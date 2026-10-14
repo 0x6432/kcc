@@ -7,7 +7,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | ID | Deliverable | Acceptance evidence | Status |
 | --- | --- | --- | --- |
 | M00 | Build/driver, style, CI, architecture and handoff | Normal/sanitizer CLI tests, invalid input rejected | complete |
-| M01 | Owned source buffers, byte locations, diagnostics, arenas | Empty/NUL/large input, bounds/alignment/overflow/lifetime tests | planned |
+| M01 | Owned source buffers, byte locations, diagnostics, arenas | Empty/NUL/large input, bounds/alignment/overflow/lifetime tests | complete |
 | M02 | On-demand initial lexer | Keywords, decimal integers, punctuators, comments, bad bytes; EOF/progress tests; libFuzzer CI | planned |
 | M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | planned |
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | planned |
@@ -70,3 +70,11 @@ save failures even when the fuzz command exits unsuccessfully.
 Normal GCC build and all CLI tests passed. ASan/UBSan build and the same tests
 passed after correcting the sandbox's missing runtime-library search path.
 No compiler features yet. Push/remote CI are verified separately.
+
+## M01 completion record
+
+Normal and ASan/UBSan support/CLI tests passed. Source byte buffers preserve
+embedded NUL, use an explicit 16 MiB limit and own filenames. Locations count
+bytes, with tabs at eight-column stops. Diagnostics count errors and write to
+a supplied stream. Arena allocation checks overflow and returns max_align_t
+alignment. Parser/AST consumers do not exist yet. No translation normalization.

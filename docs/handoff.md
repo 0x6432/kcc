@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M00: infrastructure only. Branch: `development`. Repository: `0x6432/kcc`.
+M01: source buffers, locations, diagnostics and checked arenas. Branch: `development`. Repository: `0x6432/kcc`.
 Commit identity: `0x42 <noreply@localhost>` (repository-local configuration).
 Find the exact checkpoint with `git log -1 --oneline`; this file is committed
 with the checkpoint, so it does not embed a circular reference to its own hash.
@@ -33,6 +33,5 @@ local tests used external links in `/data/tools/sanitizer-runtime` and
 `LD_LIBRARY_PATH` pointing there. Sanitizer compilation used `-fno-pie` and
 linking used `-no-pie`. This workaround is not needed on Ubuntu CI.
 Remote CI results are
-separate from local results; check them after push. Next: M01 source buffers,
-locations, diagnostics and checked arena allocation, with unit tests. Then M02
-on-demand lexer and a real libFuzzer harness. Do not skip to later features.
+separate from local results; check them after push. M01 normal and sanitizer support tests passed. Next: M02 on-demand lexer
+and a real libFuzzer harness. Do not skip to later features.

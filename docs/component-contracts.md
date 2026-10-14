@@ -21,3 +21,9 @@ use the same public interfaces as the driver and release every compilation.
 
 M00 interaction: driver has only argument handling; there are no compiler
 stages to invoke yet. It rejects source input rather than pretending to compile.
+
+M01 contracts: source_from_bytes/source_load initialize fresh structs and leave failures
+empty; destroy is idempotent. Line/column clamps invalid offsets to EOF.
+Diagnostic stream lifetime is caller-owned. arena_alloc(0) allocates one byte;
+failed allocation leaves existing chunks intact. No support for over-aligned
+types. All support stages have one implementation file.

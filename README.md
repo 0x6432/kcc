@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M00: build, driver, tests, CI, architecture and restart documentation. No C
+M01: build/CI and source, diagnostic, arena infrastructure. No C
 program can be compiled yet. Unsupported input is rejected, never silently
 accepted. See `docs/milestones.md` and `docs/limitations.md`.
 
