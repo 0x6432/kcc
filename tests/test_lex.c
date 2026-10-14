@@ -56,7 +56,7 @@ static void test_errors(void)
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@", "#",
-		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=",
+		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)

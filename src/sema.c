@@ -21,6 +21,26 @@ static bool sema_expression(struct ast_expression *expression,
 		expression->type = &type_int;
 		return true;
 	}
+	case expression_unary: {
+		struct ast_unary_expression *node =
+			(struct ast_unary_expression *)expression;
+
+		if (!sema_expression(node->operand, diagnostics))
+			return false;
+		expression->type = &type_int;
+		return true;
+	}
+	case expression_binary: {
+		struct ast_binary_expression *node =
+			(struct ast_binary_expression *)expression;
+
+		if (!sema_expression(node->left, diagnostics))
+			return false;
+		if (!sema_expression(node->right, diagnostics))
+			return false;
+		expression->type = &type_int;
+		return true;
+	}
 	}
 	assert(0 && "unknown expression kind");
 	return false;

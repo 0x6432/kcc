@@ -1,5 +1,8 @@
 # Implementation limitations
 
+Current milestone: M04. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M04.
+
 ## M00
 
 - No lexing, parsing, semantic analysis, preprocessing or code generation.
@@ -42,3 +45,18 @@ may stop before reading the rest of the file. There is no error recovery.
 Parser owns no memory: the arena owns nodes and the source owns spellings.
 Sema annotates types; QBE emission relies on those validated annotations.
 The driver emits IL only; users invoke QBE and the host linker explicitly.
+
+## M04 (current)
+
+One `int main(void)` containing one `return` of an integer expression.
+Supported: decimal int literals, parentheses, unary +/- and binary + - * / %.
+No variables, function calls, multiple statements, preprocessing or other
+types. Literal values must be <= INT32_MAX; larger literals need future
+literal typing even when unary minus would produce an int-range value.
+Signed overflow and division by zero retain C's undefined behavior; the
+compiler does not invent trapping/constant-folding semantics. Tests execute
+only defined programs, and fuzzing never executes generated code.
+
+Nesting and structural AST depth are capped at 128. Sema and codegen rely on
+that validated bound. Binary operands are emitted left then right; there are
+no side effects in this subset. No claims of optimization or full C23 support.

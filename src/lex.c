@@ -180,7 +180,7 @@ static struct token read_token(struct lexer *lexer)
 		unsigned char next = lexer->source->data[beginning + 1];
 		bool compound = (byte == '+' && (next == '+' || next == '=')) ||
 			(byte == '-' && (next == '-' || next == '=' || next == '>')) ||
-			((byte == '*' || byte == '/') && next == '=');
+			((byte == '*' || byte == '/' || byte == '%') && next == '=');
 
 		if (compound) {
 			lexer->offset += 2;
@@ -216,6 +216,9 @@ static struct token read_token(struct lexer *lexer)
 		break;
 	case '/':
 		kind = token_slash;
+		break;
+	case '%':
+		kind = token_percent;
 		break;
 	case '#':
 		return invalid_token(lexer, beginning,
@@ -273,6 +276,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_minus: return "-";
 	case token_star: return "*";
 	case token_slash: return "/";
+	case token_percent: return "%";
 	}
 	return "unknown";
 }

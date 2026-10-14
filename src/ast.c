@@ -7,8 +7,41 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 
 	if (node)
 		*node = (struct ast_integer_expression) {
-			.expression = { expression_integer, token.location, NULL },
+			.expression = { expression_integer, token.location, NULL, 1 },
 			.value = token.integer,
+		};
+	return node;
+}
+
+struct ast_unary_expression *ast_new_unary(struct arena *arena,
+	struct source_location location, enum unary_operator operation,
+	struct ast_expression *operand)
+{
+	struct ast_unary_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_unary_expression) {
+			.expression = { expression_unary, location, NULL,
+				operand->depth + 1 },
+			.operation = operation,
+			.operand = operand,
+		};
+	return node;
+}
+
+struct ast_binary_expression *ast_new_binary(struct arena *arena,
+	struct source_location location, enum binary_operator operation,
+	struct ast_expression *left, struct ast_expression *right)
+{
+	struct ast_binary_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_binary_expression) {
+			.expression = { expression_binary, location, NULL, depth + 1 },
+			.operation = operation,
+			.left = left,
+			.right = right,
 		};
 	return node;
 }

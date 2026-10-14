@@ -6,8 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M03: compile a single `int main(void)` returning a decimal int literal.
-Separate AST, parser, semantic analysis and QBE emission stages are in place.
+M04: compile a single `int main(void)` returning an integer arithmetic expression.
+On-demand lexing, BNF-documented recursive descent and Pratt expressions,
+separate AST structs, semantic analysis and QBE emission are in place.
 Unsupported input is rejected. See `docs/milestones.md` and
 `docs/limitations.md`.
 
@@ -43,10 +44,15 @@ has its own struct. Parser functions will document their BNF productions.
 ## Compile the current subset
 
 ```sh
-printf 'int main(void) { return 42; }\n' > build/example.c
+printf 'int main(void) { return (2 + 3) * 4; }\n' > build/example.c
 ./build/kcc build/example.c > build/example.ssa
 tools/qbe-1.2/qbe -t amd64_sysv -o build/example.s build/example.ssa
 cc build/example.s -o build/example
 ./build/example
-# Exit status: 42
+# Exit status: 20
 ```
+
+Supported expressions: decimal int literals, parentheses, unary `+`/`-`, and
+binary `+`, `-`, `*`, `/`, `%`. No variables, declarations, calls or control
+flow yet. Nesting and AST depth are limited to 128, sources to 16 MiB. This is
+not a complete C23 compiler.

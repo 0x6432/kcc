@@ -41,3 +41,11 @@ Parser failure returns NULL and reports an error (or preserves the lexer error).
 Sema success supplies type_int annotations throughout the supported tree.
 Only then may codegen emit. Codegen's bool is an I/O result, not semantic
 validation. Destroy the arena before its referenced source.
+
+M04: parser computes AST expression depths and rejects a node deeper than 128,
+as well as bounding Pratt recursion. Constructors initialize depth but expect
+parser-validated operands. Recursive sema/codegen rely on that invariant.
+Every supported unary/binary expression has int operands and int result;
+future type conversions belong in sema. Codegen emits operands before result
+temporaries. Invalid source is rejected before output; output I/O failure
+returns failure but cannot undo already-written bytes.

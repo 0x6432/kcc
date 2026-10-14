@@ -23,6 +23,7 @@ enum token_kind {
 	token_minus,
 	token_star,
 	token_slash,
+	token_percent,
 };
 
 /* Spelling is source->data + location.offset, with explicit length. */

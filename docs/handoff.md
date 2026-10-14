@@ -2,38 +2,61 @@
 
 ## Current checkpoint
 
-M03: first end-to-end compilation of main returning a decimal int literal. Branch: `development`. Repository: `0x6432/kcc`.
+M04: integer arithmetic through on-demand lexing, concrete AST structs,
+BNF-documented recursive descent/Pratt parsing, sema and QBE IL.
+Branch: `development`. Public repository: https://github.com/0x6432/kcc
 Commit identity: `0x42 <noreply@localhost>` (repository-local configuration).
-Find the exact checkpoint with `git log -1 --oneline`; this file is committed
-with the checkpoint, so it does not embed a circular reference to its own hash.
+M00-M04 are separate commits. Find the exact latest checkpoint with
+`git log -1 --oneline`; this file is committed with the checkpoint, avoiding
+a circular reference to its own hash.
 
-## Resume after a reset
+## Resume safely after a reset
 
-1. Clone/fetch the public repository without credentials for reading.
-2. Compare `git rev-parse HEAD` with `git ls-remote origin refs/heads/development`.
-3. Inspect `git status`; do not discard uncommitted work. Fast-forward only when
-   the checkout is clean and no divergence exists.
-4. Read this file, the milestone ledger, limitations and component contracts.
-5. Run `make clean && make test` before continuing.
-6. Obtain write authorization separately. Never save tokens in this repo,
-   documentation, remote URL or logs.
+1. Clone/fetch the public repo without credentials for reading.
+2. Compare `git rev-parse HEAD` with
+   `git ls-remote origin refs/heads/development`.
+3. Inspect `git status`. Preserve uncommitted work. Fast-forward only when the
+   checkout is clean and has no divergence; do not blindly reset.
+4. Read architecture, milestone ledger, limitations and component contracts.
+5. Run `make clean && make test`.
+6. If QBE is missing, `sh scripts/build_qbe.sh tools`; run
+   `make test-codegen QBE="$PWD/tools/qbe-1.2/qbe"`.
+7. With Clang + compiler-rt installed, run `make fuzz-lex fuzz-compile`.
+8. Obtain write authorization separately. Never save credentials in the repo,
+   docs, Git remote URL or logs. Commit and push each verified milestone.
 
-## Environment
+## Supported subset and limits
 
-Local GCC: 11.5.0. Make, Python 3 and Git available. Clang 15.0.7 and compiler-rt were installed for local fuzzing. QBE 1.2 built outside the repo for later backend testing. Rebuild it
-from the checked release hash if absent; `/data/tools` is not guaranteed to
-survive resets. Budget dependencies/builds for a 4 GB sandbox.
+Single `int main(void) { return expression; }`, decimal literals <= INT32_MAX,
+parentheses, unary +/- and binary + - * / %. No variables or preprocessing.
+Source size: 16 MiB. Pratt recursion and AST structural depth: 128 each.
+Compiler emits IL, not assembly/executables. Source spellings outlive all AST
+nodes; destroy arena before source. Sema must succeed before codegen.
 
-## Verification and next action
+## Environment and local verification
 
-Normal and ASan/UBSan CLI tests passed locally. The sandbox has sanitizer
-libraries in GCC's private directory but lacks their SONAME lookup links;
-local tests used external links in `/data/tools/sanitizer-runtime` and
-`LD_LIBRARY_PATH` pointing there. Sanitizer compilation used `-fno-pie` and
-linking used `-no-pie`. This workaround is not needed on Ubuntu CI.
-Remote CI results are
-separate from local results; check them after push. M03 GCC/Clang, ASan/UBSan, IL rejection and QBE executable tests passed.
-Full pipeline fuzzing completed 585,480 inputs in 11 seconds without failures.
-Next: M04 Pratt parsing of integer arithmetic with separate unary/binary AST
-nodes, bounded nesting/tree depth, recursive sema and QBE instructions.
-Commit/push each tested milestone; do not skip to variable declarations yet.
+GCC 11.5.0, Clang 15.0.7 + compiler-rt, Make, Python 3 and Git were available.
+QBE 1.2 was built outside the repo. Rebuild dependencies after a reset; `/data`
+is not proof that tools/checkouts are current. Budget all builds for 4 GB.
+
+Local GCC/Clang, ASan/UBSan, IL/rejection, QBE executable and differential
+arithmetic tests passed. Lexer and pipeline fuzz harnesses completed bounded
+sanitized runs without failures; counts are in docs/milestones.md. Tests
+cover excessive nesting/flat chains and source-output failure.
+
+The sandbox's GCC sanitizer libraries initially lacked SONAME lookup links.
+Local sanitizer tests used links outside the repo in
+`/data/tools/sanitizer-runtime` and LD_LIBRARY_PATH pointing there, with
+`-fno-pie` compilation and `-no-pie` linking. Ubuntu CI needs no such workaround.
+
+GitHub Actions M00-M03 were observed completed successfully. Check the latest
+M04 commit's Actions run separately. A local pass is not a remote-CI result.
+
+## Next milestone
+
+M05: local int declarations, assignment and expression statements. Before
+implementation, specify statement lists, declaration AST nodes, parser scope
+vs semantic scope, lvalue/rvalue handling, source initialization rules and
+QBE local storage. Preserve Pratt parsing; assignment needs right associativity
+and a separate AST kind. Add name resolution, shadowing, redeclaration and
+read/write runtime tests, plus corpus seeds. Do not skip ahead to loops.

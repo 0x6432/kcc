@@ -10,7 +10,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M01 | Owned source buffers, byte locations, diagnostics, arenas | Empty/NUL/large input, bounds/alignment/overflow/lifetime tests | complete |
 | M02 | On-demand initial lexer | Keywords, decimal integers, punctuators, comments, bad bytes; EOF/progress tests; libFuzzer CI | complete |
 | M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | complete |
-| M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | planned |
+| M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | complete |
 | M05 | Local int declarations, assignment, expression statements | Shadowing/redeclaration/name tests, read/write execution | planned |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | planned |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | planned |
@@ -99,3 +99,21 @@ example without introducing another language feature. Validation completes
 before any IL emission. GCC/Clang and ASan/UBSan tests passed, including QBE
 assembly/link/runtime results. Full pipeline fuzzing completed 585,480 inputs
 in 11 seconds without failures. CI adds pinned QBE build and pipeline fuzzing.
+
+## M04 completion record
+
+Pratt parsing handles parentheses, prefix +/- and binary + - * / %. Concrete
+unary/binary AST structs have structural depth annotations. Sema recursively
+types operands; codegen emits QBE integer instructions with explicit SSA
+temporaries. Nesting and tree depth are separately bounded at 128, preventing
+flat left-associative chains from bypassing recursion limits downstream.
+GCC/Clang, sanitizer and QBE/runtime tests passed. Defined arithmetic cases
+(including deterministic random cases) agree with host compiler executables.
+The first final fuzz run covered 271,175 lexer and 697,473 pipeline inputs in
+16 seconds per harness without failures. Deep/flat seeds and output-I/O failure
+regressions were then added before final verification. An additional pipeline
+fuzz run with those seeds completed 347,705 inputs in 11 seconds. Final
+regressions and output-failure tests passed under ASan/UBSan as well.
+
+Remote CI for M00, M01, M02 and M03 was observed completed successfully. The
+M04 run is verified separately after push, not inferred from those successes.
