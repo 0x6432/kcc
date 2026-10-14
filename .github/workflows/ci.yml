@@ -21,3 +21,24 @@ jobs:
         run: |
           make clean
           make test CC=${{ matrix.compiler }} CFLAGS='-std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address,undefined'
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Fuzz the on-demand lexer
+        run: |
+          seconds=20
+          if [ "${{ github.event_name }}" = schedule ]; then
+            seconds=180
+          fi
+          make fuzz-lex FUZZ_SECONDS="$seconds"
+      - name: Retain fuzz corpus and failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lexer-fuzz-artifacts
+          path: |
+            build/fuzz-artifacts/
+            build/corpus-lex/
+          retention-days: 7

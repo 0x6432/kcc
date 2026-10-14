@@ -67,9 +67,9 @@ static void test_diagnostic(void)
 
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
-				 (const unsigned char *)"a\nb", 3));
+					(const unsigned char *)"a\nb", 3));
 	diagnostic_error(&diagnostics,
-			 (struct source_location) { &source, 2 }, "test error");
+				(struct source_location) { &source, 2 }, "test error");
 	assert(diagnostics.errors == 1);
 	rewind(stream);
 	assert(fgets(message, sizeof(message), stream));

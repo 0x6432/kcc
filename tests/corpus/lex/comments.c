@@ -1,0 +1,2 @@
+/* block */ // line
+int x;

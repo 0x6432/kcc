@@ -21,3 +21,14 @@ locations are byte-based, not Unicode display-width based. Line splicing and
 encoding normalization belong to later translation-phase work. Source creation
 requires a fresh or destroyed struct; initialization failure leaves it empty.
 Arenas provide max_align_t alignment, not arbitrary over-alignment.
+
+## M02
+
+On-demand lexing handles ASCII identifiers, int/void/return keywords, decimal
+integers, initial punctuation, whitespace and comments. No C compilation yet.
+Other keywords are ordinary identifier tokens until their feature milestone.
+String/character literals, preprocessing, splicing, Unicode identifiers,
+nondecimal/suffixed/floating literals and most punctuation are unsupported.
+The debug token dump may contain partial output on lexical errors; this is
+not compiler IL output. Lexical errors always consume bytes; EOF is stable.
+One-token cache keeps parsing independent of whole-file tokenization.

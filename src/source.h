@@ -17,7 +17,7 @@ struct source_location {
 };
 
 bool source_from_bytes(struct source *source, const char *name,
-		      const unsigned char *data, size_t length);
+			const unsigned char *data, size_t length);
 bool source_load(struct source *source, const char *path);
 void source_destroy(struct source *source);
 void source_line_column(struct source_location location,

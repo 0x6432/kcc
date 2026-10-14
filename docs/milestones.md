@@ -8,7 +8,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | --- | --- | --- | --- |
 | M00 | Build/driver, style, CI, architecture and handoff | Normal/sanitizer CLI tests, invalid input rejected | complete |
 | M01 | Owned source buffers, byte locations, diagnostics, arenas | Empty/NUL/large input, bounds/alignment/overflow/lifetime tests | complete |
-| M02 | On-demand initial lexer | Keywords, decimal integers, punctuators, comments, bad bytes; EOF/progress tests; libFuzzer CI | planned |
+| M02 | On-demand initial lexer | Keywords, decimal integers, punctuators, comments, bad bytes; EOF/progress tests; libFuzzer CI | complete |
 | M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | planned |
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | planned |
 | M05 | Local int declarations, assignment, expression statements | Shadowing/redeclaration/name tests, read/write execution | planned |
@@ -78,3 +78,13 @@ embedded NUL, use an explicit 16 MiB limit and own filenames. Locations count
 bytes, with tabs at eight-column stops. Diagnostics count errors and write to
 a supplied stream. Arena allocation checks overflow and returns max_align_t
 alignment. Parser/AST consumers do not exist yet. No translation normalization.
+
+## M02 completion record
+
+GCC/Clang regression tests and GCC ASan/UBSan tests passed. Local Clang
+libFuzzer + ASan/UBSan completed 197,465 inputs in 11 seconds without failures.
+The lexer generates tokens on demand and caches one lookahead token; repeated
+peek and EOF are stable. Decimal unsigned values up to UINT64_MAX are lexed;
+semantic int-range checking comes in M03. Unsupported compound operators and
+nondecimal/suffixed literals are rejected rather than reinterpreted. Driver
+adds `--tokens file.c`; CI adds bounded and scheduled fuzzing with artifacts.

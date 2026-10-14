@@ -11,6 +11,6 @@ struct diagnostics {
 };
 
 void diagnostic_error(struct diagnostics *diagnostics,
-		      struct source_location location, const char *message);
+			struct source_location location, const char *message);
 
 #endif

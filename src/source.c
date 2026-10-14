@@ -19,7 +19,7 @@ static char *copy_name(const char *name)
 }
 
 bool source_from_bytes(struct source *source, const char *name,
-		      const unsigned char *data, size_t length)
+			const unsigned char *data, size_t length)
 {
 	*source = (struct source) { 0 };
 	if (length > SOURCE_MAX_BYTES) {

@@ -5,10 +5,10 @@ code exists, not that conformance has been established. Validated requires
 recorded tests and a stated target. This is a coverage inventory, not a claim
 of complete ISO conformance.
 
-| Area | Status at M00 | Owning milestones |
+| Area | Current status | Owning milestones |
 | --- | --- | --- |
 | Source/translation phases | absent | M01, M09-M11, M25 |
-| Tokens and literals | absent | M02, M12, M20, M23 |
+| Tokens and literals | subset (M02) | M02, M12, M20, M23 |
 | Declarations/types | absent | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | absent | M03-M08, M13, M19 |
 | Constraint diagnostics | absent | every semantic milestone |

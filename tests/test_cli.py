@@ -26,4 +26,9 @@ for _ in range(40):
                  for _ in range(random_source.randrange(5))]
     result = run(arguments)
     assert result.returncode == 1 and "error:" in result.stderr
+result = run(["--tokens", "tests/corpus/lex/basic.c"])
+assert result.returncode == 0 and "0:int\n" in result.stdout
+assert result.stdout.endswith("29:eof\n") and not result.stderr
+result = run(["--tokens", "build/nonexistent.c"])
+assert result.returncode == 1 and result.stderr and not result.stdout
 print("CLI tests passed (including 40 deterministic randomized cases)")

@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M01: build/CI and source, diagnostic, arena infrastructure. No C
+M02: on-demand lexer, token inspection, regression tests and fuzz CI. No C
 program can be compiled yet. Unsupported input is rejected, never silently
 accepted. See `docs/milestones.md` and `docs/limitations.md`.
 
@@ -18,6 +18,8 @@ Requires a C11 compiler, Make and Python 3 for tests.
 make
 make test
 ./build/kcc --help
+./build/kcc --tokens tests/corpus/lex/basic.c
+make fuzz-lex FUZZ_SECONDS=10
 ```
 
 The implementation initially targets Linux x86-64, System V ABI, LP64.

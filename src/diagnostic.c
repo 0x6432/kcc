@@ -1,7 +1,7 @@
 #include "diagnostic.h"
 
 void diagnostic_error(struct diagnostics *diagnostics,
-		      struct source_location location, const char *message)
+			struct source_location location, const char *message)
 {
 	size_t line;
 	size_t column;

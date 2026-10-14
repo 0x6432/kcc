@@ -27,3 +27,10 @@ empty; destroy is idempotent. Line/column clamps invalid offsets to EOF.
 Diagnostic stream lifetime is caller-owned. arena_alloc(0) allocates one byte;
 failed allocation leaves existing chunks intact. No support for over-aligned
 types. All support stages have one implementation file.
+
+M02: lexer_next/lexer_peek return borrowed spelling via source slices. Tokens
+contain a byte location, length, kind and integer value when applicable. Peek
+may advance the internal byte cursor but does not consume the cached token.
+Both APIs can produce diagnostics. An invalid token consumes at least one
+byte. EOF is zero-length at source length. Source and diagnostics outlive the
+lexer. Parser will use the same API in M03; preprocessing will wrap it later.
