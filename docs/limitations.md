@@ -32,3 +32,13 @@ nondecimal/suffixed/floating literals and most punctuation are unsupported.
 The debug token dump may contain partial output on lexical errors; this is
 not compiler IL output. Lexical errors always consume bytes; EOF is stable.
 One-token cache keeps parsing independent of whole-file tokenization.
+
+## M03
+
+The first compiled subset is `int main(void) { return decimal_integer; }`.
+The integer must fit a signed 32-bit int. Exactly one function and one return
+statement; no expressions, variables or other functions yet. Syntax rejection
+may stop before reading the rest of the file. There is no error recovery.
+Parser owns no memory: the arena owns nodes and the source owns spellings.
+Sema annotates types; QBE emission relies on those validated annotations.
+The driver emits IL only; users invoke QBE and the host linker explicitly.

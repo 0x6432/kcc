@@ -9,9 +9,9 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | absent | M01, M09-M11, M25 |
 | Tokens and literals | subset (M02) | M02, M12, M20, M23 |
-| Declarations/types | absent | M03, M08, M12-M18, M23-M24 |
-| Expressions/statements | absent | M03-M08, M13, M19 |
-| Constraint diagnostics | absent | every semantic milestone |
+| Declarations/types | subset (M03) | M03, M08, M12-M18, M23-M24 |
+| Expressions/statements | subset (M03) | M03-M08, M13, M19 |
+| Constraint diagnostics | subset (M03) | every semantic milestone |
 | Preprocessing | absent | M09-M11, M25 |
 | Object layout and ABI | absent | M12-M17, M20-M22, M24 |
 | C23 additions | absent | M23a-M23h, M24a-M24g |

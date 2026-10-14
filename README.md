@@ -6,9 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M02: on-demand lexer, token inspection, regression tests and fuzz CI. No C
-program can be compiled yet. Unsupported input is rejected, never silently
-accepted. See `docs/milestones.md` and `docs/limitations.md`.
+M03: compile a single `int main(void)` returning a decimal int literal.
+Separate AST, parser, semantic analysis and QBE emission stages are in place.
+Unsupported input is rejected. See `docs/milestones.md` and
+`docs/limitations.md`.
 
 ## Build and test
 
@@ -20,10 +21,12 @@ make test
 ./build/kcc --help
 ./build/kcc --tokens tests/corpus/lex/basic.c
 make fuzz-lex FUZZ_SECONDS=10
+make fuzz-compile FUZZ_SECONDS=10
 ```
 
 The implementation initially targets Linux x86-64, System V ABI, LP64.
-QBE 1.2 is the initial backend baseline; it is not needed until M03.
+QBE 1.2 is the backend baseline. Build it with `sh scripts/build_qbe.sh tools`.
+Run executable tests with `make test-codegen QBE="$PWD/tools/qbe-1.2/qbe"`.
 The compiler itself will not depend on LLVM. CI may use Clang and libFuzzer.
 
 ## Reading order
@@ -36,3 +39,14 @@ The compiler itself will not depend on LLVM. CI may use Clang and libFuzzer.
 
 All compiler stages will have one implementation file each. Each AST construct
 has its own struct. Parser functions will document their BNF productions.
+
+## Compile the current subset
+
+```sh
+printf 'int main(void) { return 42; }\n' > build/example.c
+./build/kcc build/example.c > build/example.ssa
+tools/qbe-1.2/qbe -t amd64_sysv -o build/example.s build/example.ssa
+cc build/example.s -o build/example
+./build/example
+# Exit status: 42
+```

@@ -9,7 +9,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M00 | Build/driver, style, CI, architecture and handoff | Normal/sanitizer CLI tests, invalid input rejected | complete |
 | M01 | Owned source buffers, byte locations, diagnostics, arenas | Empty/NUL/large input, bounds/alignment/overflow/lifetime tests | complete |
 | M02 | On-demand initial lexer | Keywords, decimal integers, punctuators, comments, bad bytes; EOF/progress tests; libFuzzer CI | complete |
-| M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | planned |
+| M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | complete |
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | planned |
 | M05 | Local int declarations, assignment, expression statements | Shadowing/redeclaration/name tests, read/write execution | planned |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | planned |
@@ -88,3 +88,14 @@ peek and EOF are stable. Decimal unsigned values up to UINT64_MAX are lexed;
 semantic int-range checking comes in M03. Unsupported compound operators and
 nondecimal/suffixed literals are rejected rather than reinterpreted. Driver
 adds `--tokens file.c`; CI adds bounded and scheduled fuzzing with artifacts.
+
+## M03 completion record
+
+Separate AST structs/constructors, BNF-documented recursive descent, explicit
+int type, independent sema and QBE emission are implemented. This milestone
+accepts one int main(void) with exactly one return of a decimal int literal.
+Literals 0 through INT32_MAX are supported, expanding the initial zero-only
+example without introducing another language feature. Validation completes
+before any IL emission. GCC/Clang and ASan/UBSan tests passed, including QBE
+assembly/link/runtime results. Full pipeline fuzzing completed 585,480 inputs
+in 11 seconds without failures. CI adds pinned QBE build and pipeline fuzzing.

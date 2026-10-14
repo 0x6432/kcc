@@ -34,3 +34,10 @@ may advance the internal byte cursor but does not consume the cached token.
 Both APIs can produce diagnostics. An invalid token consumes at least one
 byte. EOF is zero-length at source length. Source and diagnostics outlive the
 lexer. Parser will use the same API in M03; preprocessing will wrap it later.
+
+M03: AST constructors return NULL on allocation failure. Common headers are
+the first member of concrete node structs; kind-based casts preserve identity.
+Parser failure returns NULL and reports an error (or preserves the lexer error).
+Sema success supplies type_int annotations throughout the supported tree.
+Only then may codegen emit. Codegen's bool is an I/O result, not semantic
+validation. Destroy the arena before its referenced source.

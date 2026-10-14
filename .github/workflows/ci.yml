@@ -17,6 +17,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build and test
         run: make test CC=${{ matrix.compiler }}
+      - name: Build pinned QBE and test generated executables
+        run: |
+          sh scripts/build_qbe.sh "$RUNNER_TEMP/kcc-qbe"
+          make test-codegen QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
       - name: Address and undefined-behavior sanitizers
         run: |
           make clean
@@ -33,12 +37,14 @@ jobs:
             seconds=180
           fi
           make fuzz-lex FUZZ_SECONDS="$seconds"
+          make fuzz-compile FUZZ_SECONDS="$seconds"
       - name: Retain fuzz corpus and failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: lexer-fuzz-artifacts
+          name: compiler-fuzz-artifacts
           path: |
             build/fuzz-artifacts/
             build/corpus-lex/
+            build/corpus-compile/
           retention-days: 7

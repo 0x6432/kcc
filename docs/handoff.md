@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M02: on-demand lexer, token inspection, regression tests and fuzz CI. Branch: `development`. Repository: `0x6432/kcc`.
+M03: first end-to-end compilation of main returning a decimal int literal. Branch: `development`. Repository: `0x6432/kcc`.
 Commit identity: `0x42 <noreply@localhost>` (repository-local configuration).
 Find the exact checkpoint with `git log -1 --oneline`; this file is committed
 with the checkpoint, so it does not embed a circular reference to its own hash.
@@ -32,7 +32,8 @@ local tests used external links in `/data/tools/sanitizer-runtime` and
 `LD_LIBRARY_PATH` pointing there. Sanitizer compilation used `-fno-pie` and
 linking used `-no-pie`. This workaround is not needed on Ubuntu CI.
 Remote CI results are
-separate from local results; check them after push. M02 GCC/Clang regression tests, ASan/UBSan tests and 197,465 fuzz inputs
-passed locally. Next: M03 concrete AST structs, exact subset recursive-descent
-parser, independent sema and QBE IL for a single main returning an int literal.
-Pratt expression parsing begins with actual operators in M04, not a placeholder. Do not skip to later features.
+separate from local results; check them after push. M03 GCC/Clang, ASan/UBSan, IL rejection and QBE executable tests passed.
+Full pipeline fuzzing completed 585,480 inputs in 11 seconds without failures.
+Next: M04 Pratt parsing of integer arithmetic with separate unary/binary AST
+nodes, bounded nesting/tree depth, recursive sema and QBE instructions.
+Commit/push each tested milestone; do not skip to variable declarations yet.

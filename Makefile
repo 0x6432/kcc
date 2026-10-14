@@ -5,19 +5,21 @@ LDFLAGS =
 LDLIBS =
 FUZZ_CC = clang
 FUZZ_SECONDS = 10
+QBE = qbe
 
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
+COMPILER_SOURCES = $(LEX_SOURCES) src/arena.c src/ast.c src/type.c src/parse.c src/sema.c src/codegen.c
 HEADERS = $(wildcard src/*.h)
 
-.PHONY: all test clean fuzz-lex
+.PHONY: all test test-codegen clean fuzz-lex fuzz-compile
 
 all: build/kcc
 
 build:
 	mkdir -p build
 
-build/kcc: src/main.c $(LEX_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) src/main.c $(LEX_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/kcc: src/main.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) src/main.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
 build/test_support: tests/test_support.c src/source.c src/arena.c src/diagnostic.c src/source.h src/arena.h src/diagnostic.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_support.c src/source.c src/arena.c src/diagnostic.c $(LDFLAGS) $(LDLIBS) -o $@
@@ -33,10 +35,22 @@ fuzz-lex: build/fuzz_lex
 	cp tests/corpus/lex/* build/corpus-lex/
 	./build/fuzz_lex build/corpus-lex -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
 
+build/fuzz_compile: tests/fuzz_compile.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(FUZZ_CC) $(CPPFLAGS) -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer tests/fuzz_compile.c $(COMPILER_SOURCES) -o $@
+
+fuzz-compile: build/fuzz_compile
+	mkdir -p build/corpus-compile build/fuzz-artifacts
+	cp tests/corpus/compile/* build/corpus-compile/
+	./build/fuzz_compile build/corpus-compile -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
+
+test-codegen: build/kcc
+	QBE="$(QBE)" python3 tests/test_compile.py
+
 test: build/kcc build/test_support build/test_lex
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_lex
+	python3 tests/test_compile.py
 
 clean:
 	rm -rf build
