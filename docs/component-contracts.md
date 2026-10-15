@@ -652,3 +652,41 @@ kcc follows GCC 11.5 for removed internal macros/optional delimiter spacing;
 Clang 15 differs. They are explicit local policy regressions, not agreements
 or claims that ISO makes all such differences implementation-defined. Review
 these interpretation gaps during the conformance audit before broader claims.
+
+
+## M11b optional stringizing contract
+
+A stringizing operator may now precede a validated __VA_OPT__ operand. It keeps
+its variable-slot index and matching closing definition node. Redefinition still
+compares raw tokens/spacing; failed validation remains transactional. A nested
+__VA_OPT__ in a single definition remains invalid, even if stringized.
+
+The variable argument's existing cached prescan decides presence. An inactive
+body contributes no tokens and yields ""; no named body parameter is prescanned.
+A selected body gets ordinary parameter prescan/substitution and inner raw #,
+but not ordinary macro rescan. Thus a body macro name remains text, while a
+parameter spelling that names the same macro can expand through its argument
+cache. Inner generated strings are escaped again by the existing outer builder.
+
+expansion_frame.replacement_end is an exclusive borrowed definition pointer;
+NULL means the ordinary complete list. A temporary heap cursor reads only that
+range via read_rescan_token, never read_expanded_token. Its argument array,
+hide set and invocation come from the caller. Injected streams retain existing
+spacing/hide behavior; the parent skips the whole optional operand afterwards.
+Neither suffix tokens nor following source can be consumed by the body cursor.
+
+Substitution output uses existing arena argument_token records, charged to the
+auxiliary and work budgets. Generated buffers share the existing cumulative
+1 MiB cap. At most 32 optional cursors may be active; optional_depth restores
+to zero on every public return, including nested argument/resource failures.
+Heap cleanup is shared for all pushed-cursor exits. Normal/init/destroy APIs
+and source/AST/sema/QBE interfaces are unchanged. No real placemarker nodes are
+needed without ##; token pasting must add them under its own reviewed contract.
+
+Oracle agreement coverage is now 564 language + 276 expanded-pp streams under
+both hosts. The five M11a whitespace policies remain separate. One additional
+inactive-argument diagnostic policy explicitly checks kcc's lazy result and
+allows the observed GCC diagnostic versus Clang acceptance; it is not agreement
+or a settled standards ruling. Unit limits cover 32/33 active helper nesting
+without exponential string growth, using prescan-then-discard forwarding macros.
+Fuzzers check zero active helper depth, owned spellings and stable cache/EOF.

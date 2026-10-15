@@ -234,6 +234,47 @@ for depth in range(1, 12):
     pp_examples.append('#define S(x) #x\n#define X(x) S(x)\n'
                        + 'X(' * depth + '7' + ')' * depth + '\n')
 
+# Stringized optional operands substitute parameters but do not rescan body names.
+pp_examples += [
+    '#define V(...) #__VA_OPT__(a)\n#define E\nV() V(E) V(1) V(,)\n',
+    '#define V(x,...) #__VA_OPT__(x)\n#define A 7\nV(A) V(A,) V(A,1)\n',
+    '#define V(...) %: __VA_OPT__(a)\nV() V(1)\n',
+    '#define V(...) #__VA_OPT__()\nV() V(1)\n',
+    '#define V(...) #__VA_OPT__(  a /**/ b  )\nV(1)\n',
+    '#define A 7\n#define V(x,...) #__VA_OPT__(x A)\nV(A,1)\n',
+    '#define BAD(a,b) a+b\n#define V(x,...) #__VA_OPT__(BAD(x))\nV(7,1)\n',
+    '#define S(x) #x\n#define V(x,...) #__VA_OPT__(x)\nV(S(a),1)\n',
+    '#define V(x,...) #__VA_OPT__(#x)\n#define A 7\nV(A,1) V(A)\n',
+    '#define V(x,...) #__VA_OPT__(%: x)\nV(a+b,1)\n',
+    '#define V(...) #__VA_OPT__(#__VA_ARGS__)\nV() V(7) V(a, b)\n',
+    '#define V(...) #__VA_OPT__(__VA_ARGS__)\n#define A 7\nV(A) V(A,2) V(,)\n',
+    '#define V(x,...) #__VA_OPT__(x x)\n#define A 7\nV(A,1)\n',
+    '#define V(...) #__VA_OPT__(V(__VA_ARGS__))\nV(7) V(V(1))\n',
+    '#define V(...) #__VA_OPT__(NEXT())\n#define NEXT() 7\nV(1)\n',
+    '#define LP() (\n#define V(x,...) #__VA_OPT__(F x) )\nV(LP(),1)\n',
+    '#define V(...) #__VA_OPT__(F) (7)\n#define F(x) x\nV(1)\n',
+    '#define V(...) #__VA_OPT__(a) #__VA_OPT__(b)\nV(1) V()\n',
+    '#define V(...) #__VA_OPT__(a) __VA_OPT__(b)\nV(1) V()\n',
+    '#define V(...) #__VA_OPT__(a)\n#define V(...) #__VA_OPT__(a)\nV(1)\n',
+    '#define V(...) #__VA_OPT__(a)\n#undef V\n#define V(x) #x\nV(7)\n',
+    '#define V(x,...) #__VA_OPT__(x)\nV(12u,1)\n',
+    '#define V(x,...) #__VA_OPT__(#x)\nV("a\\nb",1)\n',
+    '#define V(x,...) #__VA_OPT__(x)\nV(L"wide",1) V(U\'x\',1)\n',
+    '#define V(x,...) #__VA_OPT__(x)\n#define E\nV(E,1)\n',
+    '#define V(x,...) #__VA_OPT__(x __VA_ARGS__)\nV((1,2),3,4)\n',
+]
+for _ in range(100):
+    argument = random_source.choice(['A', 'P(2)', '1+2', '(1,2)', 'E'])
+    tail = random_source.choice(['', 'E', '1', '1,2', 'P(3)'])
+    pp_examples.append('#define A 7\n#define E\n#define P(x) (x)\n'
+                       '#define V(x,...) #__VA_OPT__(x + A __VA_ARGS__)\n'
+                       f'V({argument},{tail})\n')
+# Argument prescan can nest optional-stringizing cursors, although definition
+# syntax correctly forbids directly nested __VA_OPT__ constructs.
+for depth in range(1, 9):
+    expression = 'V(' * depth + '7' + ',1)' * depth
+    pp_examples.append('#define V(x,...) #__VA_OPT__(x)\n' + expression + '\n')
+
 # Observed GCC/Clang whitespace disagreements are explicit policy regressions,
 # not claimed cross-host agreement or a ruling on ISO's intended interpretation.
 policy_prefix = '#define S(x) #x\n#define X(x) S(x)\n'
@@ -283,6 +324,18 @@ with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
         assert actual.returncode == expected.returncode == 0, (text, actual.stderr, expected.stderr)
         assert actual.stdout == chosen_dump, (text, actual.stdout, chosen_dump)
         assert expected.stdout in (chosen_dump, alternate_dump), (text, expected.stdout)
+    # This inactive-body arity diagnostic differs between the two local hosts.
+    # kcc intentionally does not expand named parameters of an inactive region.
+    source.write_text('#define BAD(a,b) a+b\n#define E\n'
+                      '#define V(x,...) #__VA_OPT__(x)\nV(BAD(1),E)\n')
+    actual = subprocess.run([str(driver), "--pp", str(source)],
+                            capture_output=True, text=True, timeout=5)
+    reference = subprocess.run(host + ["-std=c2x", "-E", "-P", str(source)],
+                               capture_output=True, text=True, timeout=5)
+    assert actual.returncode == 0 and actual.stdout == 'string:""\n', actual.stderr
+    assert reference.returncode in (0, 1), reference.stderr
+    if reference.returncode:
+        assert "macro" in reference.stderr and "argument" in reference.stderr, reference.stderr
 print(f"Macro token/spelling oracle passed ({len(examples)} language + "
       f"{len(pp_examples)} expanded-pp agreements; "
-      f"{len(policy_examples)} explicit whitespace policies; {host[0]})")
+      f"{len(policy_examples)} whitespace + 1 inactive-argument diagnostic policies; {host[0]})")

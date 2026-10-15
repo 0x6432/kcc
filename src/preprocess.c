@@ -316,8 +316,8 @@ static bool validate_optional_replacements(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* stringizing = ('#' | '%:') parameter
- * #__VA_OPT__ is a separate, explicitly diagnosed operator-interaction slice.
+/* stringizing = ('#' | '%:') (parameter | va-opt-replacement)
+ * Optional operands are validated and substituted before ordinary rescanning.
  */
 static bool validate_stringizing(struct preprocessor *preprocessor,
 	struct pp_token marker, struct macro_token *replacement, struct token *error)
@@ -325,12 +325,6 @@ static bool validate_stringizing(struct preprocessor *preprocessor,
 	for (struct macro_token *item = replacement; item; item = item->next) {
 		if (!is_directive_marker(item->token))
 			continue;
-		if (item->next && item->next->va_opt_end) {
-			diagnostic_error(preprocessor->diagnostics, item->token.location,
-				"stringizing __VA_OPT__ is not supported yet");
-			*error = invalid_token(marker);
-			return false;
-		}
 		if (!item->next || item->next->parameter_index == SIZE_MAX) {
 			diagnostic_error(preprocessor->diagnostics, item->token.location,
 				"expected a macro parameter after stringizing operator");
@@ -346,7 +340,7 @@ static bool validate_stringizing(struct preprocessor *preprocessor,
 /* define-directive = '#' 'define' identifier function-parameters? replacement-list newline
  * undef-directive = '#' 'undef' identifier newline
  * replacement-list = preprocessing-token*
- * Token pasting and stringized optional regions remain deferred.
+ * Token pasting remains deferred.
  */
 static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, bool define, struct token *error)
@@ -719,6 +713,10 @@ static bool stringize_argument(struct preprocessor *preprocessor,
 	return true;
 }
 
+static bool stringize_optional(struct preprocessor *preprocessor,
+	struct macro_token *optional, const struct expansion_frame *frame,
+	struct pp_token operator, struct pp_token *result, struct token *error);
+
 static void apply_frame_spacing(struct expansion_frame *frame, struct pp_token *token,
 	bool preserve_argument_space)
 {
@@ -744,7 +742,8 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 		struct expansion_frame *frame;
 
 		while (cursor->frame_count &&
-			!cursor->frames[cursor->frame_count - 1].replacement &&
+			cursor->frames[cursor->frame_count - 1].replacement ==
+				cursor->frames[cursor->frame_count - 1].replacement_end &&
 			!cursor->frames[cursor->frame_count - 1].argument) {
 			frame = &cursor->frames[cursor->frame_count - 1];
 			if ((frame->first && frame->leading_space) || frame->trailing_space)
@@ -776,11 +775,20 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 			}
 			apply_frame_spacing(frame, &result->token, false);
 			if (replacement->stringize) {
-				frame->replacement = replacement->next->next;
-				if (!stringize_argument(preprocessor,
-					&frame->arguments[replacement->parameter_index], result->token,
-					&result->token, error))
-					return false;
+				struct macro_token *operand = replacement->next;
+
+				if (operand->va_opt_end) {
+					frame->replacement = operand->va_opt_end->next;
+					if (!stringize_optional(preprocessor, operand, frame, result->token,
+						&result->token, error))
+						return false;
+				} else {
+					frame->replacement = operand->next;
+					if (!stringize_argument(preprocessor,
+						&frame->arguments[replacement->parameter_index], result->token,
+						&result->token, error))
+						return false;
+				}
 			} else if (replacement->va_opt_end) {
 				struct macro_argument *variable =
 					&frame->arguments[replacement->parameter_index];
@@ -847,6 +855,68 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 	result->token.leading_space |= cursor->deferred_space;
 	cursor->deferred_space = false;
 	return true;
+}
+
+/* A stringized optional body gets parameter substitution and inner #, but
+ * not ordinary macro rescan. Its exclusive range end cannot read the suffix.
+ */
+static bool stringize_optional(struct preprocessor *preprocessor,
+	struct macro_token *optional, const struct expansion_frame *frame,
+	struct pp_token operator, struct pp_token *result, struct token *error)
+{
+	struct macro_argument *variable = &frame->arguments[optional->parameter_index];
+	struct macro_argument body = { 0 };
+	struct argument_token **tail = &body.raw;
+	struct expansion_cursor *cursor;
+	bool success = false;
+
+	if (preprocessor->optional_depth == preprocess_optional_limit) {
+		*error = stop_preprocessing(preprocessor, operator,
+			"macro optional substitution depth limit exceeded");
+		return false;
+	}
+	if (!prescan_argument(preprocessor, variable, operator, error))
+		return false;
+	if (!variable->expanded)
+		return stringize_argument(preprocessor, &body, operator, result, error);
+	cursor = malloc(sizeof(*cursor));
+	if (!cursor) {
+		*error = stop_preprocessing(preprocessor, operator,
+			"cannot allocate macro optional substitution cursor");
+		return false;
+	}
+	*cursor = (struct expansion_cursor) { .end = operator.expansion_location };
+	preprocessor->optional_depth++;
+	if (!push_frame(preprocessor, cursor, (struct expansion_frame) {
+		.replacement = optional->next->next,
+		.replacement_end = optional->va_opt_end,
+		.arguments = frame->arguments,
+		.invocation = frame->invocation,
+		.hide = frame->hide,
+		.first = true,
+	}, operator, error))
+		goto done;
+	for (;;) {
+		struct rescan_token token;
+		struct argument_token *copy;
+
+		/* Deliberately do not call read_expanded_token here. */
+		if (!read_rescan_token(preprocessor, cursor, &token, error))
+			break;
+		if (token.token.kind == pp_eof) {
+			success = stringize_argument(preprocessor, &body, operator, result, error);
+			break;
+		}
+		copy = copy_argument_token(preprocessor, token, operator, error);
+		if (!copy)
+			break;
+		*tail = copy;
+		tail = &copy->next;
+	}
+done:
+	preprocessor->optional_depth--;
+	free(cursor);
+	return success;
 }
 
 /* Source directives cannot execute speculatively inside invocation probing. */

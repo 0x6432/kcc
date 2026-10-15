@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11a. The chronological entries below describe what each
+Current milestone: M11b. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -399,7 +399,7 @@ of allocation-failure injection remain as documented above. Oracle agreement
 and bounded fuzzing are not a full-conformance or hostile-input CPU guarantee.
 
 
-## M11a (current)
+## M11a
 
 Raw named/variadic parameter stringizing with #/%: is supported, including
 inside selected __VA_OPT__ bodies. #__VA_OPT__ itself remains explicitly
@@ -430,3 +430,31 @@ a claim of ISO implementation-defined permission or a settled conformance ruling
 Review the interpretation during the later standards audit; portable programs
 should not rely on these disagreeing whitespace cases. Earlier diagnostic prefix
 scanning, source-directive lookahead and rescan/provenance caveats still apply.
+
+
+## M11b (current)
+
+#__VA_OPT__(body), including %:, is supported without token pasting. Selected
+bodies receive parameter substitution and inner stringizing, not ordinary body
+macro rescanning. Inactive bodies yield "" without named-argument expansion.
+The implementation deliberately does not stringify raw operator syntax or use
+a full expansion cursor that could consume later tokens. All prior raw # forms
+remain supported. Nested optional constructs in one definition remain invalid.
+
+A new limit permits 32 active optional-substitution cursors, independent of the
+64 argument-prescan cap. Their heap storage is freed on all success/error paths.
+Collected body tokens share auxiliary/work budgets; inner/outer string buffers
+share the cumulative 1 MiB spelling cap. Existing source/definition/frame bounds
+still apply. Limits are explicit subset policies, not full-C23 conformance.
+Allocation-failure injection and hostile-input CPU guarantees remain absent.
+
+Token pasting/placemarker operations, includes/conditions and other directives,
+predefined macros and full encoding/literal grammar remain unsupported. C string
+expressions/concatenation and other language/ABI features remain later work;
+expanded-pp tests and stringize-then-discard QBE programs do not enable them.
+
+The five earlier whitespace disagreements remain tracked. A separate policy
+covers wrong-arity macros in named arguments used only by an inactive stringized
+optional body: kcc is lazy like Clang 15; GCC 11.5 diagnoses. No cross-host
+agreement or ISO permission is claimed for that disagreement. Preserve these
+interpretation/conformance audit gaps when implementing token pasting.

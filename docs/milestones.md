@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a raw parameter stringizing complete; M11b optional operands next) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a complete; M11b optional stringizing under final validation) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -627,3 +627,29 @@ an explicit interpretation/conformance audit item, not counted as agreement.
 M11b must implement #__VA_OPT__ with correct argument substitution and pre-rescan
 boundaries. Token pasting, includes/conditions and C string semantics remain
 separate future checkpoints. No production change followed the tested source.
+
+
+## M11b planned implementation
+
+Design decisions are recorded in m11-optional-stringizing.md before coding.
+Stringized optional operands use presence testing, bounded substitution-only
+range cursors and the existing spelling builder, not premature ordinary rescan.
+Token pasting remains M11c; no implementation or validation is claimed here.
+
+
+## M11b tested implementation checkpoint
+
+make test passed, with 564 language + 276 expanded-pp agreement streams under
+GCC and Clang. Five inherited whitespace policies and the additional inactive-
+argument diagnostic policy are recorded separately, not counted as agreement.
+GCC-host QBE/reference execution and separate-object ABI passed, including eight
+new optional-stringize/discard programs under LF/CRLF/CR. Unit tests passed exact
+32/33 helper nesting, byte-limit error cleanup, definition recovery and original
+invocation diagnostics. Both active cursor counters return to zero on errors.
+Sanitized fuzzing passed 26326 lexer/preprocessor and 151927 pipeline inputs
+(178253 total) in 26 seconds each; arbitrary generated programs were not executed.
+
+The source checkpoint is pushed before the longer full GCC/Clang normal and
+ASan/UBSan matrix to protect against sandbox resets. That matrix and exact-
+commit CI must be verified separately before marking M11b complete. Token pasting,
+other directives and C string expressions remain outside this implementation.

@@ -382,6 +382,7 @@ static void check_resource_failure(const char *text, const char *message,
 	}
 	assert(integers >= minimum_integers && integers <= maximum_integers);
 	assert(token.length > 0 && preprocessor.stopped && diagnostics.errors == 1);
+	assert(!preprocessor.optional_depth && !preprocessor.prescan_depth);
 	token = preprocess_peek(&preprocessor);
 	assert(token.kind == token_eof && token.location.offset == source.length);
 	assert_same_token(token, preprocess_peek(&preprocessor));
@@ -873,6 +874,7 @@ static void check_stringizing(const char *text, const char *const *expected, siz
 		struct pp_token raw;
 
 		assert(token.kind == pp_string && token.length == strlen(expected[i]));
+		assert(!preprocessor.optional_depth && !preprocessor.prescan_depth);
 		assert(token.location.source != &source && token.location.offset == 0);
 		assert(token.location.source->prepared);
 		assert(token.length == token.location.source->length);
@@ -935,8 +937,8 @@ static void test_stringizing_errors(void)
 	check_stream("#define S(x) %: 1\n7", definition, 3, 1, "expected a macro parameter");
 	check_stream("#define S(x) #x\n#define S(x) #1\n#define DROP(x) 7\nDROP(S(a))",
 		definition, 3, 1, "expected a macro parameter");
-	check_stream("#define S(...) #__VA_OPT__(x)\n7", definition, 3, 1,
-		"stringizing __VA_OPT__ is not supported yet");
+	check_stream("#define S(...) #__VA_OPT__(#1)\n7", definition, 3, 1,
+		"expected a macro parameter");
 	check_stream("#define S(x) #x\nS(a)", literal, 2, 1, "string literals are not supported yet");
 	check_stream("#define S(x) #x\nS(\\)", (const struct expected_token[]) {
 		{ token_invalid, "#" }, { token_eof, "" },
@@ -1033,8 +1035,99 @@ static void test_stringizing_cumulative_limit(void)
 	free(text);
 }
 
+static void test_optional_stringizing(void)
+{
+	const char *const presence[] = { "\"\"", "\"\"", "\"a\"", "\"a\"" };
+	const char *const substituted[] = { "\"7 BAD(7) A\"", "\"\"" };
+	const char *const inner[] = { "\"\\\"A\\\"\"", "\"a,b\"" };
+	const char *const empty[] = { "\"\"" };
+
+	check_stringizing("#define V(...) #__VA_OPT__(a)\n#define E\nV() V(E) V(1) V(,)",
+		presence, 4);
+	check_stringizing("#define A 7\n#define BAD(a,b) a+b\n"
+		"#define V(x,...) #__VA_OPT__(x BAD(x) A)\nV(A,1) V(A)", substituted, 2);
+	check_stringizing("#define A 7\n#define V(x,...) %: __VA_OPT__(#x)\nV(A,1)\n"
+		"#define W(...) #__VA_OPT__(__VA_ARGS__)\nW(a,b)", inner, 2);
+	/* Intentional lazy policy: GCC diagnoses this inactive argument, Clang does not. */
+	check_stringizing("#define BAD(a,b) a+b\n#define E\n"
+		"#define V(x,...) #__VA_OPT__(x)\nV(BAD(1),E)", empty, 1);
+	check_stream("#define BAD(a,b) a+b\n#define V(x,...) #__VA_OPT__(x)\nV(1,BAD(1))",
+		(const struct expected_token[]) {
+			{ token_invalid, "BAD" }, { token_eof, "" },
+		}, 2, 1, "macro argument count");
+	check_stream("#define BAD(a,b) a+b\n#define V(x,...) #__VA_OPT__(x)\nV(BAD(1),1)",
+		(const struct expected_token[]) {
+			{ token_invalid, "BAD" }, { token_eof, "" },
+		}, 2, 1, "macro argument count");
+}
+
+static void test_optional_stringizing_recovery(void)
+{
+	const char *text = "#define V(...) #__VA_OPT__(7)\n"
+		"#define V(...) #__VA_OPT__(#1)\nV(1)";
+	struct source source;
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { stream, 0 };
+	struct preprocessor preprocessor;
+	struct pp_token token;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "optional-recovery.c",
+		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	token = preprocess_next_pp(&preprocessor);
+	assert(token.kind == pp_invalid && diagnostics.errors == 1 && !preprocessor.stopped);
+	token = preprocess_next_pp(&preprocessor);
+	assert(token.kind == pp_string && token.length == 3);
+	assert(memcmp(token.location.source->data, "\"7\"", 3) == 0);
+	assert(!preprocessor.optional_depth && !preprocessor.prescan_depth);
+	assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+	assert(preprocess_next_pp(&preprocessor).kind == pp_eof && diagnostics.errors == 1);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+static void test_optional_stringizing_limits(void)
+{
+	const size_t capacity = preprocess_spelling_limit + 1024;
+	char *text = malloc(capacity);
+	size_t used;
+	const char *const seven[] = { "\"7\"" };
+
+	assert(text);
+	for (size_t extra = 0; extra < 2; extra++) {
+		used = 0;
+		append_test_text(text, capacity, &used, "#define DROP(x) 7\n"
+			"#define PASS(x) DROP(x)\n#define V(x,...) #__VA_OPT__(x)\n");
+		/* PASS must prescan the nested call before DROP discards its string.
+		 * This keeps spellings small while optional helper cursors nest.
+		 */
+		for (size_t i = 0; i < preprocess_optional_limit + extra; i++)
+			append_test_text(text, capacity, &used, "V(PASS(");
+		append_test_text(text, capacity, &used, "7");
+		for (size_t i = 0; i < preprocess_optional_limit + extra; i++)
+			append_test_text(text, capacity, &used, "),1)");
+		if (extra)
+			check_resource_failure(text, "macro optional substitution depth limit exceeded", 0, 0);
+		else
+			check_stringizing(text, seven, 1);
+	}
+	used = 0;
+	append_test_text(text, capacity, &used, "#define V(x,...) #__VA_OPT__(x)\nV(");
+	memset(text + used, 'a', preprocess_spelling_limit);
+	used += preprocess_spelling_limit;
+	append_test_text(text, capacity, &used, ",1)");
+	check_resource_failure(text, "macro synthesized spelling limit exceeded", 0, 0);
+	free(text);
+}
+
 int main(void)
 {
+	test_optional_stringizing();
+	test_optional_stringizing_recovery();
+	test_optional_stringizing_limits();
 	test_stringizing();
 	test_stringizing_errors();
 	test_stringizing_limits();

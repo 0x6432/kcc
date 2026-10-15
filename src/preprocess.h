@@ -12,6 +12,7 @@
 #define preprocess_parameter_limit 128
 #define preprocess_auxiliary_limit 65536
 #define preprocess_prescan_limit 64
+#define preprocess_optional_limit 32
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 
@@ -33,6 +34,7 @@ struct rescan_token {
 
 struct expansion_frame {
 	struct macro_token *replacement;
+	struct macro_token *replacement_end;
 	struct argument_token *argument;
 	struct macro_argument *arguments;
 	struct source_location invocation;
@@ -69,6 +71,7 @@ struct preprocessor {
 	size_t auxiliary_records;
 	size_t spelling_bytes;
 	size_t prescan_depth;
+	size_t optional_depth;
 	bool stopped;
 	bool has_lookahead;
 	struct token lookahead;

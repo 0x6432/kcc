@@ -77,6 +77,7 @@ static void check_expanded_stream(const struct source *source, FILE *stream)
 		assert(preprocessor.auxiliary_records <= preprocess_auxiliary_limit);
 		assert(preprocessor.spelling_bytes <= preprocess_spelling_limit);
 		assert(preprocessor.prescan_depth == 0);
+		assert(preprocessor.optional_depth == 0);
 		if (spelling != source) {
 			struct pp_lexer lexer;
 			struct pp_token raw;
@@ -175,6 +176,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(preprocessor.stored_tokens <= preprocess_storage_limit);
 		assert(preprocessor.auxiliary_records <= preprocess_auxiliary_limit);
 		assert(preprocessor.prescan_depth == 0);
+		assert(preprocessor.optional_depth == 0);
 		if (pending)
 			assert(preprocessor.cursor.pending.token.kind != pp_newline);
 

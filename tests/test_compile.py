@@ -436,6 +436,25 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define DROP(x) 42\n#define OUT(x) DROP(#x)\n#define BAD(a,b) a+b\n"
          "int main(void) { return OUT(BAD(1)); }\n", 42),
     ]
+    directive_programs += [
+        ("#define DROP(x) 42\n#define V(x,...) DROP(#__VA_OPT__(x))\n"
+         "int main(void) { return V(7,1); }\n", 42),
+        ("#define DROP(x) 42\n#define V(x,...) DROP(#__VA_OPT__(x))\n"
+         "int main(void) { return V(7); }\n", 42),
+        ("#define DROP(x) 42\n#define V(x,...) DROP(#__VA_OPT__(x))\n#define E\n"
+         "int main(void) { return V(7,E); }\n", 42),
+        ("#define DROP(x) 42\n#define V(x,...) DROP(%: __VA_OPT__(#x))\n"
+         "int main(void) { return V(12u,1); }\n", 42),
+        ("#define DROP(x) 42\n#define V(...) DROP(#__VA_OPT__(__VA_ARGS__))\n"
+         "int main(void) { return V(1,2); }\n", 42),
+        ("#define DROP(x) 42\n#define V(...) DROP(#__VA_OPT__(# __VA_ARGS__))\n"
+         "int main(void) { return V(a,b); }\n", 42),
+        ("#define DROP(x) 42\n#define BAD(a,b) a+b\n"
+         "#define V(x,...) DROP(#__VA_OPT__(BAD(x)))\n"
+         "int main(void) { return V(7,1); }\n", 42),
+        ("#define DROP(x) 40\n#define A 7\n#define V(x,...) DROP(#__VA_OPT__(x A))+x\n"
+         "int main(void) { return V(2,1); }\n", 42),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -649,10 +668,13 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define V(x,...) #__VA_OPT__(x)\nint main(void) { return V(7,1); }", ":2:25: error: string literals are not supported yet"),
+        ("#define OUT(x,...) V(x,__VA_ARGS__)\n#define V(x,...) #__VA_OPT__(x)\nint main(void) { return OUT(7,1); }", ":3:25: error: string literals are not supported yet"),
+        ("#define BAD(a,b) a+b\n#define V(x,...) #__VA_OPT__(x)\nint main(void) { return V(BAD(1),1); }", ":3:25: error: macro argument count"),
         ("#define S(x) #x\nint main(void) { return S(a); }", ":2:25: error: string literals are not supported yet"),
         ("#define OUT(x) INNER(x)\n#define INNER(x) #x\nint main(void) { return OUT(a); }", ":3:25: error: string literals are not supported yet"),
         ("#define S(x) #1\nint main(void) { return 0; }", "expected a macro parameter after stringizing"),
-        ("#define S(...) #__VA_OPT__(1)\nint main(void) { return 0; }", "stringizing __VA_OPT__ is not supported yet"),
+        ("#define S(...) #__VA_OPT__(#1)\nint main(void) { return 0; }", "expected a macro parameter after stringizing"),
         ("#define V(...) __VA_ARGS__\nint main(void) { return V(missing); }", ":2:25: error:"),
         ("#define V(...) __VA_OPT__(missing)\nint main(void) { return V(1); }", ":2:25: error:"),
         ("#define V(...) __VA_ARGS__\nint main(void) { return V(12u); }", ":2:25: error: unsupported numeric"),

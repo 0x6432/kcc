@@ -6,14 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11a: named and variadic raw arguments can be stringized with `#` or `%:`,
-including inside selected `__VA_OPT__` regions. Generated spellings are owned
-by the preprocessor and bounded independently from input/argument storage.
-Earlier object/fixed/variadic macro features remain supported.
+M11b: `#__VA_OPT__(...)` and its `%:` spelling now substitute selected optional
+bodies and stringize them before ordinary macro rescanning. Raw named/variadic
+stringizing, earlier macro features and bounded owned spellings remain supported.
 
 This is preprocessing-token string generation, not C string-expression support.
-`#__VA_OPT__`, token pasting and full C23 coverage remain unfinished.
-See `docs/m11-stringizing.md`, `docs/milestones.md`, `docs/limitations.md`
+Token pasting and full C23 coverage remain unfinished. See
+`docs/m11-optional-stringizing.md`, `docs/milestones.md`, `docs/limitations.md`
 and `docs/handoff.md` for contracts, acceptance evidence and remaining work.
 
 ## Build and test
@@ -79,7 +78,7 @@ int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: token pasting, stringizing __VA_OPT__, C string expressions, includes,
+Unsupported: token pasting, C string expressions, includes,
 conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
@@ -91,14 +90,15 @@ arguments, 4096 body items and 256 parameter/local slots per function. Macros:
 1024 distinct names, 1024 tokens/definition, 65536 retained replacement tokens,
 128 retained expansion frames and 65536 work units (pushes, visits, argument
 collection/copies). Arguments: 128 named parameters plus one variadic slot, 128 nested parentheses,
-64 nested prescans and 65536 auxiliary records (parameters/arguments/token copies
+64 nested prescans, 32 active optional-substitution cursors and 65536 auxiliary records (parameters/arguments/token copies
 and synthesized spelling views). Generated spelling bytes, including NULs, are
 cumulatively capped at 1 MiB per translation unit.
 
 `make test-codegen` also runs separate-object ABI tests with the selected host
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
-CI runs GCC and Clang, compiler sanitizers, 564 language-token plus 142 expanded-pp token/spelling agreement cases,
-five separate whitespace-policy regressions, generated executables and ABI tests
+CI runs GCC and Clang, compiler sanitizers, 564 language-token plus 276 expanded-pp token/spelling agreement cases,
+five separate whitespace-policy groups, one inactive-argument diagnostic policy,
+generated executables and ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
 ## Raw token inspection
@@ -189,3 +189,24 @@ Two-level stringizing exposes whitespace differences between GCC and Clang in
 some empty-expansion cases. kcc currently follows the documented GCC behavior;
 those five regression groups are not counted as cross-host agreement or an ISO
 conformance determination. See the design/limitations before relying on them.
+
+
+## Stringizing an optional operand
+
+```c
+#define DISCARD(x) 42
+#define A 7
+#define DESCRIBE(x, ...) DISCARD(#__VA_OPT__(x A))
+int main(void) { return DESCRIBE(A, 1); }
+```
+
+The optional operand becomes the string token `"7 A"`: parameter `x` is
+expanded, but the ordinary body name `A` is not rescanned before stringizing.
+`DISCARD` then removes the string, so this exits 42 through QBE without requiring
+C string expressions. `DESCRIBE(A)` generates `""` and is discarded similarly.
+Inner `#parameter` still uses raw arguments and its resulting string is escaped
+again by the outer operation. The selected body cannot consume following tokens.
+
+Inactive optional bodies do not expand named arguments. GCC and Clang disagree
+on a wrong-arity macro call in such an unused argument; the lazy kcc policy is
+tracked separately, not counted as host agreement or a settled ISO ruling.

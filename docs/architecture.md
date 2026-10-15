@@ -17,7 +17,7 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-M11a dispatches null/define/undef directives and rescans object/fixed/variadic
+M11b dispatches null/define/undef directives and rescans object/fixed/variadic
 function-like replacements before language conversion. Includes remain
 unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
 not claimed. Missing terminal newlines remain an acceptance extension; no
@@ -113,8 +113,7 @@ cross optional boundaries. No recursive optional-body cursor or new record kind.
 
 See m10-variadics.md and m10-fixed-arguments.md for current contracts. Earlier
 M10 documents describe the incremental checkpoints. Parser/AST/sema/QBE APIs are
-unchanged. Headers, conditions, token pasting and stringized optional-region
-operands remain later checkpoints.
+unchanged. Headers, conditions and token pasting remain later checkpoints.
 
 M11a validates #/%: parameter operands and stringizes raw argument lists without
 prescan. Arena-owned prepared source views provide synthesized spelling through
@@ -128,6 +127,16 @@ String language semantics remain M13. See m11-stringizing.md for whitespace
 policy differences observed between the host preprocessors and remaining scope. Predefined location
 macros will require richer provenance than the current outermost diagnostic
 location; do not implement __LINE__ by guessing from definition spelling.
+
+M11b extends the # operand to a validated optional region. The variable prescan
+cache decides presence. A selected body uses a heap substitution-only cursor
+whose frame has an exclusive replacement_end; read_rescan_token substitutes
+parameters and inner # without expanding ordinary body macro names. It copies
+the bounded result into an arena argument list for the existing string builder,
+then releases the cursor on every return path. Empty optional operands generate
+an empty string. At most 32 helper cursors can be active, in addition to existing
+prescan/work/storage/spelling bounds. See m11-optional-stringizing.md; no parser,
+AST, sema or QBE API change. ## placemarkers remain a separate design requirement.
 
 ## Target model and QBE limits
 
