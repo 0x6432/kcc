@@ -5,7 +5,7 @@
 M10b: zero-parameter function-like macros and token-carried availability.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M10a remote CI passed: https://github.com/0x6432/kcc/actions/runs/38728290388
+M10b source c3ee142 CI passed: https://github.com/0x6432/kcc/actions/runs/38749074367
 M09/M10a are complete for their subsets; M10b zero-parameter calls are done.
 M10c fixed arguments/substitution is next; full M10 is incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
@@ -240,3 +240,21 @@ generated programs were executed. The sandbox reset had destroyed uncommitted
 work; this tested recovery checkpoint is pushed before the longer local matrix.
 Normal/sanitized GCC/Clang full-matrix and exact pushed-commit CI verification
 are still pending at this checkpoint. Do not infer those passes from fuzzing.
+
+
+## M10b final verification
+
+The pending validation above was completed after the recovery checkpoint.
+GCC 11.5 and Clang 15 passed strict normal and ASan/UBSan builds, source/raw/
+conversion/CLI/AST/cache/provenance/limit tests, the 198-case token/spelling
+oracle, QBE/reference programs and separate-object integer ABI tests. Fuzzing
+passed 60392 lexer/preprocessor and 169562 pipeline inputs in 26 seconds each,
+without executing arbitrary generated code. Source commit c3ee142 also passed
+GitHub CI: https://github.com/0x6432/kcc/actions/runs/38749074367
+
+M10b is complete for its zero-parameter subset. Named arguments, argument
+prescan/substitution and variadics remain unimplemented, as documented above.
+The subsequent verification commit only records results; it changes no compiler
+code. Verify its own remote CI separately after push. Future resumes must fetch
+and compare the latest development hash before editing; the sandbox really did
+lose uncommitted files and dependencies during this checkpoint.
