@@ -31,7 +31,7 @@ static void allocation_error(struct parser *parser, struct source_location locat
 	diagnostic_error(parser->diagnostics, location, "out of memory building AST");
 }
 
-/* integer-expression ::= decimal-integer-token */
+/* integer-expression ::= integer-token (decimal/octal/hex/binary, separators allowed) */
 static struct ast_expression *parse_integer_expression(struct parser *parser)
 {
 	struct token token;

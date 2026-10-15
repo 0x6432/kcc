@@ -6,7 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M12a: signed-int ~, &, ^, |, << and >> expressions now reach QBE with
+M12b: a shared bounded integer decoder handles runtime unsuffixed decimal,
+octal, hex, binary and C23 separators (values must still fit signed int).
+Signed-int ~, &, ^, |, << and >> expressions reach QBE with
 standard Pratt precedence. Direct/computed quoted and basic angle includes load
 nested headers, share macro bindings,
 and retain child source buffers for parsing and diagnostics. File/conditional
@@ -77,7 +79,7 @@ cc build/example.s -o build/example
 
 Supported: normalized line endings, backslash-newline splicing, physical source
 locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
-macros, diagnostic directives (including #warning), macro operators (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), decimal int literals, int locals, simple assignment, arithmetic,
+macros, diagnostic directives (including #warning), macro operators (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), unsuffixed signed-int literals in four bases with separators, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, ~ and bitwise/shift operators, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are

@@ -119,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-if-') as directory:
         ('(-9223372036854775807-1)%-1', 'signed overflow'),
         ('-(-9223372036854775807-1)', 'signed overflow'),
         ('1 || (1+)', 'expected an operand'), ('1 &&', 'expected an operand'),
-        ('1UU', 'unsupported conditional integer suffix'), ('1 << 64', 'shift count'),
+        ('1UU', 'unsupported integer suffix'), ('1 << 64', 'shift count'),
         ('1 << -1', 'shift count'), ('-1 << 1', 'negative left'),
         ('1 << 63', 'signed overflow'), ('1 ? 2', "expected ':'"),
         ('1 ? 42 : (1+)', 'expected an operand'),

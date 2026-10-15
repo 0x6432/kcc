@@ -59,9 +59,9 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-int-') as directory:
         legacy += 1
     for literal, message in [
         ('0x', 'expected digits'), ('0b', 'expected digits'), ('08', 'invalid digit'),
-        ('0b2', 'invalid digit'), ('0x1g', 'unsupported conditional integer suffix'),
-        ('42lL', 'unsupported conditional integer suffix'), ('42Ll', 'unsupported conditional integer suffix'),
-        ('42LLL', 'unsupported conditional integer suffix'), ('1wb', 'unsupported conditional integer suffix'),
+        ('0b2', 'invalid digit'), ('0x1g', 'unsupported integer suffix'),
+        ('42lL', 'unsupported integer suffix'), ('42Ll', 'unsupported integer suffix'),
+        ('42LLL', 'unsupported integer suffix'), ('1wb', 'unsupported integer suffix'),
         ('18446744073709551616', 'exceeds 64-bit'), ('0x1ffffffffffffffff', 'exceeds 64-bit'),
         ("0x'1", 'invalid separator'), ("0b1'2", 'invalid separator'),
         ('9223372036854775808', 'exceeds signed 64-bit'),

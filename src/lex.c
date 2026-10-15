@@ -1,6 +1,7 @@
 #include "lex.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 static bool is_digit(unsigned char byte)
@@ -375,32 +376,108 @@ static struct token invalid_language_token(struct token token,
 	return token;
 }
 
+static int integer_digit(unsigned char byte)
+{
+	if (byte >= '0' && byte <= '9')
+		return byte - '0';
+	if (byte >= 'a' && byte <= 'f')
+		return byte - 'a' + 10;
+	if (byte >= 'A' && byte <= 'F')
+		return byte - 'A' + 10;
+	return -1;
+}
+
+/* integer-constant = (decimal | octal | hexadecimal | binary) integer-suffix?
+ * integer-suffix = unsigned-suffix long-suffix? | long-suffix unsigned-suffix?
+ * long-suffix = 'l' | 'L' | 'll' | 'LL'
+ * A separator must have a valid base digit on both sides.
+ */
+const char *parse_integer_spelling(const unsigned char *text, size_t length,
+	struct integer_spelling *result)
+{
+	size_t offset = 0;
+	size_t digits = 0;
+	bool previous_digit = false;
+
+	*result = (struct integer_spelling) { .base = 10 };
+	if (!length)
+		return "expected digits in integer literal";
+	if (text[0] == '0') {
+		result->base = 8;
+		if (length > 1 && (text[1] == 'x' || text[1] == 'X')) {
+			result->base = 16;
+			offset = 2;
+		} else if (length > 1 && (text[1] == 'b' || text[1] == 'B')) {
+			result->base = 2;
+			offset = 2;
+		}
+	}
+	while (offset < length) {
+		int digit = integer_digit(text[offset]);
+
+		if (digit >= 0 && (unsigned)digit < result->base) {
+			if (result->value > (UINT64_MAX - (unsigned)digit) / result->base)
+				return "integer literal exceeds 64-bit range";
+			result->value = result->value * result->base + (unsigned)digit;
+			offset++;
+			digits++;
+			previous_digit = true;
+			continue;
+		}
+		if (text[offset] == '\'') {
+			int next = offset + 1 < length ? integer_digit(text[offset + 1]) : -1;
+
+			if (!previous_digit || next < 0 || (unsigned)next >= result->base)
+				return "invalid separator in integer literal";
+			previous_digit = false;
+			offset++;
+			continue;
+		}
+		if (text[offset] >= '0' && text[offset] <= '9')
+			return "invalid digit in integer literal";
+		break;
+	}
+	if (!digits)
+		return "expected digits in integer literal";
+	if (offset < length && (text[offset] == 'u' || text[offset] == 'U')) {
+		result->unsigned_suffix = true;
+		offset++;
+	}
+	if (offset < length && (text[offset] == 'l' || text[offset] == 'L')) {
+		unsigned char first = text[offset++];
+
+		result->long_suffix = 1;
+		if (offset < length && text[offset] == first) {
+			result->long_suffix = 2;
+			offset++;
+		}
+	}
+	if (!result->unsigned_suffix && offset < length && (text[offset] == 'u' || text[offset] == 'U')) {
+		result->unsigned_suffix = true;
+		offset++;
+	}
+	if (offset != length)
+		return "unsupported integer suffix";
+	return NULL;
+}
+
 static struct token convert_number(struct token token, struct diagnostics *diagnostics)
 {
-	const unsigned char *spelling = token.spelling_location.source->data + token.spelling_location.offset;
-	uint64_t value = 0;
-	bool overflow = false;
+	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
+	struct integer_spelling spelling;
+	const char *error = parse_integer_spelling(text, token.length, &spelling);
 
-	for (size_t i = 0; i < token.length; i++) {
-		unsigned digit;
+	if (error) {
+		char message[128];
 
-		if (!is_digit(spelling[i]))
-			return invalid_language_token(token, diagnostics,
-				"unsupported numeric literal");
-		digit = spelling[i] - '0';
-		if (value > (UINT64_MAX - digit) / 10)
-			overflow = true;
-		else if (!overflow)
-			value = value * 10 + digit;
+		snprintf(message, sizeof(message), "unsupported numeric literal: %s", error);
+		return invalid_language_token(token, diagnostics, message);
 	}
-	if (token.length > 1 && spelling[0] == '0')
+	if (spelling.unsigned_suffix || spelling.long_suffix)
 		return invalid_language_token(token, diagnostics,
-			"nondecimal integer literals are not supported");
-	if (overflow)
-		return invalid_language_token(token, diagnostics,
-			"integer literal exceeds 64 bits");
+			"unsupported numeric literal: runtime integer suffixes require wider types");
 	token.kind = token_integer;
-	token.integer = value;
+	token.integer = spelling.value;
 	return token;
 }
 

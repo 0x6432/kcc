@@ -1329,7 +1329,7 @@ static void test_macro_conditions(void)
 		"expected end of line");
 	check_stream("#ifdef X\n", empty, 1, 1, "directives.c:1:1: error: unterminated");
 	check_stream("#ifndef X\nint", keyword, 2, 1, "unterminated conditional");
-	check_stream("#if 1uu\nint", rejected, 3, 1, "unsupported conditional integer suffix");
+	check_stream("#if 1uu\nint", rejected, 3, 1, "unsupported integer suffix");
 	assert(text);
 	for (size_t i = 0; i < preprocess_conditional_limit; i++)
 		used += (size_t)sprintf(text + used, "#ifndef missing\n");

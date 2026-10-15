@@ -826,3 +826,36 @@ M11l repair 37857c4 exact-source CI passed run 38812950255. Its isolated local
 GCC matrix passed; the local Clang matrix remains in progress. M11m full local
 matrix is queued after it and remote CI is still running. M12b shared integer
 spelling decoding is designed in m12-integer-spellings.md before implementation.
+
+## M11l repaired checkpoint final verification
+
+37857c4 passed the full isolated GCC/Clang normal + ASan/UBSan matrix with
+unit/CLI/oracle and QBE/reference/ABI execution. Exact-source CI passed:
+https://github.com/0x6432/kcc/actions/runs/38812950255
+M11l is complete within its computed-quoted scope. The original 0ffd06c failure
+is preserved above; this success belongs to its explicit fixture repair.
+M11m and M12a validation remain separate and pending their own matrix/CI checks.
+
+## M12b tested source checkpoint
+
+The pure bounded decoder in lex.c now serves both preprocessing and language
+conversion. Runtime unsuffixed decimal/octal/hex/binary/separator literals are
+accepted within signed-int range. U/L/LL runtime suffixes and values requiring
+wider types remain explicit errors, while preprocessing retains intmax/uintmax.
+Its old signed-only integer grammar comment and context-specific spelling
+messages were corrected alongside the refactoring.
+
+GCC full normal regressions/QBE/reference/ABI and all shared-decoder units passed
+(90 base/suffix combinations, malformed/overflow cases and exact byte slices).
+Runtime spelling tests passed 50 GCC host programs plus six separately modeled
+legacy separator gaps; Clang accepted all 56 originals. All 56 QBE/model programs
+passed with each host, with macro-paste/newline and range-rejection regressions.
+Sanitized fuzzing passed 24002 lexer/decoder and 92882 pipeline inputs (116884
+total), 26 seconds each, including a pure-decoder uint64 decimal round-trip
+invariant. Arbitrary generated C is never executed. Full isolated M12b host/
+sanitizer matrix and exact-source CI are pending.
+
+M11m remote CI passed run 38813251318; its local GCC normal/sanitizer matrix
+passed, local Clang still running. M12a local GCC likewise passed; local Clang
+and exact-source CI still need final verification. M12c unsigned-int types and
+explicit AST conversions are designed in m12-unsigned-int.md before coding.

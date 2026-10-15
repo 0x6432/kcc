@@ -59,7 +59,7 @@ static void test_errors(void)
 	const enum token_kind invalid[] = { token_invalid };
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
-		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@",
+		"/*", "/* *", "09", "0xg", "0b2", "12u", "3.5", "@",
 		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<=", ">>=",
 	};
 
@@ -146,8 +146,55 @@ static void test_phase_ordering(void)
 	check_tokens("ab/**/cd", names, sizeof(names) / sizeof(names[0]), 0);
 }
 
+static void test_integer_spellings(void)
+{
+	const char *bases[] = { "42", "052", "0x2a", "0B101010", "4'2", "0x2'a" };
+	const char *suffixes[] = { "", "u", "U", "l", "L", "ll", "LL", "ul", "uL", "Ull",
+		"ULL", "lu", "LU", "llU", "LLu" };
+	const char *bad[] = { "", "0x", "0b", "08", "0b2", "0x'1", "1''2", "1'",
+		"1'u", "1uu", "1lL", "1Ll", "1LLL", "1wb", "1.0", "1e2",
+		"18446744073709551616", "0x10000000000000000" };
+	const unsigned char slice[] = { '4', '2', 'u' };
+	struct integer_spelling spelling;
+	char text[64];
+
+	for (size_t i = 0; i < sizeof(bases) / sizeof(bases[0]); i++)
+		for (size_t j = 0; j < sizeof(suffixes) / sizeof(suffixes[0]); j++) {
+			unsigned longs = 0;
+
+			assert(snprintf(text, sizeof(text), "%s%s", bases[i], suffixes[j]) > 0);
+			assert(!parse_integer_spelling((const unsigned char *)text, strlen(text), &spelling));
+			for (const char *p = suffixes[j]; *p; p++)
+				if (*p == 'l' || *p == 'L')
+					longs++;
+			assert(spelling.value == 42 && spelling.long_suffix == longs);
+			assert(spelling.unsigned_suffix == (strchr(suffixes[j], 'u') != NULL ||
+				strchr(suffixes[j], 'U') != NULL));
+			assert(spelling.base == (i == 1 ? 8u : i == 2 || i == 5 ? 16u : i == 3 ? 2u : 10u));
+		}
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+		assert(parse_integer_spelling((const unsigned char *)bad[i], strlen(bad[i]), &spelling));
+	assert(parse_integer_spelling(NULL, 0, &spelling));
+	assert(!parse_integer_spelling(slice, 2, &spelling));
+	assert(spelling.value == 42 && !spelling.unsigned_suffix);
+	assert(!parse_integer_spelling(slice, 3, &spelling));
+	assert(spelling.value == 42 && spelling.unsigned_suffix);
+	assert(!parse_integer_spelling((const unsigned char *)"18446744073709551615", 20, &spelling));
+	assert(spelling.value == UINT64_MAX);
+	assert(!parse_integer_spelling((const unsigned char *)"0xffffffffffffffffULL", 21, &spelling));
+	assert(spelling.value == UINT64_MAX && spelling.unsigned_suffix && spelling.long_suffix == 2);
+	{
+		const enum token_kind kinds[] = {
+			token_integer, token_integer, token_integer, token_integer, token_integer,
+		};
+
+		check_tokens("00 052 0x2a 0b101010 4'2", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	}
+}
+
 int main(void)
 {
+	test_integer_spellings();
 	test_bitwise_tokens();
 	test_phase_ordering();
 	test_basic();

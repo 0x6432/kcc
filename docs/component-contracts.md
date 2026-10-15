@@ -835,3 +835,10 @@ structs with new operator kinds. Sema loads object operands and validates depth;
 only int exists, so integer promotions are identity. Codegen word and/xor/or/shl/
 sar follows that typed contract. Undefined C shift inputs are not made defined
 by backend masking; the differential suite never executes them.
+
+M12b: parse_integer_spelling in lex.c takes an explicit byte slice and fills
+integer_spelling metadata, returning NULL or a static diagnostic message. It
+performs no source I/O, allocation, diagnostics or target type selection. Empty
+slices need no readable byte. Callers must not use partial output after error.
+preprocess.c applies its intmax model; token_from_pp currently rejects suffixes,
+and sema retains the signed-int literal bound. AST/ABI interfaces stay unchanged.

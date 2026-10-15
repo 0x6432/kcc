@@ -8,7 +8,7 @@ of complete ISO conformance.
 | Area | Current status | Owning milestones |
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
-| Tokens and literals | subset (raw pp boundary, int-only conversion; M09b) | M02, M12, M20, M23 |
+| Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime signed-int four-base/separator subset; M12b) | M02, M12, M20, M23 |
 | Declarations/types | subset (M08c) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (signed-int bitwise/shifts; M12a) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |

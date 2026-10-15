@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12a. The chronological entries below describe what each
+Current milestone: M12b. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -649,3 +649,20 @@ Other integer types/literal spellings, explicit conversions/casts and compound
 assignments remain later increments. Existing AST depth, symbol/type validation,
 short-circuit effects and ABI contracts are unchanged. Tests compare full 32-bit
 values inside C, not just exit-status low bits, using defined generated inputs.
+
+## M12b
+
+lex.c now owns a pure bounded integer spelling decoder shared by language
+conversion and preprocessing. It returns base/value/U/long-count metadata and a
+static error string, without diagnosing, allocating or selecting a type.
+Preprocessing applies unchanged intmax/uintmax semantics; spelling diagnostic
+wording is now context-neutral (e.g. unsupported integer suffix), with original
+invocation locations preserved. Character decoding remains independent.
+
+Runtime unsuffixed decimal/octal/hex/binary literals and C23 separators are
+accepted only when each literal fits signed 32-bit int. Valid U/L/LL suffixes
+still diagnose as unsupported until typed runtime support. Nondecimal high-bit
+values cannot silently become signed int; unary minus does not rescue a positive
+literal requiring a wider type. No declarations/types/ABI change is implied.
+GCC 11 separator rejection is counted separately, with model/QBE and Clang
+coverage rather than being mislabeled host agreement.

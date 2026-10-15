@@ -51,6 +51,18 @@ enum token_kind {
 	token_or_or,
 };
 
+/* Spelling only: target type selection belongs to sema/preprocessing. */
+struct integer_spelling {
+	uint64_t value;
+	unsigned base;
+	unsigned long_suffix;
+	bool unsigned_suffix;
+};
+
+/* Explicit byte slice, no allocation/diagnostics; NULL means success. */
+const char *parse_integer_spelling(const unsigned char *text, size_t length,
+	struct integer_spelling *result);
+
 /* Spelling uses spelling_location; location is the diagnostic invocation.
  * Both offsets address prepared source data, with explicit logical length.
  * Spelling may use an arena-owned generated source view, not the input source.

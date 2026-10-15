@@ -2033,90 +2033,26 @@ static struct condition_value parse_condition_character(struct condition_parser 
 	return signed_condition(value < 128 ? (int64_t)value : (int64_t)value - 256);
 }
 
-/* condition-integer = (decimal | octal | hexadecimal | binary) integer-suffix?
- * Separators occur only between valid base digits. This increment accepts only
- * signed-intmax values, with no suffix or a signed l/L/ll/LL suffix.
+/* condition-integer = integer-constant
+ * Shared spelling decoding precedes this context's intmax/uintmax selection.
  */
 static struct condition_value parse_condition_integer(struct condition_parser *parser, struct pp_token token)
 {
 	const unsigned char *text = token.location.source->data + token.location.offset;
-	size_t offset = 0;
-	size_t digits = 0;
-	unsigned base = 10;
-	uint64_t value = 0;
-	bool previous_digit = false;
-	bool unsigned_suffix = false;
+	struct integer_spelling spelling;
+	const char *error = parse_integer_spelling(text, token.length, &spelling);
 
-	if (text[0] == '0') {
-		base = 8;
-		if (token.length > 1 && (text[1] == 'x' || text[1] == 'X')) {
-			base = 16;
-			offset = 2;
-		} else if (token.length > 1 && (text[1] == 'b' || text[1] == 'B')) {
-			base = 2;
-			offset = 2;
-		}
-	}
-	while (offset < token.length) {
-		int digit = condition_digit(text[offset]);
-
-		if (digit >= 0 && (unsigned)digit < base) {
-			if (value > (UINT64_MAX - (unsigned)digit) / base) {
-				condition_error(parser, token, "conditional integer exceeds 64-bit range");
-				return signed_condition(0);
-			}
-			value = value * base + (unsigned)digit;
-			offset++;
-			digits++;
-			previous_digit = true;
-			continue;
-		}
-		if (text[offset] == '\'') {
-			int next = offset + 1 < token.length ? condition_digit(text[offset + 1]) : -1;
-
-			if (!previous_digit || next < 0 || (unsigned)next >= base) {
-				condition_error(parser, token, "invalid separator in conditional integer");
-				return signed_condition(0);
-			}
-			previous_digit = false;
-			offset++;
-			continue;
-		}
-		if (text[offset] >= '0' && text[offset] <= '9') {
-			condition_error(parser, token, "invalid digit in conditional integer");
-			return signed_condition(0);
-		}
-		break;
-	}
-	if (!digits) {
-		condition_error(parser, token, "expected digits in conditional integer");
+	if (error) {
+		condition_error(parser, token, error);
 		return signed_condition(0);
 	}
-	if (offset < token.length && (text[offset] == 'u' || text[offset] == 'U')) {
-		unsigned_suffix = true;
-		offset++;
-	}
-	if (offset < token.length && (text[offset] == 'l' || text[offset] == 'L')) {
-		unsigned char first = text[offset++];
-
-		if (offset < token.length && text[offset] == first)
-			offset++;
-	}
-	if (!unsigned_suffix && offset < token.length && (text[offset] == 'u' || text[offset] == 'U')) {
-		unsigned_suffix = true;
-		offset++;
-	}
-	if (offset != token.length) {
-		condition_error(parser, token, "unsupported conditional integer suffix");
-		return signed_condition(0);
-	}
-	if (!unsigned_suffix && base == 10 && value > INT64_MAX) {
+	if (!spelling.unsigned_suffix && spelling.base == 10 && spelling.value > INT64_MAX) {
 		condition_error(parser, token, "conditional integer exceeds signed 64-bit range");
 		return signed_condition(0);
 	}
 	return (struct condition_value) {
-		.bits = value,
-		.unsigned_type = unsigned_suffix || (base != 10 && value > INT64_MAX),
+		.bits = spelling.value,
+		.unsigned_type = spelling.unsigned_suffix || (spelling.base != 10 && spelling.value > INT64_MAX),
 	};
 }
 

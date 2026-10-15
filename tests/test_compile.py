@@ -504,7 +504,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     invalid = [
         "", "int main(void) { return; }", "int main(void) { return 0 }",
         "int main(void) { return 2147483648; }",
-        "int main(void) { return 0x10; }", "int main(void) { return 0; } int x;",
+        "int main(void) { return 0xg; }", "int main(void) { return 0; } int x;",
         "int main(void) { return 1 + ; }",
         "int main(void) { return ++1; }", "int main(void) { return (1; }",
         "int main(void) { return 1 / ; }", "#define X 0\n",
@@ -655,7 +655,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     ]
     invalid += [
         "int main(void) { return 1e+2; }", "int main(void) { return 0x1p-1; }",
-        "int main(void) { return .5; }", "int main(void) { return 1'000; }",
+        "int main(void) { return .5; }", "int main(void) { return 1'g; }",
         "int main(void) { return 'x'; }", "int main(void) { return u8'x'; }",
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
         "%:define X(x) 3\nint main(void) { return X; }",
