@@ -672,7 +672,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "#\n", "# // comment\n", "%:%:\nint main(void) { return 0; }",
         "#unknown \0\nint main(void) { return 0; }",
     ]
-    for name in ("include", "embed", "line", "error", "warning", "pragma",
+    for name in ("include", "embed", "line", "error", "pragma",
                  "if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif"):
         invalid.append(f"#{name} x\nint main(void) {{ return 0; }}")
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):

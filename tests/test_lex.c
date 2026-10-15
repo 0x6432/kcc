@@ -9,7 +9,7 @@ static void check_tokens(const char *text, const enum token_kind *kinds,
 {
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 
 	assert(stream);
@@ -94,7 +94,7 @@ static void test_binary_and_values(void)
 	const unsigned char bytes[] = { 0, 255, '0', ' ', '4', '2' };
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct token token;
 

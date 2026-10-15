@@ -7,7 +7,7 @@
 int main(int argc, char **argv)
 {
 	struct source source;
-	struct diagnostics diagnostics = { stderr, 0 };
+	struct diagnostics diagnostics = { .stream = stderr };
 	struct preprocessor preprocessor;
 	bool output_ok = true;
 	bool pp_mode = argc == 3 && strcmp(argv[1], "--pp") == 0;

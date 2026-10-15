@@ -62,7 +62,7 @@ static void test_diagnostic(void)
 {
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	char message[128];
 
 	assert(stream);
@@ -70,10 +70,15 @@ static void test_diagnostic(void)
 					(const unsigned char *)"a\nb", 3));
 	diagnostic_error(&diagnostics,
 				(struct source_location) { &source, 2 }, "test error");
-	assert(diagnostics.errors == 1);
+	assert(diagnostics.errors == 1 && diagnostics.warnings == 0);
+	diagnostic_warning(&diagnostics,
+		(struct source_location) { &source, 2 }, "test warning");
+	assert(diagnostics.errors == 1 && diagnostics.warnings == 1);
 	rewind(stream);
 	assert(fgets(message, sizeof(message), stream));
 	assert(strcmp(message, "test.c:2:1: error: test error\n") == 0);
+	assert(fgets(message, sizeof(message), stream));
+	assert(strcmp(message, "test.c:2:1: warning: test warning\n") == 0);
 	assert(fclose(stream) == 0);
 	source_destroy(&source);
 }
@@ -106,7 +111,8 @@ static void test_quiet_diagnostic(void)
 
 	/* Count-only mode must not require a printable source location. */
 	diagnostic_error(&quiet, (struct source_location) { 0 }, "quiet error");
-	assert(quiet.errors == 1);
+	diagnostic_warning(&quiet, (struct source_location) { 0 }, "quiet warning");
+	assert(quiet.errors == 1 && quiet.warnings == 1);
 }
 
 int main(void)

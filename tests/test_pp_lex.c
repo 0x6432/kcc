@@ -29,7 +29,7 @@ static void check_raw(const char *text, const struct expected_pp_token *expected
 {
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct pp_lexer lexer;
 	struct pp_token last = { 0 };
 
@@ -249,7 +249,7 @@ static void test_conversion_boundary(void)
 	for (size_t i = 0; i < sizeof(spellings) / sizeof(spellings[0]); i++) {
 		struct source source;
 		FILE *stream = tmpfile();
-		struct diagnostics diagnostics = { stream, 0 };
+		struct diagnostics diagnostics = { .stream = stream };
 		struct pp_lexer lexer;
 		struct pp_token raw;
 		struct token token;
@@ -277,7 +277,7 @@ static void test_directive_whitespace_metadata(void)
 	const unsigned char text[] = "#\vname /*\f*/ next\n\f#x";
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct pp_lexer lexer;
 	struct pp_token token;
 

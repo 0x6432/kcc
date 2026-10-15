@@ -57,7 +57,7 @@ static void check_raw_stream(const struct source *source, struct diagnostics *di
 
 static void check_expanded_stream(const struct source *source, FILE *stream)
 {
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	size_t previous_offset = 0;
 
@@ -130,7 +130,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		return 0;
 	stream = fopen("/dev/null", "w");
 	assert(stream);
-	diagnostics = (struct diagnostics) { stream, 0 };
+	diagnostics = (struct diagnostics) { .stream = stream };
 	assert(source_from_bytes(&source, "fuzz.c", data, size));
 	assert(source_prepare(&source));
 	assert(source.length <= size);

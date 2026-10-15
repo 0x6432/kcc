@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11c. The chronological entries below describe what each
+Current milestone: M11d. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -479,3 +479,15 @@ pasting completes. GCC 11.5 disagrees for F(,1); Clang 15 and kcc match N3096
 five whitespace policies and inactive-argument diagnostic policy remain separate
 conformance audit gaps. Includes, conditional/diagnostic directives, predefined
 macros and complete C23 remain unsupported.
+
+## M11d
+
+#error and C23 #warning are implemented, including digraph markers. Diagnostic
+bodies retain raw preprocessing-token spellings without macro expansion;
+comments/spacing become single separators while adjoining tokens stay adjoining.
+Warnings are counted separately and do not prevent compilation. #error emits a
+recoverable invalid token, but compilation emits no IL when any error occurred.
+Malformed lexical input and forbidden directive whitespace are rejected before
+a user message is emitted. A temporary diagnostic buffer is bounded by remaining
+source length plus prefix, immediately freed; it does not use the 1 MiB generated
+macro spelling budget. Conditional exclusion is not implemented in this batch.

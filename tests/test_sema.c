@@ -18,7 +18,7 @@ static void test_resolved_tree(void)
 	struct source source;
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *x;
@@ -92,7 +92,7 @@ static void test_point_of_declaration(void)
 	struct source source;
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *local;
@@ -123,7 +123,7 @@ static void test_conditional_scopes_and_logic(void)
 	struct source source;
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *outer;
@@ -186,7 +186,7 @@ static void test_loop_targets(void)
 	struct source source;
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_statement_item *item;
@@ -238,7 +238,7 @@ static void test_for_scope_and_target(void)
 	struct source source;
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *outer;
@@ -351,7 +351,7 @@ static void test_parameters_and_arguments(void)
 	struct source source = { 0 };
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_function_declaration *prototype;

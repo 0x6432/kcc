@@ -708,3 +708,12 @@ spelling-byte budget includes each NUL terminator. A NULL diagnostic stream
 counts errors without resolving/outputting locations, allowing speculative
 re-lexing to report one final user-call-site diagnostic instead. All active paste,
 prescan and optional-range counters unwind on both success and failure.
+
+## M11d diagnostic-directive contract
+
+Diagnostics count warnings separately from errors. NULL-stream mode counts both
+without resolving source locations. Warnings do not invalidate AST/sema/codegen;
+errors still suppress all compiler IL. Existing initializers use designated
+stream fields. Diagnostic directive bodies bypass macro expansion and language
+conversion. Temporary text is freed before returning; cache peeks do not repeat
+diagnostics. The raw --pp-tokens driver mode remains directive-agnostic.

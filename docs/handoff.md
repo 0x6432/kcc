@@ -501,3 +501,33 @@ The user's updated instruction is to continue across milestones without asking
 for approval, stopping only for a real blocker or interruption. Next implement
 small diagnostic directives, then continue the preprocessing roadmap. Keep
 checkpoint pushes and handoff evidence current. Do not claim full C23 coverage.
+
+## M11c final verification and M11d start
+
+The full local GCC/Clang normal and ASan/UBSan matrix completed successfully
+before the previous interruption (both MATRIX PASSED lines are in the saved
+log). Source commit 66920ed passed remote GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38773969266
+No production changes followed that validation. M11c is complete within its
+documented scope. M11d diagnostic directives are designed in
+m11-diagnostic-directives.md before implementation; validation is not yet claimed.
+
+## M11d tested source checkpoint
+
+#error/#warning implementation, designated diagnostic initialization and separate
+warning counts are implemented. GCC make test and QBE/reference/ABI execution
+passed. The 1008 inherited macro agreement streams and separately counted policy
+cases remain passing. New diagnostic tests cover 96 directive inputs across
+three driver modes, LF/CRLF/CR and digraph markers, host preprocessing status,
+24 warning-bearing QBE runs, two diagnostics in one compilation, and a long
+adjoining-token message. Unit tests check warning/error counts, stable peek,
+raw macro spelling, string/number messages, comments, empty/EOF bodies,
+physical spliced locations and malformed bodies. Sanitized fuzzing passed 14547
+lexer/preprocessor + 89800 pipeline inputs (104347 total), 21 seconds each.
+No arbitrary fuzz-generated program was executed.
+
+Full GCC/Clang normal/sanitizer matrix and source-commit CI are pending at this
+checkpoint. Validation will use a committed isolated snapshot to avoid racing
+continued M11e implementation. The Clang packages disappeared in the sandbox
+reset and were restored. Source/documentation are the durable state, not tools.
+M11e is designed in m11-macro-conditions.md; no implementation claimed yet.

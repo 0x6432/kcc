@@ -26,7 +26,7 @@ static void check_stream(const char *text, const struct expected_token *expected
 {
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct token last = { 0 };
 	size_t previous_offset = 0;
@@ -110,7 +110,7 @@ static void test_null_directives_in_code(void)
 static void test_known_and_unknown_directives(void)
 {
 	const char *names[] = {
-		"include", "embed", "line", "error", "warning", "pragma",
+		"include", "embed", "line", "pragma",
 		"if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif",
 	};
 	const struct expected_token expected[] = {
@@ -204,7 +204,7 @@ static void test_lazy_dispatch(void)
 	const unsigned char text[] = "int\n#include X 1\n";
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 
 	assert(stream);
@@ -339,7 +339,7 @@ static void test_macro_locations(void)
 	const unsigned char text[] = "#define A B\n#define B missing\nA\n";
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct token token;
 
@@ -364,7 +364,7 @@ static void check_resource_failure(const char *text, const char *message,
 {
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct token token;
 	char buffer[256];
@@ -859,7 +859,7 @@ static void check_stringizing(const char *text, const char *const *expected, siz
 {
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct pp_token first = { 0 };
 
@@ -956,7 +956,7 @@ static void test_stringizing_limits(void)
 	for (size_t extra = 0; extra < 2; extra++) {
 		struct source source;
 		FILE *stream = tmpfile();
-		struct diagnostics diagnostics = { stream, 0 };
+		struct diagnostics diagnostics = { .stream = stream };
 		struct preprocessor preprocessor;
 		struct pp_token token;
 		size_t argument_length = preprocess_spelling_limit - 3 + extra;
@@ -998,7 +998,7 @@ static void test_stringizing_cumulative_limit(void)
 	for (size_t extra = 0; extra < 2; extra++) {
 		struct source source;
 		FILE *stream = tmpfile();
-		struct diagnostics diagnostics = { stream, 0 };
+		struct diagnostics diagnostics = { .stream = stream };
 		struct preprocessor preprocessor;
 		struct pp_token first;
 		struct pp_token second;
@@ -1067,7 +1067,7 @@ static void test_optional_stringizing_recovery(void)
 		"#define V(...) #__VA_OPT__(#1)\nV(1)";
 	struct source source;
 	FILE *stream = tmpfile();
-	struct diagnostics diagnostics = { stream, 0 };
+	struct diagnostics diagnostics = { .stream = stream };
 	struct preprocessor preprocessor;
 	struct pp_token token;
 
@@ -1171,7 +1171,7 @@ static void test_pasting_limits(void)
 	for (size_t extra = 0; extra < 2; extra++) {
 		struct source source;
 		FILE *stream = tmpfile();
-		struct diagnostics diagnostics = { stream, 0 };
+		struct diagnostics diagnostics = { .stream = stream };
 		struct preprocessor preprocessor;
 		struct pp_token token;
 
@@ -1229,8 +1229,64 @@ static void test_pasting_limits(void)
 	free(text);
 }
 
+static void test_diagnostic_directives(void)
+{
+	const struct expected_token errors[] = {
+		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+	};
+	const struct expected_token warning[] = {
+		{ token_int, "int" }, { token_eof, "" },
+	};
+	const struct expected_token digraph[] = {
+		{ token_invalid, "%:" }, { token_int, "int" }, { token_eof, "" },
+	};
+	struct source source;
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	const char *text = "#define X 42\n#warning X+12u /**/ .5\nint";
+	char message[256];
+
+	check_stream("#error\nint", errors, 3, 1, "error: #error:");
+	check_stream("#error a+b /**/ c\nint", errors, 3, 1, "#error: a+b c");
+	check_stream("#error \"text\" 12u\nint", errors, 3, 1, "#error: \"text\" 12u");
+	check_stream("%:error no\nint", digraph, 3, 1, "#error: no");
+	check_stream("#warning\nint", warning, 2, 0, "warning: #warning:");
+	check_stream("#war\\\nning hello\nint", warning, 2, 0,
+		"directives.c:1:2: warning: #warning: hello");
+	check_stream("#warning a\v b\nint", errors, 3, 1, "only space and tab");
+	check_stream("#warning \"unterminated\nint", errors, 3, 1, "unterminated");
+	{
+		const struct expected_token eof_error[] = {
+			{ token_invalid, "#" }, { token_eof, "" },
+		};
+
+		check_stream("#error", eof_error, 2, 1, "#error:");
+	}
+	assert(stream);
+	assert(source_from_bytes(&source, "message.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	assert(preprocess_peek(&preprocessor).kind == token_int);
+	assert(diagnostics.warnings == 1 && !diagnostics.errors);
+	assert(preprocess_peek(&preprocessor).kind == token_int);
+	assert(preprocess_next(&preprocessor).kind == token_int);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
+	assert(diagnostics.warnings == 1 && !diagnostics.errors);
+	assert(!preprocessor.spelling_bytes);
+	rewind(stream);
+	assert(fgets(message, sizeof(message), stream));
+	assert(strcmp(message, "message.c:2:2: warning: #warning: X+12u .5\n") == 0);
+	assert(!fgets(message, sizeof(message), stream));
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_diagnostic_directives();
 	test_token_pasting();
 	test_pasting_limits();
 	test_optional_stringizing();

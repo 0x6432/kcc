@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a/M11b stringizing complete; M11c token pasting next) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostic directives implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -699,3 +699,13 @@ One C23 normative example and six inherited policy groups are tested separately.
 Sanitized fuzzing passed 21801 lexer/preprocessor + 137656 pipeline inputs.
 The full four-build host/sanitizer matrix and exact-source remote CI are pending
 at this checkpoint; do not confuse this local evidence with completed CI.
+
+M11c final verification: GCC/Clang normal + ASan/UBSan unit/oracle/CLI and
+QBE/reference/ABI matrix passed. Commit 66920ed passed GitHub CI run
+38773969266. M11d diagnostic directives are next, per the separately recorded
+design; subsequent conditionals remain unfinished.
+
+M11d source checkpoint: diagnostic directives pass GCC unit/CLI/oracle and
+QBE/reference/ABI tests, plus 104347 sanitized fuzz inputs. Full matrix and
+source-commit CI pending. M11e macro-existence conditional design is recorded
+before coding, with expression #if/#elif explicitly deferred.

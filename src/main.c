@@ -52,7 +52,7 @@ static bool dump_pp_tokens(const struct source *source, struct diagnostics *diag
 static int dump_tokens(const char *path, bool preprocessing)
 {
 	struct source source;
-	struct diagnostics diagnostics = { stderr, 0 };
+	struct diagnostics diagnostics = { .stream = stderr };
 	bool output_ok;
 
 	if (!source_load(&source, path)) {
@@ -79,7 +79,7 @@ static int compile_source(const char *path)
 {
 	struct source source;
 	struct arena arena = { 0 };
-	struct diagnostics diagnostics = { stderr, 0 };
+	struct diagnostics diagnostics = { .stream = stderr };
 	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	bool success = false;
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m11c");
+		puts("kcc milestone m11d");
 		return 0;
 	}
 

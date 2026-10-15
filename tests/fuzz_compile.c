@@ -19,7 +19,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		return 0;
 	stream = fopen("/dev/null", "w");
 	assert(stream);
-	diagnostics = (struct diagnostics) { stream, 0 };
+	diagnostics = (struct diagnostics) { .stream = stream };
 	assert(source_from_bytes(&source, "fuzz.c", data, size));
 	assert(source_prepare(&source));
 	preprocess_init(&preprocessor, &source, &diagnostics);

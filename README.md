@@ -6,12 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11c: `##` / `%:%:` token pasting now supports raw argument boundaries,
-placemarkers, generated identifiers/keywords and interactions with `__VA_OPT__`
-and stringizing. Concatenations must re-lex as exactly one preprocessing token.
+M11d: `#error` and C23 `#warning` now diagnose raw, unexpanded directive
+messages. Warnings are nonfatal; errors suppress IL. Token pasting, optional
+stringizing and previous macro features remain supported.
 
-This is preprocessing support, not C string-expression support or full C23.
-See `docs/m11-token-pasting.md`, `docs/milestones.md`, `docs/limitations.md`
+This is a growing C23 subset, not a complete compiler. See
+`docs/m11-diagnostic-directives.md`, `docs/milestones.md`, `docs/limitations.md`
 and `docs/handoff.md` for contracts, acceptance evidence and remaining work.
 
 ## Build and test
@@ -71,7 +71,7 @@ cc build/example.s -o build/example
 
 Supported: normalized line endings, backslash-newline splicing, physical source
 locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
-macros (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), decimal int literals, int locals, simple assignment, arithmetic,
+macros, diagnostic directives (including #warning), macro operators (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are

@@ -532,7 +532,57 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* control-line = '#' newline | define-directive | undef-directive
+/* diagnostic-directive = '#' ('error' | 'warning') pp-tokens? newline
+ * The body is a raw pp-token sequence, never a macro expansion or C expression.
+ */
+static bool read_diagnostic_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token name, struct token *error)
+{
+	bool warning = pp_spelling_is(name, "warning");
+	const char *prefix = warning ? "#warning:" : "#error:";
+	const struct source *source = name.location.source;
+	size_t used = strlen(prefix);
+	size_t capacity = source->length - name.location.offset + used + 1;
+	char *message = malloc(capacity);
+	struct pp_token token;
+
+	if (!message) {
+		*error = stop_preprocessing(preprocessor, marker,
+			"cannot allocate directive diagnostic text");
+		return false;
+	}
+	memcpy(message, prefix, used);
+	for (;;) {
+		token = pp_lexer_next(&preprocessor->input);
+		if (token.kind == pp_invalid || token.has_non_directive_space) {
+			free(message);
+			*error = reject_directive(preprocessor, marker, token,
+				token.kind == pp_invalid ? NULL :
+				"only space and tab are allowed in a preprocessing directive");
+			return false;
+		}
+		if (is_directive_end(token))
+			break;
+		/* Tokens are disjoint source slices; each separator replaces a gap. */
+		assert(used + 1 + token.length < capacity);
+		if (used == strlen(prefix) || token.leading_space)
+			message[used++] = ' ';
+		memcpy(message + used, source->data + token.location.offset, token.length);
+		used += token.length;
+	}
+	message[used] = 0;
+	if (warning)
+		diagnostic_warning(preprocessor->diagnostics, name.location, message);
+	else
+		diagnostic_error(preprocessor->diagnostics, name.location, message);
+	free(message);
+	if (warning)
+		return true;
+	*error = invalid_token(marker);
+	return false;
+}
+
+/* control-line = '#' newline | define-directive | undef-directive | diagnostic-directive
  * Other C23 control lines are recognized but not implemented yet.
  */
 static bool read_directive(struct preprocessor *preprocessor,
@@ -566,6 +616,8 @@ static bool read_directive(struct preprocessor *preprocessor,
 	if (pp_spelling_is(token, "define") || pp_spelling_is(token, "undef"))
 		return read_macro_directive(preprocessor, marker,
 			pp_spelling_is(token, "define"), error);
+	if (pp_spelling_is(token, "error") || pp_spelling_is(token, "warning"))
+		return read_diagnostic_directive(preprocessor, marker, token, error);
 	*error = reject_directive(preprocessor, marker, token,
 		is_known_directive(token) ? "preprocessing directive is not supported yet" :
 		"unknown preprocessing directive");

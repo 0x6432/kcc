@@ -6,12 +6,16 @@
 #include <stdio.h>
 
 struct diagnostics {
-	/* NULL counts errors without writing or resolving line/column. */
+	/* NULL counts diagnostics without writing or resolving line/column. */
 	FILE *stream;
 	size_t errors;
+	size_t warnings;
 };
 
 void diagnostic_error(struct diagnostics *diagnostics,
+			struct source_location location, const char *message);
+
+void diagnostic_warning(struct diagnostics *diagnostics,
 			struct source_location location, const char *message);
 
 #endif
