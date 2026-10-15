@@ -6,11 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11f: `#if` / `#elif` now evaluate a signed-decimal expression subset with
-`defined`, arithmetic, comparisons and short-circuit logical operators. Macro
+M11g: `#if` / `#elif` evaluate signed-decimal expressions with `defined`,
+arithmetic, shifts, bitwise/comparison/logical operators and short-circuit `?:`. Macro
 existence groups, diagnostic directives and previous macro operators remain.
 
-Unsigned/other literals, remaining preprocessing operators, includes and full
+Unsigned/other literals, includes and full
 C23 remain unfinished. See `docs/m11-conditional-expressions.md`,
 `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 

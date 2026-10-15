@@ -1360,7 +1360,7 @@ static void test_expression_conditions(void)
 		"9223372036854775807+1", "(-9223372036854775807-1)-1",
 		"-(-9223372036854775807-1)", "(-9223372036854775807-1)/-1",
 		"(-9223372036854775807-1)%-1", "9223372036854775807*2",
-		"0 && (1+)", "1 || (1+)", "__VA_ARGS__", "defined(__VA_OPT__)", "1u", "0x1", "01", "'a'", "1 ? 2 : 3",
+		"0 && (1+)", "1 || (1+)", "__VA_ARGS__", "defined(__VA_OPT__)", "1u", "0x1", "01", "'a'", "1 ? 2", "1 ? : 2", "1 ? 2 :",
 	};
 	char text[8192];
 	size_t used;
@@ -1404,8 +1404,36 @@ static void test_expression_conditions(void)
 }
 
 
+static void test_conditional_operator_depth(void)
+{
+	const struct expected_token integer[] = {
+		{ token_integer, "42" }, { token_eof, "" },
+	};
+	const struct expected_token rejected[] = {
+		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+	};
+	char text[4096];
+	size_t used;
+
+	for (size_t depth = preprocess_condition_depth_limit - 1;
+		depth <= preprocess_condition_depth_limit; depth++) {
+		used = (size_t)sprintf(text, "#if ");
+		for (size_t i = 0; i < depth; i++)
+			used += (size_t)sprintf(text + used, "0?0:");
+		if (depth < preprocess_condition_depth_limit) {
+			sprintf(text + used, "1\n42\n#endif\n");
+			check_stream(text, integer, 2, 0, NULL);
+		} else {
+			sprintf(text + used, "1\nint");
+			check_stream(text, rejected, 3, 1, "conditional expression nesting limit (128)");
+		}
+	}
+}
+
+
 int main(void)
 {
+	test_conditional_operator_depth();
 	test_expression_conditions();
 	test_macro_conditions();
 	test_diagnostic_directives();

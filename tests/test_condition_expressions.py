@@ -28,6 +28,27 @@ expressions = [
     ('5 > 3 && 3 >= 3 && 2 <= 2 && 2 != 3', True),
 ]
 
+expressions += [
+    ('~0 == -1', True), ('~(-1) == 0', True),
+    ('~(-9223372036854775807-1) == 9223372036854775807', True),
+    ('-8 >> 2 == -2', True), ('-1 >> 63 == -1', True),
+    ('(-9223372036854775807-1) >> 63 == -1', True),
+    ('(-9223372036854775807-1) >> 1 == -4611686018427387904', True),
+    ('0 << 63 == 0', True), ('1 << 62 == 4611686018427387904', True),
+    ('3 << 2+1 == 24', True), ('8 >> 1+1 == 2', True),
+    ('1 < 2 << 1', True), ('1 & 2 == 0', False), ('(1&2) == 0', True),
+    ('1 ^ 3 & 1', False), ('1 | 2 ^ 3 & 1', True),
+    ('(5 & 3) == 1', True), ('(5 ^ 3) == 6', True), ('(5 | 3) == 7', True),
+    ('(-1 & 42) == 42', True), ('(-1 ^ 1) == -2', True),
+    ('1 ? 42 : 0', True), ('0 ? 42 : 0', False),
+    ('0 ? 1 : 0 ? 2 : 3', True), ('1 ? 0 ? 0 : 42 : 0', True),
+    ('1 || 0 ? 0 : 42', False), ('1 ? 0 : 1 || 1', False),
+    ('1 ? 42 : 1/0', True), ('0 ? 1/0 : 42', True),
+    ('1 ? 42 : (9223372036854775807+1)', True),
+    ('0 && (1 << 64)', False), ('1 || (-1 << 1)', True),
+    ('1 ? 42 : (1 >> -1)', True), ('0 ? (1 << 63) : 42', True),
+]
+
 def expression(depth):
     if not depth or rng.randrange(4) == 0:
         value = rng.randrange(6)
@@ -36,7 +57,11 @@ def expression(depth):
     if rng.randrange(5) == 0:
         op = rng.choice(['+', '-', '!'])
         return f'{op}({left})', a if op == '+' else -a if op == '-' else int(not a)
-    op = rng.choice(['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '==', '!=', '&&', '||'])
+    if rng.randrange(6) == 0:
+        yes, a_yes = expression(depth-1)
+        no, a_no = expression(depth-1)
+        return f'({left}) ? ({yes}) : ({no})', a_yes if a else a_no
+    op = rng.choice(['+', '-', '*', '/', '%', '<', '<=', '>', '>=', '==', '!=', '&', '^', '|', '&&', '||'])
     right, b = expression(depth-1)
     if op in ('/', '%'):
         b = rng.randrange(1, 6)
@@ -52,6 +77,9 @@ def expression(depth):
     elif op == '>=': value = int(a >= b)
     elif op == '==': value = int(a == b)
     elif op == '!=': value = int(a != b)
+    elif op == '&': value = a & b
+    elif op == '^': value = a ^ b
+    elif op == '|': value = a | b
     elif op == '&&': value = int(bool(a) and bool(b))
     else: value = int(bool(a) or bool(b))
     return f'({left}) {op} ({right})', value
@@ -91,13 +119,20 @@ with tempfile.TemporaryDirectory(prefix='kcc-if-') as directory:
         ('(-9223372036854775807-1)%-1', 'signed overflow'),
         ('-(-9223372036854775807-1)', 'signed overflow'),
         ('1 || (1+)', 'expected an operand'), ('1 &&', 'expected an operand'),
-        ('1U', 'only decimal'), ('1 << 2', 'unsupported or trailing'),
+        ('1U', 'only decimal'), ('1 << 64', 'shift count'),
+        ('1 << -1', 'shift count'), ('-1 << 1', 'negative left'),
+        ('1 << 63', 'signed overflow'), ('1 ? 2', "expected ':'"),
+        ('1 ? 42 : (1+)', 'expected an operand'),
     ]:
         source.write_text(f'#if {text}\n#endif\nint main(void) {{ return 0; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, (text, result.stderr)
     programs = [
         '#if 2+3*4==14\nreturn 42;\n#else\n#error bad\n#endif\n',
+        '#if ((-8>>1)==-4) && ((5^3)==6)\nreturn 42;\n#endif\n',
+        '#if 1 ? 42 : (1/0)\nreturn 42;\n#endif\n',
+        '#if 0 ? (1<<64) : ((1<<62)>0)\nreturn 42;\n#endif\n',
+        '#if 0 ? 0 : 1 ? 42 : 0\nreturn 42;\n#endif\n',
         '#if 0\n#error hidden\n#elif defined(X) && ADD(40,2)==42\nreturn 42;\n#endif\n',
         '#if 0 && 1/0\n#error hidden\n#elif 1 || 1/0\nreturn 42;\n#endif\n',
         '#if defined(X) && !defined(missing) && X==0\nreturn 42;\n#endif\n',

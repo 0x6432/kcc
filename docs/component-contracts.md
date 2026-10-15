@@ -748,3 +748,13 @@ This first expression subset uses signed 64-bit decimal values. Arithmetic
 checks precede host operations; short-circuited operands still parse and expand
 but do not evaluate arithmetic. Diagnostics retain expansion locations. Parser,
 sema and QBE contracts are unchanged except the earlier EOF error-success fix.
+
+## M11g signed operator contract
+
+The preprocessing Pratt table now includes shifts/bitwise operators. ?: binds
+below logical-or and recurses right-associatively; its middle operand parses a
+full supported expression. Short circuit extends to ternary arithmetic, not
+syntax or macro expansion. Shift checks precede host operations; negative right
+shifts are explicitly sign-extending via nonnegative arithmetic. Both ternary
+branches are signed-intmax in this subset; later unsigned support must compute
+the common type from both branches even when one is not evaluated.

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11f. The chronological entries below describe what each
+Current milestone: M11g. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -526,3 +526,14 @@ Only arithmetic evaluation, not macro expansion or syntax checking, short
 circuits. Signed overflow, zero division and MIN/-1 are checked without host UB.
 Raw expression lines are limited to 1024 pp tokens and syntax nesting to 128;
 macro expansion retains all earlier storage/work/owned-spelling limits.
+
+## M11g
+
+The signed preprocessing-expression subset now includes unary ~, << >>, & ^ |,
+and right-associative ?: with standard precedence. Ternary operands still parse
+and expand, but only the selected branch is evaluated. Shift counts must be
+0..63, and evaluated signed left shifts require nonnegative input and a
+representable result. Negative right shift follows the target arithmetic policy,
+implemented without host negative-shift assumptions. No change to runtime C
+expression operators or types. Unsigned/nondecimal/character literals and full
+preprocessing remain unfinished in this increment.

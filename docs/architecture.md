@@ -190,3 +190,13 @@ spelling-byte budget includes each NUL terminator. A NULL diagnostic stream
 counts errors without resolving/outputting locations, allowing speculative
 re-lexing to report one final user-call-site diagnostic instead. All active paste,
 prescan and optional-range counters unwind on both success and failure.
+
+## M11f/M11g conditional expression stages
+
+Preprocessing expressions are a separate grammar within preprocess.c, not C AST
+expressions. Literal defined operands are replaced before isolated macro rescan;
+the evaluator consumes that stream on demand. A visible Pratt table and bounded
+operand recursion keep precedence and resource behavior inspectable. Signed
+arithmetic checks must precede host evaluation. Conditional parsing of inactive
+operands is distinct from their arithmetic evaluation. More literal/unsigned
+semantics must be added explicitly rather than inferred from runtime int types.

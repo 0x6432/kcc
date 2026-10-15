@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions implemented) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions + M11g signed operators implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -728,3 +728,9 @@ passes GCC full tests/runtime/ABI, 540 additional host/model expression streams
 with each GCC/Clang, boundary units and 118436 final sanitized fuzz inputs.
 M11f full isolated matrix and exact-source CI are pending. M11g remaining signed
 operators are designed before coding; unsigned/literal expansion remains later.
+
+M11g source checkpoint: signed shift/bitwise/ternary operators pass GCC full
+regressions/QBE/reference/ABI, 642 expression streams with each host, ternary
+nesting units and 148738 sanitizer-fuzz inputs. M11f/M11g full isolated matrices
+and exact-source CI still pending here. M11h signed literal spelling design is
+recorded separately before implementation.

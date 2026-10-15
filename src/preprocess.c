@@ -1692,9 +1692,10 @@ static bool prescan_argument(struct preprocessor *preprocessor,
 
 enum condition_operation {
 	condition_multiply, condition_divide, condition_remainder,
-	condition_add, condition_subtract,
+	condition_add, condition_subtract, condition_shift_left, condition_shift_right,
 	condition_less, condition_less_equal, condition_greater, condition_greater_equal,
-	condition_equal, condition_not_equal, condition_and, condition_or,
+	condition_equal, condition_not_equal, condition_bit_and, condition_bit_xor,
+	condition_bit_or, condition_and, condition_or,
 };
 
 struct condition_operator {
@@ -1707,9 +1708,12 @@ static const struct condition_operator condition_operators[] = {
 	{ "*", 60, condition_multiply }, { "/", 60, condition_divide },
 	{ "%", 60, condition_remainder },
 	{ "+", 50, condition_add }, { "-", 50, condition_subtract },
+	{ "<<", 45, condition_shift_left }, { ">>", 45, condition_shift_right },
 	{ "<", 40, condition_less }, { "<=", 40, condition_less_equal },
 	{ ">", 40, condition_greater }, { ">=", 40, condition_greater_equal },
 	{ "==", 30, condition_equal }, { "!=", 30, condition_not_equal },
+	{ "&", 27, condition_bit_and }, { "^", 25, condition_bit_xor },
+	{ "|", 23, condition_bit_or },
 	{ "&&", 20, condition_and }, { "||", 10, condition_or },
 };
 
@@ -1749,7 +1753,7 @@ static int64_t parse_condition_expression(struct condition_parser *parser,
 	unsigned minimum_power, bool evaluate);
 
 /* condition-operand = decimal-integer | identifier | '(' condition-expression ')'
- *                   | ('+' | '-' | '!') condition-operand
+ *                   | ('+' | '-' | '!' | '~') condition-operand
  * defined was handled before expansion; other identifiers are zero (C23 true is 1).
  */
 static int64_t parse_condition_operand(struct condition_parser *parser, bool evaluate)
@@ -1759,13 +1763,16 @@ static int64_t parse_condition_operand(struct condition_parser *parser, bool eva
 
 	if (parser->failed)
 		return 0;
-	if (is_punctuator(token, "+") || is_punctuator(token, "-") || is_punctuator(token, "!")) {
+	if (is_punctuator(token, "+") || is_punctuator(token, "-") ||
+		is_punctuator(token, "!") || is_punctuator(token, "~")) {
 		advance_condition(parser);
 		value = parse_condition_expression(parser, 70, evaluate);
 		if (!evaluate || parser->failed)
 			return 0;
 		if (is_punctuator(token, "!"))
 			return !value;
+		if (is_punctuator(token, "~"))
+			return ~value;
 		if (is_punctuator(token, "+"))
 			return value;
 		if (value == INT64_MIN) {
@@ -1850,6 +1857,27 @@ static int64_t evaluate_condition_operator(struct condition_parser *parser,
 		if (left == INT64_MIN && right == -1)
 			break;
 		return operation == condition_divide ? left / right : left % right;
+	case condition_shift_left:
+	case condition_shift_right:
+		if (right < 0 || right >= 64) {
+			condition_error(parser, token, "conditional shift count must be between 0 and 63");
+			return 0;
+		}
+		if (operation == condition_shift_right) {
+			if (left < 0)
+				return -1 - ((-1 - left) >> right);
+			return left >> right;
+		}
+		if (left < 0) {
+			condition_error(parser, token, "negative left operand in conditional shift");
+			return 0;
+		}
+		if (left > (INT64_MAX >> right))
+			break;
+		return (int64_t)((uint64_t)left << (unsigned)right);
+	case condition_bit_and: return left & right;
+	case condition_bit_xor: return left ^ right;
+	case condition_bit_or: return left | right;
 	case condition_less: return left < right;
 	case condition_less_equal: return left <= right;
 	case condition_greater: return left > right;
@@ -1864,7 +1892,8 @@ static int64_t evaluate_condition_operator(struct condition_parser *parser,
 }
 
 /* condition-expression = condition-operand { binary-operator condition-expression }
- * All binary operators associate left: parse the right operand above its power.
+ *                        [ '?' condition-expression ':' condition-expression ]
+ * Binary operators associate left; ?: associates right below logical-or.
  * Short circuit suppresses arithmetic only, not parsing or macro expansion.
  */
 static int64_t parse_condition_expression(struct condition_parser *parser,
@@ -1886,6 +1915,21 @@ static int64_t parse_condition_expression(struct condition_parser *parser,
 		bool evaluate_right = evaluate;
 		int64_t right;
 
+		if (is_punctuator(token, "?") && minimum_power <= 5) {
+			int64_t condition = value;
+			int64_t yes;
+			int64_t no;
+
+			advance_condition(parser);
+			yes = parse_condition_expression(parser, 0, evaluate && condition != 0);
+			if (!parser->failed && !is_punctuator(parser->token, ":"))
+				condition_error(parser, parser->token, "expected ':' in conditional expression");
+			advance_condition(parser);
+			no = parse_condition_expression(parser, 5, evaluate && condition == 0);
+			if (evaluate)
+				value = condition ? yes : no;
+			continue;
+		}
 		if (token.kind != pp_punctuator)
 			break;
 		for (size_t i = 0; i < sizeof(condition_operators) / sizeof(condition_operators[0]); i++)

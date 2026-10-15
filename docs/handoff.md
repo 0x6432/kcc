@@ -596,3 +596,24 @@ Full isolated matrix and exact-source CI remain pending at this source
 checkpoint. See m11-conditional-expressions.md for the supported subset and
 m11-signed-operators.md for M11g's pre-recorded design. Do not claim unsigned,
 nondecimal/character literal, remaining-operator or include support yet.
+
+## M11g tested source checkpoint
+
+Remaining signed preprocessing operators are implemented: ~, shifts, & ^ | and
+right-associative ?: with arithmetic short circuit. Negative right shifts follow
+the documented target policy using nonnegative host operations. Evaluated left
+shifts and counts are checked; conditional branches still parse when unselected.
+No runtime C expression/type expansion is implied.
+
+GCC make test and QBE/reference/ABI passed. The expanded expression oracle passed
+642 host/model streams with each GCC/Clang. Thirty LF/CRLF/CR expression programs
+passed QBE/reference execution. Added exact 127/128 ternary-chain depth boundary
+units; inherited arithmetic, raw-token, diagnostic and macro tests remain passing.
+Sanitized fuzzing passed 25625 lexer/preprocessor and 123113 pipeline inputs
+(148738 total), 26 seconds per target, without executing arbitrary generated C.
+
+M11g full isolated matrix and exact-source remote CI are pending. M11f's longer
+isolated matrix/CI also remain pending at this checkpoint; do not mark either
+verified before their own results complete. M11h signed integer spellings are
+designed in m11-integer-spellings.md before implementation. Unsigned arithmetic,
+character constants and include handling remain later work.
