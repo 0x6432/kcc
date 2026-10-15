@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions + M11g signed operators implemented) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11g signed operators + M11h literal spellings implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -734,3 +734,10 @@ regressions/QBE/reference/ABI, 642 expression streams with each host, ternary
 nesting units and 148738 sanitizer-fuzz inputs. M11f/M11g full isolated matrices
 and exact-source CI still pending here. M11h signed literal spelling design is
 recorded separately before implementation.
+
+M11f final verification: isolated c52dd27 passed full GCC/Clang normal +
+ASan/UBSan and QBE/reference/ABI matrix; remote CI run 38806159321 succeeded.
+M11h source checkpoint: signed literal spellings pass GCC full tests/runtime,
+94 common literal streams with each host, seven separate C23 separator cases,
+and 142694 sanitizer-fuzz inputs. M11g/M11h full validation still pending here.
+M11i explicit unsigned preprocessing values are designed before implementation.

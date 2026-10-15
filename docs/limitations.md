@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11g. The chronological entries below describe what each
+Current milestone: M11h. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -537,3 +537,19 @@ representable result. Negative right shift follows the target arithmetic policy,
 implemented without host negative-shift assumptions. No change to runtime C
 expression operators or types. Unsigned/nondecimal/character literals and full
 preprocessing remain unfinished in this increment.
+
+## M11h
+
+#if/#elif accept signed octal/hexadecimal/binary integers, C23 digit separators
+and signed l/L/ll/LL suffixes, in addition to decimal. Separators must lie between
+valid base digits. Missing digits, invalid base digits, unknown/mixed-case
+long-long suffixes and uint64 accumulation overflow diagnose explicitly.
+All supported values still fit INT64_MAX. Unsigned suffixes and nondecimal values
+requiring uintmax_t remain unsupported; no wrapping or negative reinterpretation
+is substituted for their missing semantics. Character and bit-precise literals
+remain later work. Runtime C expressions remain int/decimal-only as before.
+
+Seven C23 separator values are asserted independently. GCC 11 rejects the new
+spelling, so these cases are not counted as GCC agreement; Clang accepts them.
+Known legacy behavior is checked explicitly, rather than accepting arbitrary
+host differences. Other common literal cases compare directly with both hosts.

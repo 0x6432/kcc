@@ -758,3 +758,13 @@ syntax or macro expansion. Shift checks precede host operations; negative right
 shifts are explicitly sign-extending via nonnegative arithmetic. Both ternary
 branches are signed-intmax in this subset; later unsigned support must compute
 the common type from both branches even when one is not evaluated.
+
+## M11h preprocessing literal contract
+
+Conditional numeric scanning is separate from both pp lexing and runtime token
+conversion. Prefix/base, digits/separators and suffix are distinct validation
+steps; accumulation is bounded before host arithmetic. Accepted values are still
+signed-intmax only, with absent or signed l/L/ll/LL suffixes. Valid unsigned forms
+and nondecimal values requiring uintmax_t diagnose as unsupported, not as signed
+negative values. Digit-separator grammar is checked even in unevaluated operands.
+No change to parser AST types, C expression conversion or QBE IL types.

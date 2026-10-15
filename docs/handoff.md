@@ -617,3 +617,34 @@ isolated matrix/CI also remain pending at this checkpoint; do not mark either
 verified before their own results complete. M11h signed integer spellings are
 designed in m11-integer-spellings.md before implementation. Unsigned arithmetic,
 character constants and include handling remain later work.
+
+## M11f final verification
+
+Committed isolated c52dd27 passed both full GCC/Clang normal + ASan/UBSan
+matrices, unit/CLI/oracle tests and QBE/reference/ABI execution. Exact-source CI:
+https://github.com/0x6432/kcc/actions/runs/38806159321
+M11f is complete within its signed-decimal subset. Later source work did not
+modify the validation snapshot. M11g's separate full matrix/CI remains pending.
+
+## M11h tested source checkpoint
+
+Conditional signed integer scanning now separates prefix/base, digit/separator
+and suffix validation. Supported bases include octal, hex and C23 binary; signed
+L/LL forms and valid C23 separators are accepted up to INT64_MAX. Runtime C
+conversion is unchanged. Valid unsigned forms/values still diagnose explicitly.
+
+GCC make test and QBE/reference/ABI passed. Added 94 common literal host/model
+agreements with each GCC/Clang and seven independently asserted C23 separator
+cases (legacy GCC 11 rejects all seven; Clang agrees). Eighteen new LF/CRLF/CR
+literal-selection programs passed QBE/reference execution. Malformed base digits,
+prefixes, suffixes/separators and numeric overflow have regression tests. Existing
+642 expression, 321 conditional and 1008 macro stream agreement cases remain
+passing, with their separately counted normative/policy cases unchanged.
+Sanitized fuzzing passed 27905 lexer/preprocessor and 114789 pipeline inputs
+(142694 total), 26 seconds each, without executing arbitrary generated programs.
+
+Full isolated matrix and exact-source CI for M11h remain pending; M11g's matrix
+is queued/running separately after M11f. Do not call either completed until its
+own results are checked. M11i unsigned-value semantics are designed in
+m11-unsigned-conditions.md, not implemented at this checkpoint. Use an explicit
+value type, retain unselected ternary branch types, and preserve signed checks.

@@ -1325,7 +1325,7 @@ static void test_macro_conditions(void)
 		"expected end of line");
 	check_stream("#ifdef X\n", empty, 1, 1, "directives.c:1:1: error: unterminated");
 	check_stream("#ifndef X\nint", keyword, 2, 1, "unterminated conditional");
-	check_stream("#if 1u\nint", rejected, 3, 1, "only decimal conditional integers");
+	check_stream("#if 1u\nint", rejected, 3, 1, "unsigned conditional integers");
 	assert(text);
 	for (size_t i = 0; i < preprocess_conditional_limit; i++)
 		used += (size_t)sprintf(text + used, "#ifndef missing\n");
@@ -1360,7 +1360,7 @@ static void test_expression_conditions(void)
 		"9223372036854775807+1", "(-9223372036854775807-1)-1",
 		"-(-9223372036854775807-1)", "(-9223372036854775807-1)/-1",
 		"(-9223372036854775807-1)%-1", "9223372036854775807*2",
-		"0 && (1+)", "1 || (1+)", "__VA_ARGS__", "defined(__VA_OPT__)", "1u", "0x1", "01", "'a'", "1 ? 2", "1 ? : 2", "1 ? 2 :",
+		"0 && (1+)", "1 || (1+)", "__VA_ARGS__", "defined(__VA_OPT__)", "1u", "0x", "08", "'a'", "1 ? 2", "1 ? : 2", "1 ? 2 :",
 	};
 	char text[8192];
 	size_t used;
