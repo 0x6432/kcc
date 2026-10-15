@@ -36,3 +36,12 @@ implemented within uint64 magnitudes. Complete six-type usual-conversion matrix,
 same-width incompatible prototypes, full-width host/model comparisons and both-
 direction mixed-width separate-object ABI tests cover this increment. This is
 not full integer/C23 support: character constants and char/short types are next.
+
+### M12g ordinary runtime characters
+
+One ASCII source character or simple/octal/hex byte escape is an int expression.
+617 printable/escape checks cover all 256 target bytes in both octal and hex;
+pure decoder units and direct arbitrary-slice fuzzing share preprocessing tests.
+Prefixes/Unicode/multicharacter/string literals remain explicit later work. Char
+declaration types and integer promotions are designed for M12h, not implemented
+by character constants.

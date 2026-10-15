@@ -103,6 +103,22 @@ static struct ast_expression *parse_integer_expression(struct parser *parser)
 	return &node->expression;
 }
 
+/* character-expression ::= ordinary-character-token */
+static struct ast_expression *parse_character_expression(struct parser *parser)
+{
+	struct token token;
+	struct ast_character_expression *node;
+
+	if (!expect_token(parser, token_character, "expected character constant", &token))
+		return NULL;
+	node = ast_new_character(parser->arena, token);
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	return &node->expression;
+}
+
 struct infix_operator {
 	enum token_kind token;
 	unsigned left_binding_power;
@@ -147,13 +163,15 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 static struct ast_expression *parse_expression(struct parser *parser,
 	unsigned minimum_binding_power);
 
-/* primary-atom ::= integer-expression | identifier
+/* primary-atom ::= integer-expression | character-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.
  */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
 
+	if (token.kind == token_character)
+		return parse_character_expression(parser);
 	if (token.kind == token_identifier) {
 		struct ast_name_expression *node;
 

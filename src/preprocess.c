@@ -1933,104 +1933,21 @@ static void advance_condition(struct condition_parser *parser)
 		parser->failed = true;
 }
 
-static int condition_digit(unsigned char byte)
-{
-	if (byte >= '0' && byte <= '9')
-		return byte - '0';
-	if (byte >= 'a' && byte <= 'f')
-		return byte - 'a' + 10;
-	if (byte >= 'A' && byte <= 'F')
-		return byte - 'A' + 10;
-	return -1;
-}
-
-/* condition-character = "'" (ascii-character | simple-escape | octal-escape
- *                         | hexadecimal-escape) "'"
- * One target byte only; prefixed/Unicode/multicharacter forms are separate work.
+/* condition-character = ordinary-character
+ * Shared spelling decoding; conditional values use intmax_t arithmetic.
  */
 static struct condition_value parse_condition_character(struct condition_parser *parser,
 	struct pp_token token)
 {
 	const unsigned char *text = token.location.source->data + token.location.offset;
-	size_t offset = 1;
-	unsigned value;
+	int64_t value;
+	const char *error = parse_character_spelling(text, token.length, &value);
 
-	if (text[0] != '\'') {
-		condition_error(parser, token, "prefixed conditional characters are not supported yet");
+	if (error) {
+		condition_error(parser, token, error);
 		return signed_condition(0);
 	}
-	if (token.length < 3) {
-		condition_error(parser, token, "expected one character in conditional constant");
-		return signed_condition(0);
-	}
-	value = text[offset++];
-	if (value == '\\') {
-		unsigned char escape = text[offset++];
-
-		switch (escape) {
-		case '\'': case '"': case '?': case '\\':
-			value = escape;
-			break;
-		case 'a': value = 7; break;
-		case 'b': value = 8; break;
-		case 'f': value = 12; break;
-		case 'n': value = 10; break;
-		case 'r': value = 13; break;
-		case 't': value = 9; break;
-		case 'v': value = 11; break;
-		case 'x': {
-			size_t digits = 0;
-
-			value = 0;
-			while (offset < token.length - 1) {
-				int digit = condition_digit(text[offset]);
-
-				if (digit < 0)
-					break;
-				if (value > (255 - (unsigned)digit) / 16) {
-					condition_error(parser, token, "conditional character escape exceeds one byte");
-					return signed_condition(0);
-				}
-				value = value * 16 + (unsigned)digit;
-				offset++;
-				digits++;
-			}
-			if (!digits) {
-				condition_error(parser, token, "expected digits in hexadecimal character escape");
-				return signed_condition(0);
-			}
-			break;
-		}
-		default:
-			if (escape < '0' || escape > '7') {
-				condition_error(parser, token, "unsupported conditional character escape");
-				return signed_condition(0);
-			}
-			value = escape - '0';
-			for (size_t digits = 1; digits < 3 && offset < token.length - 1; digits++) {
-				unsigned char next = text[offset];
-
-				if (next < '0' || next > '7')
-					break;
-				value = value * 8 + next - '0';
-				offset++;
-			}
-			if (value > 255) {
-				condition_error(parser, token, "conditional character escape exceeds one byte");
-				return signed_condition(0);
-			}
-			break;
-		}
-	} else if (value >= 128) {
-		condition_error(parser, token, "non-ASCII conditional characters are not supported yet");
-		return signed_condition(0);
-	}
-	if (offset != token.length - 1) {
-		condition_error(parser, token, "multicharacter conditional constants are not supported yet");
-		return signed_condition(0);
-	}
-	/* Target signed plain char; conversion is independent of host char signedness. */
-	return signed_condition(value < 128 ? (int64_t)value : (int64_t)value - 256);
+	return signed_condition(value);
 }
 
 /* condition-integer = integer-constant

@@ -461,6 +461,99 @@ const char *parse_integer_spelling(const unsigned char *text, size_t length,
 	return NULL;
 }
 
+/* ordinary-character = "'" (ascii-character | simple-escape | octal-escape
+ *                              | hexadecimal-escape) "'"
+ * Exactly one target byte, interpreted using target signed plain char.
+ */
+const char *parse_character_spelling(const unsigned char *text, size_t length,
+	int64_t *result)
+{
+	size_t offset = 1;
+	size_t end;
+	unsigned value;
+
+	if (!length)
+		return "expected one character in character constant";
+	if (text[0] != '\'')
+		return "prefixed character constants are not supported yet";
+	if (length < 3 || text[length - 1] != '\'')
+		return "expected one character in character constant";
+	end = length - 1;
+	value = text[offset++];
+	if (value == '\\') {
+		unsigned char escape;
+
+		if (offset == end)
+			return "incomplete character escape";
+		escape = text[offset++];
+		switch (escape) {
+		case '\'': case '"': case '?': case '\\':
+			value = escape;
+			break;
+		case 'a': value = 7; break;
+		case 'b': value = 8; break;
+		case 'f': value = 12; break;
+		case 'n': value = 10; break;
+		case 'r': value = 13; break;
+		case 't': value = 9; break;
+		case 'v': value = 11; break;
+		case 'x': {
+			size_t digits = 0;
+
+			value = 0;
+			while (offset < end) {
+				int digit = integer_digit(text[offset]);
+
+				if (digit < 0)
+					break;
+				if (value > (255 - (unsigned)digit) / 16)
+					return "character escape exceeds one byte";
+				value = value * 16 + (unsigned)digit;
+				offset++;
+				digits++;
+			}
+			if (!digits)
+				return "expected digits in hexadecimal character escape";
+			break;
+		}
+		default:
+			if (escape < '0' || escape > '7')
+				return "unsupported character escape";
+			value = escape - '0';
+			for (size_t digits = 1; digits < 3 && offset < end; digits++) {
+				unsigned char next = text[offset];
+
+				if (next < '0' || next > '7')
+					break;
+				value = value * 8 + next - '0';
+				offset++;
+			}
+			if (value > 255)
+				return "character escape exceeds one byte";
+			break;
+		}
+	} else if (value >= 128) {
+		return "non-ASCII character constants are not supported yet";
+	} else if (!value || value == '\n' || value == '\r' || value == '\'') {
+		return "invalid source character in character constant";
+	}
+	if (offset != end)
+		return "multicharacter constants are not supported yet";
+	*result = value < 128 ? (int64_t)value : (int64_t)value - 256;
+	return NULL;
+}
+
+static struct token convert_character(struct token token, struct diagnostics *diagnostics)
+{
+	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
+	const char *error = parse_character_spelling(text, token.length, &token.character);
+
+	if (error)
+		return invalid_language_token(token, diagnostics, error);
+	token.kind = token_character;
+	return token;
+}
+
 static struct token convert_number(struct token token, struct diagnostics *diagnostics)
 {
 	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
@@ -536,8 +629,7 @@ struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostic
 	case pp_punctuator:
 		return convert_punctuator(token, diagnostics);
 	case pp_character:
-		return invalid_language_token(token, diagnostics,
-			"character constants are not supported yet");
+		return convert_character(token, diagnostics);
 	case pp_string:
 		return invalid_language_token(token, diagnostics,
 			"string literals are not supported yet");
@@ -559,6 +651,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_identifier: return "identifier";
 	case token_unsupported_keyword: return "unsupported-keyword";
 	case token_integer: return "integer";
+	case token_character: return "character";
 	case token_int: return "int";
 	case token_signed: return "signed";
 	case token_unsigned: return "unsigned";

@@ -187,6 +187,8 @@ static bool sema_expression(struct sema *sema,
 		}
 		break;
 	}
+	case expression_character:
+		break;
 	case expression_integer: {
 		struct ast_integer_expression *node =
 			(struct ast_integer_expression *)expression;

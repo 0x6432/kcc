@@ -973,3 +973,29 @@ ASan/UBSan matrix and exact-source CI remain pending. M12g ordinary runtime
 character constants are pre-designed in m12-character-constants.md.
 
 M12f fuzz counts: lexer 23668, pipeline 86086 (109754 total), 26/26 seconds.
+
+## M12d final verification / M12e remote verification
+
+66e7c07 passed its isolated GCC/Clang normal + ASan/UBSan matrix, including
+QBE/reference/ABI. Exact-source CI passed run 38817002032. 609164f (M12e)
+exact-source CI passed run 38818409002; its isolated local matrix remains
+pending independently. M12f CI is running at this observation.
+
+## M12g tested source checkpoint
+
+Ordinary character constants now have distinct language tokens and concrete AST
+nodes, with int type/non-lvalue semantics. Preprocessing/runtime share a pure
+explicit-slice character decoder. All 256 target byte values have octal/hex unit
+coverage; 617 printable/escape checks in 44 full-value host/model/QBE programs
+passed with GCC and Clang. Macro and pasted-prefix diagnostics retain invocation
+locations; source splicing and three line-ending forms pass. Former valid 'x'
+rejection became unsupported 'xy', preserving its original lexical boundary.
+
+Full normal GCC regression/QBE/reference/ABI passed, including prior conditional
+character oracles. Direct decoder and on-demand stream invariants are fuzzed.
+ASan/UBSan bounded fuzzing passed 24619 lexer and 81387 pipeline
+inputs (106006 total), 26/26 seconds,
+without executing arbitrary generated C. Full isolated host/sanitizer matrix
+and exact-source CI remain pending. M12h char types, promotions, canonical byte
+values and QBE sub-word ABI are designed in m12-char-types.md before coding;
+its curated QBE mechanics probe passed with both hosts, not compiler ABI yet.

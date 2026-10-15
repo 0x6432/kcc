@@ -116,6 +116,7 @@ static void assert_same_language_token(struct token left, struct token right)
 	assert(left.spelling_location.source == right.spelling_location.source);
 	assert(left.spelling_location.offset == right.spelling_location.offset);
 	assert(left.length == right.length && left.integer == right.integer);
+	assert(left.character == right.character);
 	assert(left.integer_base == right.integer_base);
 	assert(left.integer_long_suffix == right.integer_long_suffix);
 	assert(left.integer_unsigned_suffix == right.integer_unsigned_suffix);
@@ -138,6 +139,22 @@ static void fuzz_integer_spelling(const unsigned char *data, size_t size)
 	assert(roundtrip.value == spelling.value && !roundtrip.unsigned_suffix && !roundtrip.long_suffix);
 }
 
+static void fuzz_character_spelling(const unsigned char *data, size_t size)
+{
+	int64_t value;
+	int64_t roundtrip;
+	unsigned byte;
+	char text[8];
+
+	if (parse_character_spelling(data, size, &value))
+		return;
+	assert(value >= -128 && value <= 127);
+	byte = (unsigned)(value < 0 ? value + 256 : value);
+	assert(snprintf(text, sizeof(text), "'\\%03o'", byte) == 6);
+	assert(!parse_character_spelling((const unsigned char *)text, 6, &roundtrip));
+	assert(value == roundtrip);
+}
+
 /* libFuzzer requires this spelling; compiler identifiers remain snake_case. */
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 {
@@ -150,6 +167,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	if (size > 65536)
 		return 0;
 	fuzz_integer_spelling(data, size);
+	fuzz_character_spelling(data, size);
 	stream = fopen("/dev/null", "w");
 	assert(stream);
 	diagnostics = (struct diagnostics) { .stream = stream };

@@ -876,3 +876,13 @@ therefore converts both operands to unsigned long long, not unsigned long. The
 shared literal candidate helper returns these distinct types; the lexer only
 decodes base, magnitude and suffix metadata. Existing QBE lowering dispatches on
 width/signedness rather than spelling or rank, so no backend change is needed.
+
+## M12g shared character spelling
+
+parse_character_spelling(text,length,&value) consumes only the explicit byte
+slice, allocates nothing and returns NULL/static error string. It guards empty/
+truncated inputs and yields the target signed-byte value in int64_t, not an
+unsigned literal magnitude. Preprocessing selects intmax_t; language tokens carry
+a separate character field and ast_character_expression has int type in sema.
+The parser still caches one token, and spelling/invocation ownership is unchanged.
+QBE emits a signed word constant; existing explicit conversions handle wider use.

@@ -192,8 +192,42 @@ static void test_integer_spellings(void)
 	}
 }
 
+static void test_character_spellings(void)
+{
+	const char *bad[] = { "", "'", "''", "'''", "'ab'", "'a", "a'", "'\\'",
+		"'\\x'", "'\\x100'", "'\\400'", "'\\1234'", "'\\q'", "'\\u0041'",
+		"L'a'", "u'a'", "U'a'", "u8'a'", "'\n'", "'\r'", "'\200'" };
+	const unsigned char slice[] = { '\'', 'a', '\'', 'z' };
+	const unsigned char nul[] = { '\'', 0, '\'' };
+	int64_t value;
+	char text[16];
+
+	for (unsigned byte = 0; byte <= 255; byte++) {
+		int64_t expected = byte < 128 ? (int64_t)byte : (int64_t)byte - 256;
+
+		assert(snprintf(text, sizeof(text), "'\\%03o'", byte) == 6);
+		assert(!parse_character_spelling((const unsigned char *)text, 6, &value));
+		assert(value == expected);
+		assert(snprintf(text, sizeof(text), "'\\x%02x'", byte) == 6);
+		assert(!parse_character_spelling((const unsigned char *)text, 6, &value));
+		assert(value == expected);
+	}
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+		assert(parse_character_spelling((const unsigned char *)bad[i], strlen(bad[i]), &value));
+	assert(parse_character_spelling(NULL, 0, &value));
+	assert(parse_character_spelling(nul, sizeof(nul), &value));
+	assert(!parse_character_spelling(slice, 3, &value) && value == 97);
+	assert(parse_character_spelling(slice, 4, &value));
+	{
+		const enum token_kind kinds[] = { token_character, token_character, token_character };
+
+		check_tokens("'A' '\\xff' '\\0'", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	}
+}
+
 int main(void)
 {
+	test_character_spellings();
 	test_integer_spellings();
 	test_bitwise_tokens();
 	test_phase_ordering();

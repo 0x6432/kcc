@@ -189,6 +189,14 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, ")\n");
 		return result;
 	}
+	case expression_character: {
+		const struct ast_character_expression *node =
+			(const struct ast_character_expression *)expression;
+
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w copy %jd\n", temporary, (intmax_t)node->value);
+		return temporary;
+	}
 	case expression_integer: {
 		const struct ast_integer_expression *node =
 			(const struct ast_integer_expression *)expression;

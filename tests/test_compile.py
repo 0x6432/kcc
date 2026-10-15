@@ -656,7 +656,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     invalid += [
         "int main(void) { return 1e+2; }", "int main(void) { return 0x1p-1; }",
         "int main(void) { return .5; }", "int main(void) { return 1'g; }",
-        "int main(void) { return 'x'; }", "int main(void) { return u8'x'; }",
+        "int main(void) { return 'xy'; }", "int main(void) { return u8'x'; }",
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
         "%:define X(x) 3\nint main(void) { return X; }",
     ]

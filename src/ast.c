@@ -22,6 +22,23 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	return node;
 }
 
+struct ast_character_expression *ast_new_character(struct arena *arena,
+	struct token token)
+{
+	struct ast_character_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_character_expression) {
+			.expression = {
+				.kind = expression_character,
+				.location = token.location,
+				.depth = 1,
+			},
+			.value = token.character,
+		};
+	return node;
+}
+
 struct ast_name_expression *ast_new_name(struct arena *arena, struct token name)
 {
 	struct ast_name_expression *node = arena_alloc(arena, sizeof(*node));

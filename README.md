@@ -6,11 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M12f: int/unsigned, LP64 long/unsigned long and distinct-rank long long/unsigned
+M12g: int/unsigned, LP64 long/unsigned long and distinct-rank long long/unsigned
 long long support declarations, literals, casts, arithmetic, storage and calls.
 Explicit AST conversions govern extension and narrowing; 64-bit conditions inspect
 every bit. Four-base integer spellings, C23 separators and U/L/LL suffixes follow
-target literal candidate rules. Char/short and other types remain unfinished.
+target literal candidate rules. Ordinary single-byte character constants are int expressions, sharing their
+escape decoder with preprocessing. Char/short declarations and other types
+remain unfinished.
 Includes retain bounded explicit search and direct/computed quoted/basic angles.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior

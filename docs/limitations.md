@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12f. The chronological entries below describe what each
+Current milestone: M12g. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -734,3 +734,19 @@ Ordinary runtime character constants, char/short, floating types and pointers
 remain absent. M12g character constants are designed separately. Earlier LL
 rejection fixtures now use malformed LLL or unsupported floating literals; their
 diagnostic purpose and invocation locations remain covered.
+
+## M12g
+
+Ordinary character constants now produce int expressions with their own concrete
+AST nodes. Preprocessing and runtime share a pure explicit-slice decoder in lex.c:
+one ASCII character or simple/octal/hex escape <=255, with signed plain-char
+target interpretation (-128..127). Prefixes, multi-character constants, Unicode/
+UCN, non-ASCII source bytes, oversized escapes and strings remain unsupported.
+This implementation-defined character policy is tested using hosts configured
+with -fsigned-char; it is not a claim about every C implementation's encoding.
+
+The decoder rejects empty/truncated/unclosed slices before indexing, embedded
+NUL/newline/unescaped quote bytes and unknown escapes. Diagnostics are context-
+neutral, preserving macro invocation locations. Character constants are never
+lvalues. Char/short declaration types are still absent; M12h char types and
+promotions have a separate design and successful QBE byte-ABI mechanics probe.

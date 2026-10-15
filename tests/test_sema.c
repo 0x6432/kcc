@@ -708,8 +708,40 @@ static void test_long_long_rank(void)
 	source_destroy(&source);
 }
 
+static void test_character_expression_tree(void)
+{
+	const char *text = "int main(void) { return '\\xff'; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_return_statement *statement;
+	struct ast_character_expression *character;
+
+	assert(source_from_bytes(&source, "character.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	item = (struct ast_statement_item *)first_function(unit)->body->items;
+	statement = (struct ast_return_statement *)item->statement;
+	assert(statement->value->kind == expression_character);
+	character = (struct ast_character_expression *)statement->value;
+	assert(character->value == -1 && character->expression.depth == 1);
+	assert(!character->expression.type && !character->expression.is_lvalue);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(statement->value == &character->expression);
+	assert(character->expression.type == &type_int && !character->expression.is_lvalue);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_character_expression_tree();
 	test_long_long_rank();
 	test_long_types_and_conversions();
 	test_explicit_cast_tree();
