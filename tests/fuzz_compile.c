@@ -10,7 +10,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 {
 	struct source source;
 	struct arena arena = { 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	FILE *stream;
 	struct diagnostics diagnostics;
@@ -22,8 +22,8 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	diagnostics = (struct diagnostics) { stream, 0 };
 	assert(source_from_bytes(&source, "fuzz.c", data, size));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics)) {
 		assert(diagnostics.errors == 0);
 		assert(codegen_translation_unit(stream, unit));

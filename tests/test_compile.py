@@ -300,6 +300,23 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int f(int x) <% if(x) <% return x; %> return 3; %> "
          "int main(void) <% return f(4); %>\n", 4),
     ]
+    directive_programs = [
+        ("#\nint main(void) { return 7; }\n#\n", 7),
+        ("# /*leading*/\n%: /*other*/\nint main(void) { return 8; }\n", 8),
+        ("\v\f#\nint main(void) { return 9; }\n", 9),
+        ("int main(void)\n{\n#\nint x=2;\n%:\nreturn x+3;\n}\n", 5),
+        ("int main(void) { return 2\n#\n+3; }\n", 5),
+        ("int add\n#\n(int a,\n%:\nint b)\n{\n#\nreturn a+b;\n}\n"
+         "int main(void) { return add(4,7); }\n", 11),
+        ("# // continued\\\nnot C tokens\nint main(void) { return 12; }\n", 12),
+        ("#/* block\n across */\nint main(void) { return 13; }\n", 13),
+        ("%\\\n:\nint main(void) { return 14; }\n", 14),
+        ("/* leading\n */ # /*\v\f*/\nint main(void) { return 15; }\n", 15),
+    ]
+    for text, value in directive_programs:
+        for ending in ("\n", "\r\n", "\r"):
+            programs.append((text.replace("\n", ending), value))
+
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -485,6 +502,21 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
         "%:define X 3\nint main(void) { return X; }",
     ]
+    invalid += [
+        "#42\nint main(void) { return 0; }",
+        "#unknown 12u\nint main(void) { return 0; }",
+        "#\v\nint main(void) { return 0; }", "#\f",
+        "%:\v\nint main(void) { return 0; }",
+        "int main(void) { #\nreturn 0; }",
+        "int/*\n*/#\nmain(void) { return 0; }",
+        "#/*\n*/int main(void) { return 0; }",
+        "int main(void) { return 0; }\n#define X 1\n",
+        "#\n", "# // comment\n", "%:%:\nint main(void) { return 0; }",
+        "#unknown \0\nint main(void) { return 0; }",
+    ]
+    for name in ("define", "undef", "include", "embed", "line", "error", "warning", "pragma",
+                 "if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif"):
+        invalid.append(f"#{name} x\nint main(void) {{ return 0; }}")
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
@@ -494,6 +526,12 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define X 12u\nint main(void) { return 0; }", "preprocessing directive is not supported"),
+        ("#unknown 12u\nint main(void) { return 0; }", "unknown preprocessing directive"),
+        ("#42\nint main(void) { return 0; }", "expected a directive name"),
+        ("#\v\nint main(void) { return 0; }", "only space and tab"),
+        ("int main(void) { #\nreturn 0; }", "misplaced '#'"),
+        ("#\\\r\nunknown\nint main(void) { return 0; }", ":2:1: error:"),
         ("int main(void)\n{\n\tret\\\nurn missing;\n}\n", ":4:5: error:"),
         ("int main(void) {\nreturn mis\\\nsing;\n}\n", ":2:8: error:"),
         ("int main(void) {\r\n\treturn 0;\\\r\n\tmissing;\r\n}\r\n", ":3:9: error:"),

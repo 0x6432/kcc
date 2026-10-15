@@ -14,12 +14,12 @@ static void print_usage(FILE *stream)
 
 static bool dump_language_tokens(const struct source *source, struct diagnostics *diagnostics)
 {
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	bool output_ok = true;
 
-	lexer_init(&lexer, source, diagnostics);
+	preprocess_init(&preprocessor, source, diagnostics);
 	for (;;) {
-		struct token token = lexer_next(&lexer);
+		struct token token = preprocess_next(&preprocessor);
 
 		if (printf("%zu:%s\n", source_physical_offset(token.location),
 			token_kind_name(token.kind)) < 0)
@@ -78,7 +78,7 @@ static int compile_source(const char *path)
 	struct source source;
 	struct arena arena = { 0 };
 	struct diagnostics diagnostics = { stderr, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	bool success = false;
 
@@ -93,8 +93,8 @@ static int compile_source(const char *path)
 		source_destroy(&source);
 		return 1;
 	}
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics) &&
 		diagnostics.errors == 0) {
 		success = codegen_translation_unit(stdout, unit);
@@ -114,7 +114,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m09b");
+		puts("kcc milestone m09c");
 		return 0;
 	}
 

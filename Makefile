@@ -8,7 +8,8 @@ FUZZ_SECONDS = 10
 QBE = qbe
 
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
-COMPILER_SOURCES = $(LEX_SOURCES) src/arena.c src/ast.c src/type.c src/parse.c src/sema.c src/codegen.c
+PREPROCESS_SOURCES = $(LEX_SOURCES) src/preprocess.c
+COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/arena.c src/ast.c src/type.c src/parse.c src/sema.c src/codegen.c
 HEADERS = $(wildcard src/*.h)
 
 .PHONY: all test test-codegen clean fuzz-lex fuzz-compile
@@ -27,14 +28,17 @@ build/test_support: tests/test_support.c src/source.c src/arena.c src/diagnostic
 build/test_source: tests/test_source.c src/source.c src/source.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_source.c src/source.c $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_lex: tests/test_lex.c $(LEX_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_lex.c $(LEX_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_lex: tests/test_lex.c $(PREPROCESS_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_lex.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
 build/test_pp_lex: tests/test_pp_lex.c $(LEX_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_pp_lex.c $(LEX_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/fuzz_lex: tests/fuzz_lex.c $(LEX_SOURCES) $(HEADERS) | build
-	$(FUZZ_CC) $(CPPFLAGS) -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer tests/fuzz_lex.c $(LEX_SOURCES) -o $@
+build/test_preprocess: tests/test_preprocess.c $(PREPROCESS_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_preprocess.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/fuzz_lex: tests/fuzz_lex.c $(PREPROCESS_SOURCES) $(HEADERS) | build
+	$(FUZZ_CC) $(CPPFLAGS) -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer tests/fuzz_lex.c $(PREPROCESS_SOURCES) -o $@
 
 fuzz-lex: build/fuzz_lex
 	mkdir -p build/corpus-lex build/fuzz-artifacts
@@ -56,12 +60,13 @@ test-codegen: build/kcc
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
-test: build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_sema
+test: build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_sema
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
 	./build/test_lex
 	./build/test_pp_lex
+	./build/test_preprocess
 	./build/test_sema
 	python3 tests/test_compile.py
 

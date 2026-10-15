@@ -1,4 +1,4 @@
-#include "lex.h"
+#include "preprocess.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -53,11 +53,19 @@ static void check_raw_stream(const struct source *source, struct diagnostics *di
 	}
 }
 
+static void assert_same_language_token(struct token left, struct token right)
+{
+	assert(left.kind == right.kind);
+	assert(left.location.source == right.location.source);
+	assert(left.location.offset == right.location.offset);
+	assert(left.length == right.length && left.integer == right.integer);
+}
+
 /* libFuzzer requires this spelling; compiler identifiers remain snake_case. */
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 {
 	struct source source;
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	FILE *stream;
 	struct diagnostics diagnostics;
 	size_t previous_end = 0;
@@ -85,10 +93,16 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 			&source, i + 1 }) > physical);
 	}
 	check_raw_stream(&source, &diagnostics);
-	lexer_init(&lexer, &source, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
 	for (size_t steps = 0; ; steps++) {
-		struct token peek = lexer_peek(&lexer);
-		struct token token = lexer_next(&lexer);
+		struct token peek = preprocess_peek(&preprocessor);
+		size_t errors = diagnostics.errors;
+		struct token token;
+
+		assert_same_language_token(peek, preprocess_peek(&preprocessor));
+		token = preprocess_next(&preprocessor);
+		assert_same_language_token(peek, token);
+		assert(diagnostics.errors == errors);
 
 		assert(steps <= source.length);
 		assert(peek.kind == token.kind);
@@ -101,7 +115,9 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(token.length <= source.length - token.location.offset);
 		if (token.kind == token_eof) {
 			assert(token.location.offset == source.length && token.length == 0);
-			assert(lexer_next(&lexer).kind == token_eof);
+			assert_same_language_token(token, preprocess_next(&preprocessor));
+			assert_same_language_token(token, preprocess_peek(&preprocessor));
+			assert(diagnostics.errors == errors);
 			break;
 		}
 		assert(token.length > 0);

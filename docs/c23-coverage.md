@@ -12,7 +12,7 @@ of complete ISO conformance.
 | Declarations/types | subset (M08c) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (M08c) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
-| Preprocessing | raw token foundation only (M09b); no directives/macros | M09-M11, M25 |
+| Preprocessing | subset (null-directive dispatch; M09c), no macros | M09-M11, M25 |
 | Object layout and ABI | subset (integer calls, separate-object GCC/Clang tests, M08c) | M12-M17, M20-M22, M24 |
 | C23 additions | absent | M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |

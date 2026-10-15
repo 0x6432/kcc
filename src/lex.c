@@ -430,7 +430,7 @@ static struct token convert_punctuator(struct token token, struct diagnostics *d
 		}
 	if (spelling_is(token, "#") || spelling_is(token, "%:"))
 		return invalid_language_token(token, diagnostics,
-			"preprocessing directives are not supported");
+			"directive marker cannot be converted to a language token");
 	return invalid_language_token(token, diagnostics, "punctuator is not supported yet");
 }
 
@@ -468,41 +468,6 @@ struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostic
 	}
 	assert(0 && "unknown preprocessing token kind");
 	return token;
-}
-
-static struct token read_language_token(struct lexer *lexer)
-{
-	struct pp_token input;
-
-	do
-		input = pp_lexer_next(&lexer->input);
-	while (input.kind == pp_newline);
-	return token_from_pp(input, lexer->diagnostics);
-}
-
-void lexer_init(struct lexer *lexer, const struct source *source,
-	struct diagnostics *diagnostics)
-{
-	*lexer = (struct lexer) { .diagnostics = diagnostics };
-	pp_lexer_init(&lexer->input, source, diagnostics);
-}
-
-struct token lexer_next(struct lexer *lexer)
-{
-	if (lexer->has_lookahead) {
-		lexer->has_lookahead = false;
-		return lexer->lookahead;
-	}
-	return read_language_token(lexer);
-}
-
-struct token lexer_peek(struct lexer *lexer)
-{
-	if (!lexer->has_lookahead) {
-		lexer->lookahead = read_language_token(lexer);
-		lexer->has_lookahead = true;
-	}
-	return lexer->lookahead;
 }
 
 const char *token_kind_name(enum token_kind kind)

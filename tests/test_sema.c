@@ -19,7 +19,7 @@ static void test_resolved_tree(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *x;
 	struct ast_local_declaration *y;
@@ -34,8 +34,8 @@ static void test_resolved_tree(void)
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && diagnostics.errors == 0);
 	assert(sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
@@ -92,7 +92,7 @@ static void test_point_of_declaration(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *local;
 	struct ast_load_expression *load;
@@ -101,8 +101,8 @@ static void test_point_of_declaration(void)
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
 	local = (struct ast_local_declaration *)first_function(unit)->body->items;
@@ -122,7 +122,7 @@ static void test_conditional_scopes_and_logic(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *outer;
 	struct ast_local_declaration *inner;
@@ -138,8 +138,8 @@ static void test_conditional_scopes_and_logic(void)
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
 	outer = (struct ast_local_declaration *)first_function(unit)->body->items;
@@ -184,7 +184,7 @@ static void test_loop_targets(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_statement_item *item;
 	struct ast_while_statement *outer;
@@ -198,8 +198,8 @@ static void test_loop_targets(void)
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
 	item = (struct ast_statement_item *)first_function(unit)->body->items;
@@ -235,7 +235,7 @@ static void test_for_scope_and_target(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_local_declaration *outer;
 	struct ast_local_declaration *header;
@@ -253,8 +253,8 @@ static void test_for_scope_and_target(void)
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
 	outer = (struct ast_local_declaration *)first_function(unit)->body->items;
@@ -301,7 +301,7 @@ static void test_function_symbols(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { .stream = stream };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_function_declaration *prototype;
 	struct ast_function *main_function;
@@ -310,10 +310,11 @@ static void test_function_symbols(void)
 	struct ast_call_expression *call;
 
 	assert(stream);
-	assert(source_from_bytes(&source, "functions.c", (const unsigned char *)text, sizeof(text) - 1));
+	assert(source_from_bytes(&source, "functions.c",
+		(const unsigned char *)text, sizeof(text) - 1));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	prototype = (struct ast_function_declaration *)unit->declarations;
 	assert(prototype->external.kind == external_function_declaration);
@@ -345,7 +346,7 @@ static void test_parameters_and_arguments(void)
 	struct arena arena = { 0 };
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct ast_translation_unit *unit;
 	struct ast_function_declaration *prototype;
 	struct ast_function *function;
@@ -364,8 +365,8 @@ static void test_parameters_and_arguments(void)
 	assert(source_from_bytes(&source, "parameters.c",
 		(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	prototype = (struct ast_function_declaration *)unit->declarations;
 	function = (struct ast_function *)prototype->external.next;

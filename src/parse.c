@@ -3,7 +3,7 @@
 #include <assert.h>
 
 struct parser {
-	struct lexer *lexer;
+	struct preprocessor *preprocessor;
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	unsigned depth;
@@ -14,7 +14,7 @@ struct parser {
 static bool expect_token(struct parser *parser, enum token_kind kind,
 	const char *message, struct token *result)
 {
-	struct token token = lexer_next(parser->lexer);
+	struct token token = preprocess_next(parser->preprocessor);
 
 	if (token.kind != kind) {
 		if (token.kind != token_invalid)
@@ -89,13 +89,13 @@ static struct ast_expression *parse_expression(struct parser *parser,
 /* primary-expression ::= integer-expression | identifier | "(" expression ")" */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
-	struct token token = lexer_peek(parser->lexer);
+	struct token token = preprocess_peek(parser->preprocessor);
 	struct ast_expression *expression;
 
 	if (token.kind == token_identifier) {
 		struct ast_name_expression *node;
 
-		lexer_next(parser->lexer);
+		preprocess_next(parser->preprocessor);
 		node = ast_new_name(parser->arena, token);
 		if (!node) {
 			allocation_error(parser, token.location);
@@ -110,7 +110,7 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 	}
 	if (token.kind != token_left_paren)
 		return parse_integer_expression(parser);
-	lexer_next(parser->lexer);
+	preprocess_next(parser->preprocessor);
 	expression = parse_expression(parser, 0);
 	if (!expression)
 		return NULL;
@@ -128,14 +128,15 @@ static bool parse_call_arguments(struct parser *parser,
 {
 	struct ast_argument **tail = arguments;
 
-	if (lexer_peek(parser->lexer).kind == token_right_paren)
+	if (preprocess_peek(parser->preprocessor).kind == token_right_paren)
 		return true;
 	for (;;) {
 		struct ast_expression *value;
 		struct ast_argument *argument;
 
 		if (*count == ast_max_arguments) {
-			diagnostic_error(parser->diagnostics, lexer_peek(parser->lexer).location,
+			diagnostic_error(parser->diagnostics,
+				preprocess_peek(parser->preprocessor).location,
 				"call exceeds argument limit (128)");
 			return false;
 		}
@@ -150,9 +151,9 @@ static bool parse_call_arguments(struct parser *parser,
 		*tail = argument;
 		tail = &argument->next;
 		(*count)++;
-		if (lexer_peek(parser->lexer).kind != token_comma)
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			return true;
-		lexer_next(parser->lexer);
+		preprocess_next(parser->preprocessor);
 	}
 }
 
@@ -165,12 +166,12 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 
 	if (!expression)
 		return NULL;
-	while (lexer_peek(parser->lexer).kind == token_left_paren) {
+	while (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
 		struct ast_call_expression *node;
 		struct ast_argument *arguments = NULL;
 		size_t count = 0;
 
-		lexer_next(parser->lexer);
+		preprocess_next(parser->preprocessor);
 		if (!parse_call_arguments(parser, &arguments, &count))
 			return NULL;
 		if (!expect_token(parser, token_right_paren, "expected ')' after call", NULL))
@@ -193,7 +194,7 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 /* prefix-expression ::= postfix-expression | ("+" | "-" | "!") prefix-expression */
 static struct ast_expression *parse_prefix_expression(struct parser *parser)
 {
-	struct token token = lexer_peek(parser->lexer);
+	struct token token = preprocess_peek(parser->preprocessor);
 	struct ast_expression *operand;
 	struct ast_unary_expression *node;
 	enum unary_operator operation;
@@ -201,7 +202,7 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	if (token.kind != token_plus && token.kind != token_minus &&
 		token.kind != token_bang)
 		return parse_postfix_expression(parser);
-	lexer_next(parser->lexer);
+	preprocess_next(parser->preprocessor);
 	switch (token.kind) {
 	case token_plus: operation = unary_plus; break;
 	case token_minus: operation = unary_minus; break;
@@ -287,7 +288,7 @@ static struct ast_expression *parse_expression(struct parser *parser,
 
 	if (parser->depth == ast_max_expression_depth) {
 		diagnostic_error(parser->diagnostics,
-			lexer_peek(parser->lexer).location,
+			preprocess_peek(parser->preprocessor).location,
 			"expression nesting exceeds depth limit (128)");
 		return NULL;
 	}
@@ -297,14 +298,14 @@ static struct ast_expression *parse_expression(struct parser *parser,
 		goto failure;
 
 	for (;;) {
-		struct token token = lexer_peek(parser->lexer);
+		struct token token = preprocess_peek(parser->preprocessor);
 		const struct infix_operator *operator = find_infix_operator(token.kind);
 		struct ast_expression *right;
 		struct ast_expression *node;
 
 		if (!operator || operator->left_binding_power < minimum_binding_power)
 			break;
-		lexer_next(parser->lexer);
+		preprocess_next(parser->preprocessor);
 		right = parse_expression(parser, operator->right_binding_power);
 		if (!right)
 			goto failure;
@@ -390,7 +391,7 @@ static bool begin_nested_statement(struct parser *parser)
 {
 	if (parser->statement_nesting == ast_max_statement_nesting) {
 		diagnostic_error(parser->diagnostics,
-			lexer_peek(parser->lexer).location,
+			preprocess_peek(parser->preprocessor).location,
 			"statement nesting exceeds limit (128)");
 		return false;
 	}
@@ -421,8 +422,8 @@ static struct ast_if_statement *parse_if_contents(struct parser *parser)
 	then_branch = parse_statement(parser);
 	if (!then_branch)
 		return NULL;
-	if (lexer_peek(parser->lexer).kind == token_else) {
-		lexer_next(parser->lexer);
+	if (preprocess_peek(parser->preprocessor).kind == token_else) {
+		preprocess_next(parser->preprocessor);
 		else_branch = parse_statement(parser);
 		if (!else_branch)
 			return NULL;
@@ -547,7 +548,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
-	if (lexer_peek(parser->lexer).kind == token_int) {
+	if (preprocess_peek(parser->preprocessor).kind == token_int) {
 		struct ast_block_item *item = parse_local_declaration(parser);
 
 		if (!item)
@@ -555,7 +556,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		assert(item->kind == block_item_declaration);
 		initializer_declaration = (struct ast_local_declaration *)item;
 	} else {
-		if (lexer_peek(parser->lexer).kind != token_semicolon) {
+		if (preprocess_peek(parser->preprocessor).kind != token_semicolon) {
 			initializer_expression = parse_expression(parser, 0);
 			if (!initializer_expression)
 				return NULL;
@@ -564,7 +565,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 			"expected ';' after for initializer", NULL))
 			return NULL;
 	}
-	if (lexer_peek(parser->lexer).kind != token_semicolon) {
+	if (preprocess_peek(parser->preprocessor).kind != token_semicolon) {
 		condition = parse_expression(parser, 0);
 		if (!condition)
 			return NULL;
@@ -572,7 +573,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 	if (!expect_token(parser, token_semicolon,
 		"expected ';' after for condition", NULL))
 		return NULL;
-	if (lexer_peek(parser->lexer).kind != token_right_paren) {
+	if (preprocess_peek(parser->preprocessor).kind != token_right_paren) {
 		step = parse_expression(parser, 0);
 		if (!step)
 			return NULL;
@@ -646,7 +647,7 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
-	struct token token = lexer_peek(parser->lexer);
+	struct token token = preprocess_peek(parser->preprocessor);
 
 	if (token.kind == token_for) {
 		struct ast_for_statement *node = parse_for_statement(parser);
@@ -711,8 +712,8 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
-	if (lexer_peek(parser->lexer).kind == token_equal) {
-		lexer_next(parser->lexer);
+	if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+		preprocess_next(parser->preprocessor);
 		initializer = parse_expression(parser, 0);
 		if (!initializer)
 			return NULL;
@@ -734,7 +735,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 	struct ast_statement *statement;
 	struct ast_statement_item *node;
 
-	if (lexer_peek(parser->lexer).kind == token_int)
+	if (preprocess_peek(parser->preprocessor).kind == token_int)
 		return parse_local_declaration(parser);
 	statement = parse_statement(parser);
 	if (!statement)
@@ -757,9 +758,9 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 
 	if (!expect_token(parser, token_left_brace, "expected '{'", &opening))
 		return NULL;
-	while (lexer_peek(parser->lexer).kind != token_right_brace) {
+	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
 		struct ast_block_item *item;
-		struct token token = lexer_peek(parser->lexer);
+		struct token token = preprocess_peek(parser->preprocessor);
 
 		if (token.kind == token_eof) {
 			diagnostic_error(parser->diagnostics, token.location,
@@ -778,7 +779,7 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 		*tail = item;
 		tail = &item->next;
 	}
-	lexer_next(parser->lexer);
+	preprocess_next(parser->preprocessor);
 	node = ast_new_compound(parser->arena, opening.location, items);
 	if (!node)
 		allocation_error(parser, opening.location);
@@ -806,11 +807,11 @@ static bool parse_parameters(struct parser *parser,
 {
 	struct ast_parameter **tail = &declaration->parameters;
 
-	if (lexer_peek(parser->lexer).kind == token_void) {
-		lexer_next(parser->lexer);
+	if (preprocess_peek(parser->preprocessor).kind == token_void) {
+		preprocess_next(parser->preprocessor);
 		return true;
 	}
-	if (lexer_peek(parser->lexer).kind == token_right_paren)
+	if (preprocess_peek(parser->preprocessor).kind == token_right_paren)
 		return true;
 	for (;;) {
 		struct token beginning;
@@ -819,14 +820,15 @@ static bool parse_parameters(struct parser *parser,
 		bool has_name = false;
 
 		if (declaration->parameter_count == ast_max_parameters) {
-			diagnostic_error(parser->diagnostics, lexer_peek(parser->lexer).location,
+			diagnostic_error(parser->diagnostics,
+				preprocess_peek(parser->preprocessor).location,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
 		if (!expect_token(parser, token_int, "expected 'int' parameter type", &beginning))
 			return false;
-		if (lexer_peek(parser->lexer).kind == token_identifier) {
-			name = lexer_next(parser->lexer);
+		if (preprocess_peek(parser->preprocessor).kind == token_identifier) {
+			name = preprocess_next(parser->preprocessor);
 			has_name = true;
 		}
 		parameter = ast_new_parameter(parser->arena, beginning.location, name, has_name);
@@ -837,9 +839,9 @@ static bool parse_parameters(struct parser *parser,
 		*tail = parameter;
 		tail = &parameter->next;
 		declaration->parameter_count++;
-		if (lexer_peek(parser->lexer).kind != token_comma)
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			return true;
-		lexer_next(parser->lexer);
+		preprocess_next(parser->preprocessor);
 	}
 }
 
@@ -869,8 +871,8 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		return NULL;
 	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))
 		return NULL;
-	if (lexer_peek(parser->lexer).kind == token_semicolon) {
-		lexer_next(parser->lexer);
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		preprocess_next(parser->preprocessor);
 		return &declaration->external;
 	}
 	parser->block_items = 0;
@@ -886,11 +888,11 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */
-struct ast_translation_unit *parse_translation_unit(struct lexer *lexer,
+struct ast_translation_unit *parse_translation_unit(struct preprocessor *preprocessor,
 	struct arena *arena, struct diagnostics *diagnostics)
 {
 	struct parser parser = {
-		.lexer = lexer,
+		.preprocessor = preprocessor,
 		.arena = arena,
 		.diagnostics = diagnostics,
 	};
@@ -903,7 +905,7 @@ struct ast_translation_unit *parse_translation_unit(struct lexer *lexer,
 		struct ast_external_declaration *declaration;
 
 		if (count == ast_max_external_declarations) {
-			diagnostic_error(diagnostics, lexer_peek(lexer).location,
+			diagnostic_error(diagnostics, preprocess_peek(preprocessor).location,
 				"translation unit exceeds declaration limit (512)");
 			return NULL;
 		}
@@ -913,7 +915,7 @@ struct ast_translation_unit *parse_translation_unit(struct lexer *lexer,
 		*tail = declaration;
 		tail = &declaration->next;
 		count++;
-	} while (lexer_peek(lexer).kind != token_eof);
+	} while (preprocess_peek(preprocessor).kind != token_eof);
 	unit = ast_new_translation_unit(arena, declarations);
 	if (!unit)
 		allocation_error(&parser, declarations->location);

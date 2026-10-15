@@ -15,7 +15,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
-| M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | in progress (M09a/M09b complete) |
+| M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
@@ -326,3 +326,38 @@ ABI and ASan/UBSan. Final sanitized fuzzing completed 106643 lexer inputs
 26 seconds per harness. Earlier 21-second runs passed (58630/320824).
 README factorial example exits 120; raw fixture inspection succeeds without
 numeric conversion. Verify remote CI separately after pushing.
+
+M09b remote CI passed: https://github.com/0x6432/kcc/actions/runs/38719725392
+
+## M09C completion record
+
+preprocess.c now owns raw input and parser-visible one-token lookahead. Parser,
+driver, semantic tests and fuzz paths migrated together; the temporary language
+lexer wrapper was removed. Null #/%: directives disappear anywhere between C
+tokens before conversion. Directive start/whitespace/comment/splice/EOF behavior
+is explicit. Known-but-unsupported, unknown, malformed and misplaced directives
+reject without converting their bodies. Raw lexical errors remain distinct and
+are not rediagnosed. Error tokens stay nonempty even for bad separators at EOF.
+
+Dedicated tests cover 16 standard directive names, null-only streams, digraphs,
+VT/FF before/after markers and inside comments, block-comment logical lines,
+physical spliced locations, draining errors, no eager future-line diagnostics,
+stable peek/EOF and nonempty error progress. CLI tests distinguish raw inspection,
+processed language tokens and empty-TU rejection. Thirty LF/CRLF/CR runtime/
+reference cases place null directives before/within/after supported C constructs;
+late invalid directives still prevent all compiler IL. Existing source/oracle/
+AST/ABI coverage remains. Both fuzz harnesses use the production preprocessor.
+
+M09 is complete for its stated subset, not full C23 preprocessing. Non-null
+directives, macro expansion, headers, conditions, complete encoding/literals and
+macro provenance remain deferred. Clang/compiler-rt had disappeared from the
+sandbox and were restored; dependencies may vanish again. Exact final local
+verification/fuzz counts follow below. Remote CI is checked separately after
+push. Next: specify a small M10 object-like macro slice before implementation.
+
+M09c local verification passed: GCC/Clang strict builds; directive/cache/EOF,
+raw/conversion, CLI, source/oracle/AST tests; QBE/reference execution,
+separate-object integer ABI and ASan/UBSan. Final sanitized fuzzing completed
+69628 lexer/preprocessor inputs and 126498 full-pipeline inputs in 26 seconds
+each. Earlier 21-second runs passed too (54419/127155). The null-directive
+fixture compiles/links and exits 7. Remote CI is verified separately after push.

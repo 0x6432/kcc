@@ -90,14 +90,7 @@ struct pp_lexer {
 	struct pp_token lookahead;
 };
 
-/* Transitional language-token stream; owns raw input, not a token vector. */
-struct lexer {
-	struct pp_lexer input;
-	struct diagnostics *diagnostics;
-	bool has_lookahead;
-	struct token lookahead;
-};
-
+/* Requires source_prepare() before any source spelling is borrowed. */
 void pp_lexer_init(struct pp_lexer *lexer, const struct source *source,
 	struct diagnostics *diagnostics);
 struct pp_token pp_lexer_next(struct pp_lexer *lexer);
@@ -106,11 +99,6 @@ const char *pp_token_kind_name(enum pp_token_kind kind);
 /* Input must not be pp_newline. Raw-invalid diagnostics are not repeated. */
 struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostics);
 
-/* Requires source_prepare() before any source spelling is borrowed. */
-void lexer_init(struct lexer *lexer, const struct source *source,
-		struct diagnostics *diagnostics);
-struct token lexer_next(struct lexer *lexer);
-struct token lexer_peek(struct lexer *lexer);
 const char *token_kind_name(enum token_kind kind);
 
 #endif

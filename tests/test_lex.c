@@ -1,4 +1,4 @@
-#include "lex.h"
+#include "preprocess.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -10,25 +10,25 @@ static void check_tokens(const char *text, const enum token_kind *kinds,
 	struct source source;
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 					(const unsigned char *)text, strlen(text)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
+	preprocess_init(&preprocessor, &source, &diagnostics);
 	for (size_t i = 0; i < count; i++) {
-		struct token first = lexer_peek(&lexer);
-		struct token second = lexer_peek(&lexer);
-		struct token next = lexer_next(&lexer);
+		struct token first = preprocess_peek(&preprocessor);
+		struct token second = preprocess_peek(&preprocessor);
+		struct token next = preprocess_next(&preprocessor);
 
 		assert(first.kind == kinds[i]);
 		assert(first.kind == second.kind && first.kind == next.kind);
 		assert(first.location.offset == next.location.offset);
 		assert(first.length == next.length);
 	}
-	assert(lexer_next(&lexer).kind == token_eof);
-	assert(lexer_next(&lexer).kind == token_eof);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
 	assert(diagnostics.errors == errors);
 	assert(fclose(stream) == 0);
 	source_destroy(&source);
@@ -49,6 +49,8 @@ static void test_basic(void)
 	check_tokens(" \t\r\n\v\f", NULL, 0, 0);
 	check_tokens("// EOF", NULL, 0, 0);
 	check_tokens("/**/", NULL, 0, 0);
+	check_tokens("#", NULL, 0, 0);
+	check_tokens("%: /* null */\n", NULL, 0, 0);
 }
 
 static void test_errors(void)
@@ -56,7 +58,7 @@ static void test_errors(void)
 	const enum token_kind invalid[] = { token_invalid };
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
-		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@", "#",
+		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@",
 		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<", ">>=",
 	};
 
@@ -92,21 +94,21 @@ static void test_binary_and_values(void)
 	struct source source;
 	FILE *stream = tmpfile();
 	struct diagnostics diagnostics = { stream, 0 };
-	struct lexer lexer;
+	struct preprocessor preprocessor;
 	struct token token;
 
 	assert(stream);
 	assert(source_from_bytes(&source, "binary.c", bytes, sizeof(bytes)));
 	assert(source_prepare(&source));
-	lexer_init(&lexer, &source, &diagnostics);
-	assert(lexer_next(&lexer).kind == token_invalid);
-	assert(lexer_next(&lexer).kind == token_invalid);
-	token = lexer_next(&lexer);
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	assert(preprocess_next(&preprocessor).kind == token_invalid);
+	assert(preprocess_next(&preprocessor).kind == token_invalid);
+	token = preprocess_next(&preprocessor);
 	assert(token.kind == token_integer && token.integer == 0);
-	token = lexer_next(&lexer);
+	token = preprocess_next(&preprocessor);
 	assert(token.kind == token_integer && token.integer == 42);
 	assert(token.location.offset == 4 && token.length == 2);
-	assert(lexer_next(&lexer).kind == token_eof);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
 	assert(diagnostics.errors == 2);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);

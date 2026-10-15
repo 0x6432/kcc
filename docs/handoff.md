@@ -2,12 +2,12 @@
 
 ## Current checkpoint
 
-M09b: distinct raw preprocessing tokens and deferred language conversion.
+M09c: preprocessor ownership, null directives and initial directive errors.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M09a remote CI passed: https://github.com/0x6432/kcc/actions/runs/38717250245
-M09b is a separate tested commit/push. Get the latest exact hash from git log -1;
-this document avoids a circular reference to its own commit.
+M09b remote CI passed: https://github.com/0x6432/kcc/actions/runs/38719725392
+M09's stated phase/token/null subset is complete. Get the exact latest hash
+from git log -1; this file avoids a circular reference to its own commit.
 
 ## Resume safely
 
@@ -62,15 +62,25 @@ VT/FF outside comments set has_non_directive_space; M09c must validate it only
 in directive separators after # (not before #). EOF and repeat-peek flags are
 stable, with no repeated diagnostics.
 
-A stateless token_from_pp performs keyword/int/punctuator conversion. It must
-not receive pp_newline; it propagates raw-invalid errors without rediagnosis.
-The transitional struct lexer owns raw input, skips newlines and converts lazily
-for the existing parser API. Never read the same owned raw input independently
-through both streams. The language bridge still rejects #/%: directives. M09c
-will replace this adapter with actual preprocessor dispatch. Other stages keep
-their grammar and interfaces. --pp-tokens is raw inspection, not -E or compiling.
-Its format is physical_offset:kind:logical_length:leading_space:at_line_start:
-non_directive_space (one line; final three fields are 0/1). --tokens is unchanged.
+A stateless token_from_pp still converts raw tokens in lex.c; it must not receive
+pp_newline and never rediagnoses pp_invalid. The temporary struct lexer adapter
+has been removed. preprocess.c owns raw input and the sole parser-facing next/
+peek cache. parse_translation_unit now takes struct preprocessor; every driver/
+test/fuzz consumer migrated. No grammar/AST/sema/codegen changes. --tokens shows
+language tokens after null removal; --pp-tokens remains raw inspection with its
+unchanged physical_offset:kind:logical_length:leading_space:at_line_start:
+non_directive_space format (one line, final three fields 0/1).
+
+Only raw #/%: with at_line_start dispatches. Null directives accept space/tab/
+comments up to external newline or the documented EOF extension. VT/FF before
+# is allowed, after it outside comments fails. That diagnostic anchors the next
+token/terminator; its returned error token marks the nonempty directive marker.
+Unknown/unsupported/malformed/misplaced directives fail and drain their raw line,
+without converting body numbers or keywords. Raw-invalid names retain lexical
+locations/diagnostics; distinct lexical errors while draining may add errors.
+Repeated peek/EOF never duplicates them. Debug inspection can continue next line;
+compilation stops on errors and produces no IL. Null-only streams are accepted
+here; the current parser still rejects an empty TU. No macro state/allocation.
 
 One implementation file per stage, concrete AST structs, on-demand lexer with
 one cached token, recursive descent/BNF comments and Pratt expressions remain.
@@ -109,9 +119,10 @@ implicit return value. No automatic local zeroing or missing-return warning.
 
 Raw quoted literals and punctuators do not enable their C semantics. Only brace
 digraphs are newly accepted language spelling; int-only conversion still applies.
-No directives/macros, other types, pointers/function values, variadics, local
+Only null directives are supported. No non-null directives/macros, other types,
+pointers/function values, variadics, local
 prototypes, globals/storage classes, comma/update/compound-assignment operators.
-Partial phases only: no directives, header-name context, encoding/UCNs/BOM,
+Partial phases only: no non-null directives, header-name context, encoding/UCNs/BOM,
 #line presumed locations or macro provenance yet. Missing terminal newlines
 remain an acceptance extension, not strict phase-2 validation. No synthetic
 newline is appended. Allocation failures are handled but fault injection is
@@ -143,22 +154,33 @@ paths. Final local/fuzz results and remote verification follow below.
 
 ## Next milestone
 
-M09c: specify and implement preprocess.c ownership, directive line dispatch and
-null directives before coding. Reuse raw pp tokens and token_from_pp; do not
-reclassify keywords/numbers while lexing. Decide parser-facing next/peek API and
-update every driver/test/fuzz caller together. A # or %: introduces a directive
-only at raw line start, with comments/splices already accounted for. Check VT/FF
-metadata only after the introducing #; null directives may contain comments and
-end at a real newline or the documented EOF extension. Unknown/unsupported or
-misplaced directives must diagnose and prevent compiler IL. Preserve diagnostics
-and one-token lookahead; no TU vector. No macro expansion yet (M10), includes or
-conditional sections (M11). Run normal/Clang/sanitizer/runtime/ABI/fuzz checks,
-commit/push each tested slice and update this handoff.
+M10: plan small object-like definition/undefinition and rescan slices before
+coding. Specify macro table/replacement-token ownership, raw-versus-expanded
+input frames, deferred conversion, recursion suppression semantics, diagnostics,
+provenance and expansion/depth/output limits. Do not use naive string replacement
+or re-lex whole translation units. Verify suppression/rescanning corner cases
+against the chosen C23 draft and host preprocessors; a macro-generated # must
+never start a directive. Keep each concrete state type explicit and code readable
+in preprocess.c. Object-like and function-like macros can be separate tested
+checkpoints; stringizing/pasting/includes/conditions remain M11. Update relevant
+caller ownership/lifetime APIs together if macro storage needs the arena.
 
-M09b local verification passed: GCC/Clang, raw token/conversion/CLI/source/oracle/
-AST tests, QBE/reference execution, separate-object ABI and ASan/UBSan.
-Final sanitized fuzzing: 106643 lexer (raw plus converted streams) and 466292
-pipeline inputs in 26 seconds each. Earlier 21-second runs passed too
-(58630/320824). README factorial exits 120 and raw fixture inspection succeeds.
-Retained repo build artifacts are under 10 MiB; external dependencies under
-70 MiB. Check M09b remote CI after pushing, independently of local results.
+Run normal GCC/Clang, stream/source/oracle/AST, QBE/reference/ABI, ASan/UBSan and
+both fuzz paths. Clang/compiler-rt vanished on this resume and were restored with
+sudo dnf install -y clang compiler-rt; do not assume dependencies persist. Commit/
+push each tested checkpoint and update docs. Final M09c local/fuzz results are
+recorded below; verify its remote CI independently after pushing.
+
+Diagnostic performance note: line/column lookup rescans physical prefixes;
+raw-line draining with many lexical errors can be superlinear. There is no
+error-count cap yet. Preserve existing fuzz input/time limits and consider
+line indexing/diagnostic caps with M10 resource design, rather than claiming a
+large-hostile-input CPU bound from the byte limit alone.
+
+M09c local verification passed: GCC/Clang, directive/cache/EOF/raw/conversion/CLI,
+source/oracle/AST, QBE/reference executables, separate-object ABI and ASan/UBSan.
+Final sanitized fuzzing: 69628 lexer/preprocessor and 126498 pipeline inputs in
+26 seconds each; earlier runs passed (54419/127155 in 21 seconds each).
+The null-directive fixture compiles/links and exits 7. Retained build artifacts
+are under 10 MiB; external dependencies under 70 MiB. Check M09c remote CI after
+pushing, independently of these local passes.

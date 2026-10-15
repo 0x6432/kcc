@@ -7,8 +7,8 @@ and update their tests in the same checkpoint.
 | Producer | Consumer | Contract |
 | --- | --- | --- |
 | source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
-| lexer | future preprocessor / current language adapter | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
-| preprocessor | parser | Same token API; expanded tokens retain spelling and expansion provenance |
+| lexer | preprocessor | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
+| preprocessor | parser | One cached language token, null directives removed before conversion; errors prevent IL; macro provenance is future work |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
 | sema | codegen | Validated typed AST, explicit conversions, resolved declarations; failure prevents codegen |
 | codegen | QBE | Well-formed IL for the pinned target; no source-language validation here |
@@ -365,3 +365,76 @@ non-white-space characters are pp_other until language conversion. Partial
 quotes/comments yield one invalid token and make progress; no input vector.
 Header-name context, UCN identifiers and macro source/expansion provenance remain
 unimplemented, not silently converted through the host preprocessor.
+
+## M09c design before implementation
+
+preprocess.c becomes the sole parser-facing input stage. struct preprocessor
+owns a pp_lexer and one cached language token; preprocess_next/peek dispatch
+raw directives before calling token_from_pp. Remove M09b's temporary struct
+lexer/lexer_next/peek adapter rather than maintain two compiler frontends.
+Change parser input to struct preprocessor and update driver, semantic tests,
+language-token tests and both fuzz build paths in the same checkpoint. Raw
+pp_lexer APIs and --pp-tokens remain unchanged; --tokens now shows language
+tokens after directive dispatch. AST/sema/codegen interfaces do not change.
+No macro tables, arena allocations, full-file buffers or speculative expansion
+state are introduced in this slice.
+
+Only raw pp_punctuator # or %: with at_line_start introduces a directive.
+Before #, horizontal whitespace/comments (including VT/FF) are allowed. After
+#, has_non_directive_space on the next token records forbidden VT/FF separators;
+check it even when that token is newline or EOF. VT/FF inside a comment count
+only as the comment's one replacement space. Anchor a bad-separator diagnostic
+at the following token/terminator, whose location is available. Real newlines
+outside comments terminate directives; block-comment internal newlines do not.
+Splices have already disappeared. Null directives are discarded, including an
+EOF terminator under the existing missing-final-newline extension. A null
+stream is valid at this stage; the current parser still rejects an empty TU.
+
+An identifier after # is dispatched as known-but-unsupported (all standard
+non-null directives) or unknown. Other token kinds are malformed directive
+names. No numeric/keyword conversion occurs inside rejected directives. A raw
+invalid token preserves its lexical diagnostic without a duplicate. Failed or
+misplaced directives are drained through their logical line using raw tokens,
+then return one nonempty invalid language token at the directive marker; the
+diagnostic still points to the offending token. Raw-invalid tokens retain their
+lexical location. This also guarantees progress when bad trivia is at EOF.
+Distinct raw lexical errors encountered while draining remain diagnostics.
+This is bounded line-level cleanup for debug inspection, not general parser
+error recovery. The compiler stops on failure and emits no IL. Repeated peek
+and EOF remain stable with no extra diagnostics; every read advances or yields
+EOF. Unsupported #pragma/#error/#warning are not silently executed or ignored.
+Standalone ##/%:%: remain unsupported operators, not directive introducers.
+
+Test null directives before/within/after code, digraph markers, comments,
+physical splices/locations, VT/FF before versus after #, EOF, malformed/unknown/
+unsupported/misplaced directives and lexical failures during draining. Fuzz the
+actual facade's cached-token/progress/error invariants and the full compiler;
+keep raw lexer fuzzing too. Run existing source/oracle/AST, GCC/Clang,
+QBE/reference/ABI, ASan/UBSan and CI. M09 completes only the stated phase/token/
+null-directive subset; macro expansion stays M10 and includes/conditions M11.
+M10 must never reinterpret macro-generated # tokens as new directives.
+
+### M09c implemented contract
+
+The temporary lexer language adapter was removed. Parser input is now struct
+preprocessor with preprocess_next/peek; raw pp_lexer and token_from_pp remain in
+lex.c. Driver --tokens, semantic tests, language-token tests and lexer/pipeline
+fuzz consumers all use the same real facade. --pp-tokens still bypasses dispatch
+for raw inspection. PREPROCESS_SOURCES in Makefile wires the stage consistently.
+There is no new allocation, per-token ownership or grammar/AST/codegen change.
+
+Only #/%: at raw line start dispatches. Null directives allow space/tab/comments
+through external newline or the existing EOF extension. VT/FF before a marker
+is ordinary whitespace; after it, outside comments, the following raw token's
+flag triggers a diagnostic (including newline/EOF). Block comments do not end
+a directive internally; line comments stop before newline. Unsupported known,
+unknown, malformed and misplaced directives are rejected, with raw line draining
+and no premature numeric/keyword conversion of their bodies. Diagnostic anchor
+is the offending token; the returned invalid token marks the nonempty directive
+introducer. Raw-invalid tokens propagate their original location/diagnostic.
+EOF and repeated peek remain stable. A null-only stream is allowed here but
+still rejected as an empty translation unit by the current parser.
+
+M09's phase/token/null-directive foundation is complete, not all preprocessing.
+M10 must design macro storage, expansion contexts, recursion suppression and
+limits before implementation; never treat expanded # as a new directive.

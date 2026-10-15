@@ -6,7 +6,7 @@ assembler/linker and system libc; self-hosting later; GitHub Actions CI.
 
 ## Pipeline and stage boundaries
 
-`raw source -> source_prepare -> pp_lexer -> [future preprocessor] -> token_from_pp -> parser -> sema -> QBE IL`
+`raw source -> source_prepare -> pp_lexer -> preprocessor -> token_from_pp -> parser -> sema -> QBE IL`
 
 M09a implements the input-newline policy and line splicing before lexing, not
 full preprocessing. source_prepare is explicit/fallible and runs before any
@@ -17,12 +17,11 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-The current subset still bypasses directives/macro expansion and never invokes
-the host preprocessor. M09b introduces distinct preprocessing tokens; M09c will add directive
-dispatch without changing the parser's grammar. Complete phase ordering,
-encoding/UCNs and final-line constraints are not claimed. Missing terminal
-newlines remain an acceptance extension; no synthetic newline is appended.
-Reference: WG14 N3096 5.1.1.2 and 6.10,
+M09c dispatches null directives before token conversion. Non-null directives,
+macro expansion and includes remain unsupported; the host preprocessor is not
+invoked. Complete phase ordering, encoding/UCNs and final-line constraints are
+not claimed. Missing terminal newlines remain an acceptance extension; no
+synthetic newline is appended. Reference: WG14 N3096 5.1.1.2 and 6.10,
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
 
 One implementation file per stage: `source.c`, `lex.c`, `preprocess.c`, `ast.c`,
@@ -62,14 +61,30 @@ newlines are explicit tokens. Block comments become one space and never create
 directive ends from their internal newlines. Physical locations remain mapped
 by source.c. Header-name context/Unicode/UCNs/macro provenance are not complete.
 
-A transitional struct lexer owns a pp_lexer, skips pp_newline and converts one
-token lazily, preserving the parser's existing API. It rejects all directives;
-it does not expand macros. Raw and converted streams each cache one lookahead.
-The language wrapper calls raw next, not raw peek, so it does not prefetch an
-extra parser token. Consumers must not mix reads through both ownership paths.
-M09c will replace this temporary parser-facing adapter with preprocess.c and
-reuse token_from_pp only after directive/macro processing. No token vectors or
-empty speculative implementation files are introduced.
+## M09c preprocessor ownership
+
+preprocess.c owns the sole parser-facing input path. struct preprocessor owns
+raw input and caches one language token. Its next/peek APIs remove null
+#/%: directives and external newlines before token_from_pp performs conversion.
+Parser input changed from struct lexer to struct preprocessor; every consumer
+was updated, and the temporary lexer adapter was removed. AST/sema/codegen
+interfaces and parser grammar remain unchanged. There is no token vector.
+
+Only a raw marker with at_line_start starts a directive; block-comment internal
+newlines do not reset it. Null directives contain only allowed trivia through
+newline or the existing EOF extension. VT/FF are allowed before a marker, but
+not after it outside comments. Known unsupported directives, unknown names,
+malformed names and misplaced markers diagnose; no directive is silently
+expanded/ignored as if implemented. Failed lines are drained as raw tokens so
+their bodies cannot leak into normal C conversion. A nonempty error token marks
+the directive, even if the bad separator is at EOF. Distinct raw lexical errors
+remain diagnostics; repeated peek/EOF never repeats them. Debug token inspection
+can resume after a bad line, while compilation rejects it before any IL.
+
+Future macro work extends this stage, not the lexer/parser. It must specify
+ownership, recursion suppression, token provenance and resource bounds before
+implementation. Macro-generated # cannot introduce new directives. Headers,
+conditional sections and macro operators remain later milestones.
 
 ## Target model and QBE limits
 

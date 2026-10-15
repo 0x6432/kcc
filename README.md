@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M09b: raw preprocessing tokens are now distinct from language tokens. The raw stream preserves newline/spacing state and scans numbers without assigning values. Keyword, integer and supported-punctuator conversion is a separate lazy step. Parser grammar and M08 code generation stay unchanged; directives and macro expansion remain unimplemented.
+M09c: an on-demand preprocessor now owns parser input. Null directives (# and %:) are removed before language-token conversion; unsupported, unknown, malformed and misplaced directives diagnose clearly. The temporary lexer adapter is gone. M09 is complete for its stated phase/token/null-directive subset; macro expansion remains M10.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -66,13 +66,13 @@ cc build/example.s -o build/example
 ```
 
 Supported: normalized line endings, backslash-newline splicing, physical source
-locations, decimal int literals, int locals, simple assignment, arithmetic,
+locations, null directives (#/%:), decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: directives/macros, other types, globals/storage classes, local
+Unsupported: non-null directives/macros, other types, globals/storage classes, local
 prototypes, function values/pointers, variadics, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
 
@@ -88,7 +88,8 @@ and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
 ## Raw token inspection
 
-`--tokens file.c` still dumps converted language-token kinds and physical starts.
+`--tokens file.c` dumps language-token kinds and physical starts after null
+directives are removed.
 `--pp-tokens file.c` dumps the raw stream without dispatching directives or
 converting numbers/keywords. Each line has:
 
@@ -106,5 +107,6 @@ all C23 punctuator spellings (including :: and digraphs). This does not implemen
 those language features: conversion still rejects unsupported constants, types
 and operators. Brace digraphs <%/%> are accepted by the current grammar. Raw
 inspection can succeed for text the compiler rejects; it is not a preprocessor
-or conformance check. Header-name context, Unicode/UCNs and macro provenance
+or conformance check. Only null directives are handled by the compiler today.
+Header-name context, Unicode/UCNs and macro provenance
 remain future work. Both debug dumps may show partial output on lexical errors.

@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M09b. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09a/M09b additions.
+Current milestone: M09c. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09 additions.
 
 ## M00
 
@@ -227,7 +227,7 @@ still apply. source_prepare must run before borrowing any source spelling.
 Allocation-failure behavior is handled transactionally but fault-injection tests
 remain future work. Fuzzing compiles arbitrary inputs, never executes them.
 
-## M09b (current)
+## M09b
 
 Raw pp tokens are now a distinct on-demand stream, with no numeric values or
 keyword classification. Numbers use ASCII pp maximal munch, not early integer
@@ -251,3 +251,35 @@ support, encoding/escape-value validation, string concatenation, macro expansion
 #include, #line or expansion provenance. Prepared logical spelling and physical
 location mappings remain the only provenance. No additional token allocation or
 whole-file materialization; all source and AST limits remain in force.
+
+## M09c (current)
+
+The real preprocessor facade owns parser input; no temporary language lexer
+wrapper remains. Only null #/%: directives are supported. Other standard names
+(including pragma/error/warning), unknown names, malformed directives and
+misplaced markers explicitly fail. This is not macro expansion or a complete
+preprocessor, and no host preprocessor is invoked. The parser's supported C
+subset is unchanged; empty translation units still fail after null removal.
+
+VT/FF before a marker is allowed, but after it outside comments is rejected
+using leading-trivia metadata. Such diagnostics point at the following raw
+token or terminator, not the exact whitespace byte. EOF is accepted as a null
+directive terminator under the existing missing-final-newline extension. Comments
+are one replacement space; their internal newlines do not end directives.
+Failed directive lines drain as raw tokens before one nonempty invalid language
+token is returned; distinct raw lexical errors may add diagnostics. Debug
+inspection can continue after a failed line; this is not general parser error
+recovery. Compilation rejects errors before emitting any IL.
+
+All earlier source/token/int-language restrictions remain. No definitions,
+#undef, conditional sections, include/header-name context, #line, macro expansion
+provenance, complete Unicode/UCN/encoding/literal handling or final-line constraint
+validation. Raw/processed streams remain on demand with bounded source buffers;
+this slice adds no token allocation or macro expansion state.
+
+Diagnostic line/column lookup currently rescans physical source prefixes. Many
+lexical errors in one drained line or a debug dump can therefore take
+superlinear time; there is no diagnostic-count cap yet. Source size is bounded,
+and fuzz cases use their existing input/time limits, but this is not a hostile
+large-input CPU guarantee. Review this diagnostic interaction when setting M10
+macro expansion/resource budgets.
