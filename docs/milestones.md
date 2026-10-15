@@ -16,7 +16,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
-| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a–M10c complete; M10d variadics under final validation) |
+| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
@@ -551,3 +551,26 @@ The source checkpoint is pushed now to protect against sandbox resets. The
 full GCC/Clang normal/ASan/UBSan matrix and exact-commit remote CI are pending;
 these results must be checked separately before marking M10 complete. No new
 parser, AST, sema or QBE interfaces; M11 operator/directive work remains deferred.
+
+
+## M10d final verification
+
+The pending validation above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/CLI/AST/rejection tests, the
+564-case token-kind/spelling oracle, QBE/reference execution and separate-object
+integer ABI tests. The 16 new variadic runtime programs run with LF, CRLF and
+lone CR endings. Both existing and new macro regressions remain covered.
+Sanitized fuzzing completed 40473 lexer/preprocessor and 170004 pipeline inputs
+(210477 total), without executing arbitrary generated code.
+
+Source commit 34760ff passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38759964506
+This following documentation-only verification commit has its own exact-commit
+CI checked after push. No production change followed the tested source commit.
+
+M10a-M10d are complete for the documented object/function macro subset. M11
+operators/includes/conditions, predefined macros, full preprocessing and the
+remaining C23 language/ABI milestones are not complete. Next: design a small
+M11a stringizing checkpoint, accounting for borrowed versus synthesized spelling,
+raw arguments, whitespace/escaping and __VA_OPT__ semantics before coding.
+Token pasting needs its own re-lex/placemarker design, not a shortcut extension.

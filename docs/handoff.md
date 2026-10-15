@@ -5,9 +5,9 @@
 M10d: variadic macro collection, __VA_ARGS__ and streamed __VA_OPT__ regions.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-Previous M10c final CI passed: https://github.com/0x6432/kcc/actions/runs/38757262652
-M09–M10c are complete for their stated subsets; M10d validation is in progress.
-Full M10 and full C23 remain incomplete.
+M10d source CI passed: https://github.com/0x6432/kcc/actions/runs/38759964506
+M09–M10d are complete for their stated subsets. M11 operators/directives are next.
+Full preprocessing and full C23 remain incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
 ## Resume safely
@@ -326,3 +326,26 @@ The source checkpoint is pushed now to protect against sandbox resets. The
 full GCC/Clang normal/ASan/UBSan matrix and exact-commit remote CI are pending;
 these results must be checked separately before marking M10 complete. No new
 parser, AST, sema or QBE interfaces; M11 operator/directive work remains deferred.
+
+
+## M10d final verification
+
+The pending validation above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/CLI/AST/rejection tests, the
+564-case token-kind/spelling oracle, QBE/reference execution and separate-object
+integer ABI tests. The 16 new variadic runtime programs run with LF, CRLF and
+lone CR endings. Both existing and new macro regressions remain covered.
+Sanitized fuzzing completed 40473 lexer/preprocessor and 170004 pipeline inputs
+(210477 total), without executing arbitrary generated code.
+
+Source commit 34760ff passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38759964506
+This following documentation-only verification commit has its own exact-commit
+CI checked after push. No production change followed the tested source commit.
+
+M10a-M10d are complete for the documented object/function macro subset. M11
+operators/includes/conditions, predefined macros, full preprocessing and the
+remaining C23 language/ABI milestones are not complete. Next: design a small
+M11a stringizing checkpoint, accounting for borrowed versus synthesized spelling,
+raw arguments, whitespace/escaping and __VA_OPT__ semantics before coding.
+Token pasting needs its own re-lex/placemarker design, not a shortcut extension.
