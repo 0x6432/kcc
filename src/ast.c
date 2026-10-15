@@ -155,6 +155,49 @@ struct ast_binary_expression *ast_new_binary(struct arena *arena,
 	return node;
 }
 
+struct ast_pointer_offset_expression *ast_new_pointer_offset(struct arena *arena,
+	struct source_location location, struct ast_expression *base,
+	struct ast_expression *index, uint64_t element_size, bool subtract)
+{
+	struct ast_pointer_offset_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = base->depth > index->depth ? base->depth : index->depth;
+
+	if (node)
+		*node = (struct ast_pointer_offset_expression) {
+			.expression = {
+				.kind = expression_pointer_offset,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.base = base,
+			.index = index,
+			.element_size = element_size,
+			.subtract = subtract,
+		};
+	return node;
+}
+
+struct ast_pointer_difference_expression *ast_new_pointer_difference(struct arena *arena,
+	struct source_location location, struct ast_expression *left,
+	struct ast_expression *right, uint64_t element_size)
+{
+	struct ast_pointer_difference_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_pointer_difference_expression) {
+			.expression = {
+				.kind = expression_pointer_difference,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.left = left,
+			.right = right,
+			.element_size = element_size,
+		};
+	return node;
+}
+
 struct ast_logical_expression *ast_new_logical(struct arena *arena,
 	struct source_location location, enum logical_operator operation,
 	struct ast_expression *left, struct ast_expression *right)

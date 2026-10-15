@@ -185,6 +185,71 @@ static bool comparison_operator(enum binary_operator operation)
 	}
 }
 
+/* Operands have already been analyzed and loaded. Replace the parsed binary
+ * node, never reinterpret its layout or reanalyze its shared children.
+ */
+static bool lower_pointer_arithmetic(struct sema *sema,
+	struct ast_expression **slot, struct ast_binary_expression *binary)
+{
+	struct ast_expression *left = binary->left;
+	struct ast_expression *right = binary->right;
+	struct ast_expression *base;
+	struct ast_expression *index;
+	struct ast_expression *result;
+	const struct pointer_type *pointer;
+	bool subtract = binary->operation == binary_subtract;
+
+	if (subtract && left->type->kind == type_kind_pointer && right->type->kind == type_kind_pointer) {
+		struct ast_pointer_difference_expression *difference;
+
+		if (!type_compatible(left->type, right->type)) {
+			diagnostic_error(sema->diagnostics, binary->expression.location,
+				"pointer subtraction requires compatible pointer operands");
+			return false;
+		}
+		pointer = (const struct pointer_type *)left->type;
+		difference = ast_new_pointer_difference(sema->arena, binary->expression.location,
+			left, right, type_object_size(pointer->referent));
+		if (!difference)
+			goto out_of_memory;
+		result = &difference->expression;
+		/* The selected LP64 target uses signed long for ptrdiff_t. */
+		result->type = &type_long;
+	} else {
+		struct ast_pointer_offset_expression *offset;
+
+		if (left->type->kind == type_kind_pointer && type_is_integer(right->type)) {
+			base = left;
+			index = right;
+		} else if (!subtract && type_is_integer(left->type) && right->type->kind == type_kind_pointer) {
+			base = right;
+			index = left;
+		} else {
+			diagnostic_error(sema->diagnostics, binary->expression.location,
+				"pointer arithmetic requires pointer plus/minus integer or compatible pointer subtraction");
+			return false;
+		}
+		if (!convert_expression(sema, &index, type_integer_promotion(index->type)))
+			return false;
+		pointer = (const struct pointer_type *)base->type;
+		offset = ast_new_pointer_offset(sema->arena, binary->expression.location,
+			base, index, type_object_size(pointer->referent), subtract);
+		if (!offset)
+			goto out_of_memory;
+		result = &offset->expression;
+		result->type = base->type;
+	}
+	if (!check_expression_depth(sema, result))
+		return false;
+	*slot = result;
+	return true;
+
+out_of_memory:
+	diagnostic_error(sema->diagnostics, binary->expression.location,
+		"out of memory lowering pointer arithmetic");
+	return false;
+}
+
 /* Resolve/types are independent of parsing. Value contexts explicitly load
  * lvalues; assignment's left operand must remain an object, not a loaded value.
  */
@@ -343,14 +408,16 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->right, true))
 			return false;
 		if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
-			if (node->operation != binary_equal && node->operation != binary_not_equal) {
-				diagnostic_error(sema->diagnostics, expression->location, "pointer binary operators are not supported yet");
+			if (node->operation == binary_add || node->operation == binary_subtract)
+				return lower_pointer_arithmetic(sema, expression_slot, node);
+			if (!comparison_operator(node->operation)) {
+				diagnostic_error(sema->diagnostics, expression->location, "invalid pointer binary operator");
 				return false;
 			}
 			if (node->left->type->kind != type_kind_pointer || node->right->type->kind != type_kind_pointer ||
 				!type_compatible(node->left->type, node->right->type)) {
 				diagnostic_error(sema->diagnostics, expression->location,
-					"pointer equality requires compatible pointer operands; null constants are not supported yet");
+					"pointer comparison requires compatible pointer operands; null constants are not supported yet");
 				return false;
 			}
 			result_type = &type_int;
@@ -410,9 +477,11 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_pointer_offset:
+	case expression_pointer_difference:
 	case expression_conversion:
 	case expression_load:
-		/* Conversion nodes are introduced below; sema is a single pass. */
+		/* Lowered nodes are introduced during this single semantic pass. */
 		assert(0 && "conversion node before semantic analysis");
 		return false;
 	}

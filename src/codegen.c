@@ -98,8 +98,17 @@ static const char *binary_instruction(enum binary_operator operation, const stru
 	bool wide = type_value_width(operand_type) == 64;
 
 	if (operand_type->kind == type_kind_pointer) {
-		assert(operation == binary_equal || operation == binary_not_equal);
-		return operation == binary_equal ? "ceql" : "cnel";
+		switch (operation) {
+		case binary_equal: return "ceql";
+		case binary_not_equal: return "cnel";
+		case binary_less: return "cultl";
+		case binary_less_equal: return "culel";
+		case binary_greater: return "cugtl";
+		case binary_greater_equal: return "cugel";
+		default:
+			assert(0 && "noncomparison pointer operator was not lowered");
+			return NULL;
+		}
 	}
 	unsigned_operands = type_is_unsigned(operand_type);
 	switch (operation) {
@@ -138,6 +147,24 @@ static const char *binary_instruction(enum binary_operator operation, const stru
 
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression);
+
+/* Extend the promoted integer index for address arithmetic, without inventing
+ * a semantic cast to long (unsigned word indices must zero-extend).
+ */
+static size_t codegen_pointer_index(struct codegen *codegen,
+	const struct ast_expression *index)
+{
+	size_t value = codegen_expression(codegen, index);
+	size_t result;
+
+	if (type_integer_width(index->type) == 64)
+		return value;
+	assert(type_integer_width(index->type) == 32);
+	result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l %s %%t%zu\n", result,
+		type_is_unsigned(index->type) ? "extuw" : "extsw", value);
+	return result;
+}
 
 /* Object lvalues produce addresses; value-context loads are separate nodes. */
 static size_t codegen_address(struct codegen *codegen, const struct ast_expression *expression)
@@ -327,6 +354,33 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", temporary, qbe_type(expression->type),
 			binary_instruction(node->operation, node->left->type), left, right);
+		return temporary;
+	}
+	case expression_pointer_offset: {
+		const struct ast_pointer_offset_expression *node =
+			(const struct ast_pointer_offset_expression *)expression;
+		size_t base = codegen_expression(codegen, node->base);
+		size_t index = codegen_pointer_index(codegen, node->index);
+		size_t scaled = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, index,
+			(uintmax_t)node->element_size);
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l %s %%t%zu, %%t%zu\n", temporary,
+			node->subtract ? "sub" : "add", base, scaled);
+		return temporary;
+	}
+	case expression_pointer_difference: {
+		const struct ast_pointer_difference_expression *node =
+			(const struct ast_pointer_difference_expression *)expression;
+		size_t left = codegen_expression(codegen, node->left);
+		size_t right = codegen_expression(codegen, node->right);
+		size_t bytes = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =l sub %%t%zu, %%t%zu\n", bytes, left, right);
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l div %%t%zu, %ju\n", temporary, bytes,
+			(uintmax_t)node->element_size);
 		return temporary;
 	}
 	case expression_cast: {

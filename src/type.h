@@ -58,8 +58,10 @@ extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
 bool type_is_scalar(const struct type *type);
-/* QBE scalar value width; object layout remains separate future work. */
+/* QBE scalar value width is separate from target object storage size. */
 unsigned type_value_width(const struct type *type);
+/* Complete scalar objects only until aggregate layout is implemented. */
+uint64_t type_object_size(const struct type *type);
 struct pointer_type *type_new_pointer(struct arena *arena, const struct type *referent);
 bool type_is_unsigned(const struct type *type);
 unsigned type_integer_width(const struct type *type);

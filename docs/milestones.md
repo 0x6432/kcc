@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a declarations, M13b lvalues and M13c equality implemented; later verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-d declarations/lvalues, comparisons and scaled arithmetic implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -936,3 +936,13 @@ M13c source checkpoint: compatible pointer equality passed full normal GCC suite
 15 both-host/QBE full-value programs, both-direction live/null ABI, typed AST,
 once-only/short-circuit checks and bounded sanitized fuzz. Full isolated/remote
 verification remains pending. M13d scaled arithmetic/ordering is pre-designed.
+
+M12j final verification: 1735825 passed isolated GCC/Clang normal + ASan/UBSan
+matrix and exact-source CI 38822838501. Older h/i and later snapshots remain
+independently pending; source-specific CI evidence is not interchangeable.
+
+M13d source checkpoint: scaled pointer offsets, signed-long differences and
+compatible ordering passed full normal GCC suites, 14 both-host/QBE programs,
+13 referent sizes x all integer indices in both ABI directions, typed-tree/depth
+and bounded sanitized fuzz checks. Full isolated/remote verification remains
+pending. M13e pointer subscripts are designed before implementation.

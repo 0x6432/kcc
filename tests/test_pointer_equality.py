@@ -63,8 +63,8 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer equality ') as directory:
               ('int f(char *p,signed char *q) { return p!=q; }','compatible pointer'),
               ('int f(int *p) { return p==0; }','null constants'),
               ('int f(int *p) { return 0!=p; }','null constants'),
-              ('int f(int *p) { return p<p; }','pointer binary'),
-              ('int *f(int *p) { return p+1; }','pointer binary'),
+              ('int f(int *p) { return p/p; }','pointer binary'),
+              ('int *f(int *p) { return p*2; }','pointer binary'),
               ('int f(int *p) { return p&p; }','pointer binary')]
     for text,message in rejected:
         source.write_text(text+'\n')

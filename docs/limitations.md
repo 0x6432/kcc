@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13c. The chronological entries below describe what each
+Current milestone: M13d. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -859,3 +859,20 @@ queries. Host-supplied null pointers compare correctly, including deep pointer
 values. Source null pointer constants and void-pointer compatibility are still
 unsupported. Ordering/arithmetic remain next; unrelated live object equality is
 not confused with an integer comparison. No lifetime or dereference rule changed.
+
+## M13d
+
+Object pointers support p+n, n+p and p-n with any implemented integer type;
+indices undergo integer promotion. Compatible p-q produces target ptrdiff_t
+(signed long). All six compatible pointer comparisons produce int. Target
+scalar object sizes are explicit (1/2/4/8 bytes); pointer referents stride eight,
+not the size of their ultimate pointee. No language sizeof or array declarations
+are added. Arithmetic/comparison operands are each evaluated once.
+
+Defined pointer arithmetic/order requires the same live array, including its
+one-past position; a scalar acts as a one-element array. One-past may be formed
+but not loaded/stored. Unrelated subtraction/order, out-of-bounds arithmetic and
+nonrepresentable differences remain undefined; tests never execute them. No
+runtime bound checks are promised. Null+0 is not silently made defined. Source
+null constants, subscripting, array/string declarations, void/function pointers,
+qualifiers and full declarators remain future work.

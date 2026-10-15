@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer values ') as directory:
         ('int f(int *p) { return +p; }','requires an integer'),
         ('int f(int *p) { return -p; }','requires an integer'),
         ('int f(int *p) { return ~p; }','requires an integer'),
-        ('int *f(int *p) { return p+1; }','pointer binary'),
+        ('int *f(int *p) { return p*2; }','pointer binary'),
         ('int f(int *p) { return p&p; }','pointer binary'),
         ('int *f(void); unsigned *f(void);','incompatible function'),
         ('int f(int **); int f(int *);','incompatible function'),

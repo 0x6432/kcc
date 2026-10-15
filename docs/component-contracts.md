@@ -967,3 +967,21 @@ pointers with recursively compatible referents. Generic binary ASTs retain their
 loaded pointer children, checked depth and int result. Backend dispatches pointer
 comparison before integer signedness and uses ceql/cnel with word boolean results.
 No pointer enters integer width/rank helpers. Integer comparisons are unchanged.
+
+## M13d pointer scaling and typed lowering
+
+The scalar-only target type_object_size API reports storage bytes, independently
+of host sizeof, integer rank or local allocation alignment. Sema replaces parsed
+binary +/- nodes with separate ast_pointer_offset_expression or
+ast_pointer_difference_expression nodes. Operands are already typed/loaded;
+shared children are not reanalyzed. Offset integer promotion and every inserted
+node count toward typed depth. Offset result preserves the base pointer type;
+difference result is target signed long. Parsed nodes remain arena-owned.
+
+QBE widens word indices with extsw/extuw by their promoted signedness, without a
+fake semantic cast to long; long indices stay long. Scale by referent object size
+then add/subtract the base. Differences signed-divide address byte differences
+by referent size. Compatible pointer ordering dispatches before integer property
+queries and uses full-width unsigned address comparisons on the flat LP64 target.
+The backend does not supply runtime array bounds/lifetime checks. Every operand
+is evaluated once, in a C-permitted order, including symmetric integer+pointer.

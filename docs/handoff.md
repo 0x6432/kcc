@@ -2,8 +2,9 @@
 
 ## Current checkpoint
 
-M13c implementation: compatible pointer equality plus concrete address/indirection
-ASTs and general object lvalue addresses, with pointer mutation, fixed calls/returns/casts
+M13d implementation: scaled pointer offsets, signed-long differences and compatible
+comparisons, plus concrete address/indirection ASTs and general object lvalue
+addresses, with pointer mutation, fixed calls/returns/casts
 and scalar truth. Integer/pointer syntax resolves a separate semantic type graph.
 All baseline primitive integers, ordinary byte characters, explicit conversions,
 on-demand tokens, RDP/Pratt and single-file stages remain intact.
@@ -13,14 +14,14 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 
 Latest confirmed exact-source CI: M13a b6ba02d, run 38823808449, passed GCC/Clang
 normal/sanitizer and fuzz jobs. M13b 6f5e5ab run 38824691700 remains in progress.
-M13c full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+M13d full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated snapshots run independently; M13a queues under an external
 flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13d scaled pointer arithmetic/ordering, designed in m13-pointer-arithmetic.md.
+Next: M13e pointer subscripts, designed in m13-pointer-subscripts.md.
 Null constants, void/functions/full declarators,
 arrays/strings and remaining C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
@@ -1194,3 +1195,29 @@ Sanitized bounded fuzz passed 22894 lexer + 73861 pipeline inputs (96755 total),
 26 seconds each. Arbitrary generated C was not executed. Full isolated matrix
 and exact-source CI remain pending; M13d is designed but not implemented yet.
 M13a exact-source CI passed 38823808449; M13b run 38824691700 is in progress.
+
+## M13d tested source checkpoint
+
+Sema lowers parsed pointer arithmetic to concrete typed offset/difference nodes,
+sharing already analyzed children and explicitly promoting only integer indices.
+Object size is target storage size, not host sizeof or ultimate-pointee size.
+QBE extends word indices by promoted signedness, scales and adds/subtracts;
+pointer differences signed-divide bytes and return target long. Comparisons
+use full-width pointer opcodes before any integer property query.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 14 new full-value scalar
+programs and both-direction host-array ABI tests passed with GCC and Clang:
+all twelve primitive referents plus pointer objects, all integer indices,
+signed negative indices, promoted bytes/shorts/bool, signed differences, all six
+comparisons, one-past addresses and once-only/short-circuit calls. Unit tests
+assert replaced syntax nodes, integer promotion, exact target sizes, long
+differences and depth; runtime tests check the 128/129 typed-depth boundary.
+The initial unit fixture used a nonexistent ast_function_definition struct name;
+it was corrected to the existing ast_function, without changing compiler code.
+Earlier now-valid p+1 and p<p rejection fixtures became invalid p*2 and p/p;
+no constraint coverage was silently discarded. No invalid pointer program or
+arbitrary generated C was executed. Bounded sanitized fuzz passed
+24192 lexer + 74272 pipeline inputs (98464 total),
+26/26 seconds. Full isolated/remote matrix remains pending.
+M12j 1735825 completed both local normal/sanitizer compiler legs, with previously
+passed exact-source CI 38822838501. M13e pointer subscripts are pre-designed.

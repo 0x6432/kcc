@@ -16,6 +16,8 @@ enum expression_kind {
 	expression_name,
 	expression_unary,
 	expression_binary,
+	expression_pointer_offset,
+	expression_pointer_difference,
 	expression_assignment,
 	expression_load,
 	expression_conversion,
@@ -125,6 +127,22 @@ struct ast_binary_expression {
 	struct ast_expression *right;
 };
 
+/* Inserted by sema after operand analysis; never parsed directly. */
+struct ast_pointer_offset_expression {
+	struct ast_expression expression;
+	struct ast_expression *base;
+	struct ast_expression *index;
+	uint64_t element_size;
+	bool subtract;
+};
+
+struct ast_pointer_difference_expression {
+	struct ast_expression expression;
+	struct ast_expression *left;
+	struct ast_expression *right;
+	uint64_t element_size;
+};
+
 enum logical_operator {
 	logical_and,
 	logical_or,
@@ -143,7 +161,7 @@ struct ast_assignment_expression {
 	struct ast_expression *right;
 };
 
-/* Inserted by sema, never by the parser. Operand denotes a local object. */
+/* Inserted by sema, never by the parser. Operand denotes an object lvalue. */
 struct ast_load_expression {
 	struct ast_expression expression;
 	struct ast_expression *operand;
@@ -365,6 +383,12 @@ struct ast_unary_expression *ast_new_unary(struct arena *arena,
 struct ast_binary_expression *ast_new_binary(struct arena *arena,
 	struct source_location location, enum binary_operator operation,
 	struct ast_expression *left, struct ast_expression *right);
+struct ast_pointer_offset_expression *ast_new_pointer_offset(struct arena *arena,
+	struct source_location location, struct ast_expression *base,
+	struct ast_expression *index, uint64_t element_size, bool subtract);
+struct ast_pointer_difference_expression *ast_new_pointer_difference(struct arena *arena,
+	struct source_location location, struct ast_expression *left,
+	struct ast_expression *right, uint64_t element_size);
 struct ast_logical_expression *ast_new_logical(struct arena *arena,
 	struct source_location location, enum logical_operator operation,
 	struct ast_expression *left, struct ast_expression *right);

@@ -60,6 +60,12 @@ unsigned type_value_width(const struct type *type)
 	return type_integer_width(type);
 }
 
+uint64_t type_object_size(const struct type *type)
+{
+	assert(type_is_scalar(type));
+	return type_value_width(type) / 8;
+}
+
 struct pointer_type *type_new_pointer(struct arena *arena, const struct type *referent)
 {
 	struct pointer_type *pointer = arena_alloc(arena, sizeof(*pointer));

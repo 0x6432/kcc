@@ -10,7 +10,7 @@ of complete ISO conformance.
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
 | Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; restricted integer-object pointers M13a) | M03, M08, M12-M18, M23-M24 |
-| Expressions/statements | subset (implemented integer arithmetic, promotions, mixed-width/boolean conversions and casts; M12j) | M03-M08, M13, M19 |
+| Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
@@ -95,3 +95,15 @@ Compatible object pointers support ==/!= with full-width values and int results.
 once-only/short-circuit tests cover this increment. The M13a rejection of p==p is
 replaced by permanently invalid p&p; its pointer-operation constraint purpose is
 retained. Pointer ordering/arithmetic and source null constants are not implied.
+
+### M13d scaled pointer arithmetic and ordering
+
+14 both-host/QBE full-value scalar programs, host-created arrays for all twelve
+primitive referents plus pointer objects, every integer index type and both ABI
+linkage directions cover signed/unsigned promotion, offsets, distances, ordering,
+one-past/scalar cases and once-only calls. Large word-index extension is asserted
+in IL, not exercised through impossible out-of-bounds arrays. Typed tree units
+assert replacement, target sizes, explicit index promotion and signed-long
+differences; exact 128/129 typed-depth cases pass. Previously rejected p+1 and
+p<p fixtures now use permanently invalid p*2 and p/p, preserving their pointer
+operation constraint purpose. Arrays/subscripts/null constants are not implied.

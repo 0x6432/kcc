@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer lvalues ') as directory:
               ('int main(void) { int *p=&42; return 0; }','address-of requires'),
               ('int main(void) { int x=0; int *p=&(x=1); return 0; }','address-of requires'),
               ('int main(void) { int x=0; int *p=&(int)x; return 0; }','address-of requires'),
-              ('int main(void) { int x=0; int *p=&x; return p+1; }','pointer binary'),
+              ('int main(void) { int x=0; int *p=&x; return p*2; }','pointer binary'),
               ('int main(void) { return *&42; }','address-of requires')]
     for text,message in rejected:
         source.write_text(text+'\n')

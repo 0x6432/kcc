@@ -1027,8 +1027,69 @@ static void test_pointer_equality_tree(void)
 	source_destroy(&source);
 }
 
+static void test_pointer_arithmetic_tree(void)
+{
+	const char *text = "int *f(int *p,unsigned short n) { return n+p; } "
+		"long g(short *p,short *q) { return p-q; }";
+	const struct type *types[] = { &type_bool, &type_char, &type_schar, &type_uchar,
+		&type_short, &type_ushort, &type_int, &type_uint, &type_long, &type_ulong,
+		&type_long_long, &type_ulong_long };
+	const uint64_t sizes[] = { 1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 8, 8 };
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_return_statement *statement;
+	struct ast_binary_expression *parsed;
+	struct ast_pointer_offset_expression *offset;
+	struct ast_pointer_difference_expression *difference;
+	struct ast_conversion_expression *promotion;
+	struct pointer_type *pointer;
+
+	for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++)
+		assert(type_object_size(types[i]) == sizes[i]);
+	pointer = type_new_pointer(&arena, &type_int);
+	assert(pointer && type_object_size(&pointer->type) == 8);
+	assert(source_from_bytes(&source, "pointer-arithmetic.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	statement = (struct ast_return_statement *)item->statement;
+	parsed = (struct ast_binary_expression *)statement->value;
+	assert(parsed->expression.kind == expression_binary && parsed->operation == binary_add);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(statement->value != &parsed->expression);
+	assert(statement->value->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)statement->value;
+	assert(offset->expression.type->kind == type_kind_pointer && offset->expression.depth == 4);
+	assert(!offset->expression.is_lvalue && !offset->subtract && offset->element_size == 4);
+	assert(offset->base == parsed->right && offset->base->kind == expression_load);
+	assert(type_compatible(offset->expression.type, offset->base->type));
+	promotion = require_conversion(offset->index, &type_int, &type_ushort);
+	assert(promotion->operand == parsed->left && promotion->operand->kind == expression_load);
+	function = (struct ast_function *)unit->declarations->next;
+	item = (struct ast_statement_item *)function->body->items;
+	statement = (struct ast_return_statement *)item->statement;
+	assert(statement->value->kind == expression_pointer_difference);
+	difference = (struct ast_pointer_difference_expression *)statement->value;
+	assert(difference->expression.type == &type_long && difference->expression.depth == 3);
+	assert(!difference->expression.is_lvalue && difference->element_size == 2);
+	assert(difference->left->kind == expression_load && difference->right->kind == expression_load);
+	assert(type_compatible(difference->left->type, difference->right->type));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_pointer_arithmetic_tree();
 	test_pointer_equality_tree();
 	test_pointer_lvalue_tree();
 	test_pointer_type_syntax_and_values();
