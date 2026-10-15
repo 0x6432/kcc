@@ -11,7 +11,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M02 | On-demand initial lexer | Keywords, decimal integers, punctuators, comments, bad bytes; EOF/progress tests; libFuzzer CI | complete |
 | M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | complete |
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | complete |
-| M05 | Local int declarations, assignment, expression statements | Shadowing/redeclaration/name tests, read/write execution | planned |
+| M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | planned |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | planned |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | planned |
@@ -117,3 +117,26 @@ regressions and output-failure tests passed under ASan/UBSan as well.
 
 Remote CI for M00, M01, M02 and M03 was observed completed successfully. The
 M04 run is verified separately after push, not inferred from those successes.
+
+## M05 completion record
+
+Ordered block items, distinct local/name/assignment/load/expression/empty nodes,
+one function-body scope, point-of-declaration binding and explicit lvalue loads
+are implemented. Assignment binds below arithmetic and associates rightward.
+Sema now receives the arena for conversion nodes and validates all items,
+including unreachable code. QBE entry alloc4 slots and loadw/storew execute
+initializers/statements in source order. No zero fill for uninitialized locals;
+falling off main returns zero. Unsupported C keywords cannot become local names.
+
+GCC/Clang builds, semantic-AST assertions, positive/negative/diagnostic tests,
+ASan/UBSan and QBE executable/reference tests passed. Boundary tests cover
+256/257 locals, 4096/4097 block items, right-associative assignment, explicit
+conversion depth and malformed/unreachable items. Fuzzing completed 272,299
+lexer and 425,201 pipeline inputs in 21 seconds per harness without failures.
+Final diagnostic/self-assignment additions passed normal and ASan/UBSan
+regressions before commit.
+
+Scope is deliberately flat here: nested blocks/shadowing belong to M06. Limits
+are resource policies, not C constraints. Uninitialized reads/self-initialization
+are not executed in runtime tests; point-of-declaration is checked structurally.
+Remote push and CI must be checked separately; M04 CI passed previously.

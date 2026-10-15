@@ -2,11 +2,11 @@
 
 ## Current checkpoint
 
-M04: integer arithmetic through on-demand lexing, concrete AST structs,
-BNF-documented recursive descent/Pratt parsing, sema and QBE IL.
+M05: local int declarations, name resolution, assignment, expression/empty
+statements and explicit lvalue conversions on top of the M04 pipeline.
 Branch: `development`. Public repository: https://github.com/0x6432/kcc
 Commit identity: `0x42 <noreply@localhost>` (repository-local configuration).
-M00-M04 are separate commits. Find the exact latest checkpoint with
+M00-M05 are separate commits. Find the exact latest checkpoint with
 `git log -1 --oneline`; this file is committed with the checkpoint, avoiding
 a circular reference to its own hash.
 
@@ -27,11 +27,19 @@ a circular reference to its own hash.
 
 ## Supported subset and limits
 
-Single `int main(void) { return expression; }`, decimal literals <= INT32_MAX,
-parentheses, unary +/- and binary + - * / %. No variables or preprocessing.
-Source size: 16 MiB. Pratt recursion and AST structural depth: 128 each.
+Single `int main(void)` with int locals (one name per declaration, optional
+initializer), return/expression/empty statements, local names, arithmetic and
+simple assignment. Assignment is right-associative and requires an lvalue.
+Falling off main returns zero. No nested blocks, shadowing or preprocessing.
+Source size: 16 MiB. Pratt recursion/typed AST depth: 128. Block items: 4096.
+Locals: 256. These are explicit resource policies. Uninitialized objects are
+not zero-filled; reading one may be UB. Runtime tests avoid UB.
+
 Compiler emits IL, not assembly/executables. Source spellings outlive all AST
-nodes; destroy arena before source. Sema must succeed before codegen.
+nodes; destroy arena before source. Sema receives the arena and runs once on a
+fresh parsed unit, inserting load nodes and declaration references. Those
+references may form cycles through initializers; traverse expression operands,
+not declarations' initializer backlinks. Sema must succeed before codegen.
 
 ## Environment and local verification
 
@@ -40,23 +48,25 @@ QBE 1.2 was built outside the repo. Rebuild dependencies after a reset; `/data`
 is not proof that tools/checkouts are current. Budget all builds for 4 GB.
 
 Local GCC/Clang, ASan/UBSan, IL/rejection, QBE executable and differential
-arithmetic tests passed. Lexer and pipeline fuzz harnesses completed bounded
-sanitized runs without failures; counts are in docs/milestones.md. Tests
-cover excessive nesting/flat chains and source-output failure.
+arithmetic tests passed. Lexer/pipeline fuzz runs completed 272,299/425,201 inputs in 21 seconds
+each without failures. Tests also assert typed AST binding/load shape and
+resource boundaries; updated diagnostics/self-assignment tests passed normal and sanitizer builds.
 
 The sandbox's GCC sanitizer libraries initially lacked SONAME lookup links.
 Local sanitizer tests used links outside the repo in
 `/data/tools/sanitizer-runtime` and LD_LIBRARY_PATH pointing there, with
 `-fno-pie` compilation and `-no-pie` linking. Ubuntu CI needs no such workaround.
 
-GitHub Actions M00-M03 were observed completed successfully. Check the latest
-M04 commit's Actions run separately. A local pass is not a remote-CI result.
+GitHub Actions M00-M04 were observed completed successfully. Check the latest
+M05 commit's Actions run separately. A local pass is not a remote-CI result.
 
 ## Next milestone
 
-M05: local int declarations, assignment and expression statements. Before
-implementation, specify statement lists, declaration AST nodes, parser scope
-vs semantic scope, lvalue/rvalue handling, source initialization rules and
-QBE local storage. Preserve Pratt parsing; assignment needs right associativity
-and a separate AST kind. Add name resolution, shadowing, redeclaration and
-read/write runtime tests, plus corpus seeds. Do not skip ahead to loops.
+M06: nested blocks/scopes, if/else, comparisons and logical short circuit.
+Before implementation, separate semantic scope bindings from function->locals
+(which must retain all declarations for codegen), add bounded block nesting,
+then build branch labels and terminated-block handling in QBE. Add tests for
+shadowing and post-block lookup; do not let an inner local escape its scope.
+Logical operators must not evaluate a skipped RHS. All branches are still
+checked semantically. Keep the existing load nodes and assignment lvalue rules.
+Do not skip ahead to loops, which belong to M07.

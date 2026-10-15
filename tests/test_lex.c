@@ -56,12 +56,20 @@ static void test_errors(void)
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@", "#",
-		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=",
+		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "==",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
 		check_tokens(cases[i], invalid, 1, 1);
 	check_tokens("integer", separate, 1, 0);
+	{
+		const enum token_kind keyword[] = { token_unsupported_keyword };
+		const enum token_kind equal[] = { token_equal };
+
+		check_tokens("if", keyword, 1, 0);
+		check_tokens("constexpr", keyword, 1, 0);
+		check_tokens("=", equal, 1, 0);
+	}
 }
 
 static void test_binary_and_values(void)

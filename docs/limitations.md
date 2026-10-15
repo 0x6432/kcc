@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M04. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M04.
+Current milestone: M05. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M05.
 
 ## M00
 
@@ -46,7 +46,7 @@ Parser owns no memory: the arena owns nodes and the source owns spellings.
 Sema annotates types; QBE emission relies on those validated annotations.
 The driver emits IL only; users invoke QBE and the host linker explicitly.
 
-## M04 (current)
+## M04
 
 One `int main(void)` containing one `return` of an integer expression.
 Supported: decimal int literals, parentheses, unary +/- and binary + - * / %.
@@ -60,3 +60,25 @@ only defined programs, and fuzzing never executes generated code.
 Nesting and structural AST depth are capped at 128. Sema and codegen rely on
 that validated bound. Binary operands are emitted left then right; there are
 no side effects in this subset. No claims of optimization or full C23 support.
+
+## M05 (current)
+
+One int main(void) with an ordered list of single-object int declarations,
+returns, expression statements and empty statements. Initializers are optional.
+Local identifiers, simple assignment and the M04 arithmetic subset are
+supported. A declaration is visible in its own initializer; forward references
+and same-scope redeclarations are errors. Assignment requires a modifiable
+lvalue, has an rvalue result and associates right-to-left. Parenthesized names
+remain lvalues. Keyword spellings cannot be declared as ordinary locals.
+
+Nested blocks and shadowing are not yet supported. No comma declarations,
+compound assignments, increments, if/else, calls, qualifiers or preprocessing.
+One function-body scope; at most 256 locals and 4096 block items. Expression
+limits remain 128 after sema inserts explicit lvalue-to-rvalue conversions.
+
+Automatic objects without initializers are not zeroed. Reading an indeterminate
+int may have undefined behavior; there is no definite-initialization analysis
+or warning system yet. Tests execute defined programs only. Sema validates
+unreachable source too, while codegen stops after the first return. Reaching
+main's closing brace returns zero. These policies are explicit, not missing
+semantic checks hidden in codegen.

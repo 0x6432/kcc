@@ -46,10 +46,14 @@ fuzz-compile: build/fuzz_compile
 test-codegen: build/kcc
 	QBE="$(QBE)" python3 tests/test_compile.py
 
-test: build/kcc build/test_support build/test_lex
+build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+test: build/kcc build/test_support build/test_lex build/test_sema
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_lex
+	./build/test_sema
 	python3 tests/test_compile.py
 
 clean:

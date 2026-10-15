@@ -7,8 +7,28 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 
 	if (node)
 		*node = (struct ast_integer_expression) {
-			.expression = { expression_integer, token.location, NULL, 1 },
+			.expression = {
+				.kind = expression_integer,
+				.location = token.location,
+				.depth = 1,
+			},
 			.value = token.integer,
+		};
+	return node;
+}
+
+struct ast_name_expression *ast_new_name(struct arena *arena, struct token name)
+{
+	struct ast_name_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_name_expression) {
+			.expression = {
+				.kind = expression_name,
+				.location = name.location,
+				.depth = 1,
+			},
+			.name = name,
 		};
 	return node;
 }
@@ -21,8 +41,11 @@ struct ast_unary_expression *ast_new_unary(struct arena *arena,
 
 	if (node)
 		*node = (struct ast_unary_expression) {
-			.expression = { expression_unary, location, NULL,
-				operand->depth + 1 },
+			.expression = {
+				.kind = expression_unary,
+				.location = location,
+				.depth = operand->depth + 1,
+			},
 			.operation = operation,
 			.operand = operand,
 		};
@@ -38,10 +61,51 @@ struct ast_binary_expression *ast_new_binary(struct arena *arena,
 
 	if (node)
 		*node = (struct ast_binary_expression) {
-			.expression = { expression_binary, location, NULL, depth + 1 },
+			.expression = {
+				.kind = expression_binary,
+				.location = location,
+				.depth = depth + 1,
+			},
 			.operation = operation,
 			.left = left,
 			.right = right,
+		};
+	return node;
+}
+
+struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
+	struct source_location location, struct ast_expression *left,
+	struct ast_expression *right)
+{
+	struct ast_assignment_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_assignment_expression) {
+			.expression = {
+				.kind = expression_assignment,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.left = left,
+			.right = right,
+		};
+	return node;
+}
+
+struct ast_load_expression *ast_new_load(struct arena *arena,
+	struct ast_expression *operand)
+{
+	struct ast_load_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_load_expression) {
+			.expression = {
+				.kind = expression_load,
+				.location = operand->location,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
 		};
 	return node;
 }
@@ -59,15 +123,71 @@ struct ast_return_statement *ast_new_return(struct arena *arena,
 	return node;
 }
 
+struct ast_expression_statement *ast_new_expression_statement(struct arena *arena,
+	struct source_location location, struct ast_expression *value)
+{
+	struct ast_expression_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_expression_statement) {
+			.statement = { statement_expression, location },
+			.value = value,
+		};
+	return node;
+}
+
+struct ast_empty_statement *ast_new_empty_statement(struct arena *arena,
+	struct source_location location)
+{
+	struct ast_empty_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_empty_statement) {
+			.statement = { statement_empty, location },
+		};
+	return node;
+}
+
+struct ast_local_declaration *ast_new_local(struct arena *arena,
+	struct source_location location, struct token name,
+	struct ast_expression *initializer)
+{
+	struct ast_local_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_local_declaration) {
+			.item = { .kind = block_item_declaration, .location = location },
+			.name = name,
+			.initializer = initializer,
+		};
+	return node;
+}
+
+struct ast_statement_item *ast_new_statement_item(struct arena *arena,
+	struct ast_statement *statement)
+{
+	struct ast_statement_item *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_statement_item) {
+			.item = {
+				.kind = block_item_statement,
+				.location = statement->location,
+			},
+			.statement = statement,
+		};
+	return node;
+}
+
 struct ast_compound_statement *ast_new_compound(struct arena *arena,
-	struct source_location location, struct ast_statement *body)
+	struct source_location location, struct ast_block_item *items)
 {
 	struct ast_compound_statement *node = arena_alloc(arena, sizeof(*node));
 
 	if (node)
 		*node = (struct ast_compound_statement) {
 			.statement = { statement_compound, location },
-			.body = body,
+			.items = items,
 		};
 	return node;
 }

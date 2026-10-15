@@ -23,7 +23,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	assert(source_from_bytes(&source, "fuzz.c", data, size));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
-	if (unit && sema_translation_unit(unit, &diagnostics)) {
+	if (unit && sema_translation_unit(unit, &arena, &diagnostics)) {
 		assert(diagnostics.errors == 0);
 		assert(codegen_translation_unit(stream, unit));
 	}

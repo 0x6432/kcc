@@ -10,6 +10,7 @@ enum token_kind {
 	token_eof,
 	token_invalid,
 	token_identifier,
+	token_unsupported_keyword,
 	token_integer,
 	token_int,
 	token_void,
@@ -24,6 +25,7 @@ enum token_kind {
 	token_star,
 	token_slash,
 	token_percent,
+	token_equal,
 };
 
 /* Spelling is source->data + location.offset, with explicit length. */

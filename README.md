@@ -6,7 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M04: compile a single `int main(void)` returning an integer arithmetic expression.
+M05: compile local `int` declarations, assignment and expression statements
+inside a single `int main(void)`.
 On-demand lexing, BNF-documented recursive descent and Pratt expressions,
 separate AST structs, semantic analysis and QBE emission are in place.
 Unsupported input is rejected. See `docs/milestones.md` and
@@ -44,15 +45,28 @@ has its own struct. Parser functions will document their BNF productions.
 ## Compile the current subset
 
 ```sh
-printf 'int main(void) { return (2 + 3) * 4; }\n' > build/example.c
+cat > build/example.c <<'EOF'
+int main(void)
+{
+	int x = 3;
+	int y = x * 4;
+
+	x = y = 7;
+	return x + y;
+}
+EOF
 ./build/kcc build/example.c > build/example.ssa
 tools/qbe-1.2/qbe -t amd64_sysv -o build/example.s build/example.ssa
 cc build/example.s -o build/example
 ./build/example
-# Exit status: 20
+# Exit status: 14
 ```
 
-Supported expressions: decimal int literals, parentheses, unary `+`/`-`, and
-binary `+`, `-`, `*`, `/`, `%`. No variables, declarations, calls or control
-flow yet. Nesting and AST depth are limited to 128, sources to 16 MiB. This is
-not a complete C23 compiler.
+Supported expressions: decimal int literals, local names, parentheses, unary
+`+`/`-`, binary `+`, `-`, `*`, `/`, `%`, and right-associative `=`. Declarations
+introduce one int object with an optional initializer. Empty statements and
+falling off main (returning zero) are supported.
+
+Nested blocks, shadowing, if/else, calls and preprocessing are not supported yet.
+Source limit: 16 MiB; expression nesting/typed-tree depth: 128; function-body
+items: 4096; locals: 256. This is not a complete C23 compiler.

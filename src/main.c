@@ -54,7 +54,7 @@ static int compile_source(const char *path)
 	}
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
-	if (unit && sema_translation_unit(unit, &diagnostics) &&
+	if (unit && sema_translation_unit(unit, &arena, &diagnostics) &&
 		diagnostics.errors == 0) {
 		success = codegen_translation_unit(stdout, unit);
 		if (!success)
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m04");
+		puts("kcc milestone m05");
 		return 0;
 	}
 

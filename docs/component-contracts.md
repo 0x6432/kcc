@@ -49,3 +49,37 @@ Every supported unary/binary expression has int operands and int result;
 future type conversions belong in sema. Codegen emits operands before result
 temporaries. Invalid source is rejected before output; output I/O failure
 returns failure but cannot undo already-written bytes.
+
+## M05 design (before implementation)
+
+- Compound bodies become ordered linked block items. Declarations and statement
+  wrappers are separate concrete structs; no all-purpose AST union.
+- One local declaration introduces one int object, with an optional initializer.
+  Parser stores names only; sema owns the one function-body scope. Nested blocks
+  and shadowing remain M06. A name becomes visible before its initializer.
+- Name expressions resolve to declaration nodes and are modifiable lvalues.
+  Sema inserts a distinct load-expression node for lvalue-to-rvalue conversion.
+  Assignment is its own expression type, binds below arithmetic and associates
+  right-to-left. Its result is an rvalue. Sema receives the arena to allocate
+  conversion nodes; driver and fuzz harness must pass it explicitly.
+- Every local gets a sema-assigned slot ID. QBE alloc4/loadw/storew implement
+  storage. Allocation happens at entry; initialization follows source order.
+  Uninitialized automatic objects are not silently zero-filled. Reading one is
+  not turned into a false C constraint error; runtime tests exclude such UB.
+- Sema validates even unreachable items. Codegen stops after a return. Falling
+  off this main returns zero, as C requires, not an arbitrary missing-return
+  error. Empty and expression statements have distinct structs.
+- Keep expression nesting/tree limits at 128, including inserted conversions.
+  Limit a function body to 4096 items and 256 locals, with explicit diagnostics.
+  These resource policies are not C language constraints.
+
+M05 integration record: compound->body was replaced by compound->items. Block
+items retain source order through item->next; function->locals is a separate
+reverse binding/allocation list. Slots are assigned in declaration order.
+Name nodes reference declarations, not their initializer expressions: passes
+must not recursively follow declaration backlinks (self-initializers can make
+the reference graph cyclic). Conversion nodes are arena-owned. Sema is run
+once on a fresh parsed tree; typed depth is recomputed after conversions.
+Driver and pipeline fuzz harness pass the arena to the new sema interface.
+Codegen uses binding IDs, never performs name lookup, and never initializes
+an object solely because its storage was allocated. Empty bodies are valid.

@@ -95,6 +95,28 @@ static bool spelling_is(struct token token, const char *spelling)
 			spelling, length) == 0;
 }
 
+/* Keep unsupported C keywords out of the ordinary identifier namespace. */
+static bool is_unsupported_keyword(struct token token)
+{
+	static const char *const keywords[] = {
+		"auto", "break", "case", "char", "const", "continue", "default",
+		"do", "double", "else", "enum", "extern", "float", "for", "goto",
+		"if", "inline", "long", "register", "restrict", "short", "signed",
+		"sizeof", "static", "struct", "switch", "typedef", "union",
+		"unsigned", "volatile", "while", "_Alignas", "_Alignof", "_Atomic",
+		"_Bool", "_Complex", "_Decimal32", "_Decimal64", "_Decimal128",
+		"_Generic", "_Imaginary", "_Noreturn", "_Static_assert",
+		"_Thread_local", "_BitInt", "alignas", "alignof", "bool",
+		"constexpr", "false", "nullptr", "static_assert", "thread_local",
+		"true", "typeof", "typeof_unqual",
+	};
+
+	for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++)
+		if (spelling_is(token, keywords[i]))
+			return true;
+	return false;
+}
+
 static struct token lex_identifier(struct lexer *lexer)
 {
 	size_t beginning = lexer->offset;
@@ -112,6 +134,8 @@ static struct token lex_identifier(struct lexer *lexer)
 		token.kind = token_void;
 	else if (spelling_is(token, "return"))
 		token.kind = token_return;
+	else if (is_unsupported_keyword(token))
+		token.kind = token_unsupported_keyword;
 	return token;
 }
 
@@ -178,7 +202,8 @@ static struct token read_token(struct lexer *lexer)
 	/* Preserve maximal munch for compound operators outside this subset. */
 	if (lexer->source->length - beginning >= 2) {
 		unsigned char next = lexer->source->data[beginning + 1];
-		bool compound = (byte == '+' && (next == '+' || next == '=')) ||
+		bool compound = (byte == '=' && next == '=') ||
+			(byte == '+' && (next == '+' || next == '=')) ||
 			(byte == '-' && (next == '-' || next == '=' || next == '>')) ||
 			((byte == '*' || byte == '/' || byte == '%') && next == '=');
 
@@ -219,6 +244,9 @@ static struct token read_token(struct lexer *lexer)
 		break;
 	case '%':
 		kind = token_percent;
+		break;
+	case '=':
+		kind = token_equal;
 		break;
 	case '#':
 		return invalid_token(lexer, beginning,
@@ -263,6 +291,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_eof: return "eof";
 	case token_invalid: return "invalid";
 	case token_identifier: return "identifier";
+	case token_unsupported_keyword: return "unsupported-keyword";
 	case token_integer: return "integer";
 	case token_int: return "int";
 	case token_void: return "void";
@@ -277,6 +306,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_star: return "*";
 	case token_slash: return "/";
 	case token_percent: return "%";
+	case token_equal: return "=";
 	}
 	return "unknown";
 }

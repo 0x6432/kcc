@@ -1,5 +1,7 @@
 #include "parse.h"
 
+#include <assert.h>
+
 struct parser {
 	struct lexer *lexer;
 	struct arena *arena;
@@ -45,21 +47,22 @@ static struct ast_expression *parse_integer_expression(struct parser *parser)
 
 struct infix_operator {
 	enum token_kind token;
-	enum binary_operator operation;
 	unsigned left_binding_power;
 	unsigned right_binding_power;
 };
 
 /* A higher binding power binds more tightly. Right = left + 1 gives left
  * associativity: a-b-c is (a-b)-c, because the RHS does not consume another
- * operator of equal precedence. Prefix operators bind at 30.
+ * operator of equal precedence. Assignment uses equal left/right powers,
+ * making a=b=c associate as a=(b=c). Prefix operators bind at 30.
  */
 static const struct infix_operator infix_operators[] = {
-	{ token_plus, binary_add, 10, 11 },
-	{ token_minus, binary_subtract, 10, 11 },
-	{ token_star, binary_multiply, 20, 21 },
-	{ token_slash, binary_divide, 20, 21 },
-	{ token_percent, binary_remainder, 20, 21 },
+	{ token_equal, 5, 5 },
+	{ token_plus, 10, 11 },
+	{ token_minus, 10, 11 },
+	{ token_star, 20, 21 },
+	{ token_slash, 20, 21 },
+	{ token_percent, 20, 21 },
 };
 
 static const struct infix_operator *find_infix_operator(enum token_kind kind)
@@ -73,12 +76,28 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 static struct ast_expression *parse_expression(struct parser *parser,
 	unsigned minimum_binding_power);
 
-/* primary-expression ::= integer-expression | "(" expression ")" */
+/* primary-expression ::= integer-expression | identifier | "(" expression ")" */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
 	struct ast_expression *expression;
 
+	if (token.kind == token_identifier) {
+		struct ast_name_expression *node;
+
+		lexer_next(parser->lexer);
+		node = ast_new_name(parser->arena, token);
+		if (!node) {
+			allocation_error(parser, token.location);
+			return NULL;
+		}
+		return &node->expression;
+	}
+	if (token.kind == token_unsupported_keyword) {
+		diagnostic_error(parser->diagnostics, token.location,
+			"keyword is not supported in this expression");
+		return NULL;
+	}
 	if (token.kind != token_left_paren)
 		return parse_integer_expression(parser);
 	lexer_next(parser->lexer);
@@ -118,8 +137,42 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	return &node->expression;
 }
 
+static enum binary_operator arithmetic_operator(enum token_kind kind)
+{
+	switch (kind) {
+	case token_plus: return binary_add;
+	case token_minus: return binary_subtract;
+	case token_star: return binary_multiply;
+	case token_slash: return binary_divide;
+	case token_percent: return binary_remainder;
+	default:
+		assert(0 && "unknown arithmetic token");
+		return binary_add;
+	}
+}
+
+static struct ast_expression *new_infix_expression(struct parser *parser,
+	struct token token, struct ast_expression *left, struct ast_expression *right)
+{
+	if (token.kind == token_equal) {
+		struct ast_assignment_expression *node = ast_new_assignment(
+			parser->arena, token.location, left, right);
+
+		if (node)
+			return &node->expression;
+	} else {
+		struct ast_binary_expression *node = ast_new_binary(parser->arena,
+			token.location, arithmetic_operator(token.kind), left, right);
+
+		if (node)
+			return &node->expression;
+	}
+	allocation_error(parser, token.location);
+	return NULL;
+}
+
 /* expression ::= prefix-expression { binary-operator prefix-expression }
- * binary-operator ::= "+" | "-" | "*" | "/" | "%"
+ * binary-operator ::= "=" | "+" | "-" | "*" | "/" | "%"
  * Pratt parsing groups this flat grammar using the binding-power table.
  * Recursive calls parse RHS operators only at or above the requested power.
  */
@@ -143,7 +196,7 @@ static struct ast_expression *parse_expression(struct parser *parser,
 		struct token token = lexer_peek(parser->lexer);
 		const struct infix_operator *operator = find_infix_operator(token.kind);
 		struct ast_expression *right;
-		struct ast_binary_expression *node;
+		struct ast_expression *node;
 
 		if (!operator || operator->left_binding_power < minimum_binding_power)
 			break;
@@ -157,13 +210,10 @@ static struct ast_expression *parse_expression(struct parser *parser,
 				"expression tree exceeds depth limit (128)");
 			goto failure;
 		}
-		node = ast_new_binary(parser->arena, token.location,
-			operator->operation, left, right);
-		if (!node) {
-			allocation_error(parser, token.location);
+		node = new_infix_expression(parser, token, left, right);
+		if (!node)
 			goto failure;
-		}
-		left = &node->expression;
+		left = node;
 	}
 	parser->depth--;
 	return left;
@@ -193,21 +243,140 @@ static struct ast_return_statement *parse_return_statement(struct parser *parser
 	return node;
 }
 
-/* compound-statement ::= "{" return-statement "}" */
+/* expression-statement ::= expression ";" */
+static struct ast_statement *parse_expression_statement(struct parser *parser)
+{
+	struct ast_expression *value = parse_expression(parser, 0);
+	struct ast_expression_statement *node;
+
+	if (!value)
+		return NULL;
+	if (!expect_token(parser, token_semicolon,
+		"expected ';' after expression", NULL))
+		return NULL;
+	node = ast_new_expression_statement(parser->arena, value->location, value);
+	if (!node) {
+		allocation_error(parser, value->location);
+		return NULL;
+	}
+	return &node->statement;
+}
+
+/* empty-statement ::= ";" */
+static struct ast_statement *parse_empty_statement(struct parser *parser)
+{
+	struct token token;
+	struct ast_empty_statement *node;
+
+	if (!expect_token(parser, token_semicolon, "expected ';'", &token))
+		return NULL;
+	node = ast_new_empty_statement(parser->arena, token.location);
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	return &node->statement;
+}
+
+/* statement ::= return-statement | expression-statement | empty-statement */
+static struct ast_statement *parse_statement(struct parser *parser)
+{
+	struct token token = lexer_peek(parser->lexer);
+
+	if (token.kind == token_return) {
+		struct ast_return_statement *node = parse_return_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
+	if (token.kind == token_semicolon)
+		return parse_empty_statement(parser);
+	return parse_expression_statement(parser);
+}
+
+/* local-declaration ::= "int" identifier [ "=" expression ] ";" */
+static struct ast_block_item *parse_local_declaration(struct parser *parser)
+{
+	struct token beginning;
+	struct token name;
+	struct ast_expression *initializer = NULL;
+	struct ast_local_declaration *node;
+
+	if (!expect_token(parser, token_int, "expected 'int'", &beginning))
+		return NULL;
+	if (!expect_token(parser, token_identifier, "expected local name", &name))
+		return NULL;
+	if (lexer_peek(parser->lexer).kind == token_equal) {
+		lexer_next(parser->lexer);
+		initializer = parse_expression(parser, 0);
+		if (!initializer)
+			return NULL;
+	}
+	if (!expect_token(parser, token_semicolon,
+		"expected ';' after declaration", NULL))
+		return NULL;
+	node = ast_new_local(parser->arena, beginning.location, name, initializer);
+	if (!node) {
+		allocation_error(parser, beginning.location);
+		return NULL;
+	}
+	return &node->item;
+}
+
+/* block-item ::= local-declaration | statement */
+static struct ast_block_item *parse_block_item(struct parser *parser)
+{
+	struct ast_statement *statement;
+	struct ast_statement_item *node;
+
+	if (lexer_peek(parser->lexer).kind == token_int)
+		return parse_local_declaration(parser);
+	statement = parse_statement(parser);
+	if (!statement)
+		return NULL;
+	node = ast_new_statement_item(parser->arena, statement);
+	if (!node) {
+		allocation_error(parser, statement->location);
+		return NULL;
+	}
+	return &node->item;
+}
+
+/* compound-statement ::= "{" { block-item } "}" */
 static struct ast_compound_statement *parse_compound_statement(struct parser *parser)
 {
 	struct token opening;
-	struct ast_return_statement *body;
+	struct ast_block_item *items = NULL;
+	struct ast_block_item **tail = &items;
 	struct ast_compound_statement *node;
+	size_t count = 0;
 
 	if (!expect_token(parser, token_left_brace, "expected '{'", &opening))
 		return NULL;
-	body = parse_return_statement(parser);
-	if (!body)
-		return NULL;
-	if (!expect_token(parser, token_right_brace, "expected '}'", NULL))
-		return NULL;
-	node = ast_new_compound(parser->arena, opening.location, &body->statement);
+	while (lexer_peek(parser->lexer).kind != token_right_brace) {
+		struct ast_block_item *item;
+		struct token token = lexer_peek(parser->lexer);
+
+		if (token.kind == token_eof) {
+			diagnostic_error(parser->diagnostics, token.location,
+				"expected '}' before end of file");
+			return NULL;
+		}
+		if (count == ast_max_block_items) {
+			diagnostic_error(parser->diagnostics, token.location,
+				"function body exceeds item limit (4096)");
+			return NULL;
+		}
+		item = parse_block_item(parser);
+		if (!item)
+			return NULL;
+		*tail = item;
+		tail = &item->next;
+		count++;
+	}
+	lexer_next(parser->lexer);
+	node = ast_new_compound(parser->arena, opening.location, items);
 	if (!node)
 		allocation_error(parser, opening.location);
 	return node;
