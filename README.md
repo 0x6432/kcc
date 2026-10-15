@@ -6,14 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M10b: zero-parameter function-like macros (`#define VALUE() 42`) now expand
-alongside object macros. An unexpanded-token cursor crosses replacement/source
-boundaries, and token-carried hide sets preserve recursive suppression after
-frames disappear. Named/variadic arguments remain separate checkpoints; this
-is still a small C23 subset, not a complete preprocessor/compiler.
+M10c: fixed-parameter function-like macros now collect raw arguments, prescan
+used arguments in isolated streams, and substitute with per-token suppression
+preserved. Empty arguments, nested calls and callbacks are supported. Variadics,
+macro operators and full C23 coverage remain unfinished.
 
-See `docs/m10-zero-parameter-macros.md` for decisions and current policies;
-`docs/m10-object-macros.md` records the preceding checkpoint.
+See `docs/m10-fixed-arguments.md` for ownership, limits and subset policy.
+Previous M10a/M10b design documents remain as historical checkpoints.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -73,14 +72,14 @@ cc build/example.s -o build/example
 ```
 
 Supported: normalized line endings, backslash-newline splicing, physical source
-locations, null directives (#/%:), object-like and zero-parameter function-like
+locations, null directives (#/%:), object-like and fixed-parameter function-like
 macros, decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: named/variadic macro parameters and nonempty macro arguments,
+Unsupported: variadic macro parameters/arguments and __VA_OPT__,
 token pasting, stringizing, includes,
 conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadics, comma/update/compound-assignment
@@ -91,11 +90,13 @@ Limits: 16 MiB source, 128 expression/statement nesting and typed expression
 depth, 512 external declarations, 256 distinct functions, 128 parameters/call
 arguments, 4096 body items and 256 parameter/local slots per function. Macros:
 1024 distinct names, 1024 tokens/definition, 65536 retained replacement tokens,
-128 expansion frames and 65536 expansion work units (pushes + token visits).
+128 retained expansion frames and 65536 work units (pushes, visits, argument
+collection/copies). Arguments: 128 fixed parameters, 128 nested parentheses,
+64 nested prescans and 65536 auxiliary records (parameters/arguments/token copies).
 
 `make test-codegen` also runs separate-object ABI tests with the selected host
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
-CI runs GCC and Clang, compiler sanitizers, 198 host-preprocessor token/spelling oracle cases, generated
+CI runs GCC and Clang, compiler sanitizers, 374 host-preprocessor token/spelling oracle cases, generated
 executables, ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
@@ -123,7 +124,7 @@ and operators. Brace digraphs <%/%> are accepted by the current grammar. Raw
 inspection can succeed for text the compiler rejects; it is not a preprocessor
 or conformance check. Null/define/undef directives are handled by the compiler.
 Header-name context, Unicode/UCNs, full expansion-stack diagnostic notes and
-named-argument macros remain future work. Both debug dumps may show partial output on lexical errors.
+variadic macros remain future work. Both debug dumps may show partial output on lexical errors.
 
 
 ## Zero-parameter macro example
@@ -134,8 +135,18 @@ named-argument macros remain future work. Both debug dumps may show partial outp
 int main(void) { return ALIAS() + VALUE(); }
 ```
 
-The program exits 42 through the same QBE workflow above. Whitespace/comments/
-newlines may separate the name and invocation parentheses. A bare function-like
-macro name is not expanded. Nonempty arguments are rejected even if they would
-expand to nothing. Source directives encountered while probing an invocation
-are explicitly unsupported, not executed speculatively.
+The program exits 42 through the same QBE workflow above. Whitespace/comments/newlines may separate a name from its invocation parentheses.
+A bare function-like macro name is not expanded. Source directive lines during
+invocation probing/collection remain explicitly unsupported, not speculative.
+
+## Fixed-argument macro example
+
+```c
+#define ID(x) x
+#define ADD(a, b) ((a) + (b))
+int main(void) { return ADD(ID(ID(20)), 22); }
+```
+
+This also exits 42. Arguments are collected before expansion; only parentheses
+protect commas. An unused argument is not macro-expanded. Argument prescan
+cannot consume the source after the enclosing invocation. Variadics are next.

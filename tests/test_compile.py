@@ -357,6 +357,31 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
          "int main(void) { return f(); }\n", 9),
         ("int main(void) { return 7; }\n#define UNUSED() 12u \"unused\"\n", 7),
     ]
+    directive_programs += [
+        ("#define ADD(a,b) ((a)+(b))\n#define ID(x) x\n"
+         "int main(void) { return ADD(ID(ID(20)),22); }\n", 42),
+        ("#define ID(x) x\nID(int) ID(main)(void) { return ID(7); }\n", 7),
+        ("#define CALL(f,x) f(x)\nint add(int x) { return x+1; }\n"
+         "int main(void) { return CALL(add,7); }\n", 8),
+        ("#define ID(x) x\n#define VALUE() 7\n"
+         "int main(void) { return ID(VALUE)(); }\n", 7),
+        ("#define ID(x) x\n#define F(x) x\n"
+         "int main(void) { return ID(F)(7); }\n", 7),
+        ("#define DROP(x) 7\n#define BAD(a,b) a+b\n"
+         "int main(void) { return DROP(BAD(1)); }\n", 7),
+        ("#define DROP(x) 7\n#define OUT(x) DROP(x)\n"
+         "int main(void) { return OUT(12u); }\n", 7),
+        ("#define DROP(a,b) 7\nint main(void) { return DROP({1,2}); }\n", 7),
+        ("#define EMPTY(x)\n#define KEEP(a,b) a b\n"
+         "int main(void) { EMPTY() return KEEP(,7); }\n", 7),
+        ("#define COMMA 3,4\n#define ADD(a,b) ((a)+(b))\n#define CALL(x) ADD(x)\n"
+         "int main(void) { return CALL(COMMA); }\n", 7),
+        ("int f(int x) { return x+2; }\n#define f(x) f(x)\n"
+         "int main(void) { return f(5); }\n", 7),
+        ("#define DECL(type,name,value) type name=value\n"
+         "int main(void) { DECL(int,x,7); return x; }\n", 7),
+        ("#define BOTH(x) ((x)&&(x))\nint main(void) { int x=0; BOTH(x=x+1); return x; }\n", 2),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -554,7 +579,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { #\nreturn 0; }",
         "int/*\n*/#\nmain(void) { return 0; }",
         "#/*\n*/int main(void) { return 0; }",
-        "int main(void) { return 0; }\n#define X(x) 1\n",
+        "int main(void) { return 0; }\n#define X(...) 1\n",
         "#\n", "# // comment\n", "%:%:\nint main(void) { return 0; }",
         "#unknown \0\nint main(void) { return 0; }",
     ]
@@ -570,6 +595,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define ID(x) x\nint main(void) { return ID(missing); }", ":2:25: error:"),
+        ("#define ID(x) x\nint main(void) { return ID(12u); }", ":2:25: error: unsupported numeric"),
+        ("#define F(a,b) a+b\nint main(void) { return F(1); }", "macro argument count"),
+        ("#define F(x,x) x\nint main(void) { return 0; }", "duplicate macro parameter"),
+
         ("#define F() 12u\nint main(void) { return F(); }", ":2:25: error: unsupported numeric"),
         ("#define NAME() main\nint NAME()(int x) { return x; }", ":2:5: error:"),
         ("#define F() 7\nint main(void) { return F(1); }", "requires no arguments"),
@@ -579,7 +609,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define VALUE 12u\nint main(void) { return VALUE; }", ":2:25: error: unsupported numeric"),
         ("#define A B\n#define B missing\nint main(void) { return A; }", ":3:25: error:"),
         ("#define NAME main\nint NAME(int x) { return x; }", ":2:5: error:"),
-        ("#define X(x) 1\nint main(void) { return 0; }", "macro parameters are not supported"),
+        ("#define X(...) 1\nint main(void) { return 0; }", "variadics are not supported"),
         ("#define X 1\n#define X 2\nint main(void) { return X; }", "incompatible macro redefinition"),
         ("#define X 1 ## 2\nint main(void) { return 0; }", "macro token pasting"),
 

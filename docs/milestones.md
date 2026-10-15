@@ -16,7 +16,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
-| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a objects + M10b zero-parameter calls complete) |
+| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a–M10c fixed macros complete; variadics pending) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
@@ -463,3 +463,46 @@ The subsequent verification commit only records results; it changes no compiler
 code. Verify its own remote CI separately after push. Future resumes must fetch
 and compare the latest development hash before editing; the sandbox really did
 lose uncommitted files and dependencies during this checkpoint.
+
+
+## M10C implementation checkpoint
+
+Design was recorded in m10-fixed-arguments.md before coding. Fixed parameter
+lists are validated and indexed on replacement tokens; redefinitions compare
+names/order and preserve old bindings on failure. Raw balanced collection
+preserves empty arguments and checks arity before expansion. Isolated lazy
+prescan cannot consume following source or hide the enclosing macro too early.
+Substitution retains per-token suppression and original spelling, with the
+outermost invocation used for diagnostics. Unused arguments are not expanded.
+
+Cursor state was separated from global source/table/arena/work ownership.
+Concrete arena records cover parameters, invocation arrays and raw/cached tokens;
+heap prescan cursors are freed on all returns. Parser/AST/sema/QBE interfaces
+are unchanged. New parameter, parentheses, prescan and auxiliary storage bounds
+join existing source/definition/frame/work caps, with argument work charged too.
+
+Tests retain all 198 previous oracle cases and extend to 374 GCC/Clang streams,
+including recursive fixed-parameter graphs, callbacks, empty and unused arguments,
+comma protection and parameter shadowing. Unit boundaries test 128 parameters,
+64 nested prescans, 128 nested parentheses and auxiliary retention across repeated
+definitions. New QBE/reference cases cover macro-generated declarations/calls,
+sequenced side effects, source locations and LF/CRLF/CR variants. Both fuzz paths
+have fixed-argument/rescan seeds and cursor/auxiliary invariants.
+
+The sandbox resumed with a stale uncommitted M10b snapshot. It was preserved in
+a local stash before fast-forwarding to the pushed M10b checkpoint. Dependencies
+were restored again. Final validation evidence follows; remote CI is checked
+separately. Full M10 is not complete: M10d is variadics/__VA_ARGS__/__VA_OPT__;
+M11 owns macro operators/includes/conditions and directive integration.
+
+
+## M10c tested implementation checkpoint
+
+Local make test passed, including all argument/unit/resource/provenance tests.
+The 374-case token/spelling oracle passed with GCC and Clang. GCC-host QBE/
+reference execution and separate-object integer ABI passed. Sanitized fuzzing
+passed 52567 lexer/preprocessor and 168281 full-pipeline inputs in 26 seconds
+each, with new argument corpus seeds. Arbitrary generated code was not executed.
+This checkpoint is pushed before the longer full GCC/Clang normal/ASan/UBSan
+matrix to protect work from resets. That matrix and exact pushed-commit CI are
+still pending here; do not infer them from fuzzing. Final evidence follows later.

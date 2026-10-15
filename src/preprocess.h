@@ -9,9 +9,15 @@
 #define preprocess_storage_limit 65536
 #define preprocess_depth_limit 128
 #define preprocess_work_limit 65536
+#define preprocess_parameter_limit 128
+#define preprocess_auxiliary_limit 65536
+#define preprocess_prescan_limit 64
+#define preprocess_parentheses_limit 128
 
 struct macro;
 struct macro_token;
+struct macro_argument;
+struct argument_token;
 
 /* A bit per stable macro identity; sets travel with tokens, not the C AST. */
 struct macro_hide_set {
@@ -25,9 +31,22 @@ struct rescan_token {
 };
 
 struct expansion_frame {
-	struct macro_token *next;
+	struct macro_token *replacement;
+	struct argument_token *argument;
+	struct macro_argument *arguments;
 	struct source_location invocation;
 	struct macro_hide_set hide;
+};
+
+/* Main input may read source; isolated argument input must stop at its own EOF. */
+struct expansion_cursor {
+	struct expansion_frame frames[preprocess_depth_limit];
+	size_t frame_count;
+	struct argument_token *input;
+	struct source_location end;
+	bool source_input;
+	bool has_pending;
+	struct rescan_token pending;
 };
 
 /* Owns raw input and macro storage. Do not read input independently.
@@ -41,11 +60,10 @@ struct preprocessor {
 	size_t macro_count;
 	size_t stored_tokens;
 	size_t expansion_work;
-	struct expansion_frame frames[preprocess_depth_limit];
-	size_t frame_count;
+	struct expansion_cursor cursor;
+	size_t auxiliary_records;
+	size_t prescan_depth;
 	bool stopped;
-	bool has_pending;
-	struct rescan_token pending;
 	bool has_lookahead;
 	struct token lookahead;
 };

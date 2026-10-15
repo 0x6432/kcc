@@ -78,6 +78,66 @@ for _ in range(80):
 lines = [f"#define F{i}() F{i+1}\n" for i in range(200)]
 lines.append("#define F200() 1\nF0" + "()" * 201 + "\n")
 examples.append("".join(lines))
+examples += [
+    "#define ID(x) x\nID(42) ID(ID(3)) ID()\n",
+    "#define ADD(a,b) ((a)+(b))\nADD(1,2) ADD(ADD(3,4),5)\n",
+    "#define KEEP(a,b) a b\nKEEP(,) KEEP(1,) KEEP(,2)\n",
+    "#define ID(x) x\n#define EMPTY\nID(EMPTY) ID((1,2))\n",
+    "#define DROP(x) 7\nDROP(12u) DROP(@) DROP(#) DROP(UNKNOWN(1,2))\n",
+    "#define BAD(a,b) a b\n#define DROP(x) 7\nDROP(BAD(1))\n",
+    "#define DROP(x) 7\n#define OUT(x) DROP(x)\nOUT(12u)\n",
+    "#define ID(x) x\n#define F() 7\nID(F)()\n",
+    "#define ID(x) x\n#define F(x) x\nID(F)(7)\n",
+    "#define F(x) x x\nF(F(1))\n",
+    "#define F(x) F(x)\nF(1)\n",
+    "#define F(x) G(x)\n#define G(x) F(x)\nF(1) G(2)\n",
+    "#define X 9\n#define F(X) X\nF(3)\n",
+    "#define F(int) int\nF(7)\n",
+    "#define C 1,2\n#define ADD(a,b) a+b\n#define CALL(x) ADD(x)\nCALL(C)\n",
+    "#define ID(x) x\n#define LP (\n#define F() 7\nID(F LP) )\n",
+    "#define foo(x) bar x\n#define bar(x) foo x\nfoo(foo)(2)\n",
+    "#define f(x) x x\n#define g f\nf(g)(2)\n",
+    "#define A F(A)\n#define F(x) x\nA\n",
+    "#define F(x) x\n#define G() F\nF(G)()(7)\n",
+    "#define F(x,y) x+y\n#define F( x , y ) x+y\nF(1,2)\n",
+    "#define F(x) x\nF(1)\n#undef F\n#define F(a,b) a b\nF(2,3)\n",
+    "#define ID(x) x\nID(ID(ID(ID(1))))\n",
+    "#define A(x) x()\n#define B() 3\nA(B)\n",
+    "#define BOTH(a,b) a b\n#define F(x) x\nBOTH(F,(3))\n",
+    "#define RET(x) return x\nRET(3)\n",
+    "#define F(x) x\nF(/**/) F(\n) F(\\\n7)\n",
+    "#define DROP(a,b) 7\nDROP({1,2}) DROP([1,2])\n",
+]
+# Bounded expression trees vary prescan depth, repeat substitutions and commas.
+for _ in range(80):
+    def expression(depth):
+        if not depth:
+            return str(random_source.randrange(10))
+        if random_source.randrange(2):
+            return "TWICE(" + expression(depth - 1) + ")"
+        return "ADD(" + expression(depth - 1) + "," + expression(depth - 1) + ")"
+    examples.append("#define ADD(a,b) ((a)+(b))\n#define TWICE(x) ADD(x,x)\n"
+                    + expression(3) + "\n")
+examples += [
+    "#define x 2\n#define f(a) f(x*(a))\nf(f(1))\n",
+    "#define x 2\n#define f(a) f(x*(a))\n#define g f\n#define t(a) a\nt(t(g)(0)+t)(1)\n",
+    "#define f(x) x\n#define h(x) f(x)\n#define g f\nh(g)(2)\n",
+    "#define A(x) x B\n#define B(x) x A\nA(B)(7)\n",
+    "#define F(x) x x\n#define G(x) F(x)\nG(F)(7)\n",
+    "#define F(x) x\n#define G(x) F(x)\nF(G)(F)(7)\n",
+    "#define F(x) x\n#define CALL(x) F(x)\nCALL(F)(7)\n",
+    "#define F(x) x F\nF(F)(7)\n",
+]
+for _ in range(60):
+    names = [f"R{i}" for i in range(4)]
+    lines = []
+    for name in names:
+        body = " ".join(random_source.choice(names) + "(x)"
+                        for _ in range(random_source.randrange(3)))
+        lines.append(f"#define {name}(x) {body}\n")
+    lines.append("#define ALIAS R0\nALIAS(R1(7)) "
+                 + " ".join(name + "(3)" for name in names) + "\n")
+    examples.append("".join(lines))
 
 with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
     source = Path(directory) / "input.c"

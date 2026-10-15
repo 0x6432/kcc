@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M10b. The chronological entries below describe what each
+Current milestone: M10c. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -317,7 +317,7 @@ reuse this as a full function-argument availability/hide-set implementation.
 All prior language/type/ABI/encoding restrictions remain; no full-C23 claim.
 
 
-## M10b (current)
+## M10b
 
 Object plus zero-parameter function-like macros work. No named/variadic
 parameters, nonempty invocation arguments, argument prescan or substitution.
@@ -341,3 +341,33 @@ all of them. Macro IDs remain stable through undef/redefine. Depth counts retain
 streams, not completed calls. Prior storage/work/source limits and diagnostic
 prefix-rescanning caveats remain; no hostile large-input CPU guarantee, error
 count cap or allocation-failure injection tests have been added.
+
+
+## M10c (current)
+
+Fixed parameter lists/arguments, empty arguments, isolated lazy prescan and
+suppression-preserving substitution are supported. No variadic definitions,
+__VA_ARGS__/__VA_OPT__, stringizing or pasting. No new non-macro directives,
+includes/conditions, predefined macros, #line, complete encoding/literals or
+full expansion-chain notes. Existing C-language/type/ABI restrictions remain.
+
+Only parentheses protect commas during raw argument collection. Arity is checked
+before expansion. Unused arguments are collected/lexed but not macro-expanded;
+unsupported language literals may be discarded before final conversion. Source
+directive lines during probing/collection explicitly fail; inline # tokens may
+be discarded like other raw argument tokens. No speculative directive execution.
+
+Limits added: 128 parameters, 128 nested argument parentheses, 64 active argument
+prescans, 65536 retained auxiliary records across parameters, argument array
+entries and raw/cached token copies. Rejected/duplicate definitions and completed
+invocations do not reclaim arena records. Existing definition-token, name, frame,
+source and work limits remain; work also covers argument collection/copying/
+prescan/injection. Temporary heap cursors are released on all paths. Fault
+injection is not tested. Diagnostic prefix rescanning and other earlier hostile
+large-input caveats remain; these are subset policies, not a conformance claim.
+
+Substituted diagnostics use the outermost call, with original spelling retained.
+This is not enough provenance for every future predefined-location macro case;
+M25 must review __LINE__/__FILE__ semantics rather than reuse diagnostic offsets.
+Some rescan cases have unspecified C23 behavior; oracle agreement is scoped
+validation, not proof of a unique ISO result or complete preprocessing.

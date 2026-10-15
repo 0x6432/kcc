@@ -102,9 +102,9 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		struct token peek = preprocess_peek(&preprocessor);
 		size_t errors = diagnostics.errors;
 		size_t work = preprocessor.expansion_work;
-		size_t frames = preprocessor.frame_count;
+		size_t frames = preprocessor.cursor.frame_count;
 		size_t offset = preprocessor.input.offset;
-		bool pending = preprocessor.has_pending;
+		bool pending = preprocessor.cursor.has_pending;
 		struct token token;
 
 		assert_same_language_token(peek, preprocess_peek(&preprocessor));
@@ -112,14 +112,16 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert_same_language_token(peek, token);
 		assert(diagnostics.errors == errors);
 		assert(preprocessor.expansion_work == work);
-		assert(preprocessor.frame_count == frames);
+		assert(preprocessor.cursor.frame_count == frames);
 		assert(preprocessor.input.offset == offset);
-		assert(preprocessor.has_pending == pending);
+		assert(preprocessor.cursor.has_pending == pending);
 		assert(frames <= preprocess_depth_limit && work <= preprocess_work_limit);
 		assert(preprocessor.macro_count <= preprocess_macro_limit);
 		assert(preprocessor.stored_tokens <= preprocess_storage_limit);
+		assert(preprocessor.auxiliary_records <= preprocess_auxiliary_limit);
+		assert(preprocessor.prescan_depth == 0);
 		if (pending)
-			assert(preprocessor.pending.token.kind != pp_newline);
+			assert(preprocessor.cursor.pending.token.kind != pp_newline);
 
 		assert(steps <= source.length + preprocess_work_limit + 1);
 		assert(peek.kind == token.kind);

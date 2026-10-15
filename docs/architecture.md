@@ -17,9 +17,9 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-M10b dispatches null/define/undef directives and rescans object/zero-parameter
-function-like replacements before language conversion. Named arguments and
-includes remain unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
+M10c dispatches null/define/undef directives and rescans object/fixed-parameter
+function-like replacements before language conversion. Variadics and includes
+remain unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
 not claimed. Missing terminal newlines remain an acceptance extension; no
 synthetic newline is appended. Reference: WG14 N3096 5.1.1.2 and 6.10,
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
@@ -95,12 +95,20 @@ streams without losing availability information. Only source-origin tokens
 can dispatch directives. Generated # never does; source directives encountered
 during invocation probing are explicitly unsupported.
 
-M10b implements empty parameter lists/calls, not argument substitution. See
-m10-zero-parameter-macros.md for boundaries and limits; m10-object-macros.md
-records the preceding object-only design. Parser/AST/sema/QBE APIs are unchanged.
-Future arguments need raw collection, prescan and per-token hide-set union on
-substitution, not one set on an entire argument list. Headers, conditions and
-macro operators remain later milestones.
+M10c adds fixed parameter indexes on definition tokens. Concrete arena-owned
+parameter, argument and argument-token records outlive frames borrowing them.
+The main expansion_cursor reads source; isolated argument cursors end at their
+own EOF, never the following source. Used arguments are prescanned once, without
+prematurely hiding the outer macro. Substitution streams union each cached
+token's hide set with the invocation base. Unused arguments are not expanded;
+language conversion happens only on final output, not prescan. Temporary heap
+cursors are freed on success/error; all retained records/work are bounded.
+
+See m10-fixed-arguments.md for the current contract. M10a/M10b documents describe
+historical designs. Parser/AST/sema/QBE APIs are unchanged. Variadics, headers,
+conditions and macro operators remain later checkpoints. Predefined location
+macros will require richer provenance than the current outermost diagnostic
+location; do not implement __LINE__ by guessing from definition spelling.
 
 ## Target model and QBE limits
 

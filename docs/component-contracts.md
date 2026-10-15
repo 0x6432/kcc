@@ -8,7 +8,7 @@ and update their tests in the same checkpoint.
 | --- | --- | --- |
 | source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
 | lexer | preprocessor | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
-| preprocessor | parser | One cached language token, null/define/undef consumed and object/zero-parameter macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
+| preprocessor | parser | One cached language token, null/define/undef consumed and object/fixed-parameter macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
 | sema | codegen | Validated typed AST, explicit conversions, resolved declarations; failure prevents codegen |
 | codegen | QBE | Well-formed IL for the pinned target; no source-language validation here |
@@ -518,3 +518,53 @@ Fuzzing also checks cache reads leave cursor offset/pending/frame/work state
 unchanged. The 97-case object oracle plus 101 new cases make 198 streams tested
 under both host compilers in normal/sanitized CI. No arbitrary generated code
 is executed by fuzzing.
+
+
+## M10c fixed-argument contract
+
+Each definition has ordered macro_parameter records and a count (maximum 128).
+Replacement nodes carry a parameter_index or SIZE_MAX. Parameter names are raw
+identifiers, including keyword spellings; their namespace shadows macro names
+inside the replacement. Duplicate parameters, malformed lists and variadics
+reject transactionally. Redefinition also compares parameter names/order.
+__VA_ARGS__/__VA_OPT__ are not accepted as fixed parameter names in this slice.
+
+Expansion state is now expansion_cursor: main source cursor versus isolated
+argument input. A frame streams definition or argument tokens and borrows an
+arena-owned invocation argument array. Collection uses raw unexpanded pp tokens;
+parentheses alone protect commas, preserving empty leading/trailing arguments.
+An empty () supplies zero arguments to a zero-parameter definition and one empty
+argument when parameters exist. Check arity before expansion. Source directive
+LINES encountered while probing/collecting remain unsupported; inline # tokens
+are ordinary argument tokens and can be discarded by unused parameters.
+
+Used arguments get a lazy cached prescan. Isolated cursors cannot read following
+source, and the enclosing macro's hide bit is not added early. A cached token's
+hide bits are unioned with the call base on each substitution; cached nodes are
+never mutated. Prescan is pp-only: a later unused parameter can discard literals
+unsupported by language conversion. Raw-invalid tokens still diagnose during
+collection. Unused arguments never undergo macro expansion/arity validation of
+nested calls. Injected argument streams may meet replacement/source tokens.
+Only source-origin tokens dispatch directives; copied arguments are not source.
+
+Macro records and raw/cached argument nodes belong to the preprocessing arena.
+Temporary prescan cursors are malloc/free pairs on every success/error path.
+Caller init/destroy APIs are unchanged. The main pending/frame state moved into
+preprocessor.cursor; fuzz assertions follow it and check auxiliary bounds and
+zero active prescans after each public read. No parser/AST/sema/codegen changes.
+
+New limits: 128 fixed parameters, 128 nested argument parentheses, 64 prescans,
+65536 cumulative auxiliary records (parameter nodes, argument array elements,
+raw/cached argument-token copies, including abandoned attempts). Definition token
+storage retains its separate 65536 cap. Work also counts argument collection,
+prescan input, record copies and injected frame pushes/visits. Source/object-only
+accounting stays unchanged. These bounds cover retained memory, not just output.
+Limit/allocation failure stops once then latches EOF; definitions keep line-level
+recovery except fatal resource errors. Allocation fault injection remains absent.
+
+Spelling slices stay original; substituted diagnostics use the outermost call.
+Raw lexical errors keep their original lexer locations. No full expansion chain
+is retained. M25 predefined-location macros need additional provenance review:
+outermost diagnostic position alone is not the semantic __LINE__ expansion site.
+The host oracle now has 374 streams, retaining all 198 prior cases, under both
+hosts; it includes cyclic fixed-parameter graphs, callbacks and unused arguments.

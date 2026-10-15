@@ -1,15 +1,36 @@
 #include "preprocess.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 struct macro_token {
 	struct pp_token token;
 	struct macro_token *next;
+	size_t parameter_index;
+};
+
+struct macro_parameter {
+	struct pp_token name;
+	struct macro_parameter *next;
+	size_t index;
+};
+
+struct argument_token {
+	struct rescan_token input;
+	struct argument_token *next;
+};
+
+struct macro_argument {
+	struct argument_token *raw;
+	struct argument_token *expanded;
+	bool expanded_ready;
 };
 
 struct macro {
 	struct pp_token name;
 	struct macro_token *replacement;
+	struct macro_parameter *parameters;
+	size_t parameter_count;
 	struct macro *next;
 	size_t identity;
 	bool defined;
@@ -85,6 +106,26 @@ static struct token stop_preprocessing(struct preprocessor *preprocessor,
 	return invalid_token(token);
 }
 
+/* All auxiliary record kinds are bounded together, including abandoned work. */
+static void *allocate_auxiliary(struct preprocessor *preprocessor, size_t count,
+	size_t size, struct pp_token blame, struct token *error)
+{
+	void *memory;
+
+	if (count > preprocess_auxiliary_limit - preprocessor->auxiliary_records ||
+		(count && size > SIZE_MAX / count)) {
+		*error = stop_preprocessing(preprocessor, blame, "macro auxiliary storage limit exceeded");
+		return NULL;
+	}
+	memory = arena_alloc(&preprocessor->storage, count * size);
+	if (!memory) {
+		*error = stop_preprocessing(preprocessor, blame, "cannot allocate macro argument storage");
+		return NULL;
+	}
+	preprocessor->auxiliary_records += count;
+	return memory;
+}
+
 /* Drain raw tokens, never converting a rejected directive body into C tokens. */
 static void finish_directive(struct preprocessor *preprocessor, struct pp_token token)
 {
@@ -133,32 +174,92 @@ static bool same_replacement(struct macro_token *left, struct macro_token *right
 	return !left && !right;
 }
 
-/* function-parameters = '(' ')' (named/variadic parameters are deferred). */
-static bool read_empty_parameters(struct preprocessor *preprocessor,
-	struct pp_token marker, struct token *error)
+static size_t parameter_index(struct macro_parameter *parameters, struct pp_token name)
 {
-	struct pp_token token = pp_lexer_next(&preprocessor->input);
+	for (; parameters; parameters = parameters->next)
+		if (same_spelling(parameters->name, name))
+			return parameters->index;
+	return SIZE_MAX;
+}
 
-	if (token.kind == pp_invalid) {
-		*error = reject_directive(preprocessor, marker, token, NULL);
-		return false;
+static bool same_parameters(struct macro_parameter *left, struct macro_parameter *right)
+{
+	while (left && right) {
+		if (!same_spelling(left->name, right->name))
+			return false;
+		left = left->next;
+		right = right->next;
 	}
-	if (token.has_non_directive_space) {
+	return !left && !right;
+}
+
+static bool check_parameter_token(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token token, struct token *error)
+{
+	if (token.kind == pp_invalid || token.has_non_directive_space) {
 		*error = reject_directive(preprocessor, marker, token,
+			token.kind == pp_invalid ? NULL :
 			"only space and tab are allowed in a preprocessing directive");
 		return false;
 	}
+	return true;
+}
+
+/* function-parameters = '(' (identifier (',' identifier)*)? ')' */
+static bool read_parameters(struct preprocessor *preprocessor, struct pp_token marker,
+	struct macro_parameter **parameters, size_t *count, struct token *error)
+{
+	struct pp_token token = pp_lexer_next(&preprocessor->input);
+	struct macro_parameter **tail = parameters;
+
+	if (!check_parameter_token(preprocessor, marker, token, error))
+		return false;
 	if (token.kind == pp_punctuator && pp_spelling_is(token, ")"))
 		return true;
-	*error = reject_directive(preprocessor, marker, token,
-		"expected ')' (macro parameters are not supported yet)");
-	return false;
+	for (;;) {
+		struct macro_parameter *parameter;
+
+		if (!check_parameter_token(preprocessor, marker, token, error))
+			return false;
+		if (token.kind != pp_identifier || pp_spelling_is(token, "__VA_ARGS__") ||
+			pp_spelling_is(token, "__VA_OPT__")) {
+			*error = reject_directive(preprocessor, marker, token,
+				"expected a fixed macro parameter (variadics are not supported yet)");
+			return false;
+		}
+		if (parameter_index(*parameters, token) != SIZE_MAX) {
+			*error = reject_directive(preprocessor, marker, token, "duplicate macro parameter");
+			return false;
+		}
+		if (*count == preprocess_parameter_limit) {
+			*error = stop_preprocessing(preprocessor, marker, "macro parameter limit exceeded");
+			return false;
+		}
+		parameter = allocate_auxiliary(preprocessor, 1, sizeof(*parameter), marker, error);
+		if (!parameter)
+			return false;
+		*parameter = (struct macro_parameter) { .name = token, .index = *count };
+		*tail = parameter;
+		tail = &parameter->next;
+		(*count)++;
+		token = pp_lexer_next(&preprocessor->input);
+		if (!check_parameter_token(preprocessor, marker, token, error))
+			return false;
+		if (token.kind == pp_punctuator && pp_spelling_is(token, ")"))
+			return true;
+		if (token.kind != pp_punctuator || !pp_spelling_is(token, ",")) {
+			*error = reject_directive(preprocessor, marker, token,
+				"expected ',' or ')' after macro parameter");
+			return false;
+		}
+		token = pp_lexer_next(&preprocessor->input);
+	}
 }
 
 /* define-directive = '#' 'define' identifier function-parameters? replacement-list newline
  * undef-directive = '#' 'undef' identifier newline
  * replacement-list = preprocessing-token*
- * Only empty function-parameters are supported; token pasting is deferred.
+ * Variadic parameters and token pasting remain deferred.
  */
 static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, bool define, struct token *error)
@@ -169,6 +270,8 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct macro_token *replacement = NULL;
 	struct macro_token **tail = &replacement;
 	size_t count = 0;
+	struct macro_parameter *parameters = NULL;
+	size_t parameter_count = 0;
 	bool function_like = false;
 
 	if (name.kind == pp_invalid) {
@@ -194,7 +297,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	if (define && token.kind == pp_punctuator && !token.leading_space &&
 		pp_spelling_is(token, "(")) {
 		function_like = true;
-		if (!read_empty_parameters(preprocessor, marker, error))
+		if (!read_parameters(preprocessor, marker, &parameters, &parameter_count, error))
 			return false;
 		token = pp_lexer_next(&preprocessor->input);
 	} else if (define && !is_directive_end(token) && !token.leading_space &&
@@ -245,7 +348,10 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 				"cannot allocate macro replacement token");
 			return false;
 		}
-		*item = (struct macro_token) { .token = token };
+		*item = (struct macro_token) {
+			.token = token,
+			.parameter_index = parameter_index(parameters, token),
+		};
 		*tail = item;
 		tail = &item->next;
 		count++;
@@ -259,6 +365,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	}
 	if (macro && macro->defined) {
 		if (macro->function_like == function_like &&
+			same_parameters(macro->parameters, parameters) &&
 			same_replacement(macro->replacement, replacement))
 			return true;
 		diagnostic_error(preprocessor->diagnostics, name.location,
@@ -284,6 +391,8 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 		preprocessor->macros = macro;
 		preprocessor->macro_count++;
 	}
+	macro->parameters = parameters;
+	macro->parameter_count = parameter_count;
 	macro->function_like = function_like;
 	macro->replacement = replacement;
 	macro->defined = true;
@@ -356,6 +465,16 @@ static struct macro_hide_set hide_intersection(const struct macro_hide_set *left
 	return result;
 }
 
+static struct macro_hide_set hide_union(const struct macro_hide_set *left,
+	const struct macro_hide_set *right)
+{
+	struct macro_hide_set result;
+
+	for (size_t i = 0; i < sizeof(result.words) / sizeof(result.words[0]); i++)
+		result.words[i] = left->words[i] | right->words[i];
+	return result;
+}
+
 /* Each push and replacement-token visit consumes one unit, even without output. */
 static bool spend_expansion_work(struct preprocessor *preprocessor,
 	struct pp_token token, struct token *error)
@@ -368,29 +487,113 @@ static bool spend_expansion_work(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* Read ONE unexpanded token across source/replacement stream boundaries.
- * A pending lookahead token was already visited, so never charge it twice.
+static bool read_expanded_token(struct preprocessor *preprocessor,
+	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error);
+static bool prescan_argument(struct preprocessor *preprocessor,
+	struct macro_argument *argument, struct pp_token blame, struct token *error);
+
+static struct rescan_token cursor_end(const struct expansion_cursor *cursor)
+{
+	return (struct rescan_token) {
+		.token = {
+			.kind = pp_eof,
+			.location = cursor->end,
+			.expansion_location = cursor->end,
+		},
+	};
+}
+
+static bool push_frame(struct preprocessor *preprocessor, struct expansion_cursor *cursor,
+	struct expansion_frame frame, struct pp_token blame, struct token *error)
+{
+	if (cursor->frame_count == preprocess_depth_limit) {
+		*error = stop_preprocessing(preprocessor, blame, "macro expansion depth limit exceeded");
+		return false;
+	}
+	if (!spend_expansion_work(preprocessor, blame, error))
+		return false;
+	cursor->frames[cursor->frame_count++] = frame;
+	return true;
+}
+
+static struct argument_token *copy_argument_token(struct preprocessor *preprocessor,
+	struct rescan_token input, struct pp_token blame, struct token *error)
+{
+	struct argument_token *copy;
+
+	if (!spend_expansion_work(preprocessor, blame, error))
+		return NULL;
+	copy = allocate_auxiliary(preprocessor, 1, sizeof(*copy), blame, error);
+	if (!copy)
+		return NULL;
+	input.from_source = false;
+	input.token.expansion_location = blame.expansion_location;
+	*copy = (struct argument_token) { .input = input };
+	return copy;
+}
+
+/* Read one unexpanded token. A parameter occurrence injects its prescanned
+ * argument stream, retaining per-token hide bits in addition to the call base.
  */
 static bool read_rescan_token(struct preprocessor *preprocessor,
-	struct rescan_token *result, struct token *error)
+	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error)
 {
-	if (preprocessor->has_pending) {
-		preprocessor->has_pending = false;
-		*result = preprocessor->pending;
+	if (cursor->has_pending) {
+		cursor->has_pending = false;
+		*result = cursor->pending;
 		return true;
 	}
-	while (preprocessor->frame_count &&
-		!preprocessor->frames[preprocessor->frame_count - 1].next)
-		preprocessor->frame_count--;
-	if (preprocessor->frame_count) {
-		struct expansion_frame *frame =
-			&preprocessor->frames[preprocessor->frame_count - 1];
+	for (;;) {
+		struct expansion_frame *frame;
 
-		*result = (struct rescan_token) { .token = frame->next->token, .hide = frame->hide };
-		frame->next = frame->next->next;
+		while (cursor->frame_count &&
+			!cursor->frames[cursor->frame_count - 1].replacement &&
+			!cursor->frames[cursor->frame_count - 1].argument)
+			cursor->frame_count--;
+		if (!cursor->frame_count)
+			break;
+		frame = &cursor->frames[cursor->frame_count - 1];
+		if (frame->argument) {
+			*result = frame->argument->input;
+			frame->argument = frame->argument->next;
+			result->hide = hide_union(&result->hide, &frame->hide);
+		} else {
+			struct macro_token *replacement = frame->replacement;
+
+			frame->replacement = replacement->next;
+			*result = (struct rescan_token) { .token = replacement->token, .hide = frame->hide };
+			result->token.expansion_location = frame->invocation;
+			if (replacement->parameter_index != SIZE_MAX) {
+				struct macro_argument *argument =
+					&frame->arguments[replacement->parameter_index];
+
+				if (!spend_expansion_work(preprocessor, result->token, error) ||
+					!prescan_argument(preprocessor, argument, result->token, error))
+					return false;
+				if (argument->expanded && !push_frame(preprocessor, cursor,
+					(struct expansion_frame) {
+						.argument = argument->expanded,
+						.invocation = frame->invocation,
+						.hide = frame->hide,
+					}, result->token, error))
+					return false;
+				continue;
+			}
+		}
+		result->from_source = false;
 		result->token.expansion_location = frame->invocation;
 		result->token.at_line_start = false;
 		return spend_expansion_work(preprocessor, result->token, error);
+	}
+	if (cursor->input) {
+		*result = cursor->input->input;
+		cursor->input = cursor->input->next;
+		result->from_source = false;
+		return spend_expansion_work(preprocessor, result->token, error);
+	}
+	if (!cursor->source_input) {
+		*result = cursor_end(cursor);
+		return true;
 	}
 	*result = (struct rescan_token) { .from_source = true };
 	do {
@@ -399,7 +602,7 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* Do not execute directives speculatively while deciding whether to invoke. */
+/* Source directives cannot execute speculatively inside invocation probing. */
 static bool check_invocation_input(struct preprocessor *preprocessor,
 	struct rescan_token input, struct token *error)
 {
@@ -408,7 +611,7 @@ static bool check_invocation_input(struct preprocessor *preprocessor,
 		*error = invalid_token(input.token);
 		return false;
 	}
-	if (input.from_source && is_directive_marker(input.token)) {
+	if (input.from_source && input.token.at_line_start && is_directive_marker(input.token)) {
 		*error = stop_preprocessing(preprocessor, input.token,
 			"directives during macro invocation lookahead are not supported yet");
 		return false;
@@ -416,84 +619,199 @@ static bool check_invocation_input(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* function-invocation = identifier '(' ')'
- * Inspect the next UNEXPANDED token. A later expansion producing '(' cannot
- * retroactively invoke a bare name. Delimiters may cross replacement frames.
- */
-static bool read_empty_invocation(struct preprocessor *preprocessor,
-	struct rescan_token name, bool *invoked, struct macro_hide_set *hide,
-	struct token *error)
+static bool is_punctuator(struct pp_token token, const char *spelling)
 {
-	struct rescan_token next;
-
-	*invoked = false;
-	if (!read_rescan_token(preprocessor, &next, error) ||
-		!check_invocation_input(preprocessor, next, error))
-		return false;
-	if (next.token.kind != pp_punctuator || !pp_spelling_is(next.token, "(")) {
-		preprocessor->pending = next;
-		preprocessor->has_pending = true;
-		return true;
-	}
-	if (!read_rescan_token(preprocessor, &next, error) ||
-		!check_invocation_input(preprocessor, next, error))
-		return false;
-	if (next.token.kind != pp_punctuator || !pp_spelling_is(next.token, ")")) {
-		*error = stop_preprocessing(preprocessor, name.token,
-			next.token.kind == pp_eof ? "unterminated function-like macro invocation" :
-			"zero-parameter macro invocation requires no arguments");
-		return false;
-	}
-	*invoked = true;
-	/* Only identities hidden at BOTH ends of the invocation remain hidden. */
-	*hide = hide_intersection(&name.hide, &next.hide);
-	return true;
+	return token.kind == pp_punctuator && pp_spelling_is(token, spelling);
 }
 
-/* Rescan pp tokens before the single language conversion. Availability travels
- * with tokens even after lookahead consumes and pops their original frames.
+/* invocation = identifier '(' argument-list? ')'
+ * argument-list = argument (',' argument)*
+ * An argument is raw pp tokens with balanced parentheses. Only parentheses,
+ * not braces/brackets or expanded tokens, protect commas during collection.
  */
-static struct token read_preprocessed_token(struct preprocessor *preprocessor)
+static bool read_invocation(struct preprocessor *preprocessor, struct expansion_cursor *cursor,
+	struct macro *macro, struct rescan_token name, bool *invoked,
+	struct macro_argument **arguments, struct macro_hide_set *hide, struct token *error)
+{
+	struct rescan_token next;
+	struct argument_token **tail = NULL;
+	size_t index = 0;
+	size_t parentheses = 0;
+
+	*invoked = false;
+	if (!read_rescan_token(preprocessor, cursor, &next, error) ||
+		!check_invocation_input(preprocessor, next, error))
+		return false;
+	if (!is_punctuator(next.token, "(")) {
+		cursor->pending = next;
+		cursor->has_pending = true;
+		return true;
+	}
+	if (macro->parameter_count) {
+		*arguments = allocate_auxiliary(preprocessor, macro->parameter_count,
+			sizeof(**arguments), name.token, error);
+		if (!*arguments)
+			return false;
+		for (size_t i = 0; i < macro->parameter_count; i++)
+			(*arguments)[i] = (struct macro_argument) { 0 };
+		tail = &(*arguments)[0].raw;
+	}
+	for (;;) {
+		struct argument_token *copy;
+
+		if (!read_rescan_token(preprocessor, cursor, &next, error) ||
+			!check_invocation_input(preprocessor, next, error))
+			return false;
+		if (next.token.kind == pp_eof) {
+			*error = stop_preprocessing(preprocessor, name.token,
+				"unterminated function-like macro invocation");
+			return false;
+		}
+		if (!spend_expansion_work(preprocessor, name.token, error))
+			return false;
+		if (is_punctuator(next.token, ")") && !parentheses) {
+			/* Empty () is one empty argument only when parameters exist. */
+			if (macro->parameter_count && index + 1 != macro->parameter_count) {
+				*error = stop_preprocessing(preprocessor, name.token,
+					"macro argument count does not match parameters");
+				return false;
+			}
+			*hide = hide_intersection(&name.hide, &next.hide);
+			*invoked = true;
+			return true;
+		}
+		if (!macro->parameter_count) {
+			*error = stop_preprocessing(preprocessor, name.token,
+				"zero-parameter macro invocation requires no arguments");
+			return false;
+		}
+		if (is_punctuator(next.token, ",") && !parentheses) {
+			index++;
+			if (index == macro->parameter_count) {
+				*error = stop_preprocessing(preprocessor, name.token,
+					"macro argument count does not match parameters");
+				return false;
+			}
+			tail = &(*arguments)[index].raw;
+			continue;
+		}
+		if (is_punctuator(next.token, "(")) {
+			if (parentheses == preprocess_parentheses_limit) {
+				*error = stop_preprocessing(preprocessor, name.token,
+					"macro argument parentheses limit exceeded");
+				return false;
+			}
+			parentheses++;
+		} else if (is_punctuator(next.token, ")"))
+			parentheses--;
+		copy = copy_argument_token(preprocessor, next, name.token, error);
+		if (!copy)
+			return false;
+		*tail = copy;
+		tail = &copy->next;
+	}
+}
+
+/* Expansion stays in pp tokens, including during isolated argument prescan. */
+static bool read_expanded_token(struct preprocessor *preprocessor,
+	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error)
 {
 	for (;;) {
 		struct rescan_token input;
 		struct macro *macro;
 		struct macro_hide_set hide;
-		struct token error;
+		struct macro_argument *arguments = NULL;
 
-		if (preprocessor->stopped)
-			return end_token(preprocessor);
-		if (!read_rescan_token(preprocessor, &input, &error))
-			return error;
+		if (!read_rescan_token(preprocessor, cursor, &input, error))
+			return false;
 		if (input.from_source && is_directive_marker(input.token)) {
-			if (!read_directive(preprocessor, input.token, &error))
-				return error;
+			if (!read_directive(preprocessor, input.token, error))
+				return false;
 			continue;
 		}
 		macro = input.token.kind == pp_identifier ? find_macro(preprocessor, input.token) : NULL;
-		if (!macro || !macro->defined || hide_contains(&input.hide, macro))
-			return token_from_pp(input.token, preprocessor->diagnostics);
+		if (!macro || !macro->defined || hide_contains(&input.hide, macro)) {
+			*result = input;
+			return true;
+		}
 		hide = input.hide;
 		if (macro->function_like) {
 			bool invoked;
 
-			if (!read_empty_invocation(preprocessor, input, &invoked, &hide, &error))
-				return error;
-			if (!invoked)
-				return token_from_pp(input.token, preprocessor->diagnostics);
+			if (!read_invocation(preprocessor, cursor, macro, input, &invoked,
+				&arguments, &hide, error))
+				return false;
+			if (!invoked) {
+				*result = input;
+				return true;
+			}
 		}
-		if (preprocessor->frame_count == preprocess_depth_limit)
-			return stop_preprocessing(preprocessor, input.token,
-				"macro expansion depth limit exceeded");
-		if (!spend_expansion_work(preprocessor, input.token, &error))
-			return error;
 		hide_add(&hide, macro);
-		preprocessor->frames[preprocessor->frame_count++] = (struct expansion_frame) {
-			.next = macro->replacement,
+		if (!push_frame(preprocessor, cursor, (struct expansion_frame) {
+			.replacement = macro->replacement,
+			.arguments = arguments,
 			.invocation = input.token.expansion_location,
 			.hide = hide,
-		};
+		}, input.token, error))
+			return false;
 	}
+}
+
+/* Prescan sees only this argument, not the source following the invocation.
+ * The outer macro's hide bit is added at substitution, NOT before prescan.
+ */
+static bool prescan_argument(struct preprocessor *preprocessor,
+	struct macro_argument *argument, struct pp_token blame, struct token *error)
+{
+	struct expansion_cursor *cursor;
+	struct argument_token **tail = &argument->expanded;
+	bool success = false;
+
+	if (argument->expanded_ready)
+		return true;
+	if (preprocessor->prescan_depth == preprocess_prescan_limit) {
+		*error = stop_preprocessing(preprocessor, blame, "macro argument prescan depth limit exceeded");
+		return false;
+	}
+	cursor = malloc(sizeof(*cursor));
+	if (!cursor) {
+		*error = stop_preprocessing(preprocessor, blame, "cannot allocate macro prescan cursor");
+		return false;
+	}
+	*cursor = (struct expansion_cursor) { .input = argument->raw, .end = blame.expansion_location };
+	preprocessor->prescan_depth++;
+	for (;;) {
+		struct rescan_token input;
+		struct argument_token *copy;
+
+		if (!read_expanded_token(preprocessor, cursor, &input, error))
+			break;
+		if (input.token.kind == pp_eof) {
+			argument->expanded_ready = true;
+			success = true;
+			break;
+		}
+		copy = copy_argument_token(preprocessor, input, blame, error);
+		if (!copy)
+			break;
+		*tail = copy;
+		tail = &copy->next;
+	}
+	preprocessor->prescan_depth--;
+	free(cursor);
+	return success;
+}
+
+static struct token read_preprocessed_token(struct preprocessor *preprocessor)
+{
+	struct rescan_token input;
+	struct token error;
+
+	if (preprocessor->stopped)
+		return end_token(preprocessor);
+	if (!read_expanded_token(preprocessor, &preprocessor->cursor, &input, &error))
+		return error;
+	return token_from_pp(input.token, preprocessor->diagnostics);
 }
 
 void preprocess_init(struct preprocessor *preprocessor, const struct source *source,
@@ -501,6 +819,8 @@ void preprocess_init(struct preprocessor *preprocessor, const struct source *sou
 {
 	*preprocessor = (struct preprocessor) { .diagnostics = diagnostics };
 	pp_lexer_init(&preprocessor->input, source, diagnostics);
+	preprocessor->cursor.source_input = true;
+	preprocessor->cursor.end = (struct source_location) { source, source->length };
 }
 
 void preprocess_destroy(struct preprocessor *preprocessor)
