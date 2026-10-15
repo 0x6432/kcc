@@ -30,6 +30,9 @@ build/test_source: tests/test_source.c src/source.c src/source.h | build
 build/test_lex: tests/test_lex.c $(LEX_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_lex.c $(LEX_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
+build/test_pp_lex: tests/test_pp_lex.c $(LEX_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_pp_lex.c $(LEX_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
 build/fuzz_lex: tests/fuzz_lex.c $(LEX_SOURCES) $(HEADERS) | build
 	$(FUZZ_CC) $(CPPFLAGS) -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer tests/fuzz_lex.c $(LEX_SOURCES) -o $@
 
@@ -53,11 +56,12 @@ test-codegen: build/kcc
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
-test: build/kcc build/test_support build/test_source build/test_lex build/test_sema
+test: build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_sema
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
 	./build/test_lex
+	./build/test_pp_lex
 	./build/test_sema
 	python3 tests/test_compile.py
 

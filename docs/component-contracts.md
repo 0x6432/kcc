@@ -7,7 +7,7 @@ and update their tests in the same checkpoint.
 | Producer | Consumer | Contract |
 | --- | --- | --- |
 | source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
-| lexer | preprocessor/parser | One token per request; slices refer to live source; stable EOF; invalid bytes produce diagnostics and make forward progress |
+| lexer | future preprocessor / current language adapter | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
 | preprocessor | parser | Same token API; expanded tokens retain spelling and expansion provenance |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
 | sema | codegen | Validated typed AST, explicit conversions, resolved declarations; failure prevents codegen |
@@ -289,3 +289,79 @@ physical units once; it never rescans generated output. No token vector is
 introduced. source_destroy releases all optional buffers and resets preparation.
 Parser, AST, type, sema and codegen implementation interfaces are unchanged.
 All lexer callers were updated; adding another caller requires preparation.
+
+## M09b design before implementation
+
+Keep raw lexing and language-token conversion in lex.c (one implementation file
+for the lexing stage). Introduce distinct pp_token/pp_token_kind and pp_lexer
+structures. pp_lexer_next/peek produce identifiers (including keyword spellings),
+pp numbers without values, quoted string/character preprocessing tokens,
+maximal-munch punctuators, other ASCII non-whitespace bytes, newline, invalid
+and stable EOF. No header-name context, Unicode/UCN recognition or expansion
+provenance is claimed yet. Token locations/spellings remain borrowed prepared
+logical slices; physical diagnostics still go through source mappings.
+
+Raw tokens carry leading_space and at_line_start. Horizontal whitespace and
+comments set leading_space. A block comment is one separating space, including
+its internal newlines; it does not reset directive line-start state or emit
+newline tokens. A line comment stops before its terminating newline. Only
+newlines outside comments emit pp_newline and start a new logical directive
+line. Source preparation already removes splices before these rules. Raw
+lookahead caches one token; repeated peek and EOF never duplicate diagnostics.
+
+Recognize ASCII pp-number maximal munch, including leading .digit, exponent
+signs, identifier continuations and C23 apostrophe-digit/nondigit sequences.
+Do not validate values, bases or suffixes while scanning. Recognize all C23
+punctuator spellings, including :: and digraphs, longest first. Quote scanning
+recognizes ordinary/u8/u/U/L prefixes, escaped delimiters and comment-like
+contents; interpretation, supported literal types and concatenation come later.
+Unterminated quotes/comments and invalid binary bytes diagnose and advance.
+Other ASCII pp characters remain raw until conversion, rather than diagnosing
+before preprocessing can consume them. Encoding/UCN/header-name support remains
+explicitly incomplete.
+
+A stateless token_from_pp converts one non-newline preprocessing token to the
+existing parser token: keyword classification, supported decimal int checking,
+and supported punctuator conversion happen here, not in raw scanning. Raw
+invalid tokens carry their existing diagnostic and are not diagnosed twice.
+The existing struct lexer/lexer_next/peek API temporarily wraps a pp_lexer,
+ignores newlines and converts lazily. Parser/AST/sema/codegen signatures do not
+change in M09b. This wrapper still rejects every # directive; it is not macro
+expansion. M09c will move parser-facing dispatch onto the real preprocessor
+facade. Never mix raw and converted reads on the same owned stream.
+
+Add --pp-tokens to inspect raw kind, physical start, logical length and the
+spacing flags without integer/keyword conversion; preserve --tokens behavior.
+Test the raw stream independently and fuzz raw plus converted paths with bounded
+progress, stable EOF, repeat-peek and no extra-diagnostic assertions. Preserve
+all executable/reference/ABI checks and source preparation invariants. Commit
+and push only after normal/Clang/sanitizer/fuzz verification, then check CI.
+
+### M09b implemented contract
+
+pp_lexer produces raw tokens with one cached lookahead. pp_token has no integer
+value: keywords remain identifiers and unsupported numeric spellings remain pp
+numbers until token_from_pp. The language adapter still uses lexer_next/peek,
+skips newlines and converts exactly one token on demand. Parser/AST/sema/codegen
+signatures and supported int behavior are unchanged; brace digraphs map to the
+existing brace kinds. Every # or %: still fails language conversion.
+
+Raw newline tokens carry the spacing/line-start state before the newline; the
+following token starts a new line. leading_space means horizontal whitespace
+or comments since the previous raw token, not an already-emitted newline.
+has_non_directive_space records VT/FF in that leading trivia, not characters
+inside a comment. M09c must check it after an introducing #, not before #.
+Block comments replace one space without changing at_line_start; line comments
+stop before a real newline. EOF retains stable flags, including trailing trivia.
+Repeated raw/language peek never repeats diagnostics. token_from_pp propagates
+pp_invalid without diagnosing it a second time; callers skip pp_newline.
+
+Raw numbers implement ASCII pp-number maximal munch, including e/E/p/P signs,
+leading .digit and apostrophe-digit/nondigit continuations. Literal prefixes and
+escaped delimiters are recognized, but escape values, encoding validity and
+concatenation are deferred. Source NUL/high bytes outside comments/literals
+are diagnosed; NUL inside a quoted token is diagnosed too. Other single ASCII
+non-white-space characters are pp_other until language conversion. Partial
+quotes/comments yield one invalid token and make progress; no input vector.
+Header-name context, UCN identifiers and macro source/expansion provenance remain
+unimplemented, not silently converted through the host preprocessor.

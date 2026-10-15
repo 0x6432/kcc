@@ -15,7 +15,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
-| M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | in progress (M09a complete) |
+| M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | in progress (M09a/M09b complete) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
@@ -290,3 +290,39 @@ QBE/reference executables, separate-object integer ABI tests and ASan/UBSan.
 Final sanitized fuzzing: lexer 244776 inputs; compiler pipeline 500452 inputs;
 21 seconds per harness. Earlier 21-second runs also passed (257740/510224).
 Remote CI is verified after push, independently of local passes.
+
+M09a remote CI passed: https://github.com/0x6432/kcc/actions/runs/38717250245
+
+## M09B completion record
+
+Raw preprocessing tokens and language tokens are separate structs/enums.
+pp_lexer scans identifiers, ASCII pp numbers, quoted/prefixed literals, all C23
+punctuator spellings, other ASCII characters and explicit external newlines.
+No raw numeric values/keywords are assigned. Spacing/line-start flags and VT/FF
+metadata survive scanning. Block-comment newlines do not become directive ends.
+A stateless converter and temporary language adapter preserve parser interfaces
+and rejection of unsupported language constructs/directives. --pp-tokens exposes
+the raw stream; --tokens keeps converted behavior. Raw brace digraphs convert to
+existing brace kinds without changing parser productions.
+
+Dedicated unit tests cover all punctuators, overlapping maximal munch, numeric
+boundaries/exponent signs/apostrophes/overflow spellings, prefixes/escaped quotes,
+comment/line/VT/FF flags, splice spellings, deferred conversion and stable EOF.
+CLI tests cover the raw format, physical positions, raw partial-error output,
+output failure and separation from compiler acceptance. Both lexer paths are
+fuzzed independently, with progress/bounds/flags/repeat-peek/error-count checks.
+Existing syntax/AST/source, QBE/reference and separate-object ABI tests remain.
+
+Limitations: no header-name context, Unicode/UCN recognition, interpretation of
+non-int literals, directives, expansion/concatenation or macro provenance yet.
+Exact verification/fuzz counts follow below; check remote CI after push.
+Next: M09c, with explicit preprocessor ownership and directive whitespace/null
+rules before implementation. Macro expansion stays M10.
+
+M09b local verification passed: GCC/Clang strict builds, raw/conversion unit
+and CLI tests, source/oracle/AST checks, QBE/reference executables, separate-object
+ABI and ASan/UBSan. Final sanitized fuzzing completed 106643 lexer inputs
+(each exercises raw and converted streams) and 466292 pipeline inputs in
+26 seconds per harness. Earlier 21-second runs passed (58630/320824).
+README factorial example exits 120; raw fixture inspection succeeds without
+numeric conversion. Verify remote CI separately after pushing.

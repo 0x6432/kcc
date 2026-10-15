@@ -295,6 +295,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         for line_ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", line_ending), value))
 
+    programs += [
+        ("int main(void) <% return 7; %>\n", 7),
+        ("int f(int x) <% if(x) <% return x; %> return 3; %> "
+         "int main(void) <% return f(4); %>\n", 4),
+    ]
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -472,6 +477,13 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return 1\\\t\n+2; }\n",
         "int main(void) { return " + "\\"*2 + "\n\n42; }\n",
         "int main(void) { return 1??/\n+2; }\n",
+    ]
+    invalid += [
+        "int main(void) { return 1e+2; }", "int main(void) { return 0x1p-1; }",
+        "int main(void) { return .5; }", "int main(void) { return 1'000; }",
+        "int main(void) { return 'x'; }", "int main(void) { return u8'x'; }",
+        'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
+        "%:define X 3\nint main(void) { return X; }",
     ]
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")

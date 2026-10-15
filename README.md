@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M09a: source preparation now normalizes CRLF/lone CR to LF and splices backslash-newline pairs before comment recognition. Logical token spellings remain contiguous; sparse mappings preserve physical diagnostic locations. Token generation remains on demand. M08 integer functions and recursion continue to work; directives and macros are not implemented yet.
+M09b: raw preprocessing tokens are now distinct from language tokens. The raw stream preserves newline/spacing state and scans numbers without assigning values. Keyword, integer and supported-punctuator conversion is a separate lazy step. Parser grammar and M08 code generation stay unchanged; directives and macro expansion remain unimplemented.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -19,6 +19,7 @@ make
 make test
 ./build/kcc --help
 ./build/kcc --tokens tests/corpus/lex/basic.c
+./build/kcc --pp-tokens tests/corpus/lex/pp-tokens.c
 make fuzz-lex FUZZ_SECONDS=10
 make fuzz-compile FUZZ_SECONDS=10
 ```
@@ -84,3 +85,26 @@ arguments, 4096 body items and 256 parameter/local slots per function.
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
 CI runs GCC and Clang, compiler sanitizers, generated executables, ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
+
+## Raw token inspection
+
+`--tokens file.c` still dumps converted language-token kinds and physical starts.
+`--pp-tokens file.c` dumps the raw stream without dispatching directives or
+converting numbers/keywords. Each line has:
+
+```text
+physical_offset:kind:logical_length:leading_space:at_line_start:non_directive_space
+```
+
+The last three fields are 0/1 flags. The final flag records VT/FF in leading
+trivia outside comments, for future directive whitespace checks. A block comment
+is one separating space; its internal newlines do not end a directive. Newlines
+outside comments are explicit raw tokens. Spliced newlines are already removed.
+
+Raw scanning recognizes quoted/prefixed literal boundaries, ASCII pp numbers and
+all C23 punctuator spellings (including :: and digraphs). This does not implement
+those language features: conversion still rejects unsupported constants, types
+and operators. Brace digraphs <%/%> are accepted by the current grammar. Raw
+inspection can succeed for text the compiler rejects; it is not a preprocessor
+or conformance check. Header-name context, Unicode/UCNs and macro provenance
+remain future work. Both debug dumps may show partial output on lexical errors.

@@ -55,13 +55,56 @@ struct token {
 	uint64_t integer;
 };
 
-struct lexer {
+enum pp_token_kind {
+	pp_eof,
+	pp_invalid,
+	pp_identifier,
+	pp_number,
+	pp_character,
+	pp_string,
+	pp_punctuator,
+	pp_other,
+	pp_newline,
+};
+
+/* Borrowed logical spellings, with no keyword classification or numeric value. */
+struct pp_token {
+	enum pp_token_kind kind;
+	struct source_location location;
+	size_t length;
+	bool leading_space;
+	bool at_line_start;
+	/* VT/FF in leading trivia; comments themselves count as one space. */
+	bool has_non_directive_space;
+};
+
+struct pp_lexer {
 	const struct source *source;
 	struct diagnostics *diagnostics;
 	size_t offset;
+	bool leading_space;
+	bool at_line_start;
+	/* VT/FF in leading trivia; comments themselves count as one space. */
+	bool has_non_directive_space;
+	bool has_lookahead;
+	struct pp_token lookahead;
+};
+
+/* Transitional language-token stream; owns raw input, not a token vector. */
+struct lexer {
+	struct pp_lexer input;
+	struct diagnostics *diagnostics;
 	bool has_lookahead;
 	struct token lookahead;
 };
+
+void pp_lexer_init(struct pp_lexer *lexer, const struct source *source,
+	struct diagnostics *diagnostics);
+struct pp_token pp_lexer_next(struct pp_lexer *lexer);
+struct pp_token pp_lexer_peek(struct pp_lexer *lexer);
+const char *pp_token_kind_name(enum pp_token_kind kind);
+/* Input must not be pp_newline. Raw-invalid diagnostics are not repeated. */
+struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostics);
 
 /* Requires source_prepare() before any source spelling is borrowed. */
 void lexer_init(struct lexer *lexer, const struct source *source,

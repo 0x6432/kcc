@@ -8,11 +8,11 @@ of complete ISO conformance.
 | Area | Current status | Owning milestones |
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
-| Tokens and literals | subset (M02) | M02, M12, M20, M23 |
+| Tokens and literals | subset (raw pp boundary, int-only conversion; M09b) | M02, M12, M20, M23 |
 | Declarations/types | subset (M08c) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (M08c) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
-| Preprocessing | absent | M09-M11, M25 |
+| Preprocessing | raw token foundation only (M09b); no directives/macros | M09-M11, M25 |
 | Object layout and ABI | subset (integer calls, separate-object GCC/Clang tests, M08c) | M12-M17, M20-M22, M24 |
 | C23 additions | absent | M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |

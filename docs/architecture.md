@@ -6,7 +6,7 @@ assembler/linker and system libc; self-hosting later; GitHub Actions CI.
 
 ## Pipeline and stage boundaries
 
-`raw source -> source_prepare -> lexer -> [future preprocessor] -> parser -> sema -> QBE IL`
+`raw source -> source_prepare -> pp_lexer -> [future preprocessor] -> token_from_pp -> parser -> sema -> QBE IL`
 
 M09a implements the input-newline policy and line splicing before lexing, not
 full preprocessing. source_prepare is explicit/fallible and runs before any
@@ -18,8 +18,8 @@ locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
 The current subset still bypasses directives/macro expansion and never invokes
-the host preprocessor. M09b/M09c will introduce preprocessing-token and directive
-boundaries without changing the parser's grammar. Complete phase ordering,
+the host preprocessor. M09b introduces distinct preprocessing tokens; M09c will add directive
+dispatch without changing the parser's grammar. Complete phase ordering,
 encoding/UCNs and final-line constraints are not claimed. Missing terminal
 newlines remain an acceptance extension; no synthetic newline is appended.
 Reference: WG14 N3096 5.1.1.2 and 6.10,
@@ -51,6 +51,25 @@ The driver initially emits QBE IL on stdout. QBE and the host compiler driver
 perform assembly/linking outside kcc. Process orchestration comes later; avoid
 shell interpolation of user paths. Diagnostics go to stderr. A failed compile
 must not emit usable-looking partial IL; complete validation precedes output.
+
+## M09b raw/language token boundary
+
+lex.c owns raw preprocessing-token scanning and the separate token_from_pp
+conversion. pp_token contains no numeric value or keyword category. It retains
+logical spelling, leading_space, at_line_start and has_non_directive_space
+(VT/FF outside comments). Horizontal spacing may be collapsed to flags; external
+newlines are explicit tokens. Block comments become one space and never create
+directive ends from their internal newlines. Physical locations remain mapped
+by source.c. Header-name context/Unicode/UCNs/macro provenance are not complete.
+
+A transitional struct lexer owns a pp_lexer, skips pp_newline and converts one
+token lazily, preserving the parser's existing API. It rejects all directives;
+it does not expand macros. Raw and converted streams each cache one lookahead.
+The language wrapper calls raw next, not raw peek, so it does not prefetch an
+extra parser token. Consumers must not mix reads through both ownership paths.
+M09c will replace this temporary parser-facing adapter with preprocess.c and
+reuse token_from_pp only after directive/macro processing. No token vectors or
+empty speculative implementation files are introduced.
 
 ## Target model and QBE limits
 

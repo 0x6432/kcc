@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M09a. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09a additions.
+Current milestone: M09b. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09a/M09b additions.
 
 ## M00
 
@@ -202,7 +202,7 @@ argument sequencing still follows C's rules; left-to-right lowering is not a
 portable source guarantee. Earlier M08b restrictions still apply, including
 named definition parameters and zero-parameter main.
 
-## M09a (current)
+## M09a
 
 Explicit source preparation implements newline normalization and line splicing,
 not full preprocessing. Input accepts LF, CRLF and lone CR as line endings.
@@ -226,3 +226,28 @@ implemented by running the host preprocessor. All M08 language restrictions
 still apply. source_prepare must run before borrowing any source spelling.
 Allocation-failure behavior is handled transactionally but fault-injection tests
 remain future work. Fuzzing compiles arbitrary inputs, never executes them.
+
+## M09b (current)
+
+Raw pp tokens are now a distinct on-demand stream, with no numeric values or
+keyword classification. Numbers use ASCII pp maximal munch, not early integer
+validation. Quoted literal boundaries, prefixes and escaped delimiters are
+scanned; this is boundary recognition, not full literal grammar/escape validation.
+All C23 punctuators are recognized raw. Language conversion still
+supports only the existing int subset and rejects other literals/operators.
+Brace digraphs <%/%> map to existing braces. This is not full C23 token support.
+
+Raw streams retain external newlines, leading horizontal/comment spacing,
+line-start state and VT/FF trivia metadata. Block comments, including their
+internal newlines, replace one space and do not split directives. VT/FF are not
+rejected as ordinary whitespace; the metadata is for M09c's directive checks.
+Spacing does not claim original whitespace reconstruction. --pp-tokens prints
+raw kinds/metadata, not expanded text or C tokens. It can succeed on a numeric
+spelling or keyword macro body that the compiler cannot yet consume.
+
+The temporary language adapter discards raw newlines and converts lazily, still
+rejecting every directive. No header-name lexical context, UCN/Unicode identifier
+support, encoding/escape-value validation, string concatenation, macro expansion,
+#include, #line or expansion provenance. Prepared logical spelling and physical
+location mappings remain the only provenance. No additional token allocation or
+whole-file materialization; all source and AST limits remain in force.

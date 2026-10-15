@@ -44,4 +44,32 @@ with tempfile.TemporaryDirectory(prefix="kcc-cli-phase-") as temporary:
                 (text.index(b";"), ";"), (text.index(b"}"), "}"), (len(text), "eof")]
     assert result.returncode == 0 and not result.stderr, result.stderr
     assert result.stdout == "".join(f"{offset}:{kind}\n" for offset, kind in expected)
+with tempfile.TemporaryDirectory(prefix="kcc-raw-cli-") as temporary:
+    source = Path(temporary) / "raw.c"
+    source.write_bytes(b"#define X 1e+2\nint\vX")
+    result = run(["--pp-tokens", str(source)])
+    expected = ("0:punctuator:1:0:1:0\n1:identifier:6:0:0:0\n"
+                "8:identifier:1:1:0:0\n10:pp-number:4:1:0:0\n"
+                "14:newline:1:0:0:0\n15:identifier:3:0:1:0\n"
+                "19:identifier:1:1:0:1\n20:eof:0:0:0:0\n")
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    assert result.stdout == expected, result.stdout
+    # Raw scanning neither dispatches a directive nor converts its number.
+    result = run(["--tokens", str(source)])
+    assert result.returncode == 1 and "preprocessing directives" in result.stderr
+    source.write_bytes(b"in\\\nt ma\\\nin")
+    result = run(["--pp-tokens", str(source)])
+    assert result.returncode == 0 and not result.stderr
+    assert result.stdout == ("0:identifier:3:0:1:0\n6:identifier:4:1:0:0\n"
+                             "12:eof:0:0:0:0\n")
+    source.write_bytes(b"\"unterminated\n")
+    result = run(["--pp-tokens", str(source)])
+    assert result.returncode == 1 and result.stderr.count("error:") == 1
+    source.write_bytes(b"int main(void) { return 0; }\n")
+    with open("/dev/full", "w") as full:
+        result = subprocess.run([str(compiler), "--pp-tokens", str(source)],
+                                stdout=full, stderr=subprocess.PIPE, timeout=5)
+        assert result.returncode == 1
+result = run(["--pp-tokens", "build/nonexistent.c"])
+assert result.returncode == 1 and result.stderr and not result.stdout
 print("CLI tests passed (including 40 deterministic randomized cases)")

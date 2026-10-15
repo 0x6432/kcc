@@ -2,12 +2,11 @@
 
 ## Current checkpoint
 
-M09a: source newline normalization, line splicing and physical source mappings.
+M09b: distinct raw preprocessing tokens and deferred language conversion.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M08 is complete for the stated int subset. M08c remote CI passed:
-https://github.com/0x6432/kcc/actions/runs/38715578290
-M09a is its own tested commit/push. Get the latest exact hash from git log -1;
+M09a remote CI passed: https://github.com/0x6432/kcc/actions/runs/38717250245
+M09b is a separate tested commit/push. Get the latest exact hash from git log -1;
 this document avoids a circular reference to its own commit.
 
 ## Resume safely
@@ -47,6 +46,32 @@ buffers/maps too. Both fuzz harnesses and every lexer caller were updated.
 Future callers must prepare explicitly; lexer_init asserts this precondition.
 No full-file token vector or new parser grammar/API was introduced.
 
+M09b adds pp_token/pp_token_kind and pp_lexer in lex.h/lex.c. Raw numbers have
+no value, keywords are identifiers, and punctuators use longest spelling first.
+Raw quotes recognize ordinary/u8/u/U/L prefixes and escaped delimiters without
+interpreting values. Invalid/partial tokens diagnose once and advance. Raw ASCII
+other characters are preserved until conversion; UCN/Unicode/header-name context
+is not complete. No per-token allocations or TU token vector.
+
+pp_token carries leading_space, at_line_start and has_non_directive_space.
+External newlines are explicit tokens and reset line-start state. A block
+comment, including internal newlines, is one space; it does not end a directive.
+Line comments stop before their newline. leading_space does not include an
+already-emitted newline; a macro consumer must handle that explicit token.
+VT/FF outside comments set has_non_directive_space; M09c must validate it only
+in directive separators after # (not before #). EOF and repeat-peek flags are
+stable, with no repeated diagnostics.
+
+A stateless token_from_pp performs keyword/int/punctuator conversion. It must
+not receive pp_newline; it propagates raw-invalid errors without rediagnosis.
+The transitional struct lexer owns raw input, skips newlines and converts lazily
+for the existing parser API. Never read the same owned raw input independently
+through both streams. The language bridge still rejects #/%: directives. M09c
+will replace this adapter with actual preprocessor dispatch. Other stages keep
+their grammar and interfaces. --pp-tokens is raw inspection, not -E or compiling.
+Its format is physical_offset:kind:logical_length:leading_space:at_line_start:
+non_directive_space (one line; final three fields are 0/1). --tokens is unchanged.
+
 One implementation file per stage, concrete AST structs, on-demand lexer with
 one cached token, recursive descent/BNF comments and Pratt expressions remain.
 The TU contains an ordered external declaration list; prototypes and definitions
@@ -82,9 +107,11 @@ need no main. Declared undefined functions are the host linker's responsibility.
 Main fallthrough returns zero. Non-main ABI zero filler is not a promised C
 implicit return value. No automatic local zeroing or missing-return warning.
 
+Raw quoted literals and punctuators do not enable their C semantics. Only brace
+digraphs are newly accepted language spelling; int-only conversion still applies.
 No directives/macros, other types, pointers/function values, variadics, local
 prototypes, globals/storage classes, comma/update/compound-assignment operators.
-Partial phases only: no separate pp tokens, directives, encoding/UCNs/BOM,
+Partial phases only: no directives, header-name context, encoding/UCNs/BOM,
 #line presumed locations or macro provenance yet. Missing terminal newlines
 remain an acceptance extension, not strict phase-2 validation. No synthetic
 newline is appended. Allocation failures are handled but fault injection is
@@ -116,18 +143,22 @@ paths. Final local/fuzz results and remote verification follow below.
 
 ## Next milestone
 
-M09b: design separate preprocessing-token and language-token APIs. Retain
-newline, leading whitespace and beginning-of-line state; keywords and int value
-validation must happen after preprocessing. Preserve pp-number maximal munch
-and borrowed spellings/provenance. Keep one-token on-demand parser lookahead,
-not a TU token vector. Specify comment/newline behavior and all caller impacts
-before implementation. Run regressions/sanitizers/fuzzing, commit/push and
-update this handoff. Then M09c inserts the preprocessor facade and initial
-null/directive dispatch. Do not implement macro expansion until M10.
+M09c: specify and implement preprocess.c ownership, directive line dispatch and
+null directives before coding. Reuse raw pp tokens and token_from_pp; do not
+reclassify keywords/numbers while lexing. Decide parser-facing next/peek API and
+update every driver/test/fuzz caller together. A # or %: introduces a directive
+only at raw line start, with comments/splices already accounted for. Check VT/FF
+metadata only after the introducing #; null directives may contain comments and
+end at a real newline or the documented EOF extension. Unknown/unsupported or
+misplaced directives must diagnose and prevent compiler IL. Preserve diagnostics
+and one-token lookahead; no TU vector. No macro expansion yet (M10), includes or
+conditional sections (M11). Run normal/Clang/sanitizer/runtime/ABI/fuzz checks,
+commit/push each tested slice and update this handoff.
 
-M09a local verification passed: GCC/Clang, source/oracle/AST, QBE/reference
-execution, separate-object ABI and ASan/UBSan. Final sanitized fuzzing completed
-244776 lexer and 500452 pipeline inputs in 21 seconds each. Earlier runs also
-passed (257740 lexer / 510224 pipeline). Retained workspace build artifacts are
-under 10 MiB; dependencies outside the repo under 70 MiB. Verify M09a remote CI
-after its push; do not infer remote success from local tests.
+M09b local verification passed: GCC/Clang, raw token/conversion/CLI/source/oracle/
+AST tests, QBE/reference execution, separate-object ABI and ASan/UBSan.
+Final sanitized fuzzing: 106643 lexer (raw plus converted streams) and 466292
+pipeline inputs in 26 seconds each. Earlier 21-second runs passed too
+(58630/320824). README factorial exits 120 and raw fixture inspection succeeds.
+Retained repo build artifacts are under 10 MiB; external dependencies under
+70 MiB. Check M09b remote CI after pushing, independently of local results.
