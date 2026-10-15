@@ -148,3 +148,45 @@ locals exist. Header declarations count toward the global local limit but are
 not C block items. All loop forms preserve explicit load nodes and nested
 logical-expression predecessor tracking. Unreachable condition/step blocks
 are intentionally well-formed and may be removed by QBE, not source sema.
+
+## M08 design before implementation
+
+M08a replaces the single-function translation unit with an ordered list of
+external declarations. Function declarations and definitions have separate AST
+structs; definitions refer to their header declaration. Sema registers each
+function before its body (so self-reference works) but does not hoist later
+headers. Compatible prototypes share one arena-owned symbol; duplicate
+definitions and incompatible signatures are errors. Direct calls have their own
+AST kind and resolve through ordinary-name shadowing rules. Bare function
+values/indirect calls remain later work.
+
+M08b adds distinct int parameter and argument-list nodes. Function types record
+int return and parameter types, independent of parameter names. Definition
+parameter names must exist and be unique; prototype names are optional. Parameters
+and the outermost body declarations share a scope, and parameters receive entry
+slots before ordinary locals. Calls check counts and insert normal value
+conversions. QBE emits w parameters, entry stores, and w call arguments.
+C23 empty () means zero parameters; no variadics or unspecified argument lists.
+
+M08c verifies direct/mutual recursion and ABI interoperability with GCC/Clang,
+including arguments beyond the six x86-64 integer registers. Argument evaluation
+uses the compiler's chosen left-to-right order; tests do not rely on unspecified
+order or execute undefined programs. Local, scope, loop, label and temporary
+contexts reset per function. Main remains int main(void) until pointer/argv work.
+
+Limits: 512 external declarations, 256 distinct functions, 128 parameters/call
+arguments, existing per-function locals/block limits and expression depth bounds.
+Library translation units without main are allowed. Only definitions emit IL;
+prototype-only units emit no definitions. Undefined declared functions are left
+for the host linker. Non-main fallthrough is not diagnosed yet: a zero filler
+satisfies QBE's int return ABI, but using a missing C return value is still UB,
+not a promised implicit-zero C result. Main fallthrough is the defined C zero.
+
+### M08a implemented contract
+
+Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
+
+The TU owns an ordered external list with distinct declaration/definition
+structs. Definitions reference their own declaration header. Call expressions
+carry a canonical symbol; their callee has a function type, while the call has
+int type. Sema runs once and checks unreachable calls too. No forward hoisting.

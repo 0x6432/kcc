@@ -6,6 +6,7 @@
 
 struct type;
 struct ast_local_declaration;
+struct function_symbol;
 
 enum expression_kind {
 	expression_integer,
@@ -15,6 +16,7 @@ enum expression_kind {
 	expression_assignment,
 	expression_load,
 	expression_logical,
+	expression_call,
 };
 
 enum {
@@ -22,6 +24,8 @@ enum {
 	ast_max_statement_nesting = 128,
 	ast_max_block_items = 4096,
 	ast_max_locals = 256,
+	ast_max_external_declarations = 512,
+	ast_max_functions = 256,
 };
 
 struct ast_expression {
@@ -41,6 +45,12 @@ struct ast_name_expression {
 	struct ast_expression expression;
 	struct token name;
 	struct ast_local_declaration *declaration;
+};
+
+struct ast_call_expression {
+	struct ast_expression expression;
+	struct ast_expression *callee;
+	struct function_symbol *function;
 };
 
 enum unary_operator {
@@ -200,18 +210,39 @@ struct ast_compound_statement {
 	struct ast_block_item *items;
 };
 
-struct ast_function {
+enum external_declaration_kind {
+	external_function_declaration,
+	external_function_definition,
+};
+
+struct ast_external_declaration {
+	enum external_declaration_kind kind;
 	struct source_location location;
+	struct ast_external_declaration *next;
+};
+
+struct ast_function_declaration {
+	struct ast_external_declaration external;
 	struct token name;
+	struct function_symbol *symbol;
+};
+
+struct ast_function {
+	struct ast_external_declaration external;
+	struct ast_function_declaration *declaration;
 	const struct type *return_type;
 	struct ast_compound_statement *body;
 	struct ast_local_declaration *locals;
 };
 
 struct ast_translation_unit {
-	struct ast_function *function;
+	struct ast_external_declaration *declarations;
 };
 
+struct ast_call_expression *ast_new_call(struct arena *arena,
+	struct ast_expression *callee);
+struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,
+	struct source_location location, struct token name);
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);
 struct ast_name_expression *ast_new_name(struct arena *arena, struct token name);
@@ -261,9 +292,8 @@ struct ast_statement_item *ast_new_statement_item(struct arena *arena,
 struct ast_compound_statement *ast_new_compound(struct arena *arena,
 	struct source_location location, struct ast_block_item *items);
 struct ast_function *ast_new_function(struct arena *arena,
-	struct source_location location, struct token name,
-	struct ast_compound_statement *body);
+	struct ast_function_declaration *declaration, struct ast_compound_statement *body);
 struct ast_translation_unit *ast_new_translation_unit(struct arena *arena,
-	struct ast_function *function);
+	struct ast_external_declaration *declarations);
 
 #endif

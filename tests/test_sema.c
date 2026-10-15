@@ -33,13 +33,13 @@ static void test_resolved_tree(void)
 	assert(sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
 
-	x = (struct ast_local_declaration *)unit->function->body->items;
+	x = (struct ast_local_declaration *)((struct ast_function *)unit->declarations)->body->items;
 	y = (struct ast_local_declaration *)x->item.next;
 	assert(x->item.kind == block_item_declaration);
 	assert(y->item.kind == block_item_declaration);
 	assert(x->type == &type_int && y->type == &type_int);
 	assert(x->slot == 0 && y->slot == 1);
-	assert(unit->function->locals == y && y->next_local == x);
+	assert(((struct ast_function *)unit->declarations)->locals == y && y->next_local == x);
 	assert(x->next_local == NULL);
 	assert(y->initializer->kind == expression_load);
 	load = (struct ast_load_expression *)y->initializer;
@@ -97,7 +97,7 @@ static void test_point_of_declaration(void)
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
-	local = (struct ast_local_declaration *)unit->function->body->items;
+	local = (struct ast_local_declaration *)((struct ast_function *)unit->declarations)->body->items;
 	assert(local->initializer->kind == expression_load);
 	load = (struct ast_load_expression *)local->initializer;
 	assert(((struct ast_name_expression *)load->operand)->declaration == local);
@@ -133,7 +133,7 @@ static void test_conditional_scopes_and_logic(void)
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
-	outer = (struct ast_local_declaration *)unit->function->body->items;
+	outer = (struct ast_local_declaration *)((struct ast_function *)unit->declarations)->body->items;
 	item = (struct ast_statement_item *)outer->item.next;
 	assert(item->statement->kind == statement_if);
 	conditional = (struct ast_if_statement *)item->statement;
@@ -192,7 +192,7 @@ static void test_loop_targets(void)
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
-	item = (struct ast_statement_item *)unit->function->body->items;
+	item = (struct ast_statement_item *)((struct ast_function *)unit->declarations)->body->items;
 	assert(item->statement->kind == statement_while);
 	outer = (struct ast_while_statement *)item->statement;
 	outer_body = (struct ast_compound_statement *)outer->body;
@@ -246,7 +246,7 @@ static void test_for_scope_and_target(void)
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
 	assert(diagnostics.errors == 0);
-	outer = (struct ast_local_declaration *)unit->function->body->items;
+	outer = (struct ast_local_declaration *)((struct ast_function *)unit->declarations)->body->items;
 	item = (struct ast_statement_item *)outer->item.next;
 	assert(item->statement->kind == statement_for);
 	loop = (struct ast_for_statement *)item->statement;
@@ -281,8 +281,51 @@ static void test_for_scope_and_target(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_function_symbols(void)
+{
+	static const char text[] =
+		"int f(void); int main(void) { return f(); } "
+		"int f(void) { return f(); } int f(void);";
+	struct source source = { 0 };
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct lexer lexer;
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_function *main_function;
+	struct ast_function *definition;
+	struct ast_statement_item *item;
+	struct ast_call_expression *call;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "functions.c", (const unsigned char *)text, sizeof(text) - 1));
+	lexer_init(&lexer, &source, &diagnostics);
+	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	assert(prototype->external.kind == external_function_declaration);
+	main_function = (struct ast_function *)prototype->external.next;
+	definition = (struct ast_function *)main_function->external.next;
+	assert(definition->declaration->symbol == prototype->symbol);
+	assert(prototype->symbol->definition == definition);
+	item = (struct ast_statement_item *)main_function->body->items;
+	call = (struct ast_call_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(call->expression.kind == expression_call);
+	assert(call->function == prototype->symbol);
+	assert(call->expression.type == &type_int);
+	assert(call->callee->type->kind == type_kind_function);
+	item = (struct ast_statement_item *)definition->body->items;
+	call = (struct ast_call_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(call->function == prototype->symbol);
+	arena_destroy(&arena);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_function_symbols();
 	test_resolved_tree();
 	test_point_of_declaration();
 	test_conditional_scopes_and_logic();

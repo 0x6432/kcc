@@ -119,7 +119,35 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 	return expression;
 }
 
-/* prefix-expression ::= primary-expression | ("+" | "-" | "!") prefix-expression */
+/* postfix-expression ::= primary-expression { "(" ")" } */
+static struct ast_expression *parse_postfix_expression(struct parser *parser)
+{
+	struct ast_expression *expression = parse_primary_expression(parser);
+
+	if (!expression)
+		return NULL;
+	while (lexer_peek(parser->lexer).kind == token_left_paren) {
+		struct ast_call_expression *node;
+
+		lexer_next(parser->lexer);
+		if (!expect_token(parser, token_right_paren, "expected ')' after call", NULL))
+			return NULL;
+		if (expression->depth >= ast_max_expression_depth) {
+			diagnostic_error(parser->diagnostics, expression->location,
+				"expression tree exceeds depth limit (128)");
+			return NULL;
+		}
+		node = ast_new_call(parser->arena, expression);
+		if (!node) {
+			allocation_error(parser, expression->location);
+			return NULL;
+		}
+		expression = &node->expression;
+	}
+	return expression;
+}
+
+/* prefix-expression ::= postfix-expression | ("+" | "-" | "!") prefix-expression */
 static struct ast_expression *parse_prefix_expression(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
@@ -129,7 +157,7 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 
 	if (token.kind != token_plus && token.kind != token_minus &&
 		token.kind != token_bang)
-		return parse_primary_expression(parser);
+		return parse_postfix_expression(parser);
 	lexer_next(parser->lexer);
 	switch (token.kind) {
 	case token_plus: operation = unary_plus; break;
@@ -726,13 +754,16 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 	return node;
 }
 
-/* function-definition ::= "int" identifier "(" "void" ")" compound-statement */
-static struct ast_function *parse_function_definition(struct parser *parser)
+/* external-declaration ::= "int" identifier "(" "void" ")"
+ *                          (";" | compound-statement)
+ */
+static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
 {
 	struct token beginning;
 	struct token name;
+	struct ast_function_declaration *declaration;
 	struct ast_compound_statement *body;
-	struct ast_function *node;
+	struct ast_function *function;
 
 	if (!expect_token(parser, token_int, "expected 'int' return type", &beginning))
 		return NULL;
@@ -744,16 +775,28 @@ static struct ast_function *parse_function_definition(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))
 		return NULL;
+	declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
+	if (!declaration) {
+		allocation_error(parser, beginning.location);
+		return NULL;
+	}
+	if (lexer_peek(parser->lexer).kind == token_semicolon) {
+		lexer_next(parser->lexer);
+		return &declaration->external;
+	}
+	parser->block_items = 0;
 	body = parse_compound_statement(parser);
 	if (!body)
 		return NULL;
-	node = ast_new_function(parser->arena, beginning.location, name, body);
-	if (!node)
+	function = ast_new_function(parser->arena, declaration, body);
+	if (!function) {
 		allocation_error(parser, beginning.location);
-	return node;
+		return NULL;
+	}
+	return &function->external;
 }
 
-/* translation-unit ::= function-definition end-of-file */
+/* translation-unit ::= external-declaration { external-declaration } end-of-file */
 struct ast_translation_unit *parse_translation_unit(struct lexer *lexer,
 	struct arena *arena, struct diagnostics *diagnostics)
 {
@@ -762,15 +805,28 @@ struct ast_translation_unit *parse_translation_unit(struct lexer *lexer,
 		.arena = arena,
 		.diagnostics = diagnostics,
 	};
-	struct ast_function *function = parse_function_definition(&parser);
+	struct ast_external_declaration *declarations = NULL;
+	struct ast_external_declaration **tail = &declarations;
 	struct ast_translation_unit *unit;
+	size_t count = 0;
 
-	if (!function)
-		return NULL;
-	if (!expect_token(&parser, token_eof, "expected end of file", NULL))
-		return NULL;
-	unit = ast_new_translation_unit(arena, function);
+	do {
+		struct ast_external_declaration *declaration;
+
+		if (count == ast_max_external_declarations) {
+			diagnostic_error(diagnostics, lexer_peek(lexer).location,
+				"translation unit exceeds declaration limit (512)");
+			return NULL;
+		}
+		declaration = parse_external_declaration(&parser);
+		if (!declaration)
+			return NULL;
+		*tail = declaration;
+		tail = &declaration->next;
+		count++;
+	} while (lexer_peek(lexer).kind != token_eof);
+	unit = ast_new_translation_unit(arena, declarations);
 	if (!unit)
-		allocation_error(&parser, function->location);
+		allocation_error(&parser, declarations->location);
 	return unit;
 }

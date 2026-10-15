@@ -2,10 +2,10 @@
 
 ## Current checkpoint
 
-M07C: For loops and complete M07 iteration subset. Branch: development.
+M08a: Zero-argument functions, prototypes and calls. Branch: development.
 Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local configuration).
-Each M07 subcheckpoint is committed/pushed after testing. Find the latest exact
+Each M08 subcheckpoint is committed/pushed after testing. Find the latest exact
 hash with git log -1 --oneline; this file avoids a circular reference to itself.
 
 ## Resume safely
@@ -23,13 +23,14 @@ hash with git log -1 --oneline; this file avoids a circular reference to itself.
 
 ## Behavior and invariants
 
-A distinct for-statement node records optional initializer declaration/expression, condition and step. Initializer declarations are visible in condition/body/step but not after the loop. Continue executes the step before the condition; missing condition means unconditional iteration. All loop kinds preserve scoped local initialization, short-circuit conditions and nearest-loop jump targets.
+Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
 
-Unsupported: function calls/prototypes/parameters, comma/update/compound-assignment operators, other types and preprocessing.
-One main(void), only int types. ++, comma expressions and compound assignments
-are not implemented: use i=i+1 for increments. No zero-fill of automatic locals;
-uninitialized reads may be UB. Limits: 16 MiB source, 128 expression/statement
-nesting, 128 typed expression depth, 4096 block items and 256 locals/function.
+Only int returns and `(void)` signatures. Unsupported: parameters, function
+values/pointers, local prototypes, globals, storage classes and preprocessing.
+Library units need no main; unresolved declared functions reach the host linker.
+Main fallthrough returns zero; non-main filler is not a defined C return value.
+Limits: 512 external declarations, 256 functions; per-function 256 locals and
+4096 block items. Expression/statement nesting and typed depth remain 128.
 
 Parser only builds syntax and enforces resource bounds. Sema runs once on a
 fresh AST, inserts explicit load nodes and resolves names/loop jump targets.
@@ -59,9 +60,13 @@ All executable loop cases are bounded; fuzzing never executes arbitrary inputs.
 
 ## Next milestone
 
-M08: integer functions, declarations/prototypes, parameters, calls and recursion. Specify translation-unit function lists, signature compatibility, separate function/local scopes, entry parameter slots and QBE call ABI before implementation.
+M08b: int parameter/argument lists and real signature compatibility, ignoring
+parameter names. Parameters and root body locals must share one scope. Give
+parameters the first local slots; QBE w entry parameters store into these slots.
+Keep source-order visibility and named direct calls. Empty () means zero
+parameters in C23, not an old-style unspecified-argument function. M08c then
+adds recursion runtime cases and bidirectional GCC/Clang ABI tests, including
+more than six arguments. See the M08 design in component-contracts.md.
 
-M08 planning note: parameter names and outermost function-body declarations
-must share the correct C scope (do not accidentally allow a parameter to be
-redeclared in a newly created outer-body child scope). Reset local/loop contexts
-per function and retain real source-order declaration/prototype visibility.
+M08a verification: normal GCC, semantic-AST, QBE/reference execution and
+ASan/UBSan passed. Sanitized pipeline fuzzing: 349498 inputs in 13 seconds.

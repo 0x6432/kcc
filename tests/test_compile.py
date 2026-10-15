@@ -191,6 +191,29 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         text = (f"int main(void) {{ int s=0; for(int i=0;i<{limit};i=i+1) "
                 f"{{ if(i=={skipped}) continue; s=s+i; }} return s; }}")
         programs.append((text, expected))
+    programs += [
+        ("int f(void) { return 7; } int main(void) { return f(); }", 7),
+        ("int f(void); int main(void) { return f(); } int f(void) { return 19; }", 19),
+        ("int f(void); int f(void); int f(void) { return 3; } int f(void); "
+         "int main(void) { return (f)() + f()*2; }", 9),
+        ("int f(void) { int x=6; return x; } int g(void) { int x=8; return x; } "
+         "int main(void) { int x=2; return f()+g()+x; }", 16),
+        ("int f(void) { return 1; } int main(void) { int x=0; "
+         "for(int i=0;i<3;i=i+1) x=x+f(); return x; }", 3),
+        ("int f(void) { return 9; } int main(void) { return 0 && f(); }", 0),
+        ("int f(void) { return 0; } int main(void) { return f() || (f() || 7); }", 1),
+        ("int f(void) { } int main(void) { f(); return 0; }", 0),
+        ("int f(void) { return 4; } int main(void) { { int f=9; f=f+1; } return f(); }", 4),
+        ("int f(void) { int x=0; while(x<2) x=x+1; return x; } "
+         "int main(void) { while(0) break; return f(); }", 2),
+    ]
+    for text in ("int f(void);", "int library(void) { return 5; }"):
+        source.write_text(text)
+        result = subprocess.run([str(compiler), str(source)],
+                                capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and not result.stderr, result.stderr
+        assert ("export function" in result.stdout) == ("{" in text)
+
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -221,7 +244,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "", "int main(void) { return; }", "int main(void) { return 0 }",
         "int main(void) { return 2147483648; }",
         "int main(void) { return 0x10; }", "int main(void) { return 0; } int x;",
-        "int other(void) { return 0; }", "int main() { return 0; }",
+        "int main() { return 0; }",
         "int main(void) { return 1 + ; }",
         "int main(void) { return ++1; }", "int main(void) { return (1; }",
         "int main(void) { return 1 / ; }", "#define X 0\n",
@@ -321,6 +344,22 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { for(;0;) ; break; }",
         "int main(void) {" + "for(;0;) "*128 + ";}",
     ]
+    invalid += [
+        "int main(void) { return later(); } int later(void) { return 1; }",
+        "int main(void) { return missing(); }",
+        "int f(void) { return 1; } int f(void) { return 2; }",
+        "int f(void); int main(void) { int f=3; return f(); }",
+        "int f(void); int main(void) { int f=f(); return 0; }",
+        "int f(void); int main(void) { return f; }",
+        "int f(void); int main(void) { f=3; return 0; }",
+        "int f(void); int main(void) { return f()(); }",
+        "int f(void); int main(void) { return (1+2)(); }",
+        "int main(void) { while(0) break; } int f(void) { break; }",
+        "int a(void) { int x=1; return x; } int b(void) { return x; }",
+        "int f(void);"*513,
+        "".join(f"int f{i}(void);" for i in range(257)),
+        "int f(void); int main(void) { return f" + "()"*128 + "; }",
+    ]
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
@@ -330,6 +369,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("int main(void) { return f(); }", "call to undeclared function"),
+        ("int f(void); int main(void) { int f; f(); }", "not a function"),
+        ("int f(void) {} int f(void) {}", "redefinition of function"),
+        ("int f(void);"*513, "declaration limit (512)"),
+        ("".join(f"int f{i}(void);" for i in range(257)), "function limit (256)"),
         ("int main(void) { break; }", "break is only supported inside a loop"),
         ("int main(void) { continue; }", "continue requires an enclosing loop"),
         ("int main(void) { return missing; }", "use of undeclared identifier"),

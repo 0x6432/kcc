@@ -26,6 +26,8 @@ struct sema {
 	struct scope *scope;
 	struct loop_context *loop;
 	size_t local_count;
+	struct function_symbol *functions;
+	size_t function_count;
 };
 
 static bool same_name(struct token left, struct token right)
@@ -64,6 +66,18 @@ static struct ast_local_declaration *find_local(struct sema *sema,
 	return NULL;
 }
 
+static struct function_symbol *find_function(struct sema *sema, struct token name)
+{
+	struct function_symbol *symbol = sema->functions;
+
+	while (symbol) {
+		if (same_name(symbol->name, name))
+			return symbol;
+		symbol = symbol->next;
+	}
+	return NULL;
+}
+
 static bool check_expression_depth(struct sema *sema,
 	struct ast_expression *expression)
 {
@@ -84,6 +98,31 @@ static bool sema_expression(struct sema *sema,
 	struct ast_expression *expression = *expression_slot;
 
 	switch (expression->kind) {
+	case expression_call: {
+		struct ast_call_expression *node = (struct ast_call_expression *)expression;
+		struct ast_name_expression *callee;
+
+		if (node->callee->kind != expression_name) {
+			diagnostic_error(sema->diagnostics, node->callee->location,
+				"only direct calls to named functions are supported");
+			return false;
+		}
+		callee = (struct ast_name_expression *)node->callee;
+		if (find_local(sema, callee->name)) {
+			diagnostic_error(sema->diagnostics, node->callee->location,
+				"called identifier denotes a local object, not a function");
+			return false;
+		}
+		node->function = find_function(sema, callee->name);
+		if (!node->function) {
+			diagnostic_error(sema->diagnostics, node->callee->location,
+				"call to undeclared function");
+			return false;
+		}
+		node->callee->type = &node->function->type->type;
+		expression->depth = node->callee->depth + 1;
+		break;
+	}
 	case expression_integer: {
 		struct ast_integer_expression *node =
 			(struct ast_integer_expression *)expression;
@@ -399,23 +438,66 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 	return success;
 }
 
+static bool sema_function_declaration(struct sema *sema,
+	struct ast_function_declaration *declaration, struct ast_function *definition)
+{
+	struct function_symbol *symbol = find_function(sema, declaration->name);
+
+	if (!symbol) {
+		if (sema->function_count == ast_max_functions) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"translation unit exceeds function limit (256)");
+			return false;
+		}
+		symbol = arena_alloc(sema->arena, sizeof(*symbol));
+		if (!symbol) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"out of memory creating function symbol");
+			return false;
+		}
+		*symbol = (struct function_symbol) {
+			.name = declaration->name,
+			.type = &type_function_int_void,
+			.next = sema->functions,
+		};
+		sema->functions = symbol;
+		sema->function_count++;
+	}
+	if (definition && symbol->definition) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"redefinition of function");
+		return false;
+	}
+	declaration->symbol = symbol;
+	if (!definition)
+		return true;
+	/* Install the definition before its body: direct recursion is visible. */
+	symbol->definition = definition;
+	definition->return_type = symbol->type->return_type;
+	sema->function = definition;
+	sema->local_count = 0;
+	return sema_compound(sema, definition->body);
+}
+
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics)
 {
-	struct ast_function *function = unit->function;
-	struct token name = function->name;
-	struct sema sema = {
-		.arena = arena,
-		.diagnostics = diagnostics,
-		.function = function,
-	};
+	struct sema sema = { .arena = arena, .diagnostics = diagnostics };
+	struct ast_external_declaration *external = unit->declarations;
 
-	if (name.length != 4 || memcmp(name.location.source->data +
-		name.location.offset, "main", 4) != 0) {
-		diagnostic_error(diagnostics, name.location,
-			"only a function named main is supported");
-		return false;
+	while (external) {
+		struct ast_function *definition = NULL;
+		struct ast_function_declaration *declaration;
+
+		if (external->kind == external_function_definition) {
+			definition = (struct ast_function *)external;
+			declaration = definition->declaration;
+		} else {
+			declaration = (struct ast_function_declaration *)external;
+		}
+		if (!sema_function_declaration(&sema, declaration, definition))
+			return false;
+		external = external->next;
 	}
-	function->return_type = &type_int;
-	return sema_compound(&sema, function->body);
+	return true;
 }

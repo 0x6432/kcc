@@ -3,6 +3,13 @@
 
 #include "ast.h"
 
+struct function_symbol {
+	struct token name;
+	const struct function_type *type;
+	struct ast_function *definition;
+	struct function_symbol *next;
+};
+
 /* Run once on a freshly parsed unit. Arena owns inserted conversion nodes. */
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics);

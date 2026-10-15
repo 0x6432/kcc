@@ -14,7 +14,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
-| M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | planned |
+| M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | in progress (M08a complete) |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
@@ -196,3 +196,15 @@ M07c final verification passed with Clang as compiler/reference and GCC
 ASan/UBSan, including QBE executable tests. Twelve deterministic generated
 for-loop cases exercise continue/step sequencing. Structural tests assert
 header-vs-body-vs-outer bindings and nearest-loop jump targets.
+
+## M08A completion record
+
+Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
+
+Normal GCC, semantic-AST and QBE/reference runtime regressions passed.
+ASan/UBSan and sanitized pipeline fuzzing are run before the commit; exact
+results follow below. Push and remote CI are verified separately.
+Next: M08b parameter/argument lists and name-independent signature compatibility.
+
+M08a sanitizer verification passed with ASan/UBSan, including QBE runtime
+tests. Sanitized pipeline fuzzing completed 349498 inputs in 13 seconds.

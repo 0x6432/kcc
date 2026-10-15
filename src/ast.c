@@ -306,27 +306,58 @@ struct ast_compound_statement *ast_new_compound(struct arena *arena,
 	return node;
 }
 
+struct ast_call_expression *ast_new_call(struct arena *arena,
+	struct ast_expression *callee)
+{
+	struct ast_call_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_call_expression) {
+			.expression = {
+				.kind = expression_call,
+				.location = callee->location,
+				.depth = callee->depth + 1,
+			},
+			.callee = callee,
+		};
+	return node;
+}
+
+struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,
+	struct source_location location, struct token name)
+{
+	struct ast_function_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_function_declaration) {
+			.external = { .kind = external_function_declaration,
+				.location = location },
+			.name = name,
+		};
+	return node;
+}
+
 struct ast_function *ast_new_function(struct arena *arena,
-	struct source_location location, struct token name,
-	struct ast_compound_statement *body)
+	struct ast_function_declaration *declaration, struct ast_compound_statement *body)
 {
 	struct ast_function *node = arena_alloc(arena, sizeof(*node));
 
 	if (node)
 		*node = (struct ast_function) {
-			.location = location,
-			.name = name,
+			.external = { .kind = external_function_definition,
+				.location = declaration->external.location },
+			.declaration = declaration,
 			.body = body,
 		};
 	return node;
 }
 
 struct ast_translation_unit *ast_new_translation_unit(struct arena *arena,
-	struct ast_function *function)
+	struct ast_external_declaration *declarations)
 {
 	struct ast_translation_unit *node = arena_alloc(arena, sizeof(*node));
 
 	if (node)
-		*node = (struct ast_translation_unit) { function };
+		*node = (struct ast_translation_unit) { declarations };
 	return node;
 }

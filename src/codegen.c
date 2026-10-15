@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "sema.h"
 #include "type.h"
 
 #include <assert.h>
@@ -118,6 +119,17 @@ static size_t codegen_expression(struct codegen *codegen,
 
 	assert(expression->type == &type_int);
 	switch (expression->kind) {
+	case expression_call: {
+		const struct ast_call_expression *node =
+			(const struct ast_call_expression *)expression;
+		struct token name = node->function->name;
+		size_t result = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =w call $%.*s()\n", result,
+			(int)name.length,
+			(const char *)name.location.source->data + name.location.offset);
+		return result;
+	}
 	case expression_integer: {
 		const struct ast_integer_expression *node =
 			(const struct ast_integer_expression *)expression;
@@ -412,16 +424,15 @@ static bool codegen_block_items(struct codegen *codegen,
 	return false;
 }
 
-bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
+static bool codegen_function(FILE *stream, const struct ast_function *function)
 {
 	struct codegen codegen = {
 		.stream = stream,
 		.next_label = 1,
 		.output_ok = true,
 	};
-	const struct ast_function *function = unit->function;
 	const struct ast_local_declaration *local = function->locals;
-	struct token name = function->name;
+	struct token name = function->declaration->name;
 
 	assert(function->return_type == &type_int);
 	emit(&codegen, "export function w $%.*s() {\n",
@@ -440,4 +451,17 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 	if (fflush(stream) != 0)
 		codegen.output_ok = false;
 	return codegen.output_ok;
+}
+
+bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
+{
+	const struct ast_external_declaration *external = unit->declarations;
+
+	while (external) {
+		if (external->kind == external_function_definition &&
+			!codegen_function(stream, (const struct ast_function *)external))
+			return false;
+		external = external->next;
+	}
+	return fflush(stream) == 0;
 }

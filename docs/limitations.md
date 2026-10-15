@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M06A. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M06A.
+Current milestone: M08a. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08a.
 
 ## M00
 
@@ -140,7 +140,7 @@ bounded, defined programs; fuzzing never executes user loops. Source remains
 limited to 16 MiB, expression/statement nesting to 128, block items to 4096
 and locals to 256 per function. Automatic locals are not zero-filled.
 
-## M07C (current)
+## M07C
 
 A distinct for-statement node records optional initializer declaration/expression, condition and step. Initializer declarations are visible in condition/body/step but not after the loop. Continue executes the step before the condition; missing condition means unconditional iteration. All loop kinds preserve scoped local initialization, short-circuit conditions and nearest-loop jump targets.
 
@@ -151,3 +151,19 @@ analysis. Jump constraints are checked even in dead source. Runtime tests use
 bounded, defined programs; fuzzing never executes user loops. Source remains
 limited to 16 MiB, expression/statement nesting to 128, block items to 4096
 and locals to 256 per function. Automatic locals are not zero-filled.
+
+## M08a (current)
+
+Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
+
+Only int returns and `(void)` declarations; calls take no arguments. Parameters,
+function values/pointers, local prototypes, storage classes, globals, other types
+and preprocessing remain unsupported. Library translation units need no main;
+declared but undefined functions are left to the host linker. Main fallthrough
+returns zero; other functions have an ABI zero filler, not a promised C implicit
+return value. No whole-function reachability/missing-return diagnostic.
+
+At most 512 external declarations and 256 distinct functions. Previous limits
+apply per function; local/loop contexts and QBE counters do not leak between
+definitions. Semantic symbols contain backlinks; do not recursively traverse
+them as ownership edges. Syntax/constraint failures produce no compiler IL.
