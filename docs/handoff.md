@@ -999,3 +999,33 @@ without executing arbitrary generated C. Full isolated host/sanitizer matrix
 and exact-source CI remain pending. M12h char types, promotions, canonical byte
 values and QBE sub-word ABI are designed in m12-char-types.md before coding;
 its curated QBE mechanics probe passed with both hosts, not compiler ABI yet.
+
+## M12f remote verification
+
+619ba96 passed exact-source CI run 38819398360 (GCC/Clang normal and sanitizer
+jobs plus bounded fuzz). Its isolated local matrix is queued separately; do not
+claim that queued run completed. M12g exact-source CI is still in progress.
+
+## M12h tested source checkpoint
+
+Three distinct byte types now flow through declarations, signatures, casts,
+storage and calls. Sema explicitly promotes bytes to int for unary arithmetic
+and binary/shift operands. Values remain canonical signed/unsigned words, with
+byte ABI return normalization before any use. QBE base types, ABI names and
+memory operations are separate helpers; byte locals use alloc4 1.
+
+Full normal GCC regressions/QBE/reference/ABI passed. New 462 width/sign checks
+in 69 full-value host/model/QBE programs passed with GCC and Clang. Typed AST
+units cover identity, promotion nodes and usual-conversion combinations. Exact
+typed-depth 128/129 boundaries, assignment narrowing, macro types, loops and
+prototype conflicts pass. Both-direction mixed eight-argument byte ABI and
+deliberately dirty upper-return bits passed with both hosts. The first depth
+fixture accidentally formed ++ tokens; spacing unary + fixed the test, not the
+compiler. No source workaround or relaxed depth bound was introduced.
+
+ASan/UBSan bounded fuzzing passed 23257 lexer and 80030 pipeline
+inputs (103287 total), 26/26 seconds,
+without arbitrary generated program execution. Full isolated normal/sanitizer
+matrix and exact-source CI remain pending. M12i short/unsigned short, inter-rank
+conversions and halfword ABI are designed in m12-short-types.md before coding;
+a curated QBE mechanics probe passed both hosts, not yet compiler short support.

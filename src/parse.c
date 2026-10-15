@@ -33,10 +33,12 @@ static void allocation_error(struct parser *parser, struct source_location locat
 
 static bool begins_integer_type(enum token_kind kind)
 {
-	return kind == token_int || kind == token_signed || kind == token_unsigned || kind == token_long;
+	return kind == token_int || kind == token_signed || kind == token_unsigned ||
+		kind == token_long || kind == token_char;
 }
 
 /* integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
+ *                | permutation of ['signed' | 'unsigned'] 'char'
  * At least one specifier is required, at most two long specifiers,
  * and no other repeats or conflicting signs.
  */
@@ -44,6 +46,7 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	struct token *beginning)
 {
 	bool seen_int = false;
+	bool seen_char = false;
 	bool seen_sign = false;
 	unsigned long_count = 0;
 	bool unsigned_type = false;
@@ -57,7 +60,13 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	while (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
 		struct token token = preprocess_next(parser->preprocessor);
 
-		if (token.kind == token_long) {
+		if (token.kind == token_char) {
+			if (seen_char) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate char type specifier");
+				return false;
+			}
+			seen_char = true;
+		} else if (token.kind == token_long) {
 			if (long_count == 2) {
 				diagnostic_error(parser->diagnostics, token.location, "too many long type specifiers");
 				return false;
@@ -78,7 +87,14 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 			unsigned_type = token.kind == token_unsigned;
 		}
 	}
-	if (long_count == 2)
+	if (seen_char && (seen_int || long_count)) {
+		diagnostic_error(parser->diagnostics, beginning->location, "char cannot combine with int or long");
+		return false;
+	}
+	if (seen_char)
+		*specifier = !seen_sign ? integer_specifier_char : unsigned_type ?
+			integer_specifier_unsigned_char : integer_specifier_signed_char;
+	else if (long_count == 2)
 		*specifier = unsigned_type ? integer_specifier_unsigned_long_long : integer_specifier_long_long;
 	else if (long_count == 1)
 		*specifier = unsigned_type ? integer_specifier_unsigned_long : integer_specifier_long;

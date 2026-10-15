@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12g. The chronological entries below describe what each
+Current milestone: M12h. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -750,3 +750,24 @@ NUL/newline/unescaped quote bytes and unknown escapes. Diagnostics are context-
 neutral, preserving macro invocation locations. Character constants are never
 lvalues. Char/short declaration types are still absent; M12h char types and
 promotions have a separate design and successful QBE byte-ABI mechanics probe.
+
+## M12h
+
+Plain char, signed char and unsigned char are distinct 8-bit types; plain char
+is signed on this target. Optional sign may precede/follow char, but char cannot
+combine with int/long or duplicate itself. Ordinary character constants remain
+int. Unary arithmetic and each binary/shift operand promote byte types to int;
+assignment/init/fixed arguments/returns retain exact declared byte types.
+
+Values are canonical in QBE words: signed bytes sign-extend, unsigned bytes
+zero-extend. Narrow casts/conversions normalize low bits; byte-to-long extension
+uses source signedness. Byte calls use sb/ub and immediately normalize return
+values because upper bits are unspecified. Parameters spill their low byte and
+loads use loadsb/loadub; stores use storeb. Local slots use alloc4 1 with stronger
+stack alignment, not a claim that the C byte type has alignment 4. No pointer/
+aggregate layout exists yet. Signed narrowing follows the target two's-complement
+low-byte policy, tested against these hosts.
+
+Short/bool, floating types, pointer types and full C23 remain absent. Byte ABI
+tests include both-direction eight mixed arguments and assembly returns with
+deliberately dirty upper bits; same-compiler-only calls are not the sole oracle.

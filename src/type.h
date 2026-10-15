@@ -7,6 +7,9 @@
 #include <stdint.h>
 
 enum type_kind {
+	type_kind_char,
+	type_kind_schar,
+	type_kind_uchar,
 	type_kind_int,
 	type_kind_uint,
 	type_kind_long,
@@ -32,6 +35,9 @@ struct function_type {
 	size_t parameter_count;
 };
 
+extern const struct type type_char;
+extern const struct type type_schar;
+extern const struct type type_uchar;
 extern const struct type type_int;
 extern const struct type type_uint;
 extern const struct type type_long;
@@ -41,6 +47,7 @@ extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
 bool type_is_unsigned(const struct type *type);
 unsigned type_integer_width(const struct type *type);
+const struct type *type_integer_promotion(const struct type *type);
 const struct type *type_usual_arithmetic(const struct type *left, const struct type *right);
 const struct type *type_integer_literal(uint64_t value, unsigned base,
 	bool unsigned_suffix, unsigned long_suffix);

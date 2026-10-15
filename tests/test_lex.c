@@ -229,6 +229,11 @@ int main(void)
 {
 	test_character_spellings();
 	test_integer_spellings();
+	{
+		const enum token_kind kinds[] = { token_char, token_signed, token_char, token_unsigned, token_char };
+
+		check_tokens("char signed char unsigned char", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	}
 	test_bitwise_tokens();
 	test_phase_ordering();
 	test_basic();

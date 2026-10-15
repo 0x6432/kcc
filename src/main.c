@@ -185,7 +185,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m12g");
+		puts("kcc milestone m12h");
 		return 0;
 	}
 

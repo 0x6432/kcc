@@ -2,6 +2,9 @@
 
 #include <assert.h>
 
+const struct type type_char = { type_kind_char };
+const struct type type_schar = { type_kind_schar };
+const struct type type_uchar = { type_kind_uchar };
 const struct type type_int = { type_kind_int };
 const struct type type_uint = { type_kind_uint };
 const struct type type_long = { type_kind_long };
@@ -19,6 +22,9 @@ struct integer_properties {
 
 /* Target LP64 properties, independent of the compiler host's long width. */
 static const struct integer_properties integer_properties[] = {
+	{ type_kind_char, 8, 0, false, &type_uchar },
+	{ type_kind_schar, 8, 0, false, &type_uchar },
+	{ type_kind_uchar, 8, 0, true, &type_uchar },
 	{ type_kind_int, 32, 1, false, &type_uint },
 	{ type_kind_uint, 32, 1, true, &type_uint },
 	{ type_kind_long, 64, 2, false, &type_ulong },
@@ -54,15 +60,27 @@ unsigned type_integer_width(const struct type *type)
 	return integer_properties_for(type)->width;
 }
 
+/* All implemented types below int fit in int, including unsigned char. */
+const struct type *type_integer_promotion(const struct type *type)
+{
+	if (type_integer_width(type) < 32)
+		return &type_int;
+	return type;
+}
+
 const struct type *type_usual_arithmetic(const struct type *left, const struct type *right)
 {
-	const struct integer_properties *a = integer_properties_for(left);
-	const struct integer_properties *b = integer_properties_for(right);
+	const struct integer_properties *a;
+	const struct integer_properties *b;
 	const struct type *unsigned_type;
 	const struct type *signed_type;
 	const struct integer_properties *unsigned_properties;
 	const struct integer_properties *signed_properties;
 
+	left = type_integer_promotion(left);
+	right = type_integer_promotion(right);
+	a = integer_properties_for(left);
+	b = integer_properties_for(right);
 	if (a->unsigned_type == b->unsigned_type)
 		return a->rank >= b->rank ? left : right;
 	unsigned_type = a->unsigned_type ? left : right;

@@ -47,6 +47,41 @@ static char qbe_type(const struct type *type)
 	return type_integer_width(type) == 64 ? 'l' : 'w';
 }
 
+static const char *qbe_abi_type(const struct type *type)
+{
+	if (type_integer_width(type) == 8)
+		return type_is_unsigned(type) ? "ub" : "sb";
+	return type_integer_width(type) == 64 ? "l" : "w";
+}
+
+static const char *qbe_load_instruction(const struct type *type)
+{
+	if (type_integer_width(type) == 8)
+		return type_is_unsigned(type) ? "loadub" : "loadsb";
+	return type_integer_width(type) == 64 ? "loadl" : "loadw";
+}
+
+static char qbe_store_size(const struct type *type)
+{
+	if (type_integer_width(type) == 8)
+		return 'b';
+	return qbe_type(type);
+}
+
+/* A byte ABI result has unspecified upper bits; normalize before any use. */
+static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
+	const struct type *type)
+{
+	size_t result;
+
+	if (type_integer_width(type) != 8)
+		return value;
+	result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w %s %%t%zu\n", result,
+		type_is_unsigned(type) ? "extub" : "extsb", value);
+	return result;
+}
+
 static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
 {
 	bool unsigned_operands = type_is_unsigned(operand_type);
@@ -114,10 +149,13 @@ static size_t codegen_conversion(struct codegen *codegen, const struct ast_expre
 	const struct type *target)
 {
 	size_t value = codegen_expression(codegen, operand);
-	size_t result = codegen->next_temporary++;
+	size_t result;
 	const char *instruction = "copy";
 
-	if (type_integer_width(target) == 64 && type_integer_width(operand->type) == 32)
+	if (type_integer_width(target) == 8)
+		return codegen_canonicalize(codegen, value, target);
+	result = codegen->next_temporary++;
+	if (type_integer_width(target) == 64 && type_integer_width(operand->type) <= 32)
 		instruction = type_is_unsigned(operand->type) ? "extuw" : "extsw";
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
 	return result;
@@ -178,16 +216,16 @@ static size_t codegen_expression(struct codegen *codegen,
 			arguments[count++] = codegen_expression(codegen, argument->value);
 		assert(count == node->argument_count && count <= ast_max_arguments);
 		result = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =%c call $%.*s(", result, qbe_type(expression->type),
+		emit(codegen, "\t%%t%zu =%s call $%.*s(", result, qbe_abi_type(expression->type),
 			(int)name.length,
 			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 		count = 0;
 		for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
-			emit(codegen, "%s%c %%t%zu", count ? ", " : "", qbe_type(argument->value->type), arguments[count]);
+			emit(codegen, "%s%s %%t%zu", count ? ", " : "", qbe_abi_type(argument->value->type), arguments[count]);
 			count++;
 		}
 		emit(codegen, ")\n");
-		return result;
+		return codegen_canonicalize(codegen, result, expression->type);
 	}
 	case expression_character: {
 		const struct ast_character_expression *node =
@@ -267,8 +305,8 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t slot = codegen_local_slot(node->operand);
 
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =%c load%c %%v%zu\n", temporary,
-			qbe_type(expression->type), qbe_type(expression->type), slot);
+		emit(codegen, "\t%%t%zu =%c %s %%v%zu\n", temporary,
+			qbe_type(expression->type), qbe_load_instruction(expression->type), slot);
 		return temporary;
 	}
 	case expression_assignment: {
@@ -277,7 +315,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t value = codegen_expression(codegen, node->right);
 		size_t slot = codegen_local_slot(node->left);
 
-		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_type(node->left->type), value, slot);
+		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(node->left->type), value, slot);
 		return value;
 	}
 	case expression_name:
@@ -391,7 +429,7 @@ static void codegen_local_initializer(struct codegen *codegen,
 	if (local->initializer) {
 		size_t value = codegen_expression(codegen, local->initializer);
 
-		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_type(local->type), value, local->slot);
+		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(local->type), value, local->slot);
 	}
 }
 
@@ -527,29 +565,31 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 
 	assert(type_is_integer(function->return_type));
 
-	emit(&codegen, "export function %c $%.*s(", qbe_type(function->return_type),
+	emit(&codegen, "export function %s $%.*s(", qbe_abi_type(function->return_type),
 		(int)name.length,
 		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
-		emit(&codegen, "%s%c %%p%zu", parameter_index ? ", " : "",
-			qbe_type(parameter->local->type), parameter_index);
+		emit(&codegen, "%s%s %%p%zu", parameter_index ? ", " : "",
+			qbe_abi_type(parameter->local->type), parameter_index);
 		parameter_index++;
 	}
 	emit(&codegen, ") {\n");
 	emit_label(&codegen, 0);
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
+		unsigned bytes = type_integer_width(local->type) / 8;
+		unsigned alignment = bytes < 4 ? 4 : bytes;
+
 		assert(type_is_integer(local->type));
-		emit(&codegen, "\t%%v%zu =l alloc%u %u\n", local->slot,
-			type_integer_width(local->type) / 8, type_integer_width(local->type) / 8);
+		emit(&codegen, "\t%%v%zu =l alloc%u %u\n", local->slot, alignment, bytes);
 		local = local->next_local;
 	}
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
 		emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
-			qbe_type(parameter->local->type), parameter_index, parameter->local->slot);
+			qbe_store_size(parameter->local->type), parameter_index, parameter->local->slot);
 		parameter_index++;
 	}
 	if (!codegen_block_items(&codegen, function->body->items))

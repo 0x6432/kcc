@@ -886,3 +886,20 @@ unsigned literal magnitude. Preprocessing selects intmax_t; language tokens carr
 a separate character field and ast_character_expression has int type in sema.
 The parser still caches one token, and spelling/invocation ownership is unchanged.
 QBE emits a signed word constant; existing explicit conversions handle wider use.
+
+## M12h promotions and canonical byte values
+
+type_integer_promotion maps each byte type to int and preserves other currently
+implemented types. Sema inserts explicit conversions after lvalue loads and
+before usual arithmetic conversion, including each shift operand independently.
+Unary ! and logical operands only require scalar truth. Assignment/initialization/
+fixed calls/returns convert directly to their exact declared target type. All
+inserted nodes contribute to the checked typed-expression depth.
+
+QBE base types (w/l), ABI names (sb/ub/w/l), memory loads and stores are separate
+helpers. Every integer temporary is canonical for its semantic type; call results
+are normalized at the ABI boundary, even for immediate truth or same-type uses.
+Narrow conversions use extsb/extub; widening canonical byte values to long uses
+extsw/extuw by source signedness. Byte locals allocate one byte with alloc4
+(stronger local alignment); future target layout must not infer type alignment
+from that allocation instruction. Plain/signed char compatibility stays distinct.

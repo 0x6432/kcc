@@ -18,7 +18,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks and M12g ordinary character constants implemented; remaining ranks planned) |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters and M12h char types/promotions implemented; remaining ranks planned) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -881,3 +881,11 @@ M12g source checkpoint: ordinary int-valued character constants, shared decoder,
 617 byte/escape checks across 44 both-host/QBE programs, full normal GCC suites
 and bounded sanitized fuzz passed. Full matrix/exact-source CI remain pending.
 M12h distinct char types and promotion/ABI contracts are pre-designed.
+
+M12f exact-source CI passed run 38819398360; its isolated local full matrix
+remains queued behind M12e. M12g remote verification remains pending.
+
+M12h source checkpoint: char identities, explicit integer promotions and QBE byte
+memory/ABI passed full normal GCC suites, 462 conversion checks across 69 both-
+host/QBE programs, cross-host ABI/dirty-return checks and bounded sanitized fuzz.
+Full isolated matrix/CI remain pending. M12i short types are pre-designed.

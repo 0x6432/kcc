@@ -324,7 +324,7 @@ static bool spelling_is(struct token token, const char *spelling)
 static bool is_unsupported_keyword(struct token token)
 {
 	static const char *const keywords[] = {
-		"auto", "break", "case", "char", "const", "continue", "default",
+		"auto", "break", "case", "const", "continue", "default",
 		"do", "double", "else", "enum", "extern", "float", "for", "goto",
 		"if", "inline", "register", "restrict", "short",
 		"sizeof", "static", "struct", "switch", "typedef", "union",
@@ -348,6 +348,7 @@ struct keyword {
 };
 
 static const struct keyword keywords[] = {
+	{ "char", token_char },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
@@ -656,6 +657,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_signed: return "signed";
 	case token_unsigned: return "unsigned";
 	case token_long: return "long";
+	case token_char: return "char";
 	case token_void: return "void";
 	case token_return: return "return";
 	case token_if: return "if";

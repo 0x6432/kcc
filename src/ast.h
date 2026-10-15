@@ -143,6 +143,9 @@ struct ast_conversion_expression {
 };
 
 enum integer_specifier {
+	integer_specifier_char,
+	integer_specifier_signed_char,
+	integer_specifier_unsigned_char,
 	integer_specifier_int,
 	integer_specifier_unsigned,
 	integer_specifier_long,

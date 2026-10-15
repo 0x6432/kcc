@@ -92,6 +92,9 @@ static bool check_expression_depth(struct sema *sema,
 static const struct type *specifier_type(enum integer_specifier specifier)
 {
 	switch (specifier) {
+	case integer_specifier_char: return &type_char;
+	case integer_specifier_signed_char: return &type_schar;
+	case integer_specifier_unsigned_char: return &type_uchar;
 	case integer_specifier_int: return &type_int;
 	case integer_specifier_unsigned: return &type_uint;
 	case integer_specifier_long: return &type_long;
@@ -231,13 +234,16 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, true))
 			return false;
-		if (node->operation != unary_not)
-			result_type = node->operand->type;
+		if (node->operation != unary_not) {
+			result_type = type_integer_promotion(node->operand->type);
+			if (!convert_expression(sema, &node->operand, result_type))
+				return false;
+		}
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
-	/* Integer promotions are identity for int/uint. Usual conversions apply
-	 * to arithmetic/comparisons; shifts promote operands independently.
+	/* Promote both operands explicitly before usual arithmetic conversions.
+	 * Shifts keep the independently promoted left type, not a common type.
 	 */
 	case expression_binary: {
 		struct ast_binary_expression *node =
@@ -247,6 +253,9 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->left, true))
 			return false;
 		if (!sema_expression(sema, &node->right, true))
+			return false;
+		if (!convert_expression(sema, &node->left, type_integer_promotion(node->left->type)) ||
+			!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
 			return false;
 		if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
 			result_type = node->left->type;

@@ -45,3 +45,11 @@ pure decoder units and direct arbitrary-slice fuzzing share preprocessing tests.
 Prefixes/Unicode/multicharacter/string literals remain explicit later work. Char
 declaration types and integer promotions are designed for M12h, not implemented
 by character constants.
+
+### M12h byte types and promotions
+
+Plain/signed/unsigned char declarations, casts, exact signature identity and
+integer promotions are implemented. 462 width/sign conversion checks, promoted
+arithmetic, assignment narrowing and typed-depth boundaries have both-host/QBE
+coverage. Byte memory and SysV ABI use correct signed/unsigned QBE sub-word
+annotations and canonicalization. Short/bool and other types remain separate.
