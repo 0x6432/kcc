@@ -768,3 +768,18 @@ signed-intmax only, with absent or signed l/L/ll/LL suffixes. Valid unsigned for
 and nondecimal values requiring uintmax_t diagnose as unsupported, not as signed
 negative values. Digit-separator grammar is checked even in unevaluated operands.
 No change to parser AST types, C expression conversion or QBE IL types.
+
+## M11i explicit integer-value contract
+
+Each preprocessing expression value carries uint64 bits plus signedness; this
+private struct does not change AST or runtime types. One mathematical decoder
+maps signed bit patterns without large unsigned-to-signed casts. Arithmetic and
+bitwise operators apply intmax/uintmax usual conversion; comparisons/logical
+operators produce signed 0/1. Shifts preserve the left type independently of the
+right operand. Unsigned arithmetic wraps in uint64; signed arithmetic is checked.
+
+Unselected operands still produce correct types without evaluated arithmetic.
+Ternary signedness depends on both branches, not only the selected one, and the
+chosen bits are converted to that common type. This invariant also applies to
+unselected unary, binary and nested conditional expressions. Macro-generated
+numeric spellings follow the same literal scanner and ownership contracts.

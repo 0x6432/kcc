@@ -648,3 +648,27 @@ is queued/running separately after M11f. Do not call either completed until its
 own results are checked. M11i unsigned-value semantics are designed in
 m11-unsigned-conditions.md, not implemented at this checkpoint. Use an explicit
 value type, retain unselected ternary branch types, and preserve signed checks.
+
+## M11i tested source checkpoint
+
+Preprocessing values now carry explicit uint64 bits and signedness. U suffixes,
+large nondecimal constants, intmax/uintmax conversions and wrapping arithmetic
+are implemented. Comparisons/logical results are signed; shifts preserve the
+left type; ?: derives its common type from both parsed branches even when one
+contains unselected arithmetic errors. No runtime C type/AST changes.
+
+GCC make test and QBE/reference/ABI passed. New unsigned tests passed 302
+host/model agreements with each GCC/Clang, including 250 modeled value-and-type
+binary cases, boundary arithmetic, macro-pasted suffixes and nested ternary/
+logical/shift result types. Fifteen LF/CRLF/CR unsigned-selection programs passed
+QBE/reference execution. Inherited signed, literal, conditional, macro and
+resource tests passed. Sanitizer fuzzing passed 26702 lexer/preprocessor and
+106993 pipeline inputs (133695 total), 26 seconds per target, without executing
+arbitrary C. A final brace-style-only cleanup was followed by passing unit tests;
+full committed-snapshot sanitizer validation still needs separate confirmation.
+
+M11i full isolated matrix and exact-source CI remain pending. M11g remote CI
+passed run 38806781592, but its longer local matrix and M11h's full validation
+still need final checks. M11j ordinary single-byte preprocessing characters are
+designed in m11-character-conditions.md, not yet implemented. Keep signed target
+character policy explicit; do not silently extend runtime types or Unicode.

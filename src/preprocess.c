@@ -1690,6 +1690,25 @@ static bool prescan_argument(struct preprocessor *preprocessor,
 	return success;
 }
 
+/* A preprocessing integer has target intmax_t or uintmax_t semantics. */
+struct condition_value {
+	uint64_t bits;
+	bool unsigned_type;
+};
+
+static struct condition_value signed_condition(int64_t value)
+{
+	return (struct condition_value) { .bits = (uint64_t)value };
+}
+
+/* Decode mathematically, without an implementation-defined large unsigned cast. */
+static int64_t condition_signed_value(struct condition_value value)
+{
+	if (value.bits <= INT64_MAX)
+		return (int64_t)value.bits;
+	return -1 - (int64_t)(UINT64_MAX - value.bits);
+}
+
 enum condition_operation {
 	condition_multiply, condition_divide, condition_remainder,
 	condition_add, condition_subtract, condition_shift_left, condition_shift_right,
@@ -1764,7 +1783,7 @@ static int condition_digit(unsigned char byte)
  * Separators occur only between valid base digits. This increment accepts only
  * signed-intmax values, with no suffix or a signed l/L/ll/LL suffix.
  */
-static int64_t parse_condition_integer(struct condition_parser *parser, struct pp_token token)
+static struct condition_value parse_condition_integer(struct condition_parser *parser, struct pp_token token)
 {
 	const unsigned char *text = token.location.source->data + token.location.offset;
 	size_t offset = 0;
@@ -1790,7 +1809,7 @@ static int64_t parse_condition_integer(struct condition_parser *parser, struct p
 		if (digit >= 0 && (unsigned)digit < base) {
 			if (value > (UINT64_MAX - (unsigned)digit) / base) {
 				condition_error(parser, token, "conditional integer exceeds 64-bit range");
-				return 0;
+				return signed_condition(0);
 			}
 			value = value * base + (unsigned)digit;
 			offset++;
@@ -1803,7 +1822,7 @@ static int64_t parse_condition_integer(struct condition_parser *parser, struct p
 
 			if (!previous_digit || next < 0 || (unsigned)next >= base) {
 				condition_error(parser, token, "invalid separator in conditional integer");
-				return 0;
+				return signed_condition(0);
 			}
 			previous_digit = false;
 			offset++;
@@ -1811,13 +1830,13 @@ static int64_t parse_condition_integer(struct condition_parser *parser, struct p
 		}
 		if (text[offset] >= '0' && text[offset] <= '9') {
 			condition_error(parser, token, "invalid digit in conditional integer");
-			return 0;
+			return signed_condition(0);
 		}
 		break;
 	}
 	if (!digits) {
 		condition_error(parser, token, "expected digits in conditional integer");
-		return 0;
+		return signed_condition(0);
 	}
 	if (offset < token.length && (text[offset] == 'u' || text[offset] == 'U')) {
 		unsigned_suffix = true;
@@ -1835,50 +1854,56 @@ static int64_t parse_condition_integer(struct condition_parser *parser, struct p
 	}
 	if (offset != token.length) {
 		condition_error(parser, token, "unsupported conditional integer suffix");
-		return 0;
+		return signed_condition(0);
 	}
-	if (unsigned_suffix || (base != 10 && value > INT64_MAX)) {
-		condition_error(parser, token, "unsigned conditional integers are not supported yet");
-		return 0;
-	}
-	if (value > INT64_MAX) {
+	if (!unsigned_suffix && base == 10 && value > INT64_MAX) {
 		condition_error(parser, token, "conditional integer exceeds signed 64-bit range");
-		return 0;
+		return signed_condition(0);
 	}
-	return (int64_t)value;
+	return (struct condition_value) {
+		.bits = value,
+		.unsigned_type = unsigned_suffix || (base != 10 && value > INT64_MAX),
+	};
 }
 
-static int64_t parse_condition_expression(struct condition_parser *parser,
+static struct condition_value parse_condition_expression(struct condition_parser *parser,
 	unsigned minimum_power, bool evaluate);
 
 /* condition-operand = condition-integer | identifier | '(' condition-expression ')'
  *                   | ('+' | '-' | '!' | '~') condition-operand
  * defined was handled before expansion; other identifiers are zero (C23 true is 1).
  */
-static int64_t parse_condition_operand(struct condition_parser *parser, bool evaluate)
+static struct condition_value parse_condition_operand(struct condition_parser *parser, bool evaluate)
 {
 	struct pp_token token = parser->token;
-	int64_t value = 0;
+	struct condition_value value = signed_condition(0);
 
 	if (parser->failed)
-		return 0;
+		return signed_condition(0);
 	if (is_punctuator(token, "+") || is_punctuator(token, "-") ||
 		is_punctuator(token, "!") || is_punctuator(token, "~")) {
 		advance_condition(parser);
 		value = parse_condition_expression(parser, 70, evaluate);
-		if (!evaluate || parser->failed)
-			return 0;
+		if (parser->failed)
+			return signed_condition(0);
 		if (is_punctuator(token, "!"))
-			return !value;
-		if (is_punctuator(token, "~"))
-			return ~value;
+			return signed_condition(evaluate && !value.bits);
+		if (!evaluate) {
+			value.bits = 0;
+			return value;
+		}
+		if (is_punctuator(token, "~")) {
+			value.bits = ~value.bits;
+			return value;
+		}
 		if (is_punctuator(token, "+"))
 			return value;
-		if (value == INT64_MIN) {
+		if (!value.unsigned_type && condition_signed_value(value) == INT64_MIN) {
 			condition_error(parser, token, "signed overflow in conditional expression");
-			return 0;
+			return signed_condition(0);
 		}
-		return -value;
+		value.bits = UINT64_C(0) - value.bits;
+		return value;
 	}
 	if (is_punctuator(token, "(")) {
 		advance_condition(parser);
@@ -1893,7 +1918,7 @@ static int64_t parse_condition_operand(struct condition_parser *parser, bool eva
 	} else if (token.kind == pp_identifier) {
 		if (pp_spelling_is(token, "defined"))
 			condition_error(parser, token, "defined produced by macro expansion is not supported");
-		value = pp_spelling_is(token, "true");
+		value = signed_condition(pp_spelling_is(token, "true"));
 	} else {
 		condition_error(parser, token, "expected an operand in conditional expression");
 	}
@@ -1912,65 +1937,119 @@ static bool condition_multiply_overflows(int64_t left, int64_t right)
 	return false;
 }
 
-static int64_t evaluate_condition_operator(struct condition_parser *parser,
-	struct pp_token token, enum condition_operation operation, int64_t left, int64_t right)
+static bool condition_result_unsigned(enum condition_operation operation,
+	struct condition_value left, struct condition_value right)
 {
 	switch (operation) {
-	case condition_add:
-		if ((right > 0 && left > INT64_MAX - right) ||
-			(right < 0 && left < INT64_MIN - right))
-			break;
-		return left + right;
-	case condition_subtract:
-		if ((right > 0 && left < INT64_MIN + right) ||
-			(right < 0 && left > INT64_MAX + right))
-			break;
-		return left - right;
-	case condition_multiply:
-		if (condition_multiply_overflows(left, right))
-			break;
-		return left * right;
-	case condition_divide:
-	case condition_remainder:
-		if (!right) {
-			condition_error(parser, token, "division by zero in conditional expression");
-			return 0;
-		}
-		if (left == INT64_MIN && right == -1)
-			break;
-		return operation == condition_divide ? left / right : left % right;
+	case condition_less:
+	case condition_less_equal:
+	case condition_greater:
+	case condition_greater_equal:
+	case condition_equal:
+	case condition_not_equal:
+	case condition_and:
+	case condition_or:
+		return false;
 	case condition_shift_left:
 	case condition_shift_right:
-		if (right < 0 || right >= 64) {
-			condition_error(parser, token, "conditional shift count must be between 0 and 63");
-			return 0;
-		}
-		if (operation == condition_shift_right) {
-			if (left < 0)
-				return -1 - ((-1 - left) >> right);
-			return left >> right;
-		}
-		if (left < 0) {
-			condition_error(parser, token, "negative left operand in conditional shift");
-			return 0;
-		}
-		if (left > (INT64_MAX >> right))
+		return left.unsigned_type;
+	default:
+		return left.unsigned_type || right.unsigned_type;
+	}
+}
+
+static struct condition_value evaluate_condition_operator(struct condition_parser *parser,
+	struct pp_token token, enum condition_operation operation,
+	struct condition_value left, struct condition_value right)
+{
+	bool unsigned_type = left.unsigned_type || right.unsigned_type;
+	struct condition_value result = { .unsigned_type = unsigned_type };
+	int64_t a = condition_signed_value(left);
+	int64_t b = condition_signed_value(right);
+
+	switch (operation) {
+	case condition_add:
+		if (!unsigned_type && ((b > 0 && a > INT64_MAX - b) ||
+			(b < 0 && a < INT64_MIN - b)))
 			break;
-		return (int64_t)((uint64_t)left << (unsigned)right);
-	case condition_bit_and: return left & right;
-	case condition_bit_xor: return left ^ right;
-	case condition_bit_or: return left | right;
-	case condition_less: return left < right;
-	case condition_less_equal: return left <= right;
-	case condition_greater: return left > right;
-	case condition_greater_equal: return left >= right;
-	case condition_equal: return left == right;
-	case condition_not_equal: return left != right;
-	case condition_and: return left && right;
-	case condition_or: return left || right;
+		result.bits = left.bits + right.bits;
+		return result;
+	case condition_subtract:
+		if (!unsigned_type && ((b > 0 && a < INT64_MIN + b) ||
+			(b < 0 && a > INT64_MAX + b)))
+			break;
+		result.bits = left.bits - right.bits;
+		return result;
+	case condition_multiply:
+		if (!unsigned_type && condition_multiply_overflows(a, b))
+			break;
+		result.bits = left.bits * right.bits;
+		return result;
+	case condition_divide:
+	case condition_remainder:
+		if (!right.bits) {
+			condition_error(parser, token, "division by zero in conditional expression");
+			return signed_condition(0);
+		}
+		if (unsigned_type) {
+			result.bits = operation == condition_divide ?
+				left.bits / right.bits : left.bits % right.bits;
+			return result;
+		}
+		if (a == INT64_MIN && b == -1)
+			break;
+		return signed_condition(operation == condition_divide ? a / b : a % b);
+	case condition_shift_left:
+	case condition_shift_right:
+		if ((!right.unsigned_type && b < 0) || right.bits >= 64) {
+			condition_error(parser, token, "conditional shift count must be between 0 and 63");
+			return signed_condition(0);
+		}
+		result.unsigned_type = left.unsigned_type;
+		if (operation == condition_shift_right) {
+			if (!left.unsigned_type && a < 0)
+				return signed_condition(-1 - ((-1 - a) >> right.bits));
+			result.bits = left.bits >> right.bits;
+			return result;
+		}
+		if (!left.unsigned_type) {
+			if (a < 0) {
+				condition_error(parser, token, "negative left operand in conditional shift");
+				return signed_condition(0);
+			}
+			if (a > (INT64_MAX >> right.bits))
+				break;
+		}
+		result.bits = left.bits << right.bits;
+		return result;
+	case condition_bit_and:
+		result.bits = left.bits & right.bits;
+		return result;
+	case condition_bit_xor:
+		result.bits = left.bits ^ right.bits;
+		return result;
+	case condition_bit_or:
+		result.bits = left.bits | right.bits;
+		return result;
+	case condition_less:
+		return signed_condition(unsigned_type ? left.bits < right.bits : a < b);
+	case condition_less_equal:
+		return signed_condition(unsigned_type ? left.bits <= right.bits : a <= b);
+	case condition_greater:
+		return signed_condition(unsigned_type ? left.bits > right.bits : a > b);
+	case condition_greater_equal:
+		return signed_condition(unsigned_type ? left.bits >= right.bits : a >= b);
+	case condition_equal:
+		return signed_condition(left.bits == right.bits);
+	case condition_not_equal:
+		return signed_condition(left.bits != right.bits);
+	case condition_and:
+		return signed_condition(left.bits && right.bits);
+	case condition_or:
+		return signed_condition(left.bits || right.bits);
 	}
 	condition_error(parser, token, "signed overflow in conditional expression");
-	return 0;
+	return signed_condition(0);
 }
 
 /* condition-expression = condition-operand { binary-operator condition-expression }
@@ -1978,16 +2057,16 @@ static int64_t evaluate_condition_operator(struct condition_parser *parser,
  * Binary operators associate left; ?: associates right below logical-or.
  * Short circuit suppresses arithmetic only, not parsing or macro expansion.
  */
-static int64_t parse_condition_expression(struct condition_parser *parser,
+static struct condition_value parse_condition_expression(struct condition_parser *parser,
 	unsigned minimum_power, bool evaluate)
 {
-	int64_t value;
+	struct condition_value value;
 
 	if (parser->failed)
-		return 0;
+		return signed_condition(0);
 	if (parser->depth == preprocess_condition_depth_limit) {
 		condition_error(parser, parser->token, "conditional expression nesting limit (128) exceeded");
-		return 0;
+		return signed_condition(0);
 	}
 	parser->depth++;
 	value = parse_condition_operand(parser, evaluate);
@@ -1995,21 +2074,21 @@ static int64_t parse_condition_expression(struct condition_parser *parser,
 		const struct condition_operator *operator = NULL;
 		struct pp_token token = parser->token;
 		bool evaluate_right = evaluate;
-		int64_t right;
+		struct condition_value right;
 
 		if (is_punctuator(token, "?") && minimum_power <= 5) {
-			int64_t condition = value;
-			int64_t yes;
-			int64_t no;
+			struct condition_value condition = value;
+			struct condition_value yes;
+			struct condition_value no;
 
 			advance_condition(parser);
-			yes = parse_condition_expression(parser, 0, evaluate && condition != 0);
+			yes = parse_condition_expression(parser, 0, evaluate && condition.bits != 0);
 			if (!parser->failed && !is_punctuator(parser->token, ":"))
 				condition_error(parser, parser->token, "expected ':' in conditional expression");
 			advance_condition(parser);
-			no = parse_condition_expression(parser, 5, evaluate && condition == 0);
-			if (evaluate)
-				value = condition ? yes : no;
+			no = parse_condition_expression(parser, 5, evaluate && condition.bits == 0);
+			value.bits = evaluate ? (condition.bits ? yes.bits : no.bits) : 0;
+			value.unsigned_type = yes.unsigned_type || no.unsigned_type;
 			continue;
 		}
 		if (token.kind != pp_punctuator)
@@ -2021,14 +2100,18 @@ static int64_t parse_condition_expression(struct condition_parser *parser,
 			}
 		if (!operator || operator->binding_power < minimum_power)
 			break;
-		if (operator->operation == condition_and && !value)
+		if (operator->operation == condition_and && !value.bits)
 			evaluate_right = false;
-		if (operator->operation == condition_or && value)
+		if (operator->operation == condition_or && value.bits)
 			evaluate_right = false;
 		advance_condition(parser);
 		right = parse_condition_expression(parser, operator->binding_power + 1, evaluate_right);
 		if (evaluate && !parser->failed)
 			value = evaluate_condition_operator(parser, token, operator->operation, value, right);
+		else {
+			value.unsigned_type = condition_result_unsigned(operator->operation, value, right);
+			value.bits = 0;
+		}
 	}
 	parser->depth--;
 	return value;
@@ -2119,7 +2202,7 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor;
 	struct condition_parser parser;
 	size_t count = 0;
-	int64_t result;
+	struct condition_value result;
 
 	for (;;) {
 		struct argument_token *copy;
@@ -2158,7 +2241,7 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 		*error = invalid_token(marker);
 		return false;
 	}
-	*value = result != 0;
+	*value = result.bits != 0;
 	return true;
 }
 

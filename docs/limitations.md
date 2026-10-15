@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11h. The chronological entries below describe what each
+Current milestone: M11i. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -553,3 +553,17 @@ Seven C23 separator values are asserted independently. GCC 11 rejects the new
 spelling, so these cases are not counted as GCC agreement; Clang accepts them.
 Known legacy behavior is checked explicitly, rather than accepting arbitrary
 host differences. Other common literal cases compare directly with both hosts.
+
+## M11i
+
+Preprocessing expressions now model both signed intmax and unsigned uintmax
+(64 bits on the chosen target), including U suffix combinations, large
+nondecimal constants, usual conversions, modulo unsigned arithmetic and ternary
+common type from both branches. Shift result type remains the left operand's;
+comparison/logical results are signed 0/1. Signed error checks and short-circuit
+syntax/resource behavior are preserved. Decimal constants without U still must
+fit INT64_MAX; all spellings must fit UINT64_MAX before evaluation.
+
+This does not implement C runtime unsigned integers, character constants,
+_BitInt suffixes or include handling. Character/encoding/predefined-macro work
+remains explicit. A uint64 storage representation is not a full-C23 claim.
