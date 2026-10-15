@@ -17,10 +17,10 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-M11k dispatches macro, conditional and diagnostic directives plus direct quoted
+M11l dispatches macro, conditional and diagnostic directives plus direct/computed quoted
 includes, and rescans object/fixed/variadic replacements before language
 conversion. Include loading is explicit and bounded; child spellings outlive
-AST use. Macro-computed/angle search remains a later increment. The compiler
+AST use. Angle/search-directory support remains a later increment. The compiler
 never invokes the host preprocessor. Complete phase ordering, encoding/UCNs and final-line constraints are
 not claimed. Missing terminal newlines remain an acceptance extension; no
 synthetic newline is appended. Reference: WG14 N3096 5.1.1.2 and 6.10,

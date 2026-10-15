@@ -21,6 +21,7 @@
 #define preprocess_include_count_limit 128
 #define preprocess_include_bytes_limit (64 * 1024 * 1024)
 #define preprocess_include_path_limit 4096
+#define preprocess_header_token_limit 1024
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 

@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters/M11k quoted includes implemented) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct/M11l computed quoted includes implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -766,3 +766,25 @@ ABI, ten pp agreements with each host, actual byte/path/depth/attempt limits,
 retained-source/conditional/EOF regressions and 134920 sanitizer-fuzz inputs.
 Full isolated matrix/CI pending. M11l computed quoted operands are pre-designed,
 including generated spelling provenance and isolated-line recovery contracts.
+
+M11j final verification: 73b76f8 passed the isolated full normal/sanitizer host
+matrix and QBE/reference/ABI. Remote CI run 38809079871 succeeded.
+
+## M11l tested source checkpoint
+
+Macro-computed quoted operands now rescan one bounded isolated directive line.
+Relative lookup uses the directive source, not the generated string spelling or
+macro definition directory. Invalid expanded operands never consume the next
+source line. Directive collectors retain each token's invocation location, so
+computed include and conditional macro errors point to the call site.
+
+GCC full tests and QBE/reference/ABI execution passed. Computed include tests
+agree with both GCC and Clang on 24 streams each, covering object/function,
+stringizing/pasting, empty replacements, all newline forms, source-directory
+anchoring and malformed/missing operands. All 24 QBE/reference programs passed.
+Sanitized fuzzing passed 22969 lexer/preprocessor and 89116 pipeline inputs
+(112085 total), 26 seconds each, without executing arbitrary generated C.
+Full isolated M11l normal/sanitizer matrix and exact-source CI remain pending.
+M11k exact-source CI passed run 38810635063; its local GCC matrix passed, while
+its local Clang matrix is still running. M11m bounded -I/angle search is designed
+in m11-include-search.md before implementation. No full C23 claim is made.

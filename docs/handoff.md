@@ -747,3 +747,30 @@ quoted operands are designed in m11-computed-includes.md before coding. Anchor
 relative search to the directive source (not generated/header-definition spelling
 sources) and never drain the next source line after isolated operand validation.
 No angle/system/-I support or complete C23 claim is made yet.
+
+## M11j final verification
+
+Isolated 73b76f8 passed the complete GCC/Clang normal + ASan/UBSan matrix,
+unit/CLI/oracle and QBE/reference/ABI execution. Exact-source CI passed:
+https://github.com/0x6432/kcc/actions/runs/38809079871
+M11j is complete within its ordinary-character scope. M11k verification remains
+independent and pending until its own matrix/CI results are checked.
+
+## M11l tested source checkpoint
+
+Macro-computed quoted operands now rescan one bounded isolated directive line.
+Relative lookup uses the directive source, not the generated string spelling or
+macro definition directory. Invalid expanded operands never consume the next
+source line. Directive collectors retain each token's invocation location, so
+computed include and conditional macro errors point to the call site.
+
+GCC full tests and QBE/reference/ABI execution passed. Computed include tests
+agree with both GCC and Clang on 24 streams each, covering object/function,
+stringizing/pasting, empty replacements, all newline forms, source-directory
+anchoring and malformed/missing operands. All 24 QBE/reference programs passed.
+Sanitized fuzzing passed 22969 lexer/preprocessor and 89116 pipeline inputs
+(112085 total), 26 seconds each, without executing arbitrary generated C.
+Full isolated M11l normal/sanitizer matrix and exact-source CI remain pending.
+M11k exact-source CI passed run 38810635063; its local GCC matrix passed, while
+its local Clang matrix is still running. M11m bounded -I/angle search is designed
+in m11-include-search.md before implementation. No full C23 claim is made.

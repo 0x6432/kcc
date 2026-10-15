@@ -74,10 +74,10 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
     for directive, message in [
         ('#include "missing.h"', 'cannot load quoted include'),
-        ('#include ""', 'only direct nonempty'), ('#include <x.h>', 'only direct nonempty'),
-        ('#define H "common.h"\n#include H', 'only direct nonempty'),
-        ('#include "common.h" extra', 'expected end of line'),
-        (r'#include "a\b.h"', 'backslashes'), ('#include u8"common.h"', 'only direct nonempty'),
+        ('#include ""', 'quoted name'), ('#include <x.h>', 'exactly one quoted include name'),
+
+        ('#include "common.h" extra', 'exactly one quoted include name'),
+        (r'#include "a\b.h"', 'backslashes'), ('#include u8"common.h"', 'quoted name'),
     ]:
         source.write_text(directive+'\nint main(void) { return 0; }\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)

@@ -720,45 +720,40 @@ static bool read_diagnostic_directive(struct preprocessor *preprocessor,
 	return false;
 }
 
-/* include-directive = '#' 'include' '"' q-char-sequence '"' newline
- * This increment accepts direct quoted names only, without escape decoding.
+static bool expand_include_operand(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token *header, struct token *error);
+
+/* include-directive = '#' 'include' include-operand
+ * The isolated operand must expand to one quoted name; no escape decoding.
  */
 static bool read_include_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, struct token *error)
 {
-	struct pp_token name = pp_lexer_next(&preprocessor->input);
-	const struct source *parent = name.location.source;
-	const unsigned char *text = parent->data + name.location.offset;
-	struct pp_token end;
+	struct pp_token name;
+	const struct source *parent = marker.location.source;
+	const unsigned char *text;
 	struct include_source *child;
 	size_t directory_length = 0;
 	size_t name_length;
 	char path[preprocess_include_path_limit];
 
-	if (name.kind == pp_invalid || name.has_non_directive_space) {
-		*error = reject_directive(preprocessor, marker, name,
-			name.kind == pp_invalid ? NULL :
-			"only space and tab are allowed in a preprocessing directive");
+	if (!expand_include_operand(preprocessor, marker, &name, error))
 		return false;
-	}
+	text = name.location.source->data + name.location.offset;
 	if (name.kind != pp_string || name.length < 3 || text[0] != '"') {
-		*error = reject_directive(preprocessor, marker, name,
-			"only direct nonempty quoted includes are supported yet");
+		diagnostic_error(preprocessor->diagnostics, name.expansion_location,
+			"include operand must expand to one nonempty unprefixed quoted name");
+		*error = invalid_token(marker);
 		return false;
 	}
 	name_length = name.length - 2;
 	for (size_t i = 1; i <= name_length; i++)
 		if (text[i] == '\\') {
-			*error = reject_directive(preprocessor, marker, name,
+			diagnostic_error(preprocessor->diagnostics, name.expansion_location,
 				"backslashes in quoted include names are not supported yet");
+			*error = invalid_token(marker);
 			return false;
 		}
-	end = pp_lexer_next(&preprocessor->input);
-	if (end.kind == pp_invalid || end.has_non_directive_space || !is_directive_end(end)) {
-		*error = reject_directive(preprocessor, marker, end,
-			end.kind == pp_invalid ? NULL : "expected end of line after quoted include");
-		return false;
-	}
 	if (text[1] != '/') {
 		const char *slash = strrchr(parent->name, '/');
 
@@ -773,7 +768,7 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 	memcpy(path + directory_length, text + 1, name_length);
 	path[directory_length + name_length] = 0;
 	if (!preprocessor->include_loader) {
-		diagnostic_error(preprocessor->diagnostics, name.location,
+		diagnostic_error(preprocessor->diagnostics, name.expansion_location,
 			"quoted includes require a configured source loader");
 		*error = invalid_token(marker);
 		return false;
@@ -795,7 +790,7 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 		char message[preprocess_include_path_limit + 64];
 
 		snprintf(message, sizeof(message), "cannot load quoted include '%s'", path);
-		diagnostic_error(preprocessor->diagnostics, name.location, message);
+		diagnostic_error(preprocessor->diagnostics, name.expansion_location, message);
 		source_destroy(&child->source);
 		*error = invalid_token(marker);
 		return false;
@@ -2447,7 +2442,8 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 		if (token.kind == pp_identifier && pp_spelling_is(token, "defined") &&
 			!replace_defined_operand(preprocessor, marker, &token, &count, error))
 			return false;
-		copy = copy_argument_token(preprocessor, (struct rescan_token) { .token = token }, marker, error);
+		/* Directive tokens retain their individual source invocation sites. */
+		copy = copy_argument_token(preprocessor, (struct rescan_token) { .token = token }, token, error);
 		if (!copy)
 			return false;
 		*tail = copy;
@@ -2475,6 +2471,73 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 		return false;
 	}
 	*value = result.bits != 0;
+	return true;
+}
+
+/* include-operand = pp-tokens newline
+ * Collect one raw line, then rescan in isolation. Validation must not drain
+ * source again: the next directive or C token already follows this operand.
+ */
+static bool expand_include_operand(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token *header, struct token *error)
+{
+	struct argument_token *head = NULL;
+	struct argument_token **tail = &head;
+	struct expansion_cursor *cursor;
+	struct rescan_token first;
+	struct rescan_token end;
+	struct pp_token token;
+	size_t count = 0;
+	bool success;
+
+	for (;;) {
+		struct argument_token *copy;
+
+		token = pp_lexer_next(&preprocessor->input);
+		if (token.kind == pp_invalid || token.has_non_directive_space) {
+			*error = reject_directive(preprocessor, marker, token,
+				token.kind == pp_invalid ? NULL :
+				"only space and tab are allowed in a preprocessing directive");
+			return false;
+		}
+		if (is_directive_end(token))
+			break;
+		if (++count > preprocess_header_token_limit) {
+			*error = reject_directive(preprocessor, marker, token,
+				"include operand token limit (1024) exceeded");
+			return false;
+		}
+		if (is_variadic_identifier(token)) {
+			*error = reject_directive(preprocessor, marker, token,
+				"variadic identifiers require a variadic macro replacement list");
+			return false;
+		}
+		/* Directive tokens retain their individual source invocation sites. */
+		copy = copy_argument_token(preprocessor, (struct rescan_token) { .token = token }, token, error);
+		if (!copy)
+			return false;
+		*tail = copy;
+		tail = &copy->next;
+	}
+	cursor = calloc(1, sizeof(*cursor));
+	if (!cursor) {
+		*error = stop_preprocessing(preprocessor, marker, "cannot allocate include macro cursor");
+		return false;
+	}
+	cursor->input = head;
+	cursor->end = token.location;
+	success = read_expanded_token(preprocessor, cursor, &first, error) &&
+		read_expanded_token(preprocessor, cursor, &end, error);
+	free(cursor);
+	if (!success)
+		return false;
+	if (end.token.kind != pp_eof) {
+		diagnostic_error(preprocessor->diagnostics, end.token.expansion_location,
+			"expected exactly one quoted include name after macro expansion");
+		*error = invalid_token(marker);
+		return false;
+	}
+	*header = first.token;
 	return true;
 }
 

@@ -718,7 +718,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define X 1\n#define X 2\nint main(void) { return X; }", "incompatible macro redefinition"),
         ("#define X 1 ##\nint main(void) { return 0; }", "token pasting requires an operand"),
 
-        ("#include X 12u\nint main(void) { return 0; }", "only direct nonempty quoted includes"),
+        ("#include X 12u\nint main(void) { return 0; }", "exactly one quoted include name"),
         ("#unknown 12u\nint main(void) { return 0; }", "unknown preprocessing directive"),
         ("#42\nint main(void) { return 0; }", "expected a directive name"),
         ("#\v\nint main(void) { return 0; }", "only space and tab"),

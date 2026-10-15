@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11k. The chronological entries below describe what each
+Current milestone: M11l. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -594,3 +594,19 @@ each loaded source retains the earlier 16 MiB limit. File EOF is not transparent
 to macro invocation probing: incomplete calls cannot continue into a parent.
 Conditional groups cannot cross file boundaries. Root public EOF stays stable.
 These are bounded subset semantics, not a claim of complete C23 include search.
+
+## M11l
+
+Quoted include operands may be macro-computed, including aliases, function
+arguments, stringizing/pasting and optional replacements. The raw operand line
+is bounded to 1024 pp tokens and rescans in isolation, with shared macro limits.
+The result must be exactly one nonempty unprefixed quoted token; it is not C
+string concatenation. Relative search remains anchored to the #include source.
+Angle names/search paths, system headers and general header-name encoding remain
+unimplemented. Backslashes in names retain M11k's explicit rejection policy.
+
+Failed expanded operands never consume the following source line or call the
+loader. Directive tokens keep individual invocation diagnostics instead of all
+pointing at #. Malformed raw quoted text now produces its lexical diagnostic
+without an extra obsolete unsupported-directive error; this intentional change
+is regression-tested separately from expansion-format errors.

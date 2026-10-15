@@ -6,12 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11k: direct quoted includes now load nested headers, share macro bindings,
+M11l: direct and macro-computed quoted includes load nested headers, share macro bindings,
 and retain child source buffers for parsing and diagnostics. File/conditional
 boundaries are explicit; loading and retained bytes have documented bounds.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior
-macro operators. Macro-computed/angle includes, search paths, general encodings
+macro operators. Angle includes, search paths, general encodings
 and full C23 remain unfinished. See `docs/m11-quoted-includes.md`,
 `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -78,7 +78,7 @@ int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: C string expressions, macro-computed/angle includes and search paths,
+Unsupported: C string expressions, angle includes and search paths,
 full conditional expressions, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.

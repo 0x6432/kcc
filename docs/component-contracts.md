@@ -807,3 +807,15 @@ readers similarly cannot consume parent lines. A child cannot close a parent's
 conditional group. Unclosed child conditionals diagnose then return stable root
 EOF; parser must reject its deferred diagnostic. Include filenames/physical
 locations remain the child's own, not the root's or a generated spelling view.
+
+## M11l computed include contract
+
+Quoted operands rescan one bounded isolated raw line, using normal macro
+operators and no defined-expression handling. Require exactly one resulting
+unprefixed quoted token. Relative paths always use the directive source, not
+macro spelling/definition sources; generated views never become search roots.
+Raw directive token collection preserves individual invocation locations (also
+corrected for conditional expression collection). Expanded format recovery must
+not drain input again: the next source line is already available for normal
+conditional/lexical processing. Raw lexical failures take precedence over
+emitting an additional expanded-header format diagnostic.

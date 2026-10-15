@@ -62,6 +62,8 @@ static void check_stream(const char *text, const struct expected_token *expected
 	assert_same_token(last, preprocess_next(&preprocessor));
 	assert_same_token(last, preprocess_peek(&preprocessor));
 	assert_same_token(last, preprocess_next(&preprocessor));
+	if (diagnostics.errors != expected_errors)
+		fprintf(stderr, "error count mismatch (%zu vs %zu): %s\n", diagnostics.errors, expected_errors, text);
 	assert(diagnostics.errors == expected_errors);
 	if (message) {
 		char text_buffer[2048];
@@ -127,7 +129,7 @@ static void test_known_and_unknown_directives(void)
 	check_stream("#int\nint", expected, sizeof(expected) / sizeof(expected[0]),
 		1, "unknown preprocessing directive");
 	check_stream("#include X 18446744073709551616\nint", expected,
-		sizeof(expected) / sizeof(expected[0]), 1, "only direct nonempty quoted includes");
+		sizeof(expected) / sizeof(expected[0]), 1, "exactly one quoted include name");
 }
 
 static void test_malformed_and_misplaced(void)
@@ -193,7 +195,7 @@ static void test_lexical_errors_and_spliced_locations(void)
 	check_stream("#/* unterminated", raw_error, sizeof(raw_error) / sizeof(raw_error[0]),
 		1, "unterminated block comment");
 	check_stream("#include X \"bad\nint", unsupported,
-		sizeof(unsupported) / sizeof(unsupported[0]), 2, "unterminated quoted");
+		sizeof(unsupported) / sizeof(unsupported[0]), 1, "unterminated quoted");
 	check_stream("#\\\r\nunknown X\nint", unsupported,
 		sizeof(unsupported) / sizeof(unsupported[0]), 1, ":2:1: error: unknown");
 }
@@ -1578,8 +1580,55 @@ static void test_include_byte_budget(void)
 	free(body);
 }
 
+static void test_computed_include_operands(void)
+{
+	struct test_include_context context = { .text = "42" };
+	char text[4096];
+	size_t used;
+
+	check_include_stream("#define H \"h\"\n#include H", &context, 1, 0, true);
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream("#define S(x) #x\n#include S(h)", &context, 1, 0, true);
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream("#if 1\n#define H bad\n#include H\n#endif\n42", &context, 0, 1, true);
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream("#define E\n#include E\n42", &context, 0, 1, true);
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream("#define H \"h\" \"j\"\n#include H\n42", &context, 0, 1, true);
+	used = (size_t)sprintf(text, "#define E\n#define H \"h\"\n#include ");
+	for (size_t i = 1; i < preprocess_header_token_limit; i++)
+		used += (size_t)sprintf(text + used, "E ");
+	sprintf(text + used, "H");
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream(text, &context, 1, 0, true);
+	sprintf(text + used, "E H");
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream(text, &context, 0, 1, false);
+	{
+		const char *input = "#define H(x) x\n#include H\n(42)";
+		struct source source;
+		struct preprocessor preprocessor;
+		struct diagnostics diagnostics = { 0 };
+
+		assert(source_from_bytes(&source, "root.c", (const unsigned char *)input, strlen(input)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		preprocess_set_include_loader(&preprocessor, load_test_include, &context);
+		assert(preprocess_next(&preprocessor).kind == token_invalid);
+		assert(preprocess_next(&preprocessor).kind == token_left_paren);
+		assert(preprocess_next(&preprocessor).integer == 42);
+		assert(preprocess_next(&preprocessor).kind == token_right_paren);
+		assert(preprocess_next(&preprocessor).kind == token_eof);
+		assert(diagnostics.errors == 1 && !context.calls);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+	}
+}
+
+
 int main(void)
 {
+	test_computed_include_operands();
 	test_include_byte_budget();
 	test_include_macro_boundary();
 	test_quoted_includes();
