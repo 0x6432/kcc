@@ -8,7 +8,7 @@ and update their tests in the same checkpoint.
 | --- | --- | --- |
 | source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
 | lexer | preprocessor | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
-| preprocessor | parser | One cached language token, null directives removed before conversion; errors prevent IL; macro provenance is future work |
+| preprocessor | parser | One cached language token, null/define/undef consumed and object macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
 | sema | codegen | Validated typed AST, explicit conversions, resolved declarations; failure prevents codegen |
 | codegen | QBE | Well-formed IL for the pinned target; no source-language validation here |
@@ -438,3 +438,44 @@ still rejected as an empty translation unit by the current parser.
 M09's phase/token/null-directive foundation is complete, not all preprocessing.
 M10 must design macro storage, expansion contexts, recursion suppression and
 limits before implementation; never treat expanded # as a new directive.
+
+
+## M10a object-like macro contract
+
+The preprocessor owns arena-backed macro identities/replacement lists, borrowed
+source spellings and a fixed expansion-frame stack. preprocess_init initializes
+all state; preprocess_destroy frees it and clears state. All driver, test and
+fuzz callers destroy after AST use and before source destruction. Raw lexer and
+parser entry APIs are otherwise unchanged. Arena is linked into PREPROCESS_SOURCES.
+
+Raw pp_token.location is spelling; expansion_location initially matches it.
+Copied expansion tokens retain spelling but carry the outermost invocation.
+Converted token.location is the diagnostic location; spelling_location plus
+length is the only spelling slice. Diagnostics/AST nodes keep using location;
+sema equality, numeric conversion and emitted function symbols use spelling.
+There is no full expansion-chain note API yet. EOF has both locations at source
+length. Error lengths describe spelling, not invocation width. Expanded output
+need not have increasing spelling offsets or fit within the invocation name.
+
+Definition/undefinition parsing never expands operands or converts replacement
+literals. Completed valid lines bind atomically; failures preserve old bindings.
+Redefinitions compare kind/spelling and inter-token spacing. All attempted stored
+replacements count against retained storage, even duplicates/rejected definitions;
+undefinition does not reclaim identities or arena memory. Macro identity is
+stable across undef/redefine; later definitions affect subsequent rescans only.
+
+Frame push and replacement-token visits consume the translation-unit work budget.
+An exhausted frame stays active until its last token is fully rescanned; direct
+and mutual object recursion terminate. No C parser grammar or typed AST variant
+was added. Function-like argument expansion must revisit unavailability/hide sets.
+Raw-source markers alone dispatch directives; replacement markers reach language
+conversion and fail without starting a directive. Deferred numeric/string errors
+point at invocation sites. A limit/allocation failure returns one nonempty invalid
+token then permanent EOF, with no repeated diagnostics from peek. Source/raw
+scanning and diagnostics retain their earlier limits/performance caveats.
+
+Fuzz invariants now bound language steps by source length + expansion work + one
+terminal error. Diagnostic offsets are nondecreasing (equal for one invocation);
+spelling offsets may go backward, but spelling slices must remain source-bounded.
+No arbitrary generated program is executed. The test-only pp_oracle compares
+actual kind/spelling pairs with host -E -P output; CI uses both GCC and Clang.

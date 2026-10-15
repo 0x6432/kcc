@@ -29,6 +29,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(codegen_translation_unit(stream, unit));
 	}
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 	return 0;

@@ -17,9 +17,9 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-M09c dispatches null directives before token conversion. Non-null directives,
-macro expansion and includes remain unsupported; the host preprocessor is not
-invoked. Complete phase ordering, encoding/UCNs and final-line constraints are
+M10a dispatches null/define/undef directives and rescans object-like replacement
+tokens before language conversion. Function-like macros and includes remain
+unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
 not claimed. Missing terminal newlines remain an acceptance extension; no
 synthetic newline is appended. Reference: WG14 N3096 5.1.1.2 and 6.10,
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
@@ -81,10 +81,17 @@ the directive, even if the bad separator is at EOF. Distinct raw lexical errors
 remain diagnostics; repeated peek/EOF never repeats them. Debug token inspection
 can resume after a bad line, while compilation rejects it before any IL.
 
-Future macro work extends this stage, not the lexer/parser. It must specify
-ownership, recursion suppression, token provenance and resource bounds before
-implementation. Macro-generated # cannot introduce new directives. Headers,
-conditional sections and macro operators remain later milestones.
+M10a extends this stage, not the parser grammar. The preprocessor owns its macro
+arena; destroy it after AST use, before destroying source. Raw token location
+addresses spelling and expansion_location addresses the outermost invocation.
+Language token spelling_location addresses spelling; location is for diagnostics.
+Sema name comparison and codegen symbol spelling must never use location as text.
+An explicit frame stack rescans replacements, retaining disabled ancestors while
+their final token is examined. Only source frames can dispatch directives.
+Macro-generated # cannot introduce directives. See m10-object-macros.md for
+storage, resource policy, object-only suppression and deferred work. Function
+arguments require a new availability/hide-set review, not naive stack reuse.
+Headers, conditional sections and macro operators remain later milestones.
 
 ## Target model and QBE limits
 

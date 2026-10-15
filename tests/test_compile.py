@@ -313,6 +313,26 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("%\\\n:\nint main(void) { return 14; }\n", 14),
         ("/* leading\n */ # /*\v\f*/\nint main(void) { return 15; }\n", 15),
     ]
+    directive_programs += [
+        ("#define VALUE 6\n#define DOUBLE VALUE+VALUE\n"
+         "int main(void) { return 3*DOUBLE; }\n", 24),
+        ("#define TYPE int\n#define START main\n#define RET return\n"
+         "TYPE START(void) { RET 42; }\n", 42),
+        ("#define NAME plus\n#define PARAM value\n#define N 4\n"
+         "int NAME(int PARAM) { return PARAM+N; }\n"
+         "int main(void) { return NAME(7); }\n", 11),
+        ("#define X 1\nint first(void) { return X; }\n#undef X\n#define X 3\n"
+         "int main(void) { return first()+X; }\n", 4),
+        ("#define EMPTY\n#define VALUE ALIAS\n#define ALIAS 8\n"
+         "int main(void) { EMPTY return VALUE; }\n", 8),
+        ("#define SELF SELF\n#define A B\n#define B A\n"
+         "int main(void) { int SELF=3; int A=4; return SELF+A; }\n", 7),
+        ("#define CALL add\nint add(int x);\n"
+         "int main(void) { return CALL(6); }\nint CALL(int x) { return x+2; }\n", 8),
+        ("%:define X 3\nint main(void) { return X; }\n", 3),
+        ("#define UNUSED 12u .5 \"unused\"\nint main(void) { return 7; }\n", 7),
+        ("int main(void) { return 7; }\n#define X 1\n", 7),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -500,7 +520,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return .5; }", "int main(void) { return 1'000; }",
         "int main(void) { return 'x'; }", "int main(void) { return u8'x'; }",
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
-        "%:define X 3\nint main(void) { return X; }",
+        "%:define X() 3\nint main(void) { return X; }",
     ]
     invalid += [
         "#42\nint main(void) { return 0; }",
@@ -510,11 +530,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { #\nreturn 0; }",
         "int/*\n*/#\nmain(void) { return 0; }",
         "#/*\n*/int main(void) { return 0; }",
-        "int main(void) { return 0; }\n#define X 1\n",
+        "int main(void) { return 0; }\n#define X() 1\n",
         "#\n", "# // comment\n", "%:%:\nint main(void) { return 0; }",
         "#unknown \0\nint main(void) { return 0; }",
     ]
-    for name in ("define", "undef", "include", "embed", "line", "error", "warning", "pragma",
+    for name in ("include", "embed", "line", "error", "warning", "pragma",
                  "if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif"):
         invalid.append(f"#{name} x\nint main(void) {{ return 0; }}")
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
@@ -526,7 +546,14 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
-        ("#define X 12u\nint main(void) { return 0; }", "preprocessing directive is not supported"),
+        ("#define VALUE 12u\nint main(void) { return VALUE; }", ":2:25: error: unsupported numeric"),
+        ("#define A B\n#define B missing\nint main(void) { return A; }", ":3:25: error:"),
+        ("#define NAME main\nint NAME(int x) { return x; }", ":2:5: error:"),
+        ("#define X() 1\nint main(void) { return 0; }", "function-like macros"),
+        ("#define X 1\n#define X 2\nint main(void) { return X; }", "incompatible macro redefinition"),
+        ("#define X 1 ## 2\nint main(void) { return 0; }", "macro token pasting"),
+
+        ("#include X 12u\nint main(void) { return 0; }", "preprocessing directive is not supported"),
         ("#unknown 12u\nint main(void) { return 0; }", "unknown preprocessing directive"),
         ("#42\nint main(void) { return 0; }", "expected a directive name"),
         ("#\v\nint main(void) { return 0; }", "only space and tab"),

@@ -78,6 +78,7 @@ static void test_resolved_tree(void)
 	assert(item->item.next == NULL);
 
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
@@ -110,6 +111,7 @@ static void test_point_of_declaration(void)
 	load = (struct ast_load_expression *)local->initializer;
 	assert(((struct ast_name_expression *)load->operand)->declaration == local);
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
@@ -171,6 +173,7 @@ static void test_conditional_scopes_and_logic(void)
 	load = (struct ast_load_expression *)return_node->value;
 	assert(((struct ast_name_expression *)load->operand)->declaration == outer);
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
@@ -223,6 +226,7 @@ static void test_loop_targets(void)
 	continue_node = (struct ast_continue_statement *)item->statement;
 	assert(continue_node->target == &outer->statement);
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
@@ -288,6 +292,7 @@ static void test_for_scope_and_target(void)
 	load = (struct ast_load_expression *)return_node->value;
 	assert(((struct ast_name_expression *)load->operand)->declaration == outer);
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
@@ -334,6 +339,7 @@ static void test_function_symbols(void)
 		((struct ast_return_statement *)item->statement)->value;
 	assert(call->function == prototype->symbol);
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
@@ -400,6 +406,7 @@ static void test_parameters_and_arguments(void)
 	assert(!type_compatible(&one->type, &zero->type));
 	assert(!type_compatible(&one->type, &type_int));
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }

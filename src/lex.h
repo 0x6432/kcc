@@ -45,12 +45,14 @@ enum token_kind {
 	token_or_or,
 };
 
-/* Spelling is source->data + location.offset, with explicit logical length.
+/* Spelling uses spelling_location; location is the diagnostic invocation.
+ * Both offsets address prepared source data, with explicit logical length.
  * Use source_physical_offset() only for physical positions, not spelling reads.
  */
 struct token {
 	enum token_kind kind;
 	struct source_location location;
+	struct source_location spelling_location;
 	size_t length;
 	uint64_t integer;
 };
@@ -71,6 +73,7 @@ enum pp_token_kind {
 struct pp_token {
 	enum pp_token_kind kind;
 	struct source_location location;
+	struct source_location expansion_location;
 	size_t length;
 	bool leading_space;
 	bool at_line_start;

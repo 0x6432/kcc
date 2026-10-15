@@ -16,7 +16,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
-| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
+| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a object macros complete) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
@@ -361,3 +361,43 @@ separate-object integer ABI and ASan/UBSan. Final sanitized fuzzing completed
 69628 lexer/preprocessor inputs and 126498 full-pipeline inputs in 26 seconds
 each. Earlier 21-second runs passed too (54419/127155). The null-directive
 fixture compiles/links and exits 7. Remote CI is verified separately after push.
+
+
+## M10A completion record
+
+Design was recorded in m10-object-macros.md before implementation. Object-like
+#define/#undef use arena-owned linked replacement tokens and stable macro
+identities, then an explicit bounded rescan stack. Empty macros, aliases, keyword
+names, direct/mutual recursion, final-token suppression, source-order definition
+changes and spacing-sensitive compatible redefinitions are tested. Rejected
+lines preserve prior bindings. Adjacent function-like definitions, token pasting
+and protected names reject explicitly; replacement # never starts a directive.
+
+Raw tokens now distinguish spelling and expansion locations; language tokens
+distinguish diagnostic and spelling locations. Numeric conversion, semantic name
+matching and QBE symbol emission were migrated together. Every preprocessor
+consumer releases its storage. Parser grammar and typed AST variants are unchanged.
+
+Tests cover cache/EOF/provenance, macro identity reuse, all five resource limits,
+a countable expansion-work boundary and exponential expansion rejection. A new
+97-case deterministic kind/spelling oracle includes cyclic macro graphs against
+HOST_CC; CI selects GCC and Clang. Ten macro runtime/reference cases run under
+LF/CRLF/CR. Compiler diagnostics use invocation locations. Both existing fuzz
+paths have macro corpus seeds and expansion-aware progress/spelling assertions.
+
+M10 is NOT complete: next checkpoint is M10b function-like definitions and
+arguments, with explicit unavailability/hide-set and argument-lifetime design
+before coding. Stringizing, pasting, includes and conditions remain M11.
+Final local results/fuzz counts follow below; remote CI is checked after push.
+
+
+M10a local verification passed: GCC 11.5 and Clang 15 strict normal builds and
+ASan/UBSan builds; CLI/source/raw/token/cache/provenance/limit/AST regressions;
+97 token/spelling oracle cases with each host compiler; QBE/reference execution
+and separate-object integer ABI with both hosts. Final sanitized fuzzing passed
+43915 lexer/preprocessor and 125308 full-pipeline inputs in 26 seconds each.
+An earlier 26-second run passed 52672/136498 inputs. Both harnesses exercise the
+real macro stage and never execute arbitrary generated code. A final normal
+make test passed and --version reports m10a. Compiler build artifacts remain
+under 10 MiB after cleanup; external tools/logs under 75 MiB. Remote CI is
+verified separately after pushing; obtain the current hash from git log -1.

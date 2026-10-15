@@ -16,6 +16,8 @@ static void assert_same_token(struct pp_token left, struct pp_token right)
 	assert(left.kind == right.kind);
 	assert(left.location.source == right.location.source);
 	assert(left.location.offset == right.location.offset);
+	assert(left.expansion_location.source == right.expansion_location.source);
+	assert(left.expansion_location.offset == right.expansion_location.offset);
 	assert(left.length == right.length);
 	assert(left.leading_space == right.leading_space);
 	assert(left.at_line_start == right.at_line_start);

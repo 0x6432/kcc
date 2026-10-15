@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M09c. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09 additions.
+Current milestone: M10a. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10a additions.
 
 ## M00
 
@@ -252,7 +252,7 @@ support, encoding/escape-value validation, string concatenation, macro expansion
 location mappings remain the only provenance. No additional token allocation or
 whole-file materialization; all source and AST limits remain in force.
 
-## M09c (current)
+## M09c
 
 The real preprocessor facade owns parser input; no temporary language lexer
 wrapper remains. Only null #/%: directives are supported. Other standard names
@@ -283,3 +283,35 @@ superlinear time; there is no diagnostic-count cap yet. Source size is bounded,
 and fuzz cases use their existing input/time limits, but this is not a hostile
 large-input CPU guarantee. Review this diagnostic interaction when setting M10
 macro expansion/resource budgets.
+
+
+## M10a (current)
+
+Object-like definitions/undefinitions and rescanning are supported; the earlier
+M09c "no macro" limitations are superseded for this slice only. Null directives
+remain supported. Macros can replace keywords, numbers, names and punctuation,
+including empty replacement lists. Unused unsupported literal spellings are
+stored without conversion. Definition/undefinition errors preserve old bindings.
+Only raw source markers dispatch directives; generated markers never do.
+
+No function-like definitions/arguments, variadics, stringizing, token pasting,
+predefined macros, includes, conditions, pragmas, #line or diagnostic directives.
+Function-like definitions and ##/%:%: diagnose explicitly. Define/undef of defined
+or implementation-reserved __.../_Upper... names is outside this slice and
+rejected. This is a deliberate subset policy, not a claim those uses all violate
+the same C23 constraint. Ordinary keywords are allowed as macro names.
+
+Limits: 1024 distinct names including inactive identities, 1024 tokens per
+replacement, 65536 arena-retained tokens across attempted definitions (including
+compatible duplicates), 128 active frames and 65536 expansion work units per TU
+(one push or replacement-token visit). #undef does not reclaim storage. Failures
+of limits/allocation latch EOF after one invalid token. Allocation failure paths
+are handled but not fault-injection tested. Raw source scanning/diagnostic prefix
+rescanning retain their earlier bounds/caveats; these work limits do not promise
+a hostile large-input CPU bound. There is still no diagnostic-count cap.
+
+Spelling and outermost invocation locations are distinct. Full expansion-chain
+notes, presumed #line positions and header/source stacks remain absent. Object
+recursion suppression uses active frames and is tested against GCC/Clang; do not
+reuse this as a full function-argument availability/hide-set implementation.
+All prior language/type/ABI/encoding restrictions remain; no full-C23 claim.

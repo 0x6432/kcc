@@ -25,8 +25,10 @@ static bool dump_language_tokens(const struct source *source, struct diagnostics
 			token_kind_name(token.kind)) < 0)
 			output_ok = false;
 		if (token.kind == token_eof)
-			return output_ok;
+			break;
 	}
+	preprocess_destroy(&preprocessor);
+	return output_ok;
 }
 
 static bool dump_pp_tokens(const struct source *source, struct diagnostics *diagnostics)
@@ -102,6 +104,7 @@ static int compile_source(const char *path)
 			fputs("kcc: error: cannot write QBE output\n", stderr);
 	}
 	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	return success ? 0 : 1;
 }
@@ -114,7 +117,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m09c");
+		puts("kcc milestone m10a");
 		return 0;
 	}
 

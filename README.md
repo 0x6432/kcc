@@ -6,7 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M09c: an on-demand preprocessor now owns parser input. Null directives (# and %:) are removed before language-token conversion; unsupported, unknown, malformed and misplaced directives diagnose clearly. The temporary lexer adapter is gone. M09 is complete for its stated phase/token/null-directive subset; macro expansion remains M10.
+M10a: object-like `#define`/`#undef`, empty replacements, aliases and recursive
+rescanning are implemented with explicit token frames and bounded work. Spelling
+locations remain distinct from invocation diagnostics. Function-like macros are
+next; this is still a small C23 subset, not a complete preprocessor/compiler.
+
+See `docs/m10-object-macros.md` for the decisions, limits and unsupported cases.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -66,30 +71,35 @@ cc build/example.s -o build/example
 ```
 
 Supported: normalized line endings, backslash-newline splicing, physical source
-locations, null directives (#/%:), decimal int literals, int locals, simple assignment, arithmetic,
+locations, null directives (#/%:), object-like macros, decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: non-null directives/macros, other types, globals/storage classes, local
+Unsupported: function-like macros, token pasting, stringizing, includes,
+conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadics, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
 Limits: 16 MiB source, 128 expression/statement nesting and typed expression
 depth, 512 external declarations, 256 distinct functions, 128 parameters/call
-arguments, 4096 body items and 256 parameter/local slots per function.
+arguments, 4096 body items and 256 parameter/local slots per function. Macros:
+1024 distinct names, 1024 tokens/definition, 65536 retained replacement tokens,
+128 expansion frames and 65536 expansion work units (pushes + token visits).
 
 `make test-codegen` also runs separate-object ABI tests with the selected host
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
-CI runs GCC and Clang, compiler sanitizers, generated executables, ABI tests
+CI runs GCC and Clang, compiler sanitizers, 97 host-preprocessor token/spelling oracle cases, generated
+executables, ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
 ## Raw token inspection
 
 `--tokens file.c` dumps language-token kinds and physical starts after null
-directives are removed.
+directives are removed and object-like macros expanded. Expansion tokens print
+the outermost invocation position, not their definition position.
 `--pp-tokens file.c` dumps the raw stream without dispatching directives or
 converting numbers/keywords. Each line has:
 
@@ -107,6 +117,6 @@ all C23 punctuator spellings (including :: and digraphs). This does not implemen
 those language features: conversion still rejects unsupported constants, types
 and operators. Brace digraphs <%/%> are accepted by the current grammar. Raw
 inspection can succeed for text the compiler rejects; it is not a preprocessor
-or conformance check. Only null directives are handled by the compiler today.
-Header-name context, Unicode/UCNs and macro provenance
-remain future work. Both debug dumps may show partial output on lexical errors.
+or conformance check. Null/define/undef directives are handled by the compiler.
+Header-name context, Unicode/UCNs, full expansion-stack diagnostic notes and
+function-like macros remain future work. Both debug dumps may show partial output on lexical errors.

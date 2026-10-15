@@ -33,8 +33,8 @@ struct sema {
 static bool same_name(struct token left, struct token right)
 {
 	return left.length == right.length &&
-		memcmp(left.location.source->data + left.location.offset,
-			right.location.source->data + right.location.offset,
+		memcmp(left.spelling_location.source->data + left.spelling_location.offset,
+			right.spelling_location.source->data + right.spelling_location.offset,
 			left.length) == 0;
 }
 
@@ -512,8 +512,8 @@ static bool sema_function_declaration(struct sema *sema,
 
 	if (!sema_parameter_names(sema, declaration, definition != NULL))
 		return false;
-	if (main_name.length == 4 && memcmp(main_name.location.source->data +
-		main_name.location.offset, "main", 4) == 0 && declaration->parameter_count) {
+	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
+		main_name.spelling_location.offset, "main", 4) == 0 && declaration->parameter_count) {
 		diagnostic_error(sema->diagnostics, main_name.location,
 			"only zero-parameter main is supported yet");
 		return false;

@@ -30,6 +30,7 @@ static struct pp_token make_pp_token(struct pp_lexer *lexer,
 	struct pp_token token = {
 		.kind = kind,
 		.location = { lexer->source, beginning },
+		.expansion_location = { lexer->source, beginning },
 		.length = lexer->offset - beginning,
 		.leading_space = lexer->leading_space,
 		.at_line_start = lexer->at_line_start,
@@ -316,7 +317,7 @@ static bool spelling_is(struct token token, const char *spelling)
 	size_t length = strlen(spelling);
 
 	return token.length == length &&
-		memcmp(token.location.source->data + token.location.offset, spelling, length) == 0;
+		memcmp(token.spelling_location.source->data + token.spelling_location.offset, spelling, length) == 0;
 }
 /* Keep unsupported C keywords out of the ordinary identifier namespace. */
 static bool is_unsupported_keyword(struct token token)
@@ -376,7 +377,7 @@ static struct token invalid_language_token(struct token token,
 
 static struct token convert_number(struct token token, struct diagnostics *diagnostics)
 {
-	const unsigned char *spelling = token.location.source->data + token.location.offset;
+	const unsigned char *spelling = token.spelling_location.source->data + token.spelling_location.offset;
 	uint64_t value = 0;
 	bool overflow = false;
 
@@ -438,7 +439,8 @@ struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostic
 {
 	struct token token = {
 		.kind = token_invalid,
-		.location = input.location,
+		.location = input.expansion_location,
+		.spelling_location = input.location,
 		.length = input.length,
 	};
 

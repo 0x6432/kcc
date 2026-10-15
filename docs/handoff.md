@@ -2,12 +2,12 @@
 
 ## Current checkpoint
 
-M09c: preprocessor ownership, null directives and initial directive errors.
+M10a: bounded object-like macro definitions, undefinition and rescanning.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M09b remote CI passed: https://github.com/0x6432/kcc/actions/runs/38719725392
-M09's stated phase/token/null subset is complete. Get the exact latest hash
-from git log -1; this file avoids a circular reference to its own commit.
+M09c remote CI passed: https://github.com/0x6432/kcc/actions/runs/38725528977
+M09's stated subset is complete; M10a object macros are complete, M10b is next.
+Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
 ## Resume safely
 
@@ -25,13 +25,13 @@ from git log -1; this file avoids a circular reference to its own commit.
 ## Architecture and interactions
 
 source_load/source_from_bytes still load raw bounded bytes. source_prepare
-runs explicitly before lexer_init and before any token spelling is borrowed.
+runs explicitly before pp_lexer_init and before any token spelling is borrowed.
 It normalizes CRLF/lone CR, then deletes immediate backslash-newline pairs
 while traversing original physical units. Do not rescan newly adjacent output.
 This precedes comment recognition, so continued line comments and split comment
 markers are intentional. No whitespace after backslash splice extension.
 
-Prepared source.data/length and token location.offset/length are logical bytes.
+Prepared source.data/length and token spelling offsets/lengths are logical bytes.
 Name lookup, types and QBE symbols keep using contiguous logical spelling.
 Changed sources own optional physical_data/physical_length plus sparse offset
 checkpoints; unchanged sources keep identity offsets without an extra buffer.
@@ -43,7 +43,7 @@ Never use physical offsets to index logical spelling data.
 Preparation is idempotent and transactional on allocation failure. Call it only
 on an initialized source, before any borrowed spellings; destroy frees optional
 buffers/maps too. Both fuzz harnesses and every lexer caller were updated.
-Future callers must prepare explicitly; lexer_init asserts this precondition.
+Future callers must prepare explicitly; pp_lexer_init asserts this precondition.
 No full-file token vector or new parser grammar/API was introduced.
 
 M09b adds pp_token/pp_token_kind and pp_lexer in lex.h/lex.c. Raw numbers have
@@ -58,7 +58,7 @@ External newlines are explicit tokens and reset line-start state. A block
 comment, including internal newlines, is one space; it does not end a directive.
 Line comments stop before their newline. leading_space does not include an
 already-emitted newline; a macro consumer must handle that explicit token.
-VT/FF outside comments set has_non_directive_space; M09c must validate it only
+VT/FF outside comments set has_non_directive_space; the preprocessor validates it only
 in directive separators after # (not before #). EOF and repeat-peek flags are
 stable, with no repeated diagnostics.
 
@@ -80,7 +80,7 @@ without converting body numbers or keywords. Raw-invalid names retain lexical
 locations/diagnostics; distinct lexical errors while draining may add errors.
 Repeated peek/EOF never duplicates them. Debug inspection can continue next line;
 compilation stops on errors and produces no IL. Null-only streams are accepted
-here; the current parser still rejects an empty TU. No macro state/allocation.
+here; the current parser still rejects an empty TU. M10a adds macro state below.
 
 One implementation file per stage, concrete AST structs, on-demand lexer with
 one cached token, recursive descent/BNF comments and Pratt expressions remain.
@@ -119,11 +119,12 @@ implicit return value. No automatic local zeroing or missing-return warning.
 
 Raw quoted literals and punctuators do not enable their C semantics. Only brace
 digraphs are newly accepted language spelling; int-only conversion still applies.
-Only null directives are supported. No non-null directives/macros, other types,
+Null/define/undef and object-like macros are supported. No function-like macros,
+macro operators, other directives, other types,
 pointers/function values, variadics, local
 prototypes, globals/storage classes, comma/update/compound-assignment operators.
-Partial phases only: no non-null directives, header-name context, encoding/UCNs/BOM,
-#line presumed locations or macro provenance yet. Missing terminal newlines
+Partial phases only: no header-name context, encoding/UCNs/BOM,
+#line presumed locations or full expansion-stack notes yet. Missing terminal newlines
 remain an acceptance extension, not strict phase-2 validation. No synthetic
 newline is appended. Allocation failures are handled but fault injection is
 not yet tested. No full C23 conformance claim. Resource limits: 16 MiB source, expression and
@@ -154,21 +155,38 @@ paths. Final local/fuzz results and remote verification follow below.
 
 ## Next milestone
 
-M10: plan small object-like definition/undefinition and rescan slices before
-coding. Specify macro table/replacement-token ownership, raw-versus-expanded
-input frames, deferred conversion, recursion suppression semantics, diagnostics,
-provenance and expansion/depth/output limits. Do not use naive string replacement
-or re-lex whole translation units. Verify suppression/rescanning corner cases
-against the chosen C23 draft and host preprocessors; a macro-generated # must
-never start a directive. Keep each concrete state type explicit and code readable
-in preprocess.c. Object-like and function-like macros can be separate tested
-checkpoints; stringizing/pasting/includes/conditions remain M11. Update relevant
-caller ownership/lifetime APIs together if macro storage needs the arena.
+M10b: function-like definitions and argument substitution. Read
+m10-object-macros.md first. Design balanced argument collection, empty/zero
+arguments, raw vs pre-expanded argument ownership, redefinition comparison,
+parameter substitution, unavailable tokens/hide sets and rescan with following
+source tokens BEFORE coding. The M10a active-frame scheme is object-only; do not
+assume it handles argument rescan boundaries. Choose another small tested slice
+if full function substitution is too large. Variadics may be a separate M10c.
+Stringizing/pasting/includes/conditions remain M11. Preserve the one cached
+language token, deferred conversion, source-order visibility, transactional
+bindings and separate spelling/invocation positions. No whole-TU token vector.
+
+M10a owns struct arena storage plus macro linked lists and a fixed frame stack
+in struct preprocessor. Each name identity survives #undef; borrowed source
+spellings survive all AST use. preprocess_destroy must follow AST arena use and
+precede source_destroy. Raw pp_token.location is spelling; expansion_location is
+outermost invocation. Language token.location is diagnostic; spelling_location
+is for numeric/name/symbol reads. Error token length is spelling width, not
+invocation width. --tokens shows invocation starts; --pp-tokens remains raw.
+
+Limits: 1024 names, 1024 replacement tokens/definition, 65536 retained tokens
+across attempted definitions, depth 128, 65536 expansion work units (pushes +
+replacement visits). Limit/allocation error returns one invalid token then
+stable EOF. Defined/reserved implementation macro names reject for this subset.
+Function-like definitions and ## reject, unused unsupported literals remain raw.
+Replacement # never dispatches. See component-contracts.md for ownership and
+fuzz bounds. Macro tests include a 97-case token/spelling host oracle, runtime
+programs, recursion/identity/spacing/error/limit checks and seeded fuzzing.
 
 Run normal GCC/Clang, stream/source/oracle/AST, QBE/reference/ABI, ASan/UBSan and
 both fuzz paths. Clang/compiler-rt vanished on this resume and were restored with
 sudo dnf install -y clang compiler-rt; do not assume dependencies persist. Commit/
-push each tested checkpoint and update docs. Final M09c local/fuzz results are
+push each tested checkpoint and update docs. Final M10a local/fuzz results are
 recorded below; verify its remote CI independently after pushing.
 
 Diagnostic performance note: line/column lookup rescans physical prefixes;
@@ -182,5 +200,17 @@ source/oracle/AST, QBE/reference executables, separate-object ABI and ASan/UBSan
 Final sanitized fuzzing: 69628 lexer/preprocessor and 126498 pipeline inputs in
 26 seconds each; earlier runs passed (54419/127155 in 21 seconds each).
 The null-directive fixture compiles/links and exits 7. Retained build artifacts
-are under 10 MiB; external dependencies under 70 MiB. Check M09c remote CI after
-pushing, independently of these local passes.
+were under 10 MiB; external dependencies under 70 MiB. M09c remote CI was
+verified successful on resuming M10a (link above).
+
+
+M10a local verification passed: GCC 11.5 and Clang 15 strict normal builds and
+ASan/UBSan builds; CLI/source/raw/token/cache/provenance/limit/AST regressions;
+97 token/spelling oracle cases with each host compiler; QBE/reference execution
+and separate-object integer ABI with both hosts. Final sanitized fuzzing passed
+43915 lexer/preprocessor and 125308 full-pipeline inputs in 26 seconds each.
+An earlier 26-second run passed 52672/136498 inputs. Both harnesses exercise the
+real macro stage and never execute arbitrary generated code. A final normal
+make test passed and --version reports m10a. Compiler build artifacts remain
+under 10 MiB after cleanup; external tools/logs under 75 MiB. Remote CI is
+verified separately after pushing; obtain the current hash from git log -1.

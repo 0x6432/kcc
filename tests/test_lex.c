@@ -31,6 +31,7 @@ static void check_tokens(const char *text, const enum token_kind *kinds,
 	assert(preprocess_next(&preprocessor).kind == token_eof);
 	assert(diagnostics.errors == errors);
 	assert(fclose(stream) == 0);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 }
 
@@ -110,6 +111,7 @@ static void test_binary_and_values(void)
 	assert(token.location.offset == 4 && token.length == 2);
 	assert(preprocess_next(&preprocessor).kind == token_eof);
 	assert(diagnostics.errors == 2);
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }

@@ -8,6 +8,8 @@ static void assert_same_pp_token(struct pp_token left, struct pp_token right)
 	assert(left.kind == right.kind);
 	assert(left.location.source == right.location.source);
 	assert(left.location.offset == right.location.offset);
+	assert(left.expansion_location.source == right.expansion_location.source);
+	assert(left.expansion_location.offset == right.expansion_location.offset);
 	assert(left.length == right.length);
 	assert(left.leading_space == right.leading_space);
 	assert(left.at_line_start == right.at_line_start);
@@ -58,6 +60,8 @@ static void assert_same_language_token(struct token left, struct token right)
 	assert(left.kind == right.kind);
 	assert(left.location.source == right.location.source);
 	assert(left.location.offset == right.location.offset);
+	assert(left.spelling_location.source == right.spelling_location.source);
+	assert(left.spelling_location.offset == right.spelling_location.offset);
 	assert(left.length == right.length && left.integer == right.integer);
 }
 
@@ -104,7 +108,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert_same_language_token(peek, token);
 		assert(diagnostics.errors == errors);
 
-		assert(steps <= source.length);
+		assert(steps <= source.length + preprocess_work_limit + 1);
 		assert(peek.kind == token.kind);
 		assert(peek.location.offset == token.location.offset);
 		assert(peek.length == token.length);
@@ -112,7 +116,9 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(source_physical_offset(token.location) <= size);
 		assert(token.location.offset >= previous_end);
 		assert(token.location.offset <= source.length);
-		assert(token.length <= source.length - token.location.offset);
+		assert(token.spelling_location.source == &source);
+		assert(token.spelling_location.offset <= source.length);
+		assert(token.length <= source.length - token.spelling_location.offset);
 		if (token.kind == token_eof) {
 			assert(token.location.offset == source.length && token.length == 0);
 			assert_same_language_token(token, preprocess_next(&preprocessor));
@@ -121,8 +127,9 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 			break;
 		}
 		assert(token.length > 0);
-		previous_end = token.location.offset + token.length;
+		previous_end = token.location.offset;
 	}
+	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 	return 0;

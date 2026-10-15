@@ -135,7 +135,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		result = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =w call $%.*s(", result,
 			(int)name.length,
-			(const char *)name.location.source->data + name.location.offset);
+			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 		for (size_t i = 0; i < count; i++)
 			emit(codegen, "%sw %%t%zu", i ? ", " : "", arguments[i]);
 		emit(codegen, ")\n");
@@ -450,7 +450,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 
 	emit(&codegen, "export function w $%.*s(",
 		(int)name.length,
-		(const char *)name.location.source->data + name.location.offset);
+		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
 		emit(&codegen, "%sw %%p%zu", parameter_index ? ", " : "", parameter_index);

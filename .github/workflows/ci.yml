@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build and test
-        run: make test CC=${{ matrix.compiler }}
+        run: HOST_CC=${{ matrix.compiler }} make test CC=${{ matrix.compiler }}
       - name: Build pinned QBE and test generated executables
         run: |
           sh scripts/build_qbe.sh "$RUNNER_TEMP/kcc-qbe"
@@ -24,7 +24,7 @@ jobs:
       - name: Address and undefined-behavior sanitizers
         run: |
           make clean
-          make test CC=${{ matrix.compiler }} CFLAGS='-std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address,undefined'
+          HOST_CC=${{ matrix.compiler }} make test CC=${{ matrix.compiler }} CFLAGS='-std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address,undefined'
           HOST_CC=${{ matrix.compiler }} make test-codegen QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
   fuzz:
     runs-on: ubuntu-24.04

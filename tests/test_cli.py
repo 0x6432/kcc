@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-raw-cli-") as temporary:
     assert result.stdout == expected, result.stdout
     # Raw scanning neither dispatches a directive nor converts its number.
     result = run(["--tokens", str(source)])
-    assert result.returncode == 1 and "preprocessing directive is not supported" in result.stderr
+    assert result.returncode == 1 and "unsupported numeric literal" in result.stderr
     source.write_bytes(b"in\\\nt ma\\\nin")
     result = run(["--pp-tokens", str(source)])
     assert result.returncode == 0 and not result.stderr
@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-directive-cli-") as temporary:
     assert result.returncode == 0 and result.stdout == "4:eof\n" and not result.stderr
     result = run([str(source)])
     assert result.returncode == 1 and "error:" in result.stderr and not result.stdout
-    source.write_bytes(b'#define X 12u .5 "txt"\nint')
+    source.write_bytes(b'#include X 12u .5 "txt"\nint')
     result = run(["--tokens", str(source)])
     assert result.returncode == 1 and result.stderr.count("error:") == 1
     assert result.stdout.startswith("0:invalid\n") and ":int\n" in result.stdout
