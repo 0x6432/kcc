@@ -798,8 +798,65 @@ static void test_char_types_and_promotions(void)
 	source_destroy(&source);
 }
 
+static void test_short_types_and_promotions(void)
+{
+	const struct type *small[] = { &type_char, &type_schar, &type_uchar, &type_short, &type_ushort };
+	const struct type *wide[] = { &type_int, &type_uint, &type_long, &type_ulong,
+		&type_long_long, &type_ulong_long };
+	const char *text = "int main(void) { unsigned short u=65535; short c=1; return +u+(u<<c); }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *u;
+	struct ast_local_declaration *c;
+	struct ast_statement_item *item;
+	struct ast_binary_expression *sum;
+	struct ast_unary_expression *plus;
+	struct ast_binary_expression *shift;
+
+	assert(type_integer_width(&type_short) == 16 && !type_is_unsigned(&type_short));
+	assert(type_integer_width(&type_ushort) == 16 && type_is_unsigned(&type_ushort));
+	assert(!type_compatible(&type_short, &type_int));
+	assert(!type_compatible(&type_short, &type_ushort));
+	for (size_t i = 0; i < 5; i++) {
+		assert(type_integer_promotion(small[i]) == &type_int);
+		for (size_t j = 0; j < 5; j++)
+			assert(type_usual_arithmetic(small[i], small[j]) == &type_int);
+		for (size_t j = 0; j < 6; j++) {
+			assert(type_usual_arithmetic(small[i], wide[j]) == wide[j]);
+			assert(type_usual_arithmetic(wide[j], small[i]) == wide[j]);
+		}
+	}
+	assert(source_from_bytes(&source, "short-types.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	u = (struct ast_local_declaration *)first_function(unit)->body->items;
+	c = (struct ast_local_declaration *)u->item.next;
+	assert(u->type == &type_ushort && c->type == &type_short);
+	require_conversion(u->initializer, &type_ushort, &type_int);
+	require_conversion(c->initializer, &type_short, &type_int);
+	item = (struct ast_statement_item *)c->item.next;
+	sum = (struct ast_binary_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(sum->expression.kind == expression_binary && sum->expression.type == &type_int);
+	plus = (struct ast_unary_expression *)sum->left;
+	assert(plus->expression.kind == expression_unary && plus->expression.type == &type_int);
+	require_conversion(plus->operand, &type_int, &type_ushort);
+	shift = (struct ast_binary_expression *)sum->right;
+	assert(shift->expression.kind == expression_binary && shift->expression.type == &type_int);
+	require_conversion(shift->left, &type_int, &type_ushort);
+	require_conversion(shift->right, &type_int, &type_short);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_short_types_and_promotions();
 	test_char_types_and_promotions();
 	test_character_expression_tree();
 	test_long_long_rank();

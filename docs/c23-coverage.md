@@ -53,3 +53,11 @@ integer promotions are implemented. 462 width/sign conversion checks, promoted
 arithmetic, assignment narrowing and typed-depth boundaries have both-host/QBE
 coverage. Byte memory and SysV ABI use correct signed/unsigned QBE sub-word
 annotations and canonicalization. Short/bool and other types remain separate.
+
+### M12i short types
+
+Signed/unsigned short add 16-bit object types, declarations, casts and promoted
+arithmetic. 700 width/sign checks cover conversions between all eleven current
+integer types; both-host/QBE programs and cross-object dirty-return ABI tests
+exercise halfword storage and sh/uh calls. Bool and other remaining language
+features remain separately tracked.

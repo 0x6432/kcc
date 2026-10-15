@@ -903,3 +903,12 @@ Narrow conversions use extsb/extub; widening canonical byte values to long uses
 extsw/extuw by source signedness. Byte locals allocate one byte with alloc4
 (stronger local alignment); future target layout must not infer type alignment
 from that allocation instruction. Plain/signed char compatibility stays distinct.
+
+## M12i halfword extension
+
+Short/ushort have width 16 and rank strictly between byte types and int. Both fit
+int and use the same explicit promotion path. QBE ABI, load/store and normalization
+helpers cover sh/uh, loadsh/loaduh, storeh and extsh/extuh independently of base
+word types. The canonical-value invariant applies across every byte/halfword/word/
+long conversion, including call results and assignment expression values. Local
+alloc4 2 is stronger than target short alignment 2, not a type-layout API.

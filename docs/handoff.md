@@ -1029,3 +1029,37 @@ without arbitrary generated program execution. Full isolated normal/sanitizer
 matrix and exact-source CI remain pending. M12i short/unsigned short, inter-rank
 conversions and halfword ABI are designed in m12-short-types.md before coding;
 a curated QBE mechanics probe passed both hosts, not yet compiler short support.
+
+## M12e final verification
+
+609164f passed the isolated GCC/Clang normal + ASan/UBSan matrix, including
+QBE/reference/ABI. Exact-source CI passed run 38818409002. M12f/M12g isolated
+matrices are now running separately; M12h is queued behind them. M12g/M12h remote
+CI remains pending at this observation.
+
+## M12g remote verification
+
+d4db0ef passed exact-source CI run 38820235372: GCC and Clang normal/sanitizer
+jobs plus bounded fuzz all completed successfully. Its isolated local matrix
+is still running. M12h remote normal/sanitizer steps remain in progress.
+
+## M12i tested source checkpoint
+
+Short/unsigned short now have 16-bit storage, rank between char and int,
+independent promotion to int and canonical halfword values in QBE words.
+Valid declaration permutations and short/signed-short identity are supported.
+sh/uh ABI results normalize before any use, memory uses halfword operations,
+and two-byte locals use stronger alloc4 alignment without changing C alignment.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 700 width/sign checks in
+68 full-value host/model/QBE programs passed with GCC and Clang, including all
+eleven current integer types, byte/halfword crossings, signed and unsigned
+promotions, assignments, returns, shifts, macro types, loops and typed-depth
+128/129 boundaries. Both-direction mixed-eight-argument halfword ABI and dirty
+upper-return bits passed with both hosts. Existing byte and long tests still pass.
+ASan/UBSan bounded fuzzing passed 24007 lexer and 76502 pipeline
+inputs (100509 total), 26/26 seconds,
+without arbitrary generated C execution. Full isolated host/sanitizer matrix
+and exact-source CI remain pending. M12j _Bool is designed in m12-bool-type.md:
+whole-value conversion is distinct from discarding unspecified ABI upper bits.
+C23 bool/true/false remains planned M23a; _Bool is the next baseline type increment.

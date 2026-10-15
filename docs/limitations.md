@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12h. The chronological entries below describe what each
+Current milestone: M12i. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -771,3 +771,21 @@ low-byte policy, tested against these hosts.
 Short/bool, floating types, pointer types and full C23 remain absent. Byte ABI
 tests include both-direction eight mixed arguments and assembly returns with
 deliberately dirty upper bits; same-compiler-only calls are not the sole oracle.
+
+## M12i
+
+Short and unsigned short are distinct 16-bit LP64 types with rank between char
+and int; short/signed short alias the same type. A single short combines with
+optional int/sign in any order, never char/long or a second short. Both promote
+to int, so unsigned short 65535+1 is signed int 65536, not wrapping halfword math.
+Literal candidate lists remain int and larger; short is not a suffix type.
+
+Halfword values are canonical QBE words. Narrowing uses extsh/extuh; sh/uh ABI
+results normalize immediately, memory uses loadsh/loaduh/storeh and two-byte
+locals use stronger alloc4 alignment. C short alignment remains 2 for future
+layout. Byte/halfword crossings honor source sign extension before target low-
+bit conversion. Signed narrowing retains the documented target bit policy.
+
+Bool, enums, extended/bit-precise integers, sizeof/alignof, floating and pointers
+remain unfinished. Other expression operators and full C23 are not implied by
+adding the standard integer ranks.

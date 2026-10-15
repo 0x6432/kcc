@@ -95,6 +95,8 @@ static const struct type *specifier_type(enum integer_specifier specifier)
 	case integer_specifier_char: return &type_char;
 	case integer_specifier_signed_char: return &type_schar;
 	case integer_specifier_unsigned_char: return &type_uchar;
+	case integer_specifier_short: return &type_short;
+	case integer_specifier_unsigned_short: return &type_ushort;
 	case integer_specifier_int: return &type_int;
 	case integer_specifier_unsigned: return &type_uint;
 	case integer_specifier_long: return &type_long;

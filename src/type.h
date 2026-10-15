@@ -10,6 +10,8 @@ enum type_kind {
 	type_kind_char,
 	type_kind_schar,
 	type_kind_uchar,
+	type_kind_short,
+	type_kind_ushort,
 	type_kind_int,
 	type_kind_uint,
 	type_kind_long,
@@ -38,6 +40,8 @@ struct function_type {
 extern const struct type type_char;
 extern const struct type type_schar;
 extern const struct type type_uchar;
+extern const struct type type_short;
+extern const struct type type_ushort;
 extern const struct type type_int;
 extern const struct type type_uint;
 extern const struct type type_long;

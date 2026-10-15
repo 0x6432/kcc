@@ -18,6 +18,7 @@ enum token_kind {
 	token_unsigned,
 	token_long,
 	token_char,
+	token_short,
 	token_void,
 	token_return,
 	token_if,

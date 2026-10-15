@@ -34,11 +34,12 @@ static void allocation_error(struct parser *parser, struct source_location locat
 static bool begins_integer_type(enum token_kind kind)
 {
 	return kind == token_int || kind == token_signed || kind == token_unsigned ||
-		kind == token_long || kind == token_char;
+		kind == token_long || kind == token_char || kind == token_short;
 }
 
 /* integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
+ *                | permutation of ['signed' | 'unsigned'] 'short' ['int']
  * At least one specifier is required, at most two long specifiers,
  * and no other repeats or conflicting signs.
  */
@@ -47,6 +48,7 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 {
 	bool seen_int = false;
 	bool seen_char = false;
+	bool seen_short = false;
 	bool seen_sign = false;
 	unsigned long_count = 0;
 	bool unsigned_type = false;
@@ -66,6 +68,12 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 				return false;
 			}
 			seen_char = true;
+		} else if (token.kind == token_short) {
+			if (seen_short) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate short type specifier");
+				return false;
+			}
+			seen_short = true;
 		} else if (token.kind == token_long) {
 			if (long_count == 2) {
 				diagnostic_error(parser->diagnostics, token.location, "too many long type specifiers");
@@ -87,14 +95,22 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 			unsigned_type = token.kind == token_unsigned;
 		}
 	}
-	if (seen_char && (seen_int || long_count)) {
-		diagnostic_error(parser->diagnostics, beginning->location, "char cannot combine with int or long");
+	if (seen_char && (seen_int || long_count || seen_short)) {
+		diagnostic_error(parser->diagnostics, beginning->location, "char cannot combine with int, short or long");
 		return false;
 	}
-	if (seen_char)
-		*specifier = !seen_sign ? integer_specifier_char : unsigned_type ?
-			integer_specifier_unsigned_char : integer_specifier_signed_char;
-	else if (long_count == 2)
+	if (seen_short && long_count) {
+		diagnostic_error(parser->diagnostics, beginning->location, "short cannot combine with long");
+		return false;
+	}
+	if (seen_char) {
+		if (!seen_sign)
+			*specifier = integer_specifier_char;
+		else
+			*specifier = unsigned_type ? integer_specifier_unsigned_char : integer_specifier_signed_char;
+	} else if (seen_short) {
+		*specifier = unsigned_type ? integer_specifier_unsigned_short : integer_specifier_short;
+	} else if (long_count == 2)
 		*specifier = unsigned_type ? integer_specifier_unsigned_long_long : integer_specifier_long_long;
 	else if (long_count == 1)
 		*specifier = unsigned_type ? integer_specifier_unsigned_long : integer_specifier_long;

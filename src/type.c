@@ -5,6 +5,8 @@
 const struct type type_char = { type_kind_char };
 const struct type type_schar = { type_kind_schar };
 const struct type type_uchar = { type_kind_uchar };
+const struct type type_short = { type_kind_short };
+const struct type type_ushort = { type_kind_ushort };
 const struct type type_int = { type_kind_int };
 const struct type type_uint = { type_kind_uint };
 const struct type type_long = { type_kind_long };
@@ -25,12 +27,14 @@ static const struct integer_properties integer_properties[] = {
 	{ type_kind_char, 8, 0, false, &type_uchar },
 	{ type_kind_schar, 8, 0, false, &type_uchar },
 	{ type_kind_uchar, 8, 0, true, &type_uchar },
-	{ type_kind_int, 32, 1, false, &type_uint },
-	{ type_kind_uint, 32, 1, true, &type_uint },
-	{ type_kind_long, 64, 2, false, &type_ulong },
-	{ type_kind_ulong, 64, 2, true, &type_ulong },
-	{ type_kind_long_long, 64, 3, false, &type_ulong_long },
-	{ type_kind_ulong_long, 64, 3, true, &type_ulong_long },
+	{ type_kind_short, 16, 1, false, &type_ushort },
+	{ type_kind_ushort, 16, 1, true, &type_ushort },
+	{ type_kind_int, 32, 2, false, &type_uint },
+	{ type_kind_uint, 32, 2, true, &type_uint },
+	{ type_kind_long, 64, 3, false, &type_ulong },
+	{ type_kind_ulong, 64, 3, true, &type_ulong },
+	{ type_kind_long_long, 64, 4, false, &type_ulong_long },
+	{ type_kind_ulong_long, 64, 4, true, &type_ulong_long },
 };
 
 bool type_is_integer(const struct type *type)
@@ -60,7 +64,7 @@ unsigned type_integer_width(const struct type *type)
 	return integer_properties_for(type)->width;
 }
 
-/* All implemented types below int fit in int, including unsigned char. */
+/* All implemented types below int fit in int, including unsigned char/short. */
 const struct type *type_integer_promotion(const struct type *type)
 {
 	if (type_integer_width(type) < 32)

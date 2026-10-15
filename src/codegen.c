@@ -51,6 +51,8 @@ static const char *qbe_abi_type(const struct type *type)
 {
 	if (type_integer_width(type) == 8)
 		return type_is_unsigned(type) ? "ub" : "sb";
+	if (type_integer_width(type) == 16)
+		return type_is_unsigned(type) ? "uh" : "sh";
 	return type_integer_width(type) == 64 ? "l" : "w";
 }
 
@@ -58,6 +60,8 @@ static const char *qbe_load_instruction(const struct type *type)
 {
 	if (type_integer_width(type) == 8)
 		return type_is_unsigned(type) ? "loadub" : "loadsb";
+	if (type_integer_width(type) == 16)
+		return type_is_unsigned(type) ? "loaduh" : "loadsh";
 	return type_integer_width(type) == 64 ? "loadl" : "loadw";
 }
 
@@ -65,20 +69,26 @@ static char qbe_store_size(const struct type *type)
 {
 	if (type_integer_width(type) == 8)
 		return 'b';
+	if (type_integer_width(type) == 16)
+		return 'h';
 	return qbe_type(type);
 }
 
-/* A byte ABI result has unspecified upper bits; normalize before any use. */
+/* Sub-word ABI results have unspecified upper bits; normalize before use. */
 static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	const struct type *type)
 {
 	size_t result;
+	const char *instruction;
 
-	if (type_integer_width(type) != 8)
+	if (type_integer_width(type) == 8)
+		instruction = type_is_unsigned(type) ? "extub" : "extsb";
+	else if (type_integer_width(type) == 16)
+		instruction = type_is_unsigned(type) ? "extuh" : "extsh";
+	else
 		return value;
 	result = codegen->next_temporary++;
-	emit(codegen, "\t%%t%zu =w %s %%t%zu\n", result,
-		type_is_unsigned(type) ? "extub" : "extsb", value);
+	emit(codegen, "\t%%t%zu =w %s %%t%zu\n", result, instruction, value);
 	return result;
 }
 
@@ -152,7 +162,7 @@ static size_t codegen_conversion(struct codegen *codegen, const struct ast_expre
 	size_t result;
 	const char *instruction = "copy";
 
-	if (type_integer_width(target) == 8)
+	if (type_integer_width(target) < 32)
 		return codegen_canonicalize(codegen, value, target);
 	result = codegen->next_temporary++;
 	if (type_integer_width(target) == 64 && type_integer_width(operand->type) <= 32)
