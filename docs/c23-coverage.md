@@ -9,7 +9,7 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j) | M03, M08, M12-M18, M23-M24 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; restricted integer-object pointers M13a) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (implemented integer arithmetic, promotions, mixed-width/boolean conversions and casts; M12j) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
@@ -69,3 +69,12 @@ _Bool declarations, casts, exact compatibility and whole-integer conversion to
 even and high-only-bit values; side-effect and dirty-upper-bit ABI tests distinguish
 value conversion from register normalization. C23 bool/true/false spellings and
 constants remain M23a, not silently represented as int macros in the language.
+
+### M13a object-pointer declaration values
+
+Restricted prefix pointer type syntax, compatible object-pointer values, fixed
+parameters/returns/casts and truth are implemented. Host-driven live-object and
+null-pointer ABI tests cover both linkage arrangements and eight mixed pointer
+arguments; type graphs/AST caches and exact 64/65 syntax bounds are tested.
+Address/dereference, arithmetic/comparison, null constants and full declarators
+remain later work. This is not complete pointer semantics or full C23.

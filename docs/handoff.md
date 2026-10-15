@@ -2,27 +2,29 @@
 
 ## Current checkpoint
 
-M12j implementation: all baseline integer ranks through _Bool, char, short, int,
-long and long long, plus ordinary byte character constants, explicit promotions/
-conversions/casts and QBE byte/halfword/word/long storage and ABI. On-demand tokens,
-concrete AST structs, RDP/Pratt parsing and single-file stages remain intact.
+M13a implementation: restricted object-pointer declarations, compatible values,
+fixed parameters/returns/casts and scalar truth. Concrete integer/pointer syntax
+nodes resolve/cache a separate semantic type graph. All baseline primitive
+integer types, ordinary byte characters and explicit conversions remain intact.
+On-demand tokens, concrete AST structs, RDP/Pratt and single-file stages remain.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M12h 76944c4, run 38821148738, passed GCC/Clang
-normal/sanitizer and fuzz jobs. M12i 81db52e remote validation is pending; M12j
-full local normal regressions/fuzz passed; isolated/remote validation is pending.
-Earlier source-specific results are chronological: never substitute an older
-commit's passing run for a newer source. Isolated matrix jobs use separate /data/
-validation-m12* snapshots; their logs live outside the repo in /data/tools.
-M12f/g matrices are running, M12h/i queued; verify actual logs before claiming pass.
+Latest confirmed exact-source CI: M12i 81db52e, run 38821949608, passed GCC/Clang
+normal/sanitizer and fuzz jobs. M12j 1735825 remote verification remains pending.
+M13a full normal GCC and both-host pointer ABI checks passed; bounded fuzz and
+isolated/remote status are recorded in the chronological entries below.
+M12f/g local matrices are complete; M12h/i/j isolated matrices are running.
+They use separate /data/validation-m12* snapshots and /data/tools logs. Verify
+actual logs before claiming completion; never use older-source passing evidence
+as proof for a newer checkpoint. Their lower CPU priority does not omit tests.
 
-Next: M13a pointer declarations/type syntax, designed before coding in
-m13-pointer-declarations.md. _Bool is implemented; C23 bool/true/false spellings
-remain M23a. Pointers, floating, arrays/aggregates, headers/self-hosting and full
-C23 remain unfinished. Read the current limitations and milestone table, not an
-old chronological checkpoint alone.
+Next: M13b address-of/indirection with general lvalue-address lowering, designed
+before coding in m13-pointer-lvalues.md. M13a still lacks those expressions,
+pointer arithmetic/comparison, null constants and full declarators. C23 bool/
+true/false, floating, arrays/aggregates, headers/self-hosting and full C23 remain
+unfinished. Read current limitations, not an old chronological checkpoint alone.
 
 Working policy: continue across small milestones without asking for approval;
 stop only for a real blocker or user interruption. Preserve rigorous regression,
@@ -1114,3 +1116,38 @@ without arbitrary generated C execution. Full isolated normal/sanitizer matrix
 and exact-source CI remain pending. M13a pointer declarations and concrete type
 syntax are pre-designed in m13-pointer-declarations.md; no pointers implemented
 at this checkpoint. Local source syntax migration must retain every integer test.
+
+## M12f/M12g final local verification / M12i remote verification
+
+619ba96 and d4db0ef each passed their isolated GCC/Clang normal + ASan/UBSan
+matrices, including QBE/reference/ABI. Their exact-source CI also passed runs
+38819398360 and 38820235372 respectively. 81db52e (M12i) exact-source CI passed
+run 38821949608. M12h/i/j isolated matrices are running independently at lower
+CPU priority so foreground implementation/regressions can progress; no tests
+were stopped or omitted. M12j exact-source CI remains pending.
+
+## M13a tested source checkpoint
+
+Declarations/parameters/returns/casts now use concrete integer/pointer syntax
+nodes; sema caches separate semantic types, including parameter-local reuse.
+Pointer compatibility recursively checks referents; scalar width is separate
+from integer rank. Pointers use l/loadl/storel/alloc8 ABI/storage and full-width
+truth. Unsupported pointer operations/conversions diagnose before integer helpers.
+
+Full normal GCC regressions/QBE/reference/ABI passed, retaining all integer
+literal, conversion and exact-depth behaviors after syntax migration. Pointer
+AST/type-cache and compatibility units passed. Both GCC and Clang host-driven
+live-object ABI tests passed both linkage arrangements, including eight mixed
+pointer arguments, pointer-to-pointer identity, null-pointer truth supplied by
+the host and compatible casts. All 19 rejection constraints and exact 64/65
+pointer syntax bounds pass. No fabricated/dangling/uninitialized addresses were
+executed. ASan/UBSan bounded fuzzing passed 21992 lexer and 69401
+pipeline inputs (91393 total), 26/26
+seconds, without arbitrary generated C execution. Full isolated host/sanitizer
+matrix and exact-source CI remain pending. M13b is pre-designed; lvalue access
+must become address-based rather than encoding indirection as a local slot.
+
+New isolated matrix jobs use an external flock queue and lower CPU priority;
+existing M12h/i/j snapshots finish independently. This scheduling changes no
+validation coverage. Logs/snapshots remain outside the repo and may disappear
+on a sandbox reset; remote exact-source CI is the persistent evidence.

@@ -2,6 +2,32 @@
 
 #include <assert.h>
 
+struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
+	struct source_location location, enum integer_specifier specifier)
+{
+	struct ast_integer_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_integer_type_syntax) {
+			.syntax = { .kind = type_syntax_integer, .location = location },
+			.specifier = specifier,
+		};
+	return node;
+}
+
+struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *referent)
+{
+	struct ast_pointer_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_pointer_type_syntax) {
+			.syntax = { .kind = type_syntax_pointer, .location = location },
+			.referent = referent,
+		};
+	return node;
+}
+
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token)
 {
@@ -154,7 +180,7 @@ struct ast_load_expression *ast_new_load(struct arena *arena,
 }
 
 struct ast_cast_expression *ast_new_cast(struct arena *arena,
-	struct source_location location, enum integer_specifier specifier,
+	struct source_location location, struct ast_type_syntax *type_syntax,
 	struct ast_expression *operand)
 {
 	struct ast_cast_expression *node = arena_alloc(arena, sizeof(*node));
@@ -166,7 +192,7 @@ struct ast_cast_expression *ast_new_cast(struct arena *arena,
 				.location = location,
 				.depth = operand->depth + 1,
 			},
-			.specifier = specifier,
+			.type_syntax = type_syntax,
 			.operand = operand,
 		};
 	return node;

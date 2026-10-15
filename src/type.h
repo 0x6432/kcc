@@ -19,11 +19,17 @@ enum type_kind {
 	type_kind_long_long,
 	type_kind_ulong_long,
 	type_kind_bool,
+	type_kind_pointer,
 	type_kind_function,
 };
 
 struct type {
 	enum type_kind kind;
+};
+
+struct pointer_type {
+	struct type type;
+	const struct type *referent;
 };
 
 struct function_parameter_type {
@@ -51,6 +57,10 @@ extern const struct type type_ulong;
 extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
+bool type_is_scalar(const struct type *type);
+/* QBE scalar value width; object layout remains separate future work. */
+unsigned type_value_width(const struct type *type);
+struct pointer_type *type_new_pointer(struct arena *arena, const struct type *referent);
 bool type_is_unsigned(const struct type *type);
 unsigned type_integer_width(const struct type *type);
 const struct type *type_integer_promotion(const struct type *type);

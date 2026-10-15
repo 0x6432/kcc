@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12j. The chronological entries below describe what each
+Current milestone: M13a. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -808,3 +808,24 @@ C23 bool/true/false language spellings remain planned M23a; #if true support was
 already implemented separately. Enums, bit-precise integers, remaining operators,
 sizeof/alignof, pointers and floating types remain future milestones. Supporting
 _Bool does not imply a provided stdbool.h or a complete hosted C23 environment.
+
+## M13a
+
+Integer-object pointers and pointers to such pointers support local objects,
+fixed parameters/returns, compatible assignment/initialization/casts, passing/
+returning values and scalar truth, including conversion to _Bool. Pointer width/
+size/alignment is eight bytes on the selected target. Referent compatibility
+is recursive; int*/unsigned*/char* are not interchangeable.
+
+Restricted type-name grammar is integer-type followed by up to 64 stars, with
+a name appended in declarations. Concrete AST integer/pointer syntax nodes
+resolve/cache a separate semantic type graph. A shared scalar-width helper
+serves pointers without treating them as unsigned integer ranks. QBE uses long
+values/storage/ABI; integer promotion helpers reject pointer operands first.
+
+No address-of/dereference, arithmetic/comparison, integer-pointer conversion,
+null pointer constant, void/function pointer, qualifier, array or parenthesized
+declarator support yet. Even zero is not silently accepted as a pointer; null
+constant semantics need their own increment. Host-driven tests supply real
+live objects and valid host-created null pointers to exercise this subset.
+Uninitialized/dangling pointers are never executed to fabricate test coverage.

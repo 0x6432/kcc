@@ -44,32 +44,32 @@ static void emit_label(struct codegen *codegen, size_t label)
 
 static char qbe_type(const struct type *type)
 {
-	return type_integer_width(type) == 64 ? 'l' : 'w';
+	return type_value_width(type) == 64 ? 'l' : 'w';
 }
 
 static const char *qbe_abi_type(const struct type *type)
 {
-	if (type_integer_width(type) == 8)
+	if (type_value_width(type) == 8)
 		return type_is_unsigned(type) ? "ub" : "sb";
-	if (type_integer_width(type) == 16)
+	if (type_value_width(type) == 16)
 		return type_is_unsigned(type) ? "uh" : "sh";
-	return type_integer_width(type) == 64 ? "l" : "w";
+	return type_value_width(type) == 64 ? "l" : "w";
 }
 
 static const char *qbe_load_instruction(const struct type *type)
 {
-	if (type_integer_width(type) == 8)
+	if (type_value_width(type) == 8)
 		return type_is_unsigned(type) ? "loadub" : "loadsb";
-	if (type_integer_width(type) == 16)
+	if (type_value_width(type) == 16)
 		return type_is_unsigned(type) ? "loaduh" : "loadsh";
-	return type_integer_width(type) == 64 ? "loadl" : "loadw";
+	return type_value_width(type) == 64 ? "loadl" : "loadw";
 }
 
 static char qbe_store_size(const struct type *type)
 {
-	if (type_integer_width(type) == 8)
+	if (type_value_width(type) == 8)
 		return 'b';
-	if (type_integer_width(type) == 16)
+	if (type_value_width(type) == 16)
 		return 'h';
 	return qbe_type(type);
 }
@@ -81,9 +81,9 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	size_t result;
 	const char *instruction;
 
-	if (type_integer_width(type) == 8)
+	if (type_value_width(type) == 8)
 		instruction = type_is_unsigned(type) ? "extub" : "extsb";
-	else if (type_integer_width(type) == 16)
+	else if (type_value_width(type) == 16)
 		instruction = type_is_unsigned(type) ? "extuh" : "extsh";
 	else
 		return value;
@@ -95,7 +95,7 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
 {
 	bool unsigned_operands = type_is_unsigned(operand_type);
-	bool wide = type_integer_width(operand_type) == 64;
+	bool wide = type_value_width(operand_type) == 64;
 
 	switch (operation) {
 	case binary_add: return "add";
@@ -138,7 +138,7 @@ static size_t codegen_local_slot(const struct ast_expression *expression)
 
 	assert(expression->kind == expression_name && expression->is_lvalue);
 	name = (const struct ast_name_expression *)expression;
-	assert(name->declaration && type_is_integer(name->declaration->type));
+	assert(name->declaration && type_is_scalar(name->declaration->type));
 	return name->declaration->slot;
 }
 
@@ -172,10 +172,10 @@ static size_t codegen_conversion(struct codegen *codegen, const struct ast_expre
 
 	if (target->kind == type_kind_bool)
 		return codegen_truth_value(codegen, value, operand->type);
-	if (type_integer_width(target) < 32)
+	if (type_value_width(target) < 32)
 		return codegen_canonicalize(codegen, value, target);
 	result = codegen->next_temporary++;
-	if (type_integer_width(target) == 64 && type_integer_width(operand->type) <= 32)
+	if (type_value_width(target) == 64 && type_value_width(operand->type) <= 32)
 		instruction = type_is_unsigned(operand->type) ? "extuw" : "extsw";
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
 	return result;
@@ -220,7 +220,7 @@ static size_t codegen_expression(struct codegen *codegen,
 {
 	size_t temporary;
 
-	assert(type_is_integer(expression->type));
+	assert(type_is_scalar(expression->type));
 	switch (expression->kind) {
 	case expression_call: {
 		const struct ast_call_expression *node =
@@ -293,7 +293,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t right = codegen_expression(codegen, node->right);
 
 		if ((node->operation == binary_shift_left || node->operation == binary_shift_right) &&
-			type_integer_width(node->right->type) == 64) {
+			type_value_width(node->right->type) == 64) {
 			size_t count = codegen->next_temporary++;
 
 			/* QBE shift counts are words; valid C counts 0..63 are preserved. */
@@ -583,7 +583,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	struct token name = function->declaration->name;
 	size_t parameter_index = 0;
 
-	assert(type_is_integer(function->return_type));
+	assert(type_is_scalar(function->return_type));
 
 	emit(&codegen, "export function %s $%.*s(", qbe_abi_type(function->return_type),
 		(int)name.length,
@@ -598,10 +598,10 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	emit_label(&codegen, 0);
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
-		unsigned bytes = type_integer_width(local->type) / 8;
+		unsigned bytes = type_value_width(local->type) / 8;
 		unsigned alignment = bytes < 4 ? 4 : bytes;
 
-		assert(type_is_integer(local->type));
+		assert(type_is_scalar(local->type));
 		emit(&codegen, "\t%%v%zu =l alloc%u %u\n", local->slot, alignment, bytes);
 		local = local->next_local;
 	}

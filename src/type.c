@@ -48,6 +48,31 @@ bool type_is_integer(const struct type *type)
 	return false;
 }
 
+bool type_is_scalar(const struct type *type)
+{
+	return type_is_integer(type) || type->kind == type_kind_pointer;
+}
+
+unsigned type_value_width(const struct type *type)
+{
+	if (type->kind == type_kind_pointer)
+		return 64;
+	return type_integer_width(type);
+}
+
+struct pointer_type *type_new_pointer(struct arena *arena, const struct type *referent)
+{
+	struct pointer_type *pointer = arena_alloc(arena, sizeof(*pointer));
+
+	assert(type_is_scalar(referent));
+	if (pointer)
+		*pointer = (struct pointer_type) {
+			.type = { type_kind_pointer },
+			.referent = referent,
+		};
+	return pointer;
+}
+
 static const struct integer_properties *integer_properties_for(const struct type *type)
 {
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
@@ -178,6 +203,12 @@ bool type_compatible(const struct type *left, const struct type *right)
 		return false;
 	if (type_is_integer(left))
 		return true;
+	if (left->kind == type_kind_pointer) {
+		const struct pointer_type *a = (const struct pointer_type *)left;
+		const struct pointer_type *b = (const struct pointer_type *)right;
+
+		return type_compatible(a->referent, b->referent);
+	}
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;
 	if (!type_compatible(left_function->return_type, right_function->return_type) ||

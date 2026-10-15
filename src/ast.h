@@ -31,6 +31,7 @@ enum {
 	ast_max_functions = 256,
 	ast_max_parameters = 128,
 	ast_max_arguments = 128,
+	ast_max_pointer_depth = 64,
 };
 
 struct ast_expression {
@@ -157,9 +158,30 @@ enum integer_specifier {
 	integer_specifier_bool,
 };
 
+enum type_syntax_kind {
+	type_syntax_integer,
+	type_syntax_pointer,
+};
+
+struct ast_type_syntax {
+	enum type_syntax_kind kind;
+	struct source_location location;
+	const struct type *type;
+};
+
+struct ast_integer_type_syntax {
+	struct ast_type_syntax syntax;
+	enum integer_specifier specifier;
+};
+
+struct ast_pointer_type_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_type_syntax *referent;
+};
+
 struct ast_cast_expression {
 	struct ast_expression expression;
-	enum integer_specifier specifier;
+	struct ast_type_syntax *type_syntax;
 	struct ast_expression *operand;
 };
 
@@ -246,7 +268,7 @@ struct ast_block_item {
 
 struct ast_local_declaration {
 	struct ast_block_item item;
-	enum integer_specifier specifier;
+	struct ast_type_syntax *type_syntax;
 	struct token name;
 	struct ast_expression *initializer;
 	const struct type *type;
@@ -276,7 +298,7 @@ struct ast_external_declaration {
 };
 
 struct ast_parameter {
-	enum integer_specifier specifier;
+	struct ast_type_syntax *type_syntax;
 	struct source_location location;
 	struct token name;
 	bool has_name;
@@ -286,7 +308,7 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
-	enum integer_specifier return_specifier;
+	struct ast_type_syntax *return_syntax;
 	struct token name;
 	struct function_symbol *symbol;
 	struct ast_parameter *parameters;
@@ -305,6 +327,10 @@ struct ast_translation_unit {
 	struct ast_external_declaration *declarations;
 };
 
+struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
+	struct source_location location, enum integer_specifier specifier);
+struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *referent);
 struct ast_call_expression *ast_new_call(struct arena *arena,
 	struct ast_expression *callee, struct ast_argument *arguments, size_t argument_count);
 struct ast_argument *ast_new_argument(struct arena *arena, struct ast_expression *value);
@@ -332,7 +358,7 @@ struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 struct ast_load_expression *ast_new_load(struct arena *arena,
 	struct ast_expression *operand);
 struct ast_cast_expression *ast_new_cast(struct arena *arena,
-	struct source_location location, enum integer_specifier specifier,
+	struct source_location location, struct ast_type_syntax *type_syntax,
 	struct ast_expression *operand);
 struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	struct ast_expression *operand, const struct type *target);

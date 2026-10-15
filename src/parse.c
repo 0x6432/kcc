@@ -135,6 +135,45 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	return true;
 }
 
+/* type-name ::= integer-type { "*" }
+ * This restricted prefix declarator is shared by names and abstract cast types.
+ * Full parenthesized/function/array declarators remain separate grammar work.
+ */
+static struct ast_type_syntax *parse_type_name(struct parser *parser, struct token *beginning)
+{
+	enum integer_specifier specifier;
+	struct ast_integer_type_syntax *base;
+	struct ast_type_syntax *syntax;
+	size_t pointers = 0;
+
+	if (!parse_integer_type(parser, &specifier, beginning))
+		return NULL;
+	base = ast_new_integer_type_syntax(parser->arena, beginning->location, specifier);
+	if (!base) {
+		allocation_error(parser, beginning->location);
+		return NULL;
+	}
+	syntax = &base->syntax;
+	while (preprocess_peek(parser->preprocessor).kind == token_star) {
+		struct token star = preprocess_peek(parser->preprocessor);
+		struct ast_pointer_type_syntax *pointer;
+
+		if (pointers == ast_max_pointer_depth) {
+			diagnostic_error(parser->diagnostics, star.location, "pointer type exceeds depth limit (64)");
+			return NULL;
+		}
+		preprocess_next(parser->preprocessor);
+		pointer = ast_new_pointer_type_syntax(parser->arena, star.location, syntax);
+		if (!pointer) {
+			allocation_error(parser, star.location);
+			return NULL;
+		}
+		syntax = &pointer->syntax;
+		pointers++;
+	}
+	return syntax;
+}
+
 /* integer-expression ::= integer-token (decimal/octal/hex/binary, separators allowed) */
 static struct ast_expression *parse_integer_expression(struct parser *parser)
 {
@@ -317,7 +356,7 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 }
 
 /* parenthesized-or-cast ::= '(' expression ')' postfix-suffix
- *                        | '(' integer-type ')' cast-expression
+ *                        | '(' type-name ')' cast-expression
  * One opening token is consumed before choosing from the current token.
  * Cast operands bind at prefix power, including postfix calls but no infix.
  */
@@ -326,7 +365,7 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 	struct token opening = preprocess_next(parser->preprocessor);
 	struct ast_expression *operand;
 	struct ast_cast_expression *node;
-	enum integer_specifier specifier;
+	struct ast_type_syntax *type_syntax;
 	struct token beginning;
 
 	if (!begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
@@ -335,7 +374,8 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 			return NULL;
 		return parse_postfix_suffix(parser, operand);
 	}
-	if (!parse_integer_type(parser, &specifier, &beginning) ||
+	type_syntax = parse_type_name(parser, &beginning);
+	if (!type_syntax ||
 		!expect_token(parser, token_right_paren, "expected ')' after cast type", NULL))
 		return NULL;
 	operand = parse_expression(parser, 30);
@@ -346,7 +386,7 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 			"expression tree exceeds depth limit (128)");
 		return NULL;
 	}
-	node = ast_new_cast(parser->arena, opening.location, specifier, operand);
+	node = ast_new_cast(parser->arena, opening.location, type_syntax, operand);
 	if (!node) {
 		allocation_error(parser, opening.location);
 		return NULL;
@@ -875,16 +915,17 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* local-declaration ::= integer-type identifier [ "=" expression ] ";" */
+/* local-declaration ::= type-name identifier [ "=" expression ] ";" */
 static struct ast_block_item *parse_local_declaration(struct parser *parser)
 {
-	enum integer_specifier specifier;
+	struct ast_type_syntax *type_syntax;
 	struct token beginning;
 	struct token name;
 	struct ast_expression *initializer = NULL;
 	struct ast_local_declaration *node;
 
-	if (!parse_integer_type(parser, &specifier, &beginning))
+	type_syntax = parse_type_name(parser, &beginning);
+	if (!type_syntax)
 		return NULL;
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
@@ -902,7 +943,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 		allocation_error(parser, beginning.location);
 		return NULL;
 	}
-	node->specifier = specifier;
+	node->type_syntax = type_syntax;
 	return &node->item;
 }
 
@@ -976,7 +1017,7 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 }
 
 /* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
- * parameter-declaration ::= integer-type [ identifier ]
+ * parameter-declaration ::= type-name [ identifier ]
  * C23's empty list specifies zero parameters, just like (void).
  */
 static bool parse_parameters(struct parser *parser,
@@ -994,7 +1035,7 @@ static bool parse_parameters(struct parser *parser,
 		struct token beginning;
 		struct token name = { 0 };
 		struct ast_parameter *parameter;
-		enum integer_specifier specifier;
+		struct ast_type_syntax *type_syntax;
 		bool has_name = false;
 
 		if (declaration->parameter_count == ast_max_parameters) {
@@ -1003,7 +1044,8 @@ static bool parse_parameters(struct parser *parser,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
-		if (!parse_integer_type(parser, &specifier, &beginning))
+		type_syntax = parse_type_name(parser, &beginning);
+		if (!type_syntax)
 			return false;
 		if (preprocess_peek(parser->preprocessor).kind == token_identifier) {
 			name = preprocess_next(parser->preprocessor);
@@ -1014,7 +1056,7 @@ static bool parse_parameters(struct parser *parser,
 			allocation_error(parser, beginning.location);
 			return false;
 		}
-		parameter->specifier = specifier;
+		parameter->type_syntax = type_syntax;
 		*tail = parameter;
 		tail = &parameter->next;
 		declaration->parameter_count++;
@@ -1024,19 +1066,20 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* external-declaration ::= integer-type identifier "(" parameter-list ")"
+/* external-declaration ::= type-name identifier "(" parameter-list ")"
  *                          (";" | compound-statement)
  */
 static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
 {
-	enum integer_specifier specifier;
+	struct ast_type_syntax *type_syntax;
 	struct token beginning;
 	struct token name;
 	struct ast_function_declaration *declaration;
 	struct ast_compound_statement *body;
 	struct ast_function *function;
 
-	if (!parse_integer_type(parser, &specifier, &beginning))
+	type_syntax = parse_type_name(parser, &beginning);
+	if (!type_syntax)
 		return NULL;
 	if (!expect_token(parser, token_identifier, "expected function name", &name))
 		return NULL;
@@ -1047,7 +1090,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		allocation_error(parser, beginning.location);
 		return NULL;
 	}
-	declaration->return_specifier = specifier;
+	declaration->return_syntax = type_syntax;
 	if (!parse_parameters(parser, declaration))
 		return NULL;
 	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))

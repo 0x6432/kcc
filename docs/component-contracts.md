@@ -923,3 +923,23 @@ codegen_canonicalize discards unspecified upper ABI bits using extub for an ub
 result whose valid low byte is 0/1. Never replace either operation with the other.
 Exact compatibility distinguishes _Bool from unsigned char; integer literal
 candidate selection remains unchanged. C23 boolean literal ASTs are future work.
+
+## M13a type syntax, semantic pointer graph and scalar width
+
+Locals/parameters/casts/function returns reference ast_type_syntax. Concrete
+ast_integer_type_syntax stores the specifier enum; ast_pointer_type_syntax
+stores a referent child. Every node's location is syntax provenance and its
+cached type starts NULL. Sema resolves it once in the compilation arena; a
+parameter's synthesized local borrows the same syntax/cache, not a new type.
+
+Semantic pointer_type has struct type first and an immutable referent pointer.
+Compatibility descends referents; primitive signedness/rank identity remains
+unchanged. Parser enforces 64 pointer layers, independently of expression depth.
+type_value_width accepts integer/pointer scalar types; integer width/rank APIs
+remain integer-only. Codegen uses l/loadl/storel/alloc8 and l ABI for pointers.
+
+check_conversion permits integer conversions, compatible pointers or pointer to
+_Bool only. Unary arithmetic and all binary arithmetic/comparison diagnose
+pointers before promotion/opcode helpers; !, logical and control flow accept
+scalar truth. Loads/assignment still address named local slots; M13b will add
+address/indirection ASTs and general lvalue-address lowering, not a slot shortcut.

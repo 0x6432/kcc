@@ -577,10 +577,12 @@ static void test_explicit_cast_tree(void)
 	assert(outer->expression.kind == expression_cast && outer->expression.type == &type_int);
 	assert(outer->operand->kind == expression_cast && !outer->expression.is_lvalue);
 	middle = (struct ast_cast_expression *)outer->operand;
-	assert(middle->specifier == integer_specifier_unsigned && middle->expression.type == &type_uint);
+	assert(middle->type_syntax->kind == type_syntax_integer &&
+		((struct ast_integer_type_syntax *)middle->type_syntax)->specifier == integer_specifier_unsigned && middle->expression.type == &type_uint);
 	assert(middle->operand->kind == expression_cast);
 	inner = (struct ast_cast_expression *)middle->operand;
-	assert(inner->specifier == integer_specifier_int && inner->expression.type == &type_int);
+	assert(inner->type_syntax->kind == type_syntax_integer &&
+		((struct ast_integer_type_syntax *)inner->type_syntax)->specifier == integer_specifier_int && inner->expression.type == &type_int);
 	assert(inner->operand->kind == expression_load && inner->operand->type == &type_uint);
 	assert(outer->expression.depth == 5);
 	arena_destroy(&arena);
@@ -895,8 +897,66 @@ static void test_bool_type_and_conversions(void)
 	source_destroy(&source);
 }
 
+static void test_pointer_type_syntax_and_values(void)
+{
+	const char *text = "int **f(int **p) { int **q=p; return (int **)q; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_type_syntax *syntax;
+	struct ast_local_declaration *q;
+	struct ast_statement_item *item;
+	struct ast_cast_expression *cast;
+	const struct pointer_type *pointer;
+	struct pointer_type *other;
+
+	assert(source_from_bytes(&source, "pointer.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	syntax = function->declaration->return_syntax;
+	assert(syntax->kind == type_syntax_pointer && !syntax->type);
+	syntax = ((struct ast_pointer_type_syntax *)syntax)->referent;
+	assert(syntax->kind == type_syntax_pointer && !syntax->type);
+	syntax = ((struct ast_pointer_type_syntax *)syntax)->referent;
+	assert(syntax->kind == type_syntax_integer && !syntax->type);
+	assert(((struct ast_integer_type_syntax *)syntax)->specifier == integer_specifier_int);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(function->return_type == function->declaration->return_syntax->type);
+	assert(syntax->type == &type_int);
+	pointer = (const struct pointer_type *)function->return_type;
+	assert(pointer->type.kind == type_kind_pointer && type_value_width(&pointer->type) == 64);
+	assert(type_is_scalar(&pointer->type) && !type_is_integer(&pointer->type));
+	pointer = (const struct pointer_type *)pointer->referent;
+	assert(pointer->type.kind == type_kind_pointer && pointer->referent == &type_int);
+	other = type_new_pointer(&arena, &type_uint);
+	assert(other && !type_compatible(&pointer->type, &other->type));
+	other = type_new_pointer(&arena, &type_int);
+	assert(other && type_compatible(&pointer->type, &other->type));
+	assert(function->declaration->parameters->local->type_syntax ==
+		function->declaration->parameters->type_syntax);
+	assert(function->declaration->parameters->local->type ==
+		function->declaration->parameters->type_syntax->type);
+	q = (struct ast_local_declaration *)function->body->items;
+	assert(q->initializer->kind == expression_load && q->initializer->type->kind == type_kind_pointer);
+	item = (struct ast_statement_item *)q->item.next;
+	cast = (struct ast_cast_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(cast->expression.kind == expression_cast && !cast->expression.is_lvalue);
+	assert(cast->expression.type == cast->type_syntax->type);
+	assert(type_compatible(cast->expression.type, function->return_type));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_pointer_type_syntax_and_values();
 	test_bool_type_and_conversions();
 	test_short_types_and_promotions();
 	test_char_types_and_promotions();

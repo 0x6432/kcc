@@ -109,18 +109,62 @@ static const struct type *specifier_type(enum integer_specifier specifier)
 	return NULL;
 }
 
+/* Syntax owns spelling/locations; resolved types share compilation lifetime. */
+static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
+{
+	if (syntax->type)
+		return syntax->type;
+	switch (syntax->kind) {
+	case type_syntax_integer: {
+		struct ast_integer_type_syntax *integer = (struct ast_integer_type_syntax *)syntax;
+
+		syntax->type = specifier_type(integer->specifier);
+		break;
+	}
+	case type_syntax_pointer: {
+		struct ast_pointer_type_syntax *pointer = (struct ast_pointer_type_syntax *)syntax;
+		const struct type *referent = resolve_type_syntax(sema, pointer->referent);
+		struct pointer_type *type;
+
+		if (!referent)
+			return NULL;
+		type = type_new_pointer(sema->arena, referent);
+		if (!type) {
+			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating pointer type");
+			return NULL;
+		}
+		syntax->type = &type->type;
+		break;
+	}
+	}
+	return syntax->type;
+}
+
+static bool check_conversion(struct sema *sema, const struct type *source,
+	const struct type *target, struct source_location location)
+{
+	assert(type_is_scalar(source) && type_is_scalar(target));
+	if (type_compatible(source, target) || (type_is_integer(source) && type_is_integer(target)) ||
+		(source->kind == type_kind_pointer && target->kind == type_kind_bool))
+		return true;
+	diagnostic_error(sema->diagnostics, location,
+		"unsupported pointer conversion (incompatible pointers or integer/pointer conversion)");
+	return false;
+}
+
 static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 	const struct type *target)
 {
 	struct ast_conversion_expression *conversion;
 
-	assert(type_is_integer((*slot)->type) && type_is_integer(target));
+	if (!check_conversion(sema, (*slot)->type, target, (*slot)->location))
+		return false;
 	if (type_compatible((*slot)->type, target))
 		return true;
 	conversion = ast_new_conversion(sema->arena, *slot, target);
 	if (!conversion) {
 		diagnostic_error(sema->diagnostics, (*slot)->location,
-			"out of memory inserting integer conversion");
+			"out of memory inserting scalar conversion");
 		return false;
 	}
 	if (!check_expression_depth(sema, &conversion->expression))
@@ -227,7 +271,9 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, true))
 			return false;
-		result_type = specifier_type(node->specifier);
+		result_type = resolve_type_syntax(sema, node->type_syntax);
+		if (!result_type || !check_conversion(sema, node->operand->type, result_type, expression->location))
+			return false;
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
@@ -238,6 +284,10 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->operand, true))
 			return false;
 		if (node->operation != unary_not) {
+			if (!type_is_integer(node->operand->type)) {
+				diagnostic_error(sema->diagnostics, expression->location, "unary arithmetic requires an integer operand");
+				return false;
+			}
 			result_type = type_integer_promotion(node->operand->type);
 			if (!convert_expression(sema, &node->operand, result_type))
 				return false;
@@ -257,6 +307,10 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!sema_expression(sema, &node->right, true))
 			return false;
+		if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "pointer binary operators are not supported yet");
+			return false;
+		}
 		if (!convert_expression(sema, &node->left, type_integer_promotion(node->left->type)) ||
 			!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
 			return false;
@@ -362,7 +416,9 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 	sema->scope->bindings = binding;
 
 	/* C's point of declaration is before the initializer is analyzed. */
-	local->type = specifier_type(local->specifier);
+	local->type = resolve_type_syntax(sema, local->type_syntax);
+	if (!local->type)
+		return false;
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
@@ -590,7 +646,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 				"out of memory creating parameter local");
 			goto done;
 		}
-		parameter->local->specifier = parameter->specifier;
+		parameter->local->type_syntax = parameter->type_syntax;
 		if (!sema_local(sema, parameter->local))
 			goto done;
 	}
@@ -608,6 +664,7 @@ static bool sema_function_declaration(struct sema *sema,
 	struct function_symbol *symbol = find_function(sema, declaration->name);
 	struct function_type *type;
 	struct token main_name = declaration->name;
+	const struct type *return_type;
 	const struct type *parameters[ast_max_parameters];
 	size_t parameter_count = 0;
 
@@ -619,16 +676,24 @@ static bool sema_function_declaration(struct sema *sema,
 			"only zero-parameter main is supported yet");
 		return false;
 	}
+	return_type = resolve_type_syntax(sema, declaration->return_syntax);
+	if (!return_type)
+		return false;
 	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
 		main_name.spelling_location.offset, "main", 4) == 0 &&
-		declaration->return_specifier != integer_specifier_int) {
+		!type_compatible(return_type, &type_int)) {
 		diagnostic_error(sema->diagnostics, main_name.location, "main must return int");
 		return false;
 	}
-	for (struct ast_parameter *parameter = declaration->parameters; parameter; parameter = parameter->next)
-		parameters[parameter_count++] = specifier_type(parameter->specifier);
+	for (struct ast_parameter *parameter = declaration->parameters; parameter; parameter = parameter->next) {
+		const struct type *type = resolve_type_syntax(sema, parameter->type_syntax);
+
+		if (!type)
+			return false;
+		parameters[parameter_count++] = type;
+	}
 	assert(parameter_count == declaration->parameter_count && parameter_count <= ast_max_parameters);
-	type = type_new_function(sema->arena, specifier_type(declaration->return_specifier),
+	type = type_new_function(sema->arena, return_type,
 		parameters, parameter_count);
 	if (!type) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
