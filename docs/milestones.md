@@ -12,7 +12,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | complete |
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | complete |
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
-| M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | planned |
+| M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | in progress |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | planned |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | planned |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
@@ -140,3 +140,11 @@ Scope is deliberately flat here: nested blocks/shadowing belong to M06. Limits
 are resource policies, not C constraints. Uninitialized reads/self-initialization
 are not executed in runtime tests; point-of-declaration is checked structurally.
 Remote push and CI must be checked separately; M04 CI passed previously.
+
+## M06A completion record
+
+Nested blocks and shadowing. Nested compounds use scoped name bindings separate from the all-local slot list. Lookup walks parent scopes; redeclarations are checked only in the current scope. Combined statement nesting is bounded at 128 and block items are counted across the function.
+
+Normal GCC, ASan/UBSan and QBE/reference executable regression tests passed.
+Sanitized pipeline fuzzing: 376059 inputs in 11 seconds. Remote push and CI are checked separately.
+Next: M06b: comparisons and if/else, nearest-if else binding and QBE branch/merge blocks.

@@ -4,10 +4,21 @@
 #include <assert.h>
 #include <string.h>
 
+struct binding {
+	struct ast_local_declaration *declaration;
+	struct binding *next;
+};
+
+struct scope {
+	struct scope *parent;
+	struct binding *bindings;
+};
+
 struct sema {
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	struct ast_function *function;
+	struct scope *scope;
 	size_t local_count;
 };
 
@@ -19,15 +30,30 @@ static bool same_name(struct token left, struct token right)
 			left.length) == 0;
 }
 
+static struct ast_local_declaration *find_in_scope(struct scope *scope,
+	struct token name)
+{
+	struct binding *binding = scope->bindings;
+
+	while (binding) {
+		if (same_name(binding->declaration->name, name))
+			return binding->declaration;
+		binding = binding->next;
+	}
+	return NULL;
+}
+
 static struct ast_local_declaration *find_local(struct sema *sema,
 	struct token name)
 {
-	struct ast_local_declaration *local = sema->function->locals;
+	struct scope *scope = sema->scope;
 
-	while (local) {
-		if (same_name(local->name, name))
+	while (scope) {
+		struct ast_local_declaration *local = find_in_scope(scope, name);
+
+		if (local)
 			return local;
-		local = local->next_local;
+		scope = scope->parent;
 	}
 	return NULL;
 }
@@ -145,7 +171,9 @@ static bool sema_expression(struct sema *sema,
 
 static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 {
-	if (find_local(sema, local->name)) {
+	struct binding *binding;
+
+	if (find_in_scope(sema->scope, local->name)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"redeclaration of local in this scope");
 		return false;
@@ -156,6 +184,15 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 		return false;
 	}
 
+	binding = arena_alloc(sema->arena, sizeof(*binding));
+	if (!binding) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"out of memory creating scope binding");
+		return false;
+	}
+	*binding = (struct binding) { local, sema->scope->bindings };
+	sema->scope->bindings = binding;
+
 	/* C's point of declaration is before the initializer is analyzed. */
 	local->type = &type_int;
 	local->slot = sema->local_count++;
@@ -165,6 +202,8 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 		return sema_expression(sema, &local->initializer, true);
 	return true;
 }
+
+static bool sema_compound(struct sema *sema, struct ast_compound_statement *node);
 
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
@@ -184,9 +223,7 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	case statement_empty:
 		return true;
 	case statement_compound:
-		/* Nested blocks and scope stacks are introduced in M06. */
-		assert(0 && "nested compound statement in M05");
-		return false;
+		return sema_compound(sema, (struct ast_compound_statement *)statement);
 	}
 	assert(0 && "unknown statement kind");
 	return false;
@@ -213,6 +250,17 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 	return true;
 }
 
+static bool sema_compound(struct sema *sema, struct ast_compound_statement *node)
+{
+	struct scope scope = { .parent = sema->scope };
+	bool success;
+
+	sema->scope = &scope;
+	success = sema_block_items(sema, node->items);
+	sema->scope = scope.parent;
+	return success;
+}
+
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics)
 {
@@ -231,5 +279,5 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		return false;
 	}
 	function->return_type = &type_int;
-	return sema_block_items(&sema, function->body->items);
+	return sema_compound(&sema, function->body);
 }

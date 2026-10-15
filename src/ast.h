@@ -18,6 +18,7 @@ enum expression_kind {
 
 enum {
 	ast_max_expression_depth = 128,
+	ast_max_statement_nesting = 128,
 	ast_max_block_items = 4096,
 	ast_max_locals = 256,
 };

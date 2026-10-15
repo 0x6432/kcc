@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M05. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M05.
+Current milestone: M06A. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M06A.
 
 ## M00
 
@@ -61,7 +61,7 @@ Nesting and structural AST depth are capped at 128. Sema and codegen rely on
 that validated bound. Binary operands are emitted left then right; there are
 no side effects in this subset. No claims of optimization or full C23 support.
 
-## M05 (current)
+## M05
 
 One int main(void) with an ordered list of single-object int declarations,
 returns, expression statements and empty statements. Initializers are optional.
@@ -82,3 +82,14 @@ or warning system yet. Tests execute defined programs only. Sema validates
 unreachable source too, while codegen stops after the first return. Reaching
 main's closing brace returns zero. These policies are explicit, not missing
 semantic checks hidden in codegen.
+
+## M06A (current)
+
+Nested compounds use scoped name bindings separate from the all-local slot list. Lookup walks parent scopes; redeclarations are checked only in the current scope. Combined statement nesting is bounded at 128 and block items are counted across the function.
+
+Only int objects, one main(void), existing arithmetic and simple assignment
+are supported. Still unsupported: if/else, comparisons, logical operators, loops, calls and preprocessing. No
+zero-fill/definite-initialization analysis for uninitialized locals. Resource
+limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
+function-wide block items, 256 function-wide locals. Tests execute defined C
+only; fuzzing never executes source programs.

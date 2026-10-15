@@ -110,6 +110,9 @@ static size_t codegen_expression(struct codegen *codegen,
 	return 0;
 }
 
+static bool codegen_block_items(struct codegen *codegen,
+	const struct ast_block_item *item);
+
 /* True means the current block has terminated, not an I/O success flag. */
 static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
@@ -132,9 +135,12 @@ static bool codegen_statement(struct codegen *codegen,
 	}
 	case statement_empty:
 		return false;
-	case statement_compound:
-		assert(0 && "nested compound statement in M05");
-		return false;
+	case statement_compound: {
+		const struct ast_compound_statement *node =
+			(const struct ast_compound_statement *)statement;
+
+		return codegen_block_items(codegen, node->items);
+	}
 	}
 	assert(0 && "unknown statement kind");
 	return false;

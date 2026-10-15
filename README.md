@@ -6,10 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M05: compile local `int` declarations, assignment and expression statements
-inside a single `int main(void)`.
-On-demand lexing, BNF-documented recursive descent and Pratt expressions,
-separate AST structs, semantic analysis and QBE emission are in place.
+M06A: nested blocks and shadowing. Nested compounds use scoped name bindings separate from the all-local slot list. Lookup walks parent scopes; redeclarations are checked only in the current scope. Combined statement nesting is bounded at 128 and block items are counted across the function.
+
 Unsupported input is rejected. See `docs/milestones.md` and
 `docs/limitations.md`.
 
@@ -62,11 +60,9 @@ cc build/example.s -o build/example
 # Exit status: 14
 ```
 
-Supported expressions: decimal int literals, local names, parentheses, unary
-`+`/`-`, binary `+`, `-`, `*`, `/`, `%`, and right-associative `=`. Declarations
-introduce one int object with an optional initializer. Empty statements and
-falling off main (returning zero) are supported.
+Supported: decimal int literals, locals, simple assignment, arithmetic,
+nested blocks and shadowing.
+Unsupported: if/else, comparisons, logical operators, loops, calls and preprocessing. This is not a complete C23 compiler.
 
-Nested blocks, shadowing, if/else, calls and preprocessing are not supported yet.
-Source limit: 16 MiB; expression nesting/typed-tree depth: 128; function-body
-items: 4096; locals: 256. This is not a complete C23 compiler.
+Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items
+and 256 locals across the function.

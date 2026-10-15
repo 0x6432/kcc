@@ -7,6 +7,8 @@ struct parser {
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	unsigned depth;
+	unsigned statement_nesting;
+	size_t block_items;
 };
 
 static bool expect_token(struct parser *parser, enum token_kind kind,
@@ -278,13 +280,24 @@ static struct ast_statement *parse_empty_statement(struct parser *parser)
 	return &node->statement;
 }
 
-/* statement ::= return-statement | expression-statement | empty-statement */
+static struct ast_compound_statement *parse_compound_statement(struct parser *parser);
+
+/* statement ::= return-statement | expression-statement | empty-statement
+ *             | compound-statement
+ */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
 
 	if (token.kind == token_return) {
 		struct ast_return_statement *node = parse_return_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
+	if (token.kind == token_left_brace) {
+		struct ast_compound_statement *node = parse_compound_statement(parser);
 
 		if (!node)
 			return NULL;
@@ -344,13 +357,12 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 }
 
 /* compound-statement ::= "{" { block-item } "}" */
-static struct ast_compound_statement *parse_compound_statement(struct parser *parser)
+static struct ast_compound_statement *parse_compound_contents(struct parser *parser)
 {
 	struct token opening;
 	struct ast_block_item *items = NULL;
 	struct ast_block_item **tail = &items;
 	struct ast_compound_statement *node;
-	size_t count = 0;
 
 	if (!expect_token(parser, token_left_brace, "expected '{'", &opening))
 		return NULL;
@@ -363,22 +375,39 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 				"expected '}' before end of file");
 			return NULL;
 		}
-		if (count == ast_max_block_items) {
+		if (parser->block_items == ast_max_block_items) {
 			diagnostic_error(parser->diagnostics, token.location,
 				"function body exceeds item limit (4096)");
 			return NULL;
 		}
+		parser->block_items++;
 		item = parse_block_item(parser);
 		if (!item)
 			return NULL;
 		*tail = item;
 		tail = &item->next;
-		count++;
 	}
 	lexer_next(parser->lexer);
 	node = ast_new_compound(parser->arena, opening.location, items);
 	if (!node)
 		allocation_error(parser, opening.location);
+	return node;
+}
+
+/* compound-statement ::= "{" { block-item } "}"; guard recursive blocks. */
+static struct ast_compound_statement *parse_compound_statement(struct parser *parser)
+{
+	struct ast_compound_statement *node;
+
+	if (parser->statement_nesting == ast_max_statement_nesting) {
+		diagnostic_error(parser->diagnostics,
+			lexer_peek(parser->lexer).location,
+			"statement nesting exceeds limit (128)");
+		return NULL;
+	}
+	parser->statement_nesting++;
+	node = parse_compound_contents(parser);
+	parser->statement_nesting--;
 	return node;
 }
 

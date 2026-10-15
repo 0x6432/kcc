@@ -46,6 +46,15 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int main(void) {" + "".join(f"int x{i}={i};" for i in range(256))
          + "return x255; }", 255),
     ]
+    programs += [
+        ("int main(void) { int x=1; { int x=2; x=3; } return x; }", 1),
+        ("int main(void) { int x=1; { x=4; } return x; }", 4),
+        ("int main(void) { int r=0; { int x=2; r=x; } { int x=3; r=r+x; } return r; }", 5),
+        ("int main(void) { int x=5; { int y=x; int x=2; return y+x; } }", 7),
+        ("int main(void) { { return 9; } return 3; }", 9),
+        ("int main(void) { {} }", 0),
+        ("int main(void) {" + "{"*127 + "}"*127 + "}", 0),
+    ]
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -100,13 +109,20 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { int x, y; return 0; }",
         "int main(void) { int x=; return 0; }",
         "int main(void) { int x=1 x=2; return x; }",
-        "int main(void) { int x=1; { int x=2; } return x; }",
+
         "int main(void) { return 0; return missing; }",
         "int main(void) { return 0; int x; int x; }",
         "int main(void) {" + ";"*4097 + "}",
         "int main(void) {" + "".join(f"int x{i};" for i in range(257)) + "}",
         "int main(void) { int x=0; return " + "x+" + "0+"*126 + "0; }",
         "int main(void) { int a; a=" + "a="*128 + "1; }",
+    ]
+    invalid += [
+        "int main(void) { { int x=1; } return x; }",
+        "int main(void) { int x=1; { int x=2; int x=3; } return x; }",
+        "int main(void) {" + "{"*128 + "}"*128 + "}",
+        "int main(void) {" + "{;"*2049 + "}"*2049 + "}",
+        "int main(void) {" + "{;};"*1366 + "}",
     ]
     for keyword in ("if", "while", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")

@@ -83,3 +83,24 @@ once on a fresh parsed tree; typed depth is recomputed after conversions.
 Driver and pipeline fuzz harness pass the arena to the new sema interface.
 Codegen uses binding IDs, never performs name lookup, and never initializes
 an object solely because its storage was allocated. Empty bodies are valid.
+
+## M06 checkpoint design
+
+M06a adds compound statements and scoped bindings. Each block gets a separate
+scope; duplicate checking is current-scope only and lookup walks parents.
+Bindings are arena-owned, while scope frames are stack-local to sema. The
+function-wide locals list still retains every declaration for QBE slot allocation.
+Parser counts all block items across the function (4096), not per nested block,
+and bounds combined compound/if nesting at 128 before recursion.
+
+M06b adds a distinct if-statement struct and comparison operators. Recursive
+descent attaches else to the nearest unmatched if. QBE tracks labels and whether
+a statement's paths terminate; it must not emit instructions after a terminator
+or emit a merge block when both branches return. Selection-statement scope is
+explicit, including the C scope of its substatements.
+
+M06c adds distinct logical-expression nodes rather than eager binary nodes.
+&& and || have C precedence, produce normalized int 0/1, and emit branches plus
+phi values. The emitter records the current block label so a nested RHS supplies
+the actual predecessor to a phi. Skipped RHS operands are still checked by sema,
+but are never evaluated at runtime. ! is an ordinary prefix operation.
