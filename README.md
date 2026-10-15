@@ -6,17 +6,16 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M12i: char/signed char/unsigned char, short/unsigned short, int/unsigned, LP64
-long/unsigned long and distinct-rank long long/unsigned long long support
-declarations, literals, casts, arithmetic, storage and calls. Explicit AST
-conversions govern extension and narrowing; 64-bit conditions inspect every
-bit. Four-base integer spellings, C23 separators and U/L/LL suffixes follow
-target literal candidate rules. Ordinary single-byte character constants are
-int expressions, sharing their escape decoder with preprocessing. Byte types
-promote explicitly to int for arithmetic, and calls use QBE sub-word ABI
-annotations. Short/bool declarations and other types remain unfinished.
-Includes retain bounded explicit search and direct/computed quoted/basic
-angles.
+M12j: _Bool, plain/signed/unsigned char, short/unsigned short, int/unsigned,
+LP64 long/unsigned long and distinct-rank long long/unsigned long long support
+declarations, casts, arithmetic, storage and calls. Explicit AST promotions and
+conversions govern signedness, narrowing and full-value boolean conversion. QBE
+byte/halfword ABIs normalize unspecified upper return bits. Four-base integer
+spellings, C23 separators and U/L/LL suffixes follow target candidate rules.
+Ordinary byte character constants are int expressions sharing preprocessing's
+escape decoder. C23 bool/true/false spellings remain M23a; other types and full
+C23 remain unfinished. Includes retain bounded explicit search and direct/
+computed quoted/basic angle support.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior
 macro operators. Repeatable -I dir/-Idir adds ordered explicit search paths; quoted

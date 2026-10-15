@@ -19,6 +19,7 @@ enum token_kind {
 	token_long,
 	token_char,
 	token_short,
+	token_bool,
 	token_void,
 	token_return,
 	token_if,

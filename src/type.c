@@ -2,6 +2,7 @@
 
 #include <assert.h>
 
+const struct type type_bool = { type_kind_bool };
 const struct type type_char = { type_kind_char };
 const struct type type_schar = { type_kind_schar };
 const struct type type_uchar = { type_kind_uchar };
@@ -24,17 +25,19 @@ struct integer_properties {
 
 /* Target LP64 properties, independent of the compiler host's long width. */
 static const struct integer_properties integer_properties[] = {
-	{ type_kind_char, 8, 0, false, &type_uchar },
-	{ type_kind_schar, 8, 0, false, &type_uchar },
-	{ type_kind_uchar, 8, 0, true, &type_uchar },
-	{ type_kind_short, 16, 1, false, &type_ushort },
-	{ type_kind_ushort, 16, 1, true, &type_ushort },
-	{ type_kind_int, 32, 2, false, &type_uint },
-	{ type_kind_uint, 32, 2, true, &type_uint },
-	{ type_kind_long, 64, 3, false, &type_ulong },
-	{ type_kind_ulong, 64, 3, true, &type_ulong },
-	{ type_kind_long_long, 64, 4, false, &type_ulong_long },
-	{ type_kind_ulong_long, 64, 4, true, &type_ulong_long },
+	/* Bool has eight storage bits but only the values 0 and 1. */
+	{ type_kind_bool, 8, 0, true, &type_bool },
+	{ type_kind_char, 8, 1, false, &type_uchar },
+	{ type_kind_schar, 8, 1, false, &type_uchar },
+	{ type_kind_uchar, 8, 1, true, &type_uchar },
+	{ type_kind_short, 16, 2, false, &type_ushort },
+	{ type_kind_ushort, 16, 2, true, &type_ushort },
+	{ type_kind_int, 32, 3, false, &type_uint },
+	{ type_kind_uint, 32, 3, true, &type_uint },
+	{ type_kind_long, 64, 4, false, &type_ulong },
+	{ type_kind_ulong, 64, 4, true, &type_ulong },
+	{ type_kind_long_long, 64, 5, false, &type_ulong_long },
+	{ type_kind_ulong_long, 64, 5, true, &type_ulong_long },
 };
 
 bool type_is_integer(const struct type *type)

@@ -145,14 +145,22 @@ static size_t codegen_local_slot(const struct ast_expression *expression)
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression);
 
+/* Value conversion tests the whole source, unlike narrow ABI normalization. */
+static size_t codegen_truth_value(struct codegen *codegen, size_t value,
+	const struct type *type)
+{
+	size_t result = codegen->next_temporary++;
+
+	emit(codegen, "\t%%t%zu =w cne%c %%t%zu, 0\n", result, qbe_type(type), value);
+	return result;
+}
+
 /* Branches always consume a word boolean, never a truncated long value. */
 static size_t codegen_truth(struct codegen *codegen, const struct ast_expression *expression)
 {
 	size_t value = codegen_expression(codegen, expression);
-	size_t result = codegen->next_temporary++;
 
-	emit(codegen, "\t%%t%zu =w cne%c %%t%zu, 0\n", result, qbe_type(expression->type), value);
-	return result;
+	return codegen_truth_value(codegen, value, expression->type);
 }
 
 static size_t codegen_conversion(struct codegen *codegen, const struct ast_expression *operand,
@@ -162,6 +170,8 @@ static size_t codegen_conversion(struct codegen *codegen, const struct ast_expre
 	size_t result;
 	const char *instruction = "copy";
 
+	if (target->kind == type_kind_bool)
+		return codegen_truth_value(codegen, value, operand->type);
 	if (type_integer_width(target) < 32)
 		return codegen_canonicalize(codegen, value, target);
 	result = codegen->next_temporary++;

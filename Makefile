@@ -78,6 +78,8 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_char_abi.py
 	QBE="$(QBE)" python3 tests/test_short_types.py
 	QBE="$(QBE)" python3 tests/test_short_abi.py
+	QBE="$(QBE)" python3 tests/test_bool_type.py
+	QBE="$(QBE)" python3 tests/test_bool_abi.py
 
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
@@ -117,6 +119,8 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_char_abi.py
 	python3 tests/test_short_types.py
 	python3 tests/test_short_abi.py
+	python3 tests/test_bool_type.py
+	python3 tests/test_bool_abi.py
 
 clean:
 	rm -rf build

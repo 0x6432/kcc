@@ -912,3 +912,14 @@ helpers cover sh/uh, loadsh/loaduh, storeh and extsh/extuh independently of base
 word types. The canonical-value invariant applies across every byte/halfword/word/
 long conversion, including call results and assignment expression values. Local
 alloc4 2 is stronger than target short alignment 2, not a type-layout API.
+
+## M12j boolean range versus storage
+
+Bool's property width is storage width 8, not a promise that every byte value is
+valid. Semantic values are exactly 0/1, and promotion is int. codegen_truth_value
+normalizes an already evaluated temporary using its complete source width; casts/
+implicit conversions to bool use it without reevaluating operands. Conversely,
+codegen_canonicalize discards unspecified upper ABI bits using extub for an ub
+result whose valid low byte is 0/1. Never replace either operation with the other.
+Exact compatibility distinguishes _Bool from unsigned char; integer literal
+candidate selection remains unchanged. C23 boolean literal ASTs are future work.

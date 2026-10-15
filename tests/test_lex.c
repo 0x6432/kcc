@@ -230,6 +230,11 @@ int main(void)
 	test_character_spellings();
 	test_integer_spellings();
 	{
+		const enum token_kind kinds[] = { token_bool, token_unsupported_keyword, token_unsupported_keyword, token_unsupported_keyword };
+
+		check_tokens("_Bool bool true false", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	}
+	{
 		const enum token_kind kinds[] = { token_short, token_signed, token_short, token_unsigned, token_short };
 
 		check_tokens("short signed short unsigned short", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);

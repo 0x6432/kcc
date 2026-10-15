@@ -18,6 +18,7 @@ enum type_kind {
 	type_kind_ulong,
 	type_kind_long_long,
 	type_kind_ulong_long,
+	type_kind_bool,
 	type_kind_function,
 };
 
@@ -37,6 +38,7 @@ struct function_type {
 	size_t parameter_count;
 };
 
+extern const struct type type_bool;
 extern const struct type type_char;
 extern const struct type type_schar;
 extern const struct type type_uchar;

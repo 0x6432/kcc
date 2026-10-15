@@ -34,12 +34,13 @@ static void allocation_error(struct parser *parser, struct source_location locat
 static bool begins_integer_type(enum token_kind kind)
 {
 	return kind == token_int || kind == token_signed || kind == token_unsigned ||
-		kind == token_long || kind == token_char || kind == token_short;
+		kind == token_long || kind == token_char || kind == token_short || kind == token_bool;
 }
 
 /* integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
  *                | permutation of ['signed' | 'unsigned'] 'short' ['int']
+ *                | '_Bool'
  * At least one specifier is required, at most two long specifiers,
  * and no other repeats or conflicting signs.
  */
@@ -49,6 +50,7 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	bool seen_int = false;
 	bool seen_char = false;
 	bool seen_short = false;
+	bool seen_bool = false;
 	bool seen_sign = false;
 	unsigned long_count = 0;
 	bool unsigned_type = false;
@@ -62,7 +64,13 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	while (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
 		struct token token = preprocess_next(parser->preprocessor);
 
-		if (token.kind == token_char) {
+		if (token.kind == token_bool) {
+			if (seen_bool) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate _Bool type specifier");
+				return false;
+			}
+			seen_bool = true;
+		} else if (token.kind == token_char) {
 			if (seen_char) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate char type specifier");
 				return false;
@@ -94,6 +102,14 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 			seen_sign = true;
 			unsigned_type = token.kind == token_unsigned;
 		}
+	}
+	if (seen_bool && (seen_sign || seen_char || seen_short || seen_int || long_count)) {
+		diagnostic_error(parser->diagnostics, beginning->location, "_Bool cannot combine with other type specifiers");
+		return false;
+	}
+	if (seen_bool) {
+		*specifier = integer_specifier_bool;
+		return true;
 	}
 	if (seen_char && (seen_int || long_count || seen_short)) {
 		diagnostic_error(parser->diagnostics, beginning->location, "char cannot combine with int, short or long");

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12i. The chronological entries below describe what each
+Current milestone: M12j. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -789,3 +789,22 @@ bit conversion. Signed narrowing retains the documented target bit policy.
 Bool, enums, extended/bit-precise integers, sizeof/alignof, floating and pointers
 remain unfinished. Other expression operators and full C23 are not implied by
 adding the standard integer ranks.
+
+## M12j
+
+_Bool is a distinct unsigned integer type, rank below char, storage one byte and
+only values 0/1. It promotes to int. Declaration syntax accepts _Bool alone, not
+signed/unsigned/char/short/int/long combinations. Conversions and casts from any
+implemented integer compare the complete source value to zero: 256 and a high-
+only-bit long become 1, not 0. Every operand is evaluated once.
+
+Byte memory and ub ABI carry canonical 0/1. Narrow ABI return normalization drops
+unspecified upper register bits before any truth/cast/use; that boundary operation
+is deliberately different from full-value scalar-to-bool conversion. Test dirty
+ABI values have valid low-byte 0/1; invalid boolean object representations are
+not made defined by this implementation. Bool is incompatible with unsigned char.
+
+C23 bool/true/false language spellings remain planned M23a; #if true support was
+already implemented separately. Enums, bit-precise integers, remaining operators,
+sizeof/alignof, pointers and floating types remain future milestones. Supporting
+_Bool does not imply a provided stdbool.h or a complete hosted C23 environment.

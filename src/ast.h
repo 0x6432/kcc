@@ -154,6 +154,7 @@ enum integer_specifier {
 	integer_specifier_unsigned_long,
 	integer_specifier_long_long,
 	integer_specifier_unsigned_long_long,
+	integer_specifier_bool,
 };
 
 struct ast_cast_expression {

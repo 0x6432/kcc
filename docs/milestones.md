@@ -18,7 +18,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h char and M12i short/promotions implemented; bool remains planned) |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -901,3 +901,12 @@ passed full normal GCC suites, 700 conversion checks across 68 both-host/QBE
 programs, separate-object ABI/dirty-return tests and bounded sanitized fuzz.
 Full isolated/remote matrix remains pending. M12j _Bool is pre-designed with
 a successful both-host QBE mechanics probe; C23 bool/constants remain M23a.
+
+M12h exact-source CI passed run 38821148738. The isolated local matrix is queued
+separately, not yet complete. M12i remote verification remains pending.
+
+M12j source checkpoint: _Bool identity, promotions and full-value conversion passed
+full normal GCC suites, 418 conversion checks across 36 both-host/QBE programs,
+separate-object ABI/dirty-return tests and bounded sanitized fuzz. Full isolated
+and exact-source CI remain pending. M12's baseline primitive integer scope is
+implemented, not full language conformance. M13a pointer/type syntax is designed.

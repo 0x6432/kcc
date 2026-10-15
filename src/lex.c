@@ -329,7 +329,7 @@ static bool is_unsupported_keyword(struct token token)
 		"if", "inline", "register", "restrict",
 		"sizeof", "static", "struct", "switch", "typedef", "union",
 		"volatile", "while", "_Alignas", "_Alignof", "_Atomic",
-		"_Bool", "_Complex", "_Decimal32", "_Decimal64", "_Decimal128",
+		"_Complex", "_Decimal32", "_Decimal64", "_Decimal128",
 		"_Generic", "_Imaginary", "_Noreturn", "_Static_assert",
 		"_Thread_local", "_BitInt", "alignas", "alignof", "bool",
 		"constexpr", "false", "nullptr", "static_assert", "thread_local",
@@ -348,7 +348,7 @@ struct keyword {
 };
 
 static const struct keyword keywords[] = {
-	{ "char", token_char }, { "short", token_short },
+	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
@@ -659,6 +659,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_long: return "long";
 	case token_char: return "char";
 	case token_short: return "short";
+	case token_bool: return "_Bool";
 	case token_void: return "void";
 	case token_return: return "return";
 	case token_if: return "if";

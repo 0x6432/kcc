@@ -2,13 +2,33 @@
 
 ## Current checkpoint
 
-M11b: optional-operand stringizing with bounded substitution-only cursors.
+M12j implementation: all baseline integer ranks through _Bool, char, short, int,
+long and long long, plus ordinary byte character constants, explicit promotions/
+conversions/casts and QBE byte/halfword/word/long storage and ABI. On-demand tokens,
+concrete AST structs, RDP/Pratt parsing and single-file stages remain intact.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M11b source CI passed: https://github.com/0x6432/kcc/actions/runs/38766305589
-M09–M11b are complete for their stated subsets; M11c token pasting is next.
-Full preprocessing and full C23 remain incomplete.
-Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
+Get the exact latest hash with git log -1; avoid a circular self-commit reference.
+
+Latest confirmed exact-source CI: M12h 76944c4, run 38821148738, passed GCC/Clang
+normal/sanitizer and fuzz jobs. M12i 81db52e remote validation is pending; M12j
+full local normal regressions/fuzz passed; isolated/remote validation is pending.
+Earlier source-specific results are chronological: never substitute an older
+commit's passing run for a newer source. Isolated matrix jobs use separate /data/
+validation-m12* snapshots; their logs live outside the repo in /data/tools.
+M12f/g matrices are running, M12h/i queued; verify actual logs before claiming pass.
+
+Next: M13a pointer declarations/type syntax, designed before coding in
+m13-pointer-declarations.md. _Bool is implemented; C23 bool/true/false spellings
+remain M23a. Pointers, floating, arrays/aggregates, headers/self-hosting and full
+C23 remain unfinished. Read the current limitations and milestone table, not an
+old chronological checkpoint alone.
+
+Working policy: continue across small milestones without asking for approval;
+stop only for a real blocker or user interruption. Preserve rigorous regression,
+QBE/reference/ABI, sanitizer/fuzz checks and commit/push each tested checkpoint.
+Never execute arbitrary fuzz-generated C. Keep credentials ephemeral and outside
+the repository. No subagents are authorized.
 
 ## Resume safely
 
@@ -1063,3 +1083,34 @@ without arbitrary generated C execution. Full isolated host/sanitizer matrix
 and exact-source CI remain pending. M12j _Bool is designed in m12-bool-type.md:
 whole-value conversion is distinct from discarding unspecified ABI upper bits.
 C23 bool/true/false remains planned M23a; _Bool is the next baseline type increment.
+
+## M12h remote verification
+
+76944c4 passed exact-source CI run 38821148738, including GCC/Clang normal and
+sanitizer jobs plus bounded fuzz. Its isolated local full matrix remains queued
+separately; M12i remote CI is still running.
+
+## M12j tested source checkpoint
+
+_Bool now has distinct type identity, rank below char, storage one byte and
+canonical 0/1 values. Explicit value conversion compares the whole source width;
+ABI return normalization independently drops unspecified upper bits. Unary/binary
+promotions, assignment/init/fixed argument/return conversions and exact signature
+compatibility follow the existing typed AST pipeline. C23 keyword/constants are
+still planned M23a, not represented with fake int-valued macros.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 418 width/sign checks in
+36 full-value host/model/QBE programs passed with GCC and Clang. Tests cover
+high-only-bit long and even integers, narrowing-before-bool distinctions,
+negative values, assignment normalization, once-only side effects, short-circuit
+skips, typed-depth boundaries and invalid specifier/prototype combinations.
+Both-direction mixed-eight-argument bool ABI and valid-low-byte/dirty-upper-bit
+returns passed with both hosts. The first INT64_MIN fixture incorrectly used an
+unrepresentable positive decimal magnitude after unary minus; it now uses the
+standard (-MAX-1) expression, without relaxing compiler literal constraints.
+ASan/UBSan bounded fuzzing passed 23090 lexer and 79394 pipeline
+inputs (102484 total), 26/26 seconds,
+without arbitrary generated C execution. Full isolated normal/sanitizer matrix
+and exact-source CI remain pending. M13a pointer declarations and concrete type
+syntax are pre-designed in m13-pointer-declarations.md; no pointers implemented
+at this checkpoint. Local source syntax migration must retain every integer test.

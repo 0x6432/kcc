@@ -92,6 +92,7 @@ static bool check_expression_depth(struct sema *sema,
 static const struct type *specifier_type(enum integer_specifier specifier)
 {
 	switch (specifier) {
+	case integer_specifier_bool: return &type_bool;
 	case integer_specifier_char: return &type_char;
 	case integer_specifier_signed_char: return &type_schar;
 	case integer_specifier_unsigned_char: return &type_uchar;
