@@ -15,6 +15,7 @@ enum token_kind {
 	token_int,
 	token_signed,
 	token_unsigned,
+	token_long,
 	token_void,
 	token_return,
 	token_if,
@@ -77,6 +78,7 @@ struct token {
 	size_t length;
 	uint64_t integer;
 	unsigned integer_base;
+	unsigned integer_long_suffix;
 	bool integer_unsigned_suffix;
 };
 

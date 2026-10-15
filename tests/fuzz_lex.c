@@ -117,6 +117,7 @@ static void assert_same_language_token(struct token left, struct token right)
 	assert(left.spelling_location.offset == right.spelling_location.offset);
 	assert(left.length == right.length && left.integer == right.integer);
 	assert(left.integer_base == right.integer_base);
+	assert(left.integer_long_suffix == right.integer_long_suffix);
 	assert(left.integer_unsigned_suffix == right.integer_unsigned_suffix);
 }
 

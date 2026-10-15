@@ -91,7 +91,14 @@ static bool check_expression_depth(struct sema *sema,
 
 static const struct type *specifier_type(enum integer_specifier specifier)
 {
-	return specifier == integer_specifier_unsigned ? &type_uint : &type_int;
+	switch (specifier) {
+	case integer_specifier_int: return &type_int;
+	case integer_specifier_unsigned: return &type_uint;
+	case integer_specifier_long: return &type_long;
+	case integer_specifier_unsigned_long: return &type_ulong;
+	}
+	assert(0 && "unknown integer type specifier");
+	return NULL;
 }
 
 static bool convert_expression(struct sema *sema, struct ast_expression **slot,
@@ -182,15 +189,13 @@ static bool sema_expression(struct sema *sema,
 		struct ast_integer_expression *node =
 			(struct ast_integer_expression *)expression;
 
-		bool unsigned_type = node->unsigned_suffix ||
-			(node->base && node->base != 10 && node->value > INT32_MAX);
-
-		if (node->value > (unsigned_type ? UINT32_MAX : (uint64_t)INT32_MAX)) {
+		result_type = type_integer_literal(node->value, node->base ? node->base : 10,
+			node->unsigned_suffix, node->long_suffix);
+		if (!result_type) {
 			diagnostic_error(sema->diagnostics, expression->location,
-				"literal does not fit the supported int type; wider integer types are not implemented");
+				"literal does not fit an implemented integer type");
 			return false;
 		}
-		result_type = unsigned_type ? &type_uint : &type_int;
 		break;
 	}
 	case expression_name: {
@@ -242,8 +247,7 @@ static bool sema_expression(struct sema *sema,
 		if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
 			result_type = node->left->type;
 		} else {
-			const struct type *common = node->left->type == &type_uint ||
-				node->right->type == &type_uint ? &type_uint : &type_int;
+			const struct type *common = type_usual_arithmetic(node->left->type, node->right->type);
 
 			if (!convert_expression(sema, &node->left, common) ||
 				!convert_expression(sema, &node->right, common))

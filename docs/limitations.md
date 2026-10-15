@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12d. The chronological entries below describe what each
+Current milestone: M12e. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -702,3 +702,20 @@ post-load depths. QBE word copies preserve the implemented 32-bit bit pattern.
 No void/wider/pointer casts, compound literals or typedef-name disambiguation is
 included. Those need their respective future grammar/type milestones. C casts
 do not define signed-overflow/invalid-shift programs or relax literal typing.
+
+## M12e
+
+Signed/unsigned long are distinct 64-bit LP64 types, with optional int/sign
+specifier orderings and U/L literal suffixes. Long long/LL remain explicit later
+work. A central target property table drives widths/ranks/signedness; candidate
+lists select the first representable implemented literal type without truncation.
+Unsigned decimal literals can select ulong, while unsuffixed decimal beyond
+INT64_MAX still fails. Mixed long+uint selects signed long; long+ulong selects
+ulong. Narrowing and unsigned-to-signed follow target two's-complement bits.
+
+AST conversion nodes now lower to signed/unsigned extension from 32 bits, low-
+word narrowing, or same-width bit copies. QBE width selection covers arithmetic,
+comparisons, slots, parameters/returns, calls and shift counts. Every condition
+normalizes its whole word/long value before branching; a high-only-bit long is
+true. Long/ulong storage is eight bytes with eight-byte alignment. No char/short,
+long long, floats, pointers or full C23 claim accompanies this increment.

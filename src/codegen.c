@@ -42,8 +42,16 @@ static void emit_label(struct codegen *codegen, size_t label)
 	codegen->current_label = label;
 }
 
-static const char *binary_instruction(enum binary_operator operation, bool unsigned_operands)
+static char qbe_type(const struct type *type)
 {
+	return type_integer_width(type) == 64 ? 'l' : 'w';
+}
+
+static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
+{
+	bool unsigned_operands = type_is_unsigned(operand_type);
+	bool wide = type_integer_width(operand_type) == 64;
+
 	switch (operation) {
 	case binary_add: return "add";
 	case binary_subtract: return "sub";
@@ -55,12 +63,24 @@ static const char *binary_instruction(enum binary_operator operation, bool unsig
 	case binary_bit_or: return "or";
 	case binary_shift_left: return "shl";
 	case binary_shift_right: return unsigned_operands ? "shr" : "sar";
-	case binary_equal: return "ceqw";
-	case binary_not_equal: return "cnew";
-	case binary_less: return unsigned_operands ? "cultw" : "csltw";
-	case binary_less_equal: return unsigned_operands ? "culew" : "cslew";
-	case binary_greater: return unsigned_operands ? "cugtw" : "csgtw";
-	case binary_greater_equal: return unsigned_operands ? "cugew" : "csgew";
+	case binary_equal: return wide ? "ceql" : "ceqw";
+	case binary_not_equal: return wide ? "cnel" : "cnew";
+	case binary_less:
+		if (unsigned_operands)
+			return wide ? "cultl" : "cultw";
+		return wide ? "csltl" : "csltw";
+	case binary_less_equal:
+		if (unsigned_operands)
+			return wide ? "culel" : "culew";
+		return wide ? "cslel" : "cslew";
+	case binary_greater:
+		if (unsigned_operands)
+			return wide ? "cugtl" : "cugtw";
+		return wide ? "csgtl" : "csgtw";
+	case binary_greater_equal:
+		if (unsigned_operands)
+			return wide ? "cugel" : "cugew";
+		return wide ? "csgel" : "csgew";
 	}
 	assert(0 && "unknown binary operator");
 	return NULL;
@@ -80,14 +100,36 @@ static size_t codegen_local_slot(const struct ast_expression *expression)
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression);
 
+/* Branches always consume a word boolean, never a truncated long value. */
+static size_t codegen_truth(struct codegen *codegen, const struct ast_expression *expression)
+{
+	size_t value = codegen_expression(codegen, expression);
+	size_t result = codegen->next_temporary++;
+
+	emit(codegen, "\t%%t%zu =w cne%c %%t%zu, 0\n", result, qbe_type(expression->type), value);
+	return result;
+}
+
+static size_t codegen_conversion(struct codegen *codegen, const struct ast_expression *operand,
+	const struct type *target)
+{
+	size_t value = codegen_expression(codegen, operand);
+	size_t result = codegen->next_temporary++;
+	const char *instruction = "copy";
+
+	if (type_integer_width(target) == 64 && type_integer_width(operand->type) == 32)
+		instruction = type_is_unsigned(operand->type) ? "extuw" : "extsw";
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
+	return result;
+}
+
 static size_t codegen_logical(struct codegen *codegen,
 	const struct ast_logical_expression *node)
 {
-	size_t left = codegen_expression(codegen, node->left);
+	size_t left = codegen_truth(codegen, node->left);
 	size_t left_predecessor = codegen->current_label;
 	size_t rhs_label = new_label(codegen);
 	size_t merge_label = new_label(codegen);
-	size_t right;
 	size_t normalized;
 	size_t right_predecessor;
 	size_t result;
@@ -103,9 +145,7 @@ static size_t codegen_logical(struct codegen *codegen,
 		skipped_value = 1;
 	}
 	emit_label(codegen, rhs_label);
-	right = codegen_expression(codegen, node->right);
-	normalized = codegen->next_temporary++;
-	emit(codegen, "\t%%t%zu =w cnew %%t%zu, 0\n", normalized, right);
+	normalized = codegen_truth(codegen, node->right);
 	/* Nested RHS logic can end in a different block from rhs_label. */
 	right_predecessor = codegen->current_label;
 	emit(codegen, "\tjmp @b%zu\n", merge_label);
@@ -138,11 +178,14 @@ static size_t codegen_expression(struct codegen *codegen,
 			arguments[count++] = codegen_expression(codegen, argument->value);
 		assert(count == node->argument_count && count <= ast_max_arguments);
 		result = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w call $%.*s(", result,
+		emit(codegen, "\t%%t%zu =%c call $%.*s(", result, qbe_type(expression->type),
 			(int)name.length,
 			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
-		for (size_t i = 0; i < count; i++)
-			emit(codegen, "%sw %%t%zu", i ? ", " : "", arguments[i]);
+		count = 0;
+		for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
+			emit(codegen, "%s%c %%t%zu", count ? ", " : "", qbe_type(argument->value->type), arguments[count]);
+			count++;
+		}
 		emit(codegen, ")\n");
 		return result;
 	}
@@ -151,7 +194,7 @@ static size_t codegen_expression(struct codegen *codegen,
 			(const struct ast_integer_expression *)expression;
 
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w copy %ju\n", temporary,
+		emit(codegen, "\t%%t%zu =%c copy %ju\n", temporary, qbe_type(expression->type),
 			(uintmax_t)node->value);
 		return temporary;
 	}
@@ -163,16 +206,16 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		switch (node->operation) {
 		case unary_plus:
-			emit(codegen, "\t%%t%zu =w copy %%t%zu\n", temporary, operand);
+			emit(codegen, "\t%%t%zu =%c copy %%t%zu\n", temporary, qbe_type(expression->type), operand);
 			break;
 		case unary_minus:
-			emit(codegen, "\t%%t%zu =w sub 0, %%t%zu\n", temporary, operand);
+			emit(codegen, "\t%%t%zu =%c sub 0, %%t%zu\n", temporary, qbe_type(expression->type), operand);
 			break;
 		case unary_complement:
-			emit(codegen, "\t%%t%zu =w xor %%t%zu, -1\n", temporary, operand);
+			emit(codegen, "\t%%t%zu =%c xor %%t%zu, -1\n", temporary, qbe_type(expression->type), operand);
 			break;
 		case unary_not:
-			emit(codegen, "\t%%t%zu =w ceqw %%t%zu, 0\n", temporary, operand);
+			emit(codegen, "\t%%t%zu =w ceq%c %%t%zu, 0\n", temporary, qbe_type(node->operand->type), operand);
 			break;
 		}
 		return temporary;
@@ -183,28 +226,29 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t left = codegen_expression(codegen, node->left);
 		size_t right = codegen_expression(codegen, node->right);
 
+		if ((node->operation == binary_shift_left || node->operation == binary_shift_right) &&
+			type_integer_width(node->right->type) == 64) {
+			size_t count = codegen->next_temporary++;
+
+			/* QBE shift counts are words; valid C counts 0..63 are preserved. */
+			emit(codegen, "\t%%t%zu =w copy %%t%zu\n", count, right);
+			right = count;
+		}
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w %s %%t%zu, %%t%zu\n", temporary,
-			binary_instruction(node->operation, node->left->type == &type_uint), left, right);
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", temporary, qbe_type(expression->type),
+			binary_instruction(node->operation, node->left->type), left, right);
 		return temporary;
 	}
 	case expression_cast: {
 		const struct ast_cast_expression *node = (const struct ast_cast_expression *)expression;
-		size_t operand = codegen_expression(codegen, node->operand);
 
-		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w copy %%t%zu\n", temporary, operand);
-		return temporary;
+		return codegen_conversion(codegen, node->operand, expression->type);
 	}
 	case expression_conversion: {
 		const struct ast_conversion_expression *node =
 			(const struct ast_conversion_expression *)expression;
-		size_t operand = codegen_expression(codegen, node->operand);
 
-		/* int/uint conversion preserves the low 32 bits on this target. */
-		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w copy %%t%zu\n", temporary, operand);
-		return temporary;
+		return codegen_conversion(codegen, node->operand, expression->type);
 	}
 	case expression_logical:
 		return codegen_logical(codegen,
@@ -215,7 +259,8 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t slot = codegen_local_slot(node->operand);
 
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w loadw %%v%zu\n", temporary, slot);
+		emit(codegen, "\t%%t%zu =%c load%c %%v%zu\n", temporary,
+			qbe_type(expression->type), qbe_type(expression->type), slot);
 		return temporary;
 	}
 	case expression_assignment: {
@@ -224,7 +269,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t value = codegen_expression(codegen, node->right);
 		size_t slot = codegen_local_slot(node->left);
 
-		emit(codegen, "\tstorew %%t%zu, %%v%zu\n", value, slot);
+		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_type(node->left->type), value, slot);
 		return value;
 	}
 	case expression_name:
@@ -243,7 +288,7 @@ static bool codegen_statement(struct codegen *codegen,
 
 static bool codegen_if(struct codegen *codegen, const struct ast_if_statement *node)
 {
-	size_t condition = codegen_expression(codegen, node->condition);
+	size_t condition = codegen_truth(codegen, node->condition);
 	size_t then_label = new_label(codegen);
 	size_t merge_label = new_label(codegen);
 	size_t else_label = node->else_branch ? new_label(codegen) : merge_label;
@@ -297,7 +342,7 @@ static bool codegen_while(struct codegen *codegen,
 
 	emit(codegen, "\tjmp @b%zu\n", condition_label);
 	emit_label(codegen, condition_label);
-	condition = codegen_expression(codegen, node->condition);
+	condition = codegen_truth(codegen, node->condition);
 	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
 		condition, body_label, exit_label);
 	emit_label(codegen, body_label);
@@ -325,7 +370,7 @@ static bool codegen_do(struct codegen *codegen, const struct ast_do_statement *n
 		emit(codegen, "\tjmp @b%zu\n", condition_label);
 	/* Continue may reach this block even when every body path terminates. */
 	emit_label(codegen, condition_label);
-	condition = codegen_expression(codegen, node->condition);
+	condition = codegen_truth(codegen, node->condition);
 	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
 		condition, body_label, exit_label);
 	emit_label(codegen, exit_label);
@@ -338,7 +383,7 @@ static void codegen_local_initializer(struct codegen *codegen,
 	if (local->initializer) {
 		size_t value = codegen_expression(codegen, local->initializer);
 
-		emit(codegen, "\tstorew %%t%zu, %%v%zu\n", value, local->slot);
+		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_type(local->type), value, local->slot);
 	}
 }
 
@@ -357,7 +402,7 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 	emit(codegen, "\tjmp @b%zu\n", condition_label);
 	emit_label(codegen, condition_label);
 	if (node->condition) {
-		size_t condition = codegen_expression(codegen, node->condition);
+		size_t condition = codegen_truth(codegen, node->condition);
 
 		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
 			condition, body_label, exit_label);
@@ -474,12 +519,13 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 
 	assert(type_is_integer(function->return_type));
 
-	emit(&codegen, "export function w $%.*s(",
+	emit(&codegen, "export function %c $%.*s(", qbe_type(function->return_type),
 		(int)name.length,
 		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
-		emit(&codegen, "%sw %%p%zu", parameter_index ? ", " : "", parameter_index);
+		emit(&codegen, "%s%c %%p%zu", parameter_index ? ", " : "",
+			qbe_type(parameter->local->type), parameter_index);
 		parameter_index++;
 	}
 	emit(&codegen, ") {\n");
@@ -487,14 +533,15 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
 		assert(type_is_integer(local->type));
-		emit(&codegen, "\t%%v%zu =l alloc4 4\n", local->slot);
+		emit(&codegen, "\t%%v%zu =l alloc%u %u\n", local->slot,
+			type_integer_width(local->type) / 8, type_integer_width(local->type) / 8);
 		local = local->next_local;
 	}
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
-		emit(&codegen, "\tstorew %%p%zu, %%v%zu\n",
-			parameter_index, parameter->local->slot);
+		emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
+			qbe_type(parameter->local->type), parameter_index, parameter->local->slot);
 		parameter_index++;
 	}
 	if (!codegen_block_items(&codegen, function->body->items))

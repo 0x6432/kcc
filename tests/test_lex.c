@@ -59,7 +59,7 @@ static void test_errors(void)
 	const enum token_kind invalid[] = { token_invalid };
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
-		"/*", "/* *", "09", "0xg", "0b2", "12L", "3.5", "@",
+		"/*", "/* *", "09", "0xg", "0b2", "12.5", "3.5", "@",
 		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<=", ">>=",
 	};
 

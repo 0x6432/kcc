@@ -913,3 +913,37 @@ M12b/M12c full local verification remains pending independently; M12c remote CI
 is still running. M12e LP64 long/unsigned long is designed before implementation
 in m12-long-integers.md, including a successful curated QBE width/extension probe.
 Do not claim compiler long support until that separate increment is implemented.
+
+## M12b final verification
+
+98b9a03 passed its isolated GCC/Clang normal + ASan/UBSan matrix, including all
+unit/CLI/oracle and QBE/reference/ABI checks. Exact-source CI passed:
+https://github.com/0x6432/kcc/actions/runs/38815061741
+M12b is complete within its recorded spelling scope. M12c/M12d verification
+remains separate; do not substitute M12b evidence for those later sources.
+
+## M12e tested source checkpoint
+
+LP64 long/unsigned long now extends declarations, U/L literal candidate typing,
+casts, semantic usual conversions and QBE word/long values, memory and calls.
+Target width/rank/signedness lives in type.c. Widening uses source signedness;
+narrowing preserves low words. Every branch/logical path normalizes the entire
+value before jnz, and 64-bit shift counts narrow explicitly only after typing.
+Long long and LL suffixes remain intentionally unsupported for the next step.
+
+Full normal GCC regressions/QBE/reference/ABI passed. New type tests cover all
+16 usual-conversion pairs, literal candidate identities and widening/narrowing
+AST nodes. All 138 full-width model/host/QBE programs passed with GCC and Clang,
+including high-only-bit truth in !/logical/if/while/do/for, mixed ranks, recursion,
+unsigned wrap and signed division. Mixed word/long eight-argument separate-object
+ABI calls, extensions and returns passed both directions with both hosts.
+Old L/range rejection fixtures moved to still-unsupported floating numbers or
+unrepresentable decimal values, preserving their diagnostic purpose explicitly.
+Sanitized fuzzing passed 25253 lexer and 81809 pipeline inputs (107062 total),
+26 seconds each, without executing arbitrary generated C. Full isolated M12e
+host/sanitizer matrix and exact-source CI remain pending.
+
+M12c exact-source CI passed run 38816221787; local GCC matrix passed, local
+Clang remains pending. M12d local GCC likewise passed; Clang/remote still need
+final verification. M12f distinct long-long rank and suffixes are designed in
+m12-long-long.md before coding. Equal width must not imply compatible types.

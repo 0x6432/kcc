@@ -857,3 +857,12 @@ Grouped expressions reuse their existing nodes and shared postfix suffixes;
 cast nodes always value-convert operands and are non-lvalues. Their structural
 depth includes operand loads. Codegen copies the validated int/uint word; no
 parser heuristic or requested-type inference is deferred to the backend.
+
+M12e: primitive integer properties and literal candidate selection are owned by
+type.c. Tokens/AST retain L count; parser records long specifiers, sema selects
+int/uint/long/ulong and inserts all widening/narrowing conversions explicitly.
+Codegen derives w/l from validated types at every value/storage/ABI boundary.
+32-to-64 extension follows source signedness, even for an unsigned destination;
+all control contexts compare the whole value to zero before word jnz. QBE
+shift counts explicitly narrow only after source typing; C-invalid counts remain
+undefined, not a guaranteed masked-count extension.

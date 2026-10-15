@@ -33,21 +33,22 @@ static void allocation_error(struct parser *parser, struct source_location locat
 
 static bool begins_integer_type(enum token_kind kind)
 {
-	return kind == token_int || kind == token_signed || kind == token_unsigned;
+	return kind == token_int || kind == token_signed || kind == token_unsigned || kind == token_long;
 }
 
-/* integer-type ::= 'int' | ('signed' | 'unsigned') ['int']
- *                | 'int' ('signed' | 'unsigned')
- * Sign and int specifiers occur at most once, in either order.
+/* integer-type ::= permutation of ['signed' | 'unsigned'] ['long'] ['int']
+ * At least one specifier is required, with no repeats or conflicting signs.
+ * Two long specifiers belong to the later long-long rank increment.
  */
 static bool parse_integer_type(struct parser *parser, enum integer_specifier *specifier,
 	struct token *beginning)
 {
 	bool seen_int = false;
 	bool seen_sign = false;
+	bool seen_long = false;
+	bool unsigned_type = false;
 
 	*beginning = preprocess_peek(parser->preprocessor);
-	*specifier = integer_specifier_int;
 	if (!begins_integer_type(beginning->kind)) {
 		if (beginning->kind != token_invalid)
 			diagnostic_error(parser->diagnostics, beginning->location, "expected integer type specifier");
@@ -56,18 +57,31 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	while (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
 		struct token token = preprocess_next(parser->preprocessor);
 
-		if ((token.kind == token_int && seen_int) || (token.kind != token_int && seen_sign)) {
-			diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
-			return false;
-		}
-		if (token.kind == token_int) {
+		if (token.kind == token_long) {
+			if (seen_long) {
+				diagnostic_error(parser->diagnostics, token.location, "long long is not supported yet");
+				return false;
+			}
+			seen_long = true;
+		} else if (token.kind == token_int) {
+			if (seen_int) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
+				return false;
+			}
 			seen_int = true;
 		} else {
+			if (seen_sign) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
+				return false;
+			}
 			seen_sign = true;
-			if (token.kind == token_unsigned)
-				*specifier = integer_specifier_unsigned;
+			unsigned_type = token.kind == token_unsigned;
 		}
 	}
+	if (seen_long)
+		*specifier = unsigned_type ? integer_specifier_unsigned_long : integer_specifier_long;
+	else
+		*specifier = unsigned_type ? integer_specifier_unsigned : integer_specifier_int;
 	return true;
 }
 

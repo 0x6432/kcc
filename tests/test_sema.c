@@ -588,8 +588,74 @@ static void test_explicit_cast_tree(void)
 	source_destroy(&source);
 }
 
+static void test_long_types_and_conversions(void)
+{
+	const struct type *types[] = { &type_int, &type_uint, &type_long, &type_ulong };
+	const struct type *usual[][4] = {
+		{ &type_int, &type_uint, &type_long, &type_ulong },
+		{ &type_uint, &type_uint, &type_long, &type_ulong },
+		{ &type_long, &type_long, &type_long, &type_ulong },
+		{ &type_ulong, &type_ulong, &type_ulong, &type_ulong },
+	};
+	const char *text = "long f(unsigned x) { long a=x; unsigned long b=-1; return a+(int)b; }"
+		"int main(void) { long x=f(0xffffffff); return x; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_function *main_function;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *b;
+	struct ast_statement_item *item;
+	struct ast_binary_expression *sum;
+
+	for (size_t i = 0; i < 4; i++) {
+		assert(type_integer_width(types[i]) == (i < 2 ? 32u : 64u));
+		assert(type_is_unsigned(types[i]) == (i == 1 || i == 3));
+		for (size_t j = 0; j < 4; j++)
+			assert(type_usual_arithmetic(types[i], types[j]) == usual[i][j]);
+	}
+	assert(type_integer_literal(INT32_MAX, 10, false, 0) == &type_int);
+	assert(type_integer_literal((uint64_t)INT32_MAX + 1, 10, false, 0) == &type_long);
+	assert(type_integer_literal((uint64_t)INT32_MAX + 1, 16, false, 0) == &type_uint);
+	assert(type_integer_literal(UINT32_MAX, 10, true, 0) == &type_uint);
+	assert(type_integer_literal((uint64_t)UINT32_MAX + 1, 10, true, 0) == &type_ulong);
+	assert(type_integer_literal(INT64_MAX, 16, false, 0) == &type_long);
+	assert(type_integer_literal(UINT64_MAX, 16, false, 0) == &type_ulong);
+	assert(type_integer_literal(UINT64_MAX, 16, false, 1) == &type_ulong);
+	assert(!type_integer_literal(UINT64_MAX, 10, false, 0));
+	assert(type_integer_literal(UINT64_MAX, 10, true, 1) == &type_ulong);
+	assert(type_integer_literal(0, 10, false, 1) == &type_long);
+	assert(!type_integer_literal(0, 10, false, 2));
+	assert(source_from_bytes(&source, "long.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	function = first_function(unit);
+	main_function = (struct ast_function *)function->external.next;
+	assert(function->return_type == &type_long);
+	a = (struct ast_local_declaration *)function->body->items;
+	b = (struct ast_local_declaration *)a->item.next;
+	require_conversion(a->initializer, &type_long, &type_uint);
+	require_conversion(b->initializer, &type_ulong, &type_int);
+	item = (struct ast_statement_item *)b->item.next;
+	sum = (struct ast_binary_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(sum->expression.kind == expression_binary && sum->expression.type == &type_long);
+	require_conversion(sum->right, &type_long, &type_int);
+	a = (struct ast_local_declaration *)main_function->body->items;
+	item = (struct ast_statement_item *)a->item.next;
+	require_conversion(((struct ast_return_statement *)item->statement)->value, &type_int, &type_long);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_long_types_and_conversions();
 	test_explicit_cast_tree();
 	test_unsigned_conversion_tree();
 	test_bitwise_expression_tree();

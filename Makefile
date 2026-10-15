@@ -70,6 +70,8 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_unsigned_runtime.py
 	QBE="$(QBE)" python3 tests/test_unsigned_abi.py
 	QBE="$(QBE)" python3 tests/test_integer_casts.py
+	QBE="$(QBE)" python3 tests/test_long_runtime.py
+	QBE="$(QBE)" python3 tests/test_long_abi.py
 
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
@@ -101,6 +103,8 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_unsigned_runtime.py
 	python3 tests/test_unsigned_abi.py
 	python3 tests/test_integer_casts.py
+	python3 tests/test_long_runtime.py
+	python3 tests/test_long_abi.py
 
 clean:
 	rm -rf build

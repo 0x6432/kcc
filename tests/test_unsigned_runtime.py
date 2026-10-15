@@ -65,9 +65,7 @@ with tempfile.TemporaryDirectory(prefix='kcc unsigned runtime ') as directory:
         ('int main(void) { unsigned unsigned x; return 0; }', 'conflicting integer type'),
         ('int main(void) { unsigned x=missing; return 0; }', 'undeclared'),
         ('unsigned f(unsigned x) { int x; return 0; }', 'redeclaration'),
-        ('int main(void) { return 4294967296U; }', 'wider integer types'),
-        ('int main(void) { return 2147483648; }', 'wider integer types'),
-        ('int main(void) { return 1UL; }', 'unsupported numeric'),
+        ('int main(void) { return 1ULL; }', 'unsupported numeric'),
         ('int main(void) { return 1U + '+'+ '*126+'1; }', 'typed expression exceeds depth'),
         ('int main(void) { return '+'~'*127+'1U; }', 'typed expression exceeds depth'),
     ]

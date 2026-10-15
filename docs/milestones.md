@@ -17,8 +17,8 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct includes complete; M11l computed/M11m include search implemented) |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a operators/M12b spellings/M12c int-uint/M12d casts implemented; wider types planned) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e LP64 long/ulong implemented; remaining ranks planned) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -849,3 +849,18 @@ passed full normal GCC regressions/QBE/reference/ABI, 71 full-value host/model/
 QBE programs with each host, typed AST/depth/constraint tests and 112860
 sanitizer-fuzz inputs. Full isolated/remote verification remains pending.
 M12e LP64 long/ulong is pre-designed with a successful QBE mechanics probe.
+
+## M12b final verification
+
+98b9a03 passed its isolated GCC/Clang normal + ASan/UBSan matrix, including all
+unit/CLI/oracle and QBE/reference/ABI checks. Exact-source CI passed:
+https://github.com/0x6432/kcc/actions/runs/38815061741
+M12b is complete within its recorded spelling scope. M12c/M12d verification
+remains separate; do not substitute M12b evidence for those later sources.
+
+M12e source checkpoint: LP64 long/ulong passed full normal GCC regressions/QBE/
+reference/ABI, 16 rank pairs/literal/AST tests, 138 full-width host/QBE programs
+with each host, both mixed-width separate-object ABI directions and 107062
+sanitizer-fuzz inputs. Full isolated/remote validation pending. M12c CI
+38816221787 passed; M12c/M12d local GCC passed, remaining verification pending.
+M12f distinct long long rank is pre-designed.

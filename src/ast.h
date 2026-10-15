@@ -44,6 +44,7 @@ struct ast_integer_expression {
 	struct ast_expression expression;
 	uint64_t value;
 	unsigned base;
+	unsigned long_suffix;
 	bool unsigned_suffix;
 };
 
@@ -138,6 +139,8 @@ struct ast_conversion_expression {
 enum integer_specifier {
 	integer_specifier_int,
 	integer_specifier_unsigned,
+	integer_specifier_long,
+	integer_specifier_unsigned_long,
 };
 
 struct ast_cast_expression {
