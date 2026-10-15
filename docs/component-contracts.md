@@ -604,3 +604,51 @@ selection and closing-boundary visits consume work. The full oracle has 564
 streams under GCC and Clang, retaining all 374 prior cases. Fuzz cache checks
 also require that repeated peeks do not allocate additional auxiliary records.
 Variadic macros do not change the parser's fixed-arity function signatures or ABI.
+
+
+## M11a stringizing contract
+
+#/%: in a function replacement must precede a named parameter or __VA_ARGS__.
+Validation annotates the operator with the raw argument index and skips its
+operand during substitution. __VA_OPT__(#parameter) works; #__VA_OPT__(...) is
+explicitly deferred. Object-like # stays ordinary punctuation. Failed validation
+keeps old definitions; compatible redefinition still compares raw tokens/spacing.
+
+Stringizing never requests argument prescan. It visits raw token spellings,
+trims outside trivia, emits one space for each intertoken separation and escapes
+quotes/backslashes within quoted literal tokens only. Empty input yields "".
+A standalone nonliteral backslash rejects under the current no-UCN subset.
+Two checked passes measure then fill a fixed arena buffer. Source views count
+as auxiliary records; all bytes including NULs share a new cumulative 1 MiB cap.
+Failure yields invalid then stable EOF for resource/allocation errors.
+
+A generated token's spelling source is a prepared arena view with offset zero;
+its diagnostic expansion location remains the outermost original call. The view
+and NUL-terminated data live until preprocess_destroy, not source_destroy. Never
+assume token.spelling_location.source or pp_token.location.source equals the
+translation-unit input. Source/lexer APIs and AST/sema/QBE interfaces are unchanged.
+Future synthesized identifiers/numbers must obey the same ownership contract.
+
+preprocess_next_pp shares the main cursor and returns expanded pp tokens before
+language conversion. It normalizes EOF and maps existing preprocessing errors
+to pp_invalid without diagnosing again. Clients must not mix it with a pending
+language peek. Parser language caching remains unchanged; string tokens still
+reject during language conversion, unless discarded by an outer macro first.
+The test-only oracle has a --pp mode rather than weakening string conversion.
+
+Spacing now preserves source newlines, invocation first-token separation, empty
+streams and internally created prescan separation. Strip only original leading
+argument trivia; keep separation created when internal macros disappear. Cached
+arguments retain trailing separation, applied when their injected frame ends.
+Optional marker delimiters do not emit spacing; an empty region preserves the
+following token's own separation. Repeated peeks cannot allocate spellings or
+change deferred spacing/byte counters. Both language and expanded-pp fuzz paths
+check ownership, bounds, diagnostics and EOF; generated strings must re-lex as
+exactly one pp_string. Source view lifetime is tested across subsequent reads.
+
+Agreement coverage: 564 language + 142 expanded-pp streams with GCC and Clang.
+Five separate two-level whitespace policy groups record host disagreement:
+kcc follows GCC 11.5 for removed internal macros/optional delimiter spacing;
+Clang 15 differs. They are explicit local policy regressions, not agreements
+or claims that ISO makes all such differences implementation-defined. Review
+these interpretation gaps during the conformance audit before broader claims.

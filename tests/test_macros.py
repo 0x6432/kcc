@@ -189,19 +189,100 @@ for _ in range(60):
     lines.append(" ".join(name + "(7)" for name in names) + "\n")
     examples.append("".join(lines))
 
+# Expanded-pp inspection retains string tokens without enabling C string semantics.
+pp_examples = [
+    '#define S(x) #x\n#define A 42\nS(A) S(A + 1) S()\n',
+    '#define S(x) %: x\nS(a/**/b) S(  a\t +\n b  )\n',
+    '#define S(x) #x\nS(hello) S(1+2) S(1 + 2) S((1,2))\n',
+    '#define S(x) #x\n#define BAD(a,b) a\nS(BAD(1)) S(12u) S(@) S(#)\n',
+    '#define S(...) #__VA_ARGS__\nS() S(,) S(a,b) S(a, b) S( a , b )\n',
+    '#define S(x,...) #x #__VA_ARGS__\nS(a) S(a,) S(a,b,c)\n',
+    '#define S(...) __VA_OPT__(#__VA_ARGS__)\n#define E\nS() S(E) S(7) S(,)\n',
+    '#define S(x,...) __VA_OPT__(#x)\nS(7) S(7,1)\n',
+    '#define S(x) #x #x\nS(a+b)\n',
+    '#define S(x) #x\n#define S(x) #x\nS(a)\n#undef S\n#define S(x) x\nS(7)\n',
+    '#define S(x) #x\n#define X(x) S(x)\n#define A 7\nX(A) X(S(a)) X(S(S(a)))\n',
+    '#define S(x) #x\nS(a\\\nb) S(a/* across\nlines */b)\n',
+    '#define S(x) #x\nS("a\\nb") S(\'a\') S(\'\\\\\')\n',
+    '#define S(x) #x\nS("a\\\"b") S("\\\\") S(L"wide") S(u8"text") S(U\'x\')\n',
+    '#define S(x) #x\nS(%: %:%: <% %> <: :> ::)\n',
+    '#define S(x) #x\n#define G(x) x\nG(S(a))\n',
+]
+spacing_cases = [
+    '#define E\nX(a+E+b)', '#define E\nX(a E+b)',
+    '#define F(x) a+x\nX(F( b))', '#define F(x) a x+b\nX(F())',
+    '#define A 1\nX(a+A)', '#define F(x) x\nX(a+F( b))',
+    '#define V(...) a __VA_OPT__() b\nX(V(1)) X(V())',
+    '#define V(...) a+__VA_OPT__() b\nX(V(1)) X(V())',
+    '#define V(...) a __VA_OPT__()b\nX(V(1)) X(V())',
+    '#define V(...) __VA_OPT__(a) __VA_OPT__(b)\nX(V(1)) X(V())',
+    '#define V(...) a __VA_OPT__(__VA_ARGS__)b\nX(V())',
+    '#define F(x) a x b\nX(F())', '#define F(x) a+x+b\nX(F())',
+    '#define F(x) a x\nX(F())', '#define F(x) x b\nX(F())',
+]
+for body in spacing_cases:
+    pp_examples.append('#define S(x) #x\n#define X(x) S(x)\n' + body + '\n')
+# Two-level stringizing observes spacing through parameter and empty streams.
+for _ in range(100):
+    before, after, argument_space = [random_source.choice(['', ' ', '\t', '/**/'])
+                                     for _ in range(3)]
+    argument = random_source.choice(['', 'E', '7', 'E+7', '7+E', '(1,2)'])
+    pp_examples.append('#define S(x) #x\n#define X(x) S(x)\n#define E\n'
+                       f'#define F(x) a+{before}x{after}+b\nX(F({argument_space}{argument}))\n')
+# Re-stringizing generated spelling repeatedly exercises owned-view lifetimes.
+for depth in range(1, 12):
+    pp_examples.append('#define S(x) #x\n#define X(x) S(x)\n'
+                       + 'X(' * depth + '7' + ')' * depth + '\n')
+
+# Observed GCC/Clang whitespace disagreements are explicit policy regressions,
+# not claimed cross-host agreement or a ruling on ISO's intended interpretation.
+policy_prefix = '#define S(x) #x\n#define X(x) S(x)\n'
+policy_examples = [
+    ('#define V(...) a+__VA_OPT__( )b\nX(V(1)) X(V())\n',
+     ['a+b', 'a+b'], ['a+ b', 'a+ b']),
+    ('#define V(...) a __VA_OPT__(b )c\nX(V(1)) X(V())\n',
+     ['a bc', 'a c'], ['a b c', 'a c']),
+    ('#define V(...) a+__VA_OPT__( b)c\nX(V(1)) X(V())\n',
+     ['a+bc', 'a+c'], ['a+ bc', 'a+ c']),
+    ('#define E\n#define F(x) a+x+b\nX(F( E)) X(F(E E)) X(F(7 E)) X(F(E 7))\n',
+     ['a++b', 'a+ +b', 'a+7 +b', 'a+ 7+b'], ['a++b', 'a++b', 'a+7+b', 'a+7+b']),
+    ('#define E\n#define F(x) a x+b\nX(F(7 E))\n',
+     ['a 7 +b'], ['a 7+b']),
+]
+
 with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
     source = Path(directory) / "input.c"
     expanded = Path(directory) / "expanded.c"
-    for text in examples:
+    for pp_mode, texts in [(False, examples), (True, pp_examples)]:
+        command = [str(driver)] + (["--pp"] if pp_mode else [])
+        for text in texts:
+            source.write_text(text)
+            reference = subprocess.run(host + ["-std=c2x", "-E", "-P", str(source)],
+                                       capture_output=True, text=True, timeout=5)
+            assert reference.returncode == 0, (text, reference.stderr)
+            expanded.write_text(reference.stdout)
+            actual = subprocess.run(command + [str(source)],
+                                    capture_output=True, text=True, timeout=5)
+            expected = subprocess.run(command + [str(expanded)],
+                                      capture_output=True, text=True, timeout=5)
+            assert actual.returncode == expected.returncode == 0, (text, actual.stderr, expected.stderr)
+            assert actual.stdout == expected.stdout, (text, actual.stdout, expected.stdout)
+    for body, chosen, alternate in policy_examples:
+        text = policy_prefix + body
         source.write_text(text)
         reference = subprocess.run(host + ["-std=c2x", "-E", "-P", str(source)],
                                    capture_output=True, text=True, timeout=5)
         assert reference.returncode == 0, (text, reference.stderr)
         expanded.write_text(reference.stdout)
-        actual = subprocess.run([str(driver), str(source)],
+        actual = subprocess.run([str(driver), "--pp", str(source)],
                                 capture_output=True, text=True, timeout=5)
-        expected = subprocess.run([str(driver), str(expanded)],
+        expected = subprocess.run([str(driver), "--pp", str(expanded)],
                                   capture_output=True, text=True, timeout=5)
+        chosen_dump = "".join('string:"' + value + '"\n' for value in chosen)
+        alternate_dump = "".join('string:"' + value + '"\n' for value in alternate)
         assert actual.returncode == expected.returncode == 0, (text, actual.stderr, expected.stderr)
-        assert actual.stdout == expected.stdout, (text, actual.stdout, expected.stdout)
-print(f"Macro token/spelling oracle passed ({len(examples)} cases; {host[0]})")
+        assert actual.stdout == chosen_dump, (text, actual.stdout, chosen_dump)
+        assert expected.stdout in (chosen_dump, alternate_dump), (text, expected.stdout)
+print(f"Macro token/spelling oracle passed ({len(examples)} language + "
+      f"{len(pp_examples)} expanded-pp agreements; "
+      f"{len(policy_examples)} explicit whitespace policies; {host[0]})")

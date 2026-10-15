@@ -47,6 +47,7 @@ enum token_kind {
 
 /* Spelling uses spelling_location; location is the diagnostic invocation.
  * Both offsets address prepared source data, with explicit logical length.
+ * Spelling may use an arena-owned generated source view, not the input source.
  * Use source_physical_offset() only for physical positions, not spelling reads.
  */
 struct token {
@@ -69,7 +70,7 @@ enum pp_token_kind {
 	pp_newline,
 };
 
-/* Borrowed logical spellings, with no keyword classification or numeric value. */
+/* Borrowed logical spellings (input or arena view), without language values. */
 struct pp_token {
 	enum pp_token_kind kind;
 	struct source_location location;

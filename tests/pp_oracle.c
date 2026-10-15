@@ -2,6 +2,7 @@
 #include "preprocess.h"
 
 #include <stdio.h>
+#include <string.h>
 
 int main(int argc, char **argv)
 {
@@ -9,8 +10,9 @@ int main(int argc, char **argv)
 	struct diagnostics diagnostics = { stderr, 0 };
 	struct preprocessor preprocessor;
 	bool output_ok = true;
+	bool pp_mode = argc == 3 && strcmp(argv[1], "--pp") == 0;
 
-	if (argc != 2 || !source_load(&source, argv[1]))
+	if ((!pp_mode && argc != 2) || !source_load(&source, argv[pp_mode ? 2 : 1]))
 		return 1;
 	if (!source_prepare(&source)) {
 		source_destroy(&source);
@@ -18,14 +20,30 @@ int main(int argc, char **argv)
 	}
 	preprocess_init(&preprocessor, &source, &diagnostics);
 	for (;;) {
-		struct token token = preprocess_next(&preprocessor);
-		const struct source_location spelling = token.spelling_location;
+		struct source_location spelling;
+		size_t length;
+		const char *kind;
 
-		if (token.kind == token_eof)
-			break;
-		if (printf("%s:", token_kind_name(token.kind)) < 0 ||
-			fwrite(spelling.source->data + spelling.offset, 1, token.length, stdout) !=
-			token.length || putchar('\n') == EOF)
+		if (pp_mode) {
+			struct pp_token token = preprocess_next_pp(&preprocessor);
+
+			if (token.kind == pp_eof)
+				break;
+			spelling = token.location;
+			length = token.length;
+			kind = pp_token_kind_name(token.kind);
+		} else {
+			struct token token = preprocess_next(&preprocessor);
+
+			if (token.kind == token_eof)
+				break;
+			spelling = token.spelling_location;
+			length = token.length;
+			kind = token_kind_name(token.kind);
+		}
+		if (printf("%s:", kind) < 0 ||
+			fwrite(spelling.source->data + spelling.offset, 1, length, stdout) != length ||
+			putchar('\n') == EOF)
 			output_ok = false;
 	}
 	if (fflush(stdout) != 0)

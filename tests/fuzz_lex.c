@@ -55,6 +55,54 @@ static void check_raw_stream(const struct source *source, struct diagnostics *di
 	}
 }
 
+static void check_expanded_stream(const struct source *source, FILE *stream)
+{
+	struct diagnostics diagnostics = { stream, 0 };
+	struct preprocessor preprocessor;
+	size_t previous_offset = 0;
+
+	preprocess_init(&preprocessor, source, &diagnostics);
+	for (size_t steps = 0; ; steps++) {
+		struct pp_token token = preprocess_next_pp(&preprocessor);
+		const struct source *spelling = token.location.source;
+
+		assert(steps <= source->length + preprocess_work_limit + 1);
+		assert(token.kind != pp_newline);
+		assert(token.expansion_location.source == source);
+		assert(token.expansion_location.offset >= previous_offset);
+		assert(token.expansion_location.offset <= source->length);
+		assert(spelling->prepared && token.location.offset <= spelling->length);
+		assert(token.length <= spelling->length - token.location.offset);
+		assert(preprocessor.expansion_work <= preprocess_work_limit);
+		assert(preprocessor.auxiliary_records <= preprocess_auxiliary_limit);
+		assert(preprocessor.spelling_bytes <= preprocess_spelling_limit);
+		assert(preprocessor.prescan_depth == 0);
+		if (spelling != source) {
+			struct pp_lexer lexer;
+			struct pp_token raw;
+
+			assert(token.kind == pp_string && token.location.offset == 0);
+			assert(token.length == spelling->length && spelling->data[token.length] == 0);
+			pp_lexer_init(&lexer, spelling, &diagnostics);
+			raw = pp_lexer_next(&lexer);
+			assert(raw.kind == pp_string && raw.length == token.length);
+			assert(pp_lexer_next(&lexer).kind == pp_eof);
+		}
+		if (token.kind == pp_eof) {
+			size_t errors = diagnostics.errors;
+
+			assert(spelling == source && token.length == 0);
+			assert(token.location.offset == source->length);
+			assert_same_pp_token(token, preprocess_next_pp(&preprocessor));
+			assert(diagnostics.errors == errors);
+			break;
+		}
+		assert(token.length > 0);
+		previous_offset = token.expansion_location.offset;
+	}
+	preprocess_destroy(&preprocessor);
+}
+
 static void assert_same_language_token(struct token left, struct token right)
 {
 	assert(left.kind == right.kind);
@@ -97,12 +145,15 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 			&source, i + 1 }) > physical);
 	}
 	check_raw_stream(&source, &diagnostics);
+	check_expanded_stream(&source, stream);
 	preprocess_init(&preprocessor, &source, &diagnostics);
 	for (size_t steps = 0; ; steps++) {
 		struct token peek = preprocess_peek(&preprocessor);
 		size_t errors = diagnostics.errors;
 		size_t work = preprocessor.expansion_work;
 		size_t auxiliary = preprocessor.auxiliary_records;
+		size_t spelling_bytes = preprocessor.spelling_bytes;
+		bool deferred_space = preprocessor.cursor.deferred_space;
 		size_t frames = preprocessor.cursor.frame_count;
 		size_t offset = preprocessor.input.offset;
 		bool pending = preprocessor.cursor.has_pending;
@@ -114,6 +165,8 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(diagnostics.errors == errors);
 		assert(preprocessor.expansion_work == work);
 		assert(preprocessor.auxiliary_records == auxiliary);
+		assert(preprocessor.spelling_bytes == spelling_bytes);
+		assert(preprocessor.cursor.deferred_space == deferred_space);
 		assert(preprocessor.cursor.frame_count == frames);
 		assert(preprocessor.input.offset == offset);
 		assert(preprocessor.cursor.has_pending == pending);
@@ -133,9 +186,12 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(source_physical_offset(token.location) <= size);
 		assert(token.location.offset >= previous_end);
 		assert(token.location.offset <= source.length);
-		assert(token.spelling_location.source == &source);
-		assert(token.spelling_location.offset <= source.length);
-		assert(token.length <= source.length - token.spelling_location.offset);
+		assert(token.spelling_location.source->prepared);
+		assert(token.spelling_location.offset <= token.spelling_location.source->length);
+		assert(token.length <= token.spelling_location.source->length - token.spelling_location.offset);
+		if (token.spelling_location.source != &source)
+			assert(token.kind == token_invalid);
+		assert(preprocessor.spelling_bytes <= preprocess_spelling_limit);
 		if (token.kind == token_eof) {
 			assert(token.location.offset == source.length && token.length == 0);
 			assert_same_language_token(token, preprocess_next(&preprocessor));

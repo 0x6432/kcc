@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M10d. The chronological entries below describe what each
+Current milestone: M11a. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -373,7 +373,7 @@ Some rescan cases have unspecified C23 behavior; oracle agreement is scoped
 validation, not proof of a unique ISO result or complete preprocessing.
 
 
-## M10d (current)
+## M10d
 
 Variadic definitions/invocations, __VA_ARGS__ and __VA_OPT__ are supported.
 C23 omitted tails and explicit empty tails are accepted; optional regions use
@@ -397,3 +397,36 @@ remain future work. Source directives during invocation lookahead still reject.
 Location caveats, unspecified rescan cases, diagnostic prefix scanning and lack
 of allocation-failure injection remain as documented above. Oracle agreement
 and bounded fuzzing are not a full-conformance or hostile-input CPU guarantee.
+
+
+## M11a (current)
+
+Raw named/variadic parameter stringizing with #/%: is supported, including
+inside selected __VA_OPT__ bodies. #__VA_OPT__ itself remains explicitly
+unsupported until M11b. Token pasting, includes/conditions and other directives,
+predefined macros, C string expressions/concatenation and the remaining language/
+ABI work are not implemented. The expanded-pp test API can inspect generated
+strings; that is not language string support. Defined QBE tests generate then
+discard strings before conversion, rather than pretending they execute strings.
+
+Generated spellings use arena-owned source views, not slices of the input.
+Views share the auxiliary-record limit; buffers including terminating NULs share
+a cumulative 1 MiB byte cap. Existing work/storage/prescan/source limits remain.
+Raw-token stringizing visits consume work; byte measurement/filling is bounded
+by the synthesized byte cap. No allocation-failure injection or hostile-input
+CPU guarantee has been added. Consumers must honor the view lifetime and not
+call source_destroy on borrowed spelling views. Diagnostics remain outermost
+original invocation locations, not a full expansion provenance stack.
+
+Quoted-token quotes/backslashes are escaped; raw nonliteral backslashes are
+rejected in the no-UCN subset rather than producing an invalid string. UCN and
+complete quoted-literal validation remain later lexical work.
+
+Two-level stringizing exposes observed GCC 11.5 / Clang 15 whitespace differences.
+kcc currently follows GCC: preserve separation left by removed internal macros;
+ignore whitespace solely inside __VA_OPT__ delimiters. The five policy groups
+are isolated from agreement tests and record both observed outputs. This is not
+a claim of ISO implementation-defined permission or a settled conformance ruling.
+Review the interpretation during the later standards audit; portable programs
+should not rely on these disagreeing whitespace cases. Earlier diagnostic prefix
+scanning, source-directive lookahead and rescan/provenance caveats still apply.

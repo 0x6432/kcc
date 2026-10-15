@@ -418,6 +418,24 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define BOTH(...) ((__VA_ARGS__) && (__VA_ARGS__))\n"
          "int main(void) { int x=0; BOTH(x=x+1); return x; }\n", 2),
     ]
+    directive_programs += [
+        ("#define DROP(x) 42\n#define OUT(x) DROP(#x)\n"
+         "int main(void) { return OUT(a + b); }\n", 42),
+        ("#define DROP(x) 42\n#define OUT(x) DROP(%: x)\n"
+         "int main(void) { return OUT(12u); }\n", 42),
+        ("#define DROP(x) 42\n#define OUT(...) DROP(#__VA_ARGS__)\n"
+         "int main(void) { return OUT(a,b,c); }\n", 42),
+        ("#define DROP(x) 42\n#define OUT(...) DROP(#__VA_ARGS__)\n"
+         "int main(void) { return OUT(); }\n", 42),
+        ("#define DROP(x) 42\n#define OUT(x,...) DROP(__VA_OPT__(#x))\n"
+         "int main(void) { return OUT(a,1); }\n", 42),
+        ("#define DROP(x) 42\n#define OUT(x,...) DROP(__VA_OPT__(#x))\n"
+         "int main(void) { return OUT(a); }\n", 42),
+        ("#define DROP(x) 40\n#define OUT(x) DROP(#x)+x\n"
+         "int main(void) { return OUT(2); }\n", 42),
+        ("#define DROP(x) 42\n#define OUT(x) DROP(#x)\n#define BAD(a,b) a+b\n"
+         "int main(void) { return OUT(BAD(1)); }\n", 42),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -631,6 +649,10 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define S(x) #x\nint main(void) { return S(a); }", ":2:25: error: string literals are not supported yet"),
+        ("#define OUT(x) INNER(x)\n#define INNER(x) #x\nint main(void) { return OUT(a); }", ":3:25: error: string literals are not supported yet"),
+        ("#define S(x) #1\nint main(void) { return 0; }", "expected a macro parameter after stringizing"),
+        ("#define S(...) #__VA_OPT__(1)\nint main(void) { return 0; }", "stringizing __VA_OPT__ is not supported yet"),
         ("#define V(...) __VA_ARGS__\nint main(void) { return V(missing); }", ":2:25: error:"),
         ("#define V(...) __VA_OPT__(missing)\nint main(void) { return V(1); }", ":2:25: error:"),
         ("#define V(...) __VA_ARGS__\nint main(void) { return V(12u); }", ":2:25: error: unsupported numeric"),

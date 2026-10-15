@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a raw parameter stringizing under final validation) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -574,3 +574,30 @@ remaining C23 language/ABI milestones are not complete. Next: design a small
 M11a stringizing checkpoint, accounting for borrowed versus synthesized spelling,
 raw arguments, whitespace/escaping and __VA_OPT__ semantics before coding.
 Token pasting needs its own re-lex/placemarker design, not a shortcut extension.
+
+
+## M11a planned implementation
+
+Decisions are recorded in m11-stringizing.md before coding: raw named/variadic
+argument stringizing, owned synthesized spellings, bounded bytes, expanded-pp
+inspection and observable whitespace contracts. #__VA_OPT__ interactions are a
+separate M11b checkpoint; token pasting and directives remain later M11 slices.
+This planning entry makes no implementation or validation claim.
+
+
+## M11a tested implementation checkpoint
+
+make test passed, retaining 564 language-token oracle streams and adding 142
+expanded-pp agreement streams. Both GCC and Clang passed the 706 agreement
+cases and five separately recorded whitespace-policy groups. GCC-host QBE/
+reference execution and separate-object ABI tests passed, including eight new
+stringize-then-discard programs under LF/CRLF/CR. Single and cumulative 1 MiB
+spelling boundaries, generated-source lifetime and cached conversion errors pass.
+Sanitized fuzzing passed 19909 lexer/preprocessor and 114717 pipeline inputs
+(134626 total) in 26 seconds each; arbitrary generated C was not executed.
+
+This source checkpoint is pushed before the longer full normal/ASan/UBSan
+GCC/Clang matrix to protect work from sandbox resets. That matrix and exact
+pushed-commit CI are pending and must be checked separately. The subset excludes
+#__VA_OPT__, ##, directives beyond define/undef/null and C string expressions.
+The host whitespace differences remain a documented conformance-audit gap.

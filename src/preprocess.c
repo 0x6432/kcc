@@ -1,5 +1,6 @@
 #include "preprocess.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,6 +10,7 @@ struct macro_token {
 	struct macro_token *va_opt_end;
 	size_t parameter_index;
 	bool va_opt_close;
+	bool stringize;
 };
 
 struct macro_parameter {
@@ -26,6 +28,7 @@ struct macro_argument {
 	struct argument_token *raw;
 	struct argument_token *expanded;
 	bool expanded_ready;
+	bool trailing_space;
 };
 
 struct macro {
@@ -92,18 +95,6 @@ static struct token invalid_token(struct pp_token token)
 		.location = token.expansion_location,
 		.spelling_location = token.location,
 		.length = token.length,
-	};
-}
-
-static struct token end_token(const struct preprocessor *preprocessor)
-{
-	const struct source *source = preprocessor->input.source;
-	struct source_location location = { source, source->length };
-
-	return (struct token) {
-		.kind = token_eof,
-		.location = location,
-		.spelling_location = location,
 	};
 }
 
@@ -325,10 +316,37 @@ static bool validate_optional_replacements(struct preprocessor *preprocessor,
 	return true;
 }
 
+/* stringizing = ('#' | '%:') parameter
+ * #__VA_OPT__ is a separate, explicitly diagnosed operator-interaction slice.
+ */
+static bool validate_stringizing(struct preprocessor *preprocessor,
+	struct pp_token marker, struct macro_token *replacement, struct token *error)
+{
+	for (struct macro_token *item = replacement; item; item = item->next) {
+		if (!is_directive_marker(item->token))
+			continue;
+		if (item->next && item->next->va_opt_end) {
+			diagnostic_error(preprocessor->diagnostics, item->token.location,
+				"stringizing __VA_OPT__ is not supported yet");
+			*error = invalid_token(marker);
+			return false;
+		}
+		if (!item->next || item->next->parameter_index == SIZE_MAX) {
+			diagnostic_error(preprocessor->diagnostics, item->token.location,
+				"expected a macro parameter after stringizing operator");
+			*error = invalid_token(marker);
+			return false;
+		}
+		item->stringize = true;
+		item->parameter_index = item->next->parameter_index;
+	}
+	return true;
+}
+
 /* define-directive = '#' 'define' identifier function-parameters? replacement-list newline
  * undef-directive = '#' 'undef' identifier newline
  * replacement-list = preprocessing-token*
- * Stringizing and token pasting remain deferred.
+ * Token pasting and stringized optional regions remain deferred.
  */
 static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, bool define, struct token *error)
@@ -406,11 +424,6 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 				"macro token pasting is not supported yet");
 			return false;
 		}
-		if (function_like && is_directive_marker(token)) {
-			*error = reject_directive(preprocessor, marker, token,
-				"macro stringizing is not supported yet");
-			return false;
-		}
 		if (count == preprocess_replacement_limit ||
 			preprocessor->stored_tokens == preprocess_storage_limit) {
 			*error = stop_preprocessing(preprocessor, marker,
@@ -439,7 +452,8 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 			macro->defined = false;
 		return true;
 	}
-	if (!validate_optional_replacements(preprocessor, marker, replacement, error))
+	if (!validate_optional_replacements(preprocessor, marker, replacement, error) ||
+		(function_like && !validate_stringizing(preprocessor, marker, replacement, error)))
 		return false;
 	if (macro && macro->defined) {
 		if (macro->function_like == function_like && macro->variadic == variadic &&
@@ -611,6 +625,110 @@ static struct argument_token *copy_argument_token(struct preprocessor *preproces
 	return copy;
 }
 
+/* The byte budget includes quotes and NUL, across all retained spellings. */
+static bool add_stringizing_bytes(struct preprocessor *preprocessor, size_t *length,
+	size_t amount, struct pp_token blame, struct token *error)
+{
+	size_t remaining = preprocess_spelling_limit - preprocessor->spelling_bytes;
+
+	if (amount > remaining - *length) {
+		*error = stop_preprocessing(preprocessor, blame, "macro synthesized spelling limit exceeded");
+		return false;
+	}
+	*length += amount;
+	return true;
+}
+
+/* Stringize raw tokens, not the prescan cache. Two bounded passes avoid a
+ * growing temporary buffer; literal-token quotes/backslashes alone are escaped.
+ */
+static bool stringize_argument(struct preprocessor *preprocessor,
+	const struct macro_argument *argument, struct pp_token operator,
+	struct pp_token *result, struct token *error)
+{
+	size_t length = 0;
+	size_t used = 0;
+	struct source *spelling;
+	unsigned char *text;
+
+	if (!add_stringizing_bytes(preprocessor, &length, 3, operator, error))
+		return false;
+	for (struct argument_token *item = argument->raw; item; item = item->next) {
+		struct pp_token token = item->input.token;
+		const unsigned char *bytes = token.location.source->data + token.location.offset;
+		bool literal = token.kind == pp_string || token.kind == pp_character;
+
+		if (!spend_expansion_work(preprocessor, operator, error))
+			return false;
+		if (item != argument->raw && token.leading_space &&
+			!add_stringizing_bytes(preprocessor, &length, 1, operator, error))
+			return false;
+		for (size_t i = 0; i < token.length; i++) {
+			bool escape = literal && (bytes[i] == '"' || bytes[i] == '\\');
+
+			if (!literal && bytes[i] == '\\') {
+				*error = stop_preprocessing(preprocessor, operator,
+					"stringizing a backslash outside a literal is not supported yet");
+				return false;
+			}
+			if (!add_stringizing_bytes(preprocessor, &length, escape ? 2 : 1, operator, error))
+				return false;
+		}
+	}
+	spelling = allocate_auxiliary(preprocessor, 1, sizeof(*spelling), operator, error);
+	if (!spelling)
+		return false;
+	text = arena_alloc(&preprocessor->storage, length);
+	if (!text) {
+		*error = stop_preprocessing(preprocessor, operator, "cannot allocate synthesized spelling");
+		return false;
+	}
+	text[used++] = '"';
+	for (struct argument_token *item = argument->raw; item; item = item->next) {
+		struct pp_token token = item->input.token;
+		const unsigned char *bytes = token.location.source->data + token.location.offset;
+		bool literal = token.kind == pp_string || token.kind == pp_character;
+
+		if (item != argument->raw && token.leading_space)
+			text[used++] = ' ';
+		for (size_t i = 0; i < token.length; i++) {
+			if (literal && (bytes[i] == '"' || bytes[i] == '\\'))
+				text[used++] = '\\';
+			text[used++] = bytes[i];
+		}
+	}
+	text[used++] = '"';
+	text[used++] = 0;
+	assert(used == length);
+	/* Arena-owned view: never source_destroy this record or its borrowed name. */
+	*spelling = (struct source) {
+		.name = "<macro spelling>",
+		.data = text,
+		.length = length - 1,
+		.physical_length = length - 1,
+		.prepared = true,
+	};
+	preprocessor->spelling_bytes += length;
+	*result = (struct pp_token) {
+		.kind = pp_string,
+		.location = { spelling, 0 },
+		.expansion_location = operator.expansion_location,
+		.length = length - 1,
+		.leading_space = operator.leading_space,
+	};
+	return true;
+}
+
+static void apply_frame_spacing(struct expansion_frame *frame, struct pp_token *token,
+	bool preserve_argument_space)
+{
+	if (frame->first) {
+		token->leading_space = frame->leading_space ||
+			(preserve_argument_space && token->leading_space);
+		frame->first = false;
+	}
+}
+
 /* Read one unexpanded token. A parameter occurrence injects its prescanned
  * argument stream, retaining per-token hide bits in addition to the call base.
  */
@@ -627,8 +745,12 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 
 		while (cursor->frame_count &&
 			!cursor->frames[cursor->frame_count - 1].replacement &&
-			!cursor->frames[cursor->frame_count - 1].argument)
+			!cursor->frames[cursor->frame_count - 1].argument) {
+			frame = &cursor->frames[cursor->frame_count - 1];
+			if ((frame->first && frame->leading_space) || frame->trailing_space)
+				cursor->deferred_space = true;
 			cursor->frame_count--;
+		}
 		if (!cursor->frame_count)
 			break;
 		frame = &cursor->frames[cursor->frame_count - 1];
@@ -636,6 +758,7 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 			*result = frame->argument->input;
 			frame->argument = frame->argument->next;
 			result->hide = hide_union(&result->hide, &frame->hide);
+			apply_frame_spacing(frame, &result->token, true);
 		} else {
 			struct macro_token *replacement = frame->replacement;
 
@@ -643,11 +766,22 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 			*result = (struct rescan_token) { .token = replacement->token, .hide = frame->hide };
 			result->token.expansion_location = frame->invocation;
 			if (replacement->va_opt_close) {
+				if (frame->first) {
+					cursor->deferred_space |= frame->leading_space;
+					frame->first = false;
+				}
 				if (!spend_expansion_work(preprocessor, result->token, error))
 					return false;
 				continue;
 			}
-			if (replacement->va_opt_end) {
+			apply_frame_spacing(frame, &result->token, false);
+			if (replacement->stringize) {
+				frame->replacement = replacement->next->next;
+				if (!stringize_argument(preprocessor,
+					&frame->arguments[replacement->parameter_index], result->token,
+					&result->token, error))
+					return false;
+			} else if (replacement->va_opt_end) {
 				struct macro_argument *variable =
 					&frame->arguments[replacement->parameter_index];
 
@@ -656,25 +790,36 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 					return false;
 				frame->replacement = variable->expanded ? replacement->next->next :
 					replacement->va_opt_end->next;
+				if (variable->expanded) {
+					frame->first = true;
+					frame->leading_space = result->token.leading_space;
+				} else
+					cursor->deferred_space |= result->token.leading_space;
 				continue;
-			}
-			if (replacement->parameter_index != SIZE_MAX) {
+			} else if (replacement->parameter_index != SIZE_MAX) {
 				struct macro_argument *argument =
 					&frame->arguments[replacement->parameter_index];
 
 				if (!spend_expansion_work(preprocessor, result->token, error) ||
 					!prescan_argument(preprocessor, argument, result->token, error))
 					return false;
+				if (!argument->expanded)
+					cursor->deferred_space |= result->token.leading_space || argument->trailing_space;
 				if (argument->expanded && !push_frame(preprocessor, cursor,
 					(struct expansion_frame) {
 						.argument = argument->expanded,
 						.invocation = frame->invocation,
 						.hide = frame->hide,
+						.first = true,
+						.leading_space = result->token.leading_space,
+						.trailing_space = argument->trailing_space,
 					}, result->token, error))
 					return false;
 				continue;
 			}
 		}
+		result->token.leading_space |= cursor->deferred_space;
+		cursor->deferred_space = false;
 		result->from_source = false;
 		result->token.expansion_location = frame->invocation;
 		result->token.at_line_start = false;
@@ -684,6 +829,8 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 		*result = cursor->input->input;
 		cursor->input = cursor->input->next;
 		result->from_source = false;
+		result->token.leading_space |= cursor->deferred_space;
+		cursor->deferred_space = false;
 		return spend_expansion_work(preprocessor, result->token, error);
 	}
 	if (!cursor->source_input) {
@@ -691,9 +838,14 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 		return true;
 	}
 	*result = (struct rescan_token) { .from_source = true };
-	do {
+	for (;;) {
 		result->token = pp_lexer_next(&preprocessor->input);
-	} while (result->token.kind == pp_newline);
+		if (result->token.kind != pp_newline)
+			break;
+		cursor->deferred_space = true;
+	}
+	result->token.leading_space |= cursor->deferred_space;
+	cursor->deferred_space = false;
 	return true;
 }
 
@@ -812,6 +964,8 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 		copy = copy_argument_token(preprocessor, next, name.token, error);
 		if (!copy)
 			return false;
+		if (!(*arguments)[index].raw)
+			copy->input.token.leading_space = false;
 		*tail = copy;
 		tail = &copy->next;
 	}
@@ -862,6 +1016,8 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 			.arguments = arguments,
 			.invocation = input.token.expansion_location,
 			.hide = hide,
+			.first = true,
+			.leading_space = input.token.leading_space,
 		}, input.token, error))
 			return false;
 	}
@@ -897,6 +1053,7 @@ static bool prescan_argument(struct preprocessor *preprocessor,
 		if (!read_expanded_token(preprocessor, cursor, &input, error))
 			break;
 		if (input.token.kind == pp_eof) {
+			argument->trailing_space = cursor->deferred_space;
 			argument->expanded_ready = true;
 			success = true;
 			break;
@@ -912,16 +1069,29 @@ static bool prescan_argument(struct preprocessor *preprocessor,
 	return success;
 }
 
-static struct token read_preprocessed_token(struct preprocessor *preprocessor)
+struct pp_token preprocess_next_pp(struct preprocessor *preprocessor)
 {
 	struct rescan_token input;
 	struct token error;
 
+	assert(!preprocessor->has_lookahead);
 	if (preprocessor->stopped)
-		return end_token(preprocessor);
+		return cursor_end(&preprocessor->cursor).token;
 	if (!read_expanded_token(preprocessor, &preprocessor->cursor, &input, &error))
-		return error;
-	return token_from_pp(input.token, preprocessor->diagnostics);
+		return (struct pp_token) {
+			.kind = pp_invalid,
+			.location = error.spelling_location,
+			.expansion_location = error.location,
+			.length = error.length,
+		};
+	if (input.token.kind == pp_eof)
+		return cursor_end(&preprocessor->cursor).token;
+	return input.token;
+}
+
+static struct token read_preprocessed_token(struct preprocessor *preprocessor)
+{
+	return token_from_pp(preprocess_next_pp(preprocessor), preprocessor->diagnostics);
 }
 
 void preprocess_init(struct preprocessor *preprocessor, const struct source *source,

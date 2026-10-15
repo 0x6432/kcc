@@ -6,14 +6,15 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M10d: variadic function-like macros support `__VA_ARGS__` and `__VA_OPT__`,
-including C23 omitted variable tails and arguments that expand to nothing.
-Object-like, zero-parameter and fixed-parameter macros remain supported.
-Macro operators and full C23 coverage remain unfinished.
+M11a: named and variadic raw arguments can be stringized with `#` or `%:`,
+including inside selected `__VA_OPT__` regions. Generated spellings are owned
+by the preprocessor and bounded independently from input/argument storage.
+Earlier object/fixed/variadic macro features remain supported.
 
-See `docs/m10-variadics.md` for ownership, limits and subset policy, plus
-`docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
-Earlier M10 design documents describe the incremental checkpoints.
+This is preprocessing-token string generation, not C string-expression support.
+`#__VA_OPT__`, token pasting and full C23 coverage remain unfinished.
+See `docs/m11-stringizing.md`, `docs/milestones.md`, `docs/limitations.md`
+and `docs/handoff.md` for contracts, acceptance evidence and remaining work.
 
 ## Build and test
 
@@ -72,13 +73,13 @@ cc build/example.s -o build/example
 
 Supported: normalized line endings, backslash-newline splicing, physical source
 locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
-macros (including __VA_ARGS__/__VA_OPT__), decimal int literals, int locals, simple assignment, arithmetic,
+macros (including __VA_ARGS__/__VA_OPT__ and raw parameter stringizing), decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: token pasting, stringizing, includes,
+Unsupported: token pasting, stringizing __VA_OPT__, C string expressions, includes,
 conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
@@ -90,12 +91,14 @@ arguments, 4096 body items and 256 parameter/local slots per function. Macros:
 1024 distinct names, 1024 tokens/definition, 65536 retained replacement tokens,
 128 retained expansion frames and 65536 work units (pushes, visits, argument
 collection/copies). Arguments: 128 named parameters plus one variadic slot, 128 nested parentheses,
-64 nested prescans and 65536 auxiliary records (parameters/arguments/token copies).
+64 nested prescans and 65536 auxiliary records (parameters/arguments/token copies
+and synthesized spelling views). Generated spelling bytes, including NULs, are
+cumulatively capped at 1 MiB per translation unit.
 
 `make test-codegen` also runs separate-object ABI tests with the selected host
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
-CI runs GCC and Clang, compiler sanitizers, 564 host-preprocessor token/spelling oracle cases, generated
-executables, ABI tests
+CI runs GCC and Clang, compiler sanitizers, 564 language-token plus 142 expanded-pp token/spelling agreement cases,
+five separate whitespace-policy regressions, generated executables and ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
 ## Raw token inspection
@@ -164,3 +167,25 @@ Trailing variable arguments retain separator commas; only parentheses protect
 commas during collection. Nested `__VA_OPT__` is rejected at definition time.
 GNU named ellipses and comma-swallowing extensions are not implemented.
 Variadic macros do not enable variadic C functions or their ABI.
+
+
+## Stringizing checkpoint
+
+```c
+#define DISCARD(x) 42
+#define DESCRIBE(x) DISCARD(#x)
+int main(void) { return DESCRIBE(a + b); }
+```
+
+This exits 42 through QBE: the generated string token is discarded before C
+language conversion. Using it directly as a C expression still diagnoses that
+string literals are unsupported. The test-only `build/pp_oracle --pp file.c`
+prints expanded preprocessing token kinds and spellings; `--pp-tokens` on the
+compiler remains the unexpanded raw inspection mode.
+
+`#x` uses raw arguments, trims outside trivia, collapses separating whitespace
+and escapes quotes/backslashes in literal tokens. It does not expand `x` first.
+Two-level stringizing exposes whitespace differences between GCC and Clang in
+some empty-expansion cases. kcc currently follows the documented GCC behavior;
+those five regression groups are not counted as cross-host agreement or an ISO
+conformance determination. See the design/limitations before relying on them.

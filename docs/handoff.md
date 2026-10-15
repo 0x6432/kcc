@@ -2,11 +2,11 @@
 
 ## Current checkpoint
 
-M10d: variadic macro collection, __VA_ARGS__ and streamed __VA_OPT__ regions.
+M11a: raw argument stringizing, owned spellings and expanded-pp inspection.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M10d source CI passed: https://github.com/0x6432/kcc/actions/runs/38759964506
-M09–M10d are complete for their stated subsets. M11 operators/directives are next.
+Previous M10d final CI passed: https://github.com/0x6432/kcc/actions/runs/38760829356
+M09–M10d are complete for their stated subsets. M11a final validation is pending.
 Full preprocessing and full C23 remain incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
@@ -121,7 +121,8 @@ implicit return value. No automatic local zeroing or missing-return warning.
 Raw quoted literals and punctuators do not enable their C semantics. Only brace
 digraphs are newly accepted language spelling; int-only conversion still applies.
 Null/define/undef, object-like and fixed/variadic function macros are supported,
-including __VA_ARGS__/__VA_OPT__. No macro operators, other directives, other
+including __VA_ARGS__/__VA_OPT__ and raw parameter #/%:. No #__VA_OPT__, token
+pasting, C string expressions, other directives, other
 types, pointers/function values, variadic functions, local
 prototypes, globals/storage classes, comma/update/compound-assignment operators.
 Partial phases only: no header-name context, encoding/UCNs/BOM,
@@ -156,13 +157,13 @@ paths. Final local/fuzz results and remote verification follow below.
 
 ## Next milestone
 
-M11: macro operators and directive integration, still to be split into small
-implementation checkpoints before coding. Start with stringizing/token pasting
-in isolation; decide spelling ownership, re-lex validation, raw argument and
-placemarker semantics, including __VA_OPT__ interactions. Do not silently add
-GNU comma swallowing. Includes/conditions require separate bounded source and
-evaluation designs. Read m10-variadics.md and the existing fixed-argument contract.
-M25 needs richer predefined-location provenance than outermost diagnostics.
+M11b: #__VA_OPT__ operator interaction. Read m11-stringizing.md first. Decide
+how to substitute optional-body parameters without prematurely rescanning the
+whole body, remove placemarkers and apply stringizing escaping. The current raw
+parameter path must not stringify the unprocessed operator text. Token pasting
+is a subsequent checkpoint requiring generated spelling re-lex and placemarker
+semantics. Includes/conditions need separately bounded source/evaluation designs.
+Do not silently add GNU comma swallowing. M25 still owns predefined provenance.
 
 M10c uses concrete arena-owned macro_parameter, macro_argument and argument_token
 records. Definition tokens have parameter_index or SIZE_MAX. Parameter name/order
@@ -349,3 +350,39 @@ remaining C23 language/ABI milestones are not complete. Next: design a small
 M11a stringizing checkpoint, accounting for borrowed versus synthesized spelling,
 raw arguments, whitespace/escaping and __VA_OPT__ semantics before coding.
 Token pasting needs its own re-lex/placemarker design, not a shortcut extension.
+
+
+## M11a implementation checkpoint
+
+All production stringizing code is in preprocess.c. Arena-owned prepared source
+views and byte buffers preserve existing token layouts while allowing non-input
+spellings. Both parser language conversion and expanded-pp reads share one cursor;
+choose a mode and never bypass pending language lookahead. See the stringizing
+design, current limitations and latest component contract before changing this.
+
+New tests cover raw/no-prescan behavior, escaping, empty/variadic arguments,
+optional-body operators, transactional definition validation, generated lifetime,
+original-call diagnostics, cache/EOF stability and exact single/cumulative 1 MiB
+bounds. The expanded-pp fuzz path re-lexes generated strings and checks their
+source ownership. Five explicit whitespace-policy groups distinguish host
+disagreements from 564 language + 142 expanded-pp agreement streams. Follow-up
+ISO interpretation audit is still needed; do not overstate host agreement.
+Final local/fuzz and exact-commit remote results will be recorded below.
+
+
+## M11a tested implementation checkpoint
+
+make test passed, retaining 564 language-token oracle streams and adding 142
+expanded-pp agreement streams. Both GCC and Clang passed the 706 agreement
+cases and five separately recorded whitespace-policy groups. GCC-host QBE/
+reference execution and separate-object ABI tests passed, including eight new
+stringize-then-discard programs under LF/CRLF/CR. Single and cumulative 1 MiB
+spelling boundaries, generated-source lifetime and cached conversion errors pass.
+Sanitized fuzzing passed 19909 lexer/preprocessor and 114717 pipeline inputs
+(134626 total) in 26 seconds each; arbitrary generated C was not executed.
+
+This source checkpoint is pushed before the longer full normal/ASan/UBSan
+GCC/Clang matrix to protect work from sandbox resets. That matrix and exact
+pushed-commit CI are pending and must be checked separately. The subset excludes
+#__VA_OPT__, ##, directives beyond define/undef/null and C string expressions.
+The host whitespace differences remain a documented conformance-audit gap.

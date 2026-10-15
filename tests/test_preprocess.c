@@ -39,19 +39,21 @@ static void check_stream(const char *text, const struct expected_token *expected
 	for (size_t i = 0; i < count; i++) {
 		struct token first = preprocess_peek(&preprocessor);
 		size_t errors = diagnostics.errors;
+		size_t spelling_bytes = preprocessor.spelling_bytes;
 		struct token second = preprocess_peek(&preprocessor);
 		struct token next = preprocess_next(&preprocessor);
 
 		assert_same_token(first, second);
 		assert_same_token(first, next);
 		assert(diagnostics.errors == errors);
+		assert(preprocessor.spelling_bytes == spelling_bytes);
 		if (next.kind != expected[i].kind || next.length != strlen(expected[i].spelling))
 			fprintf(stderr, "stream mismatch at %zu: %s (wanted %s)\n", i, text, expected[i].spelling);
 		assert(next.kind == expected[i].kind);
 		assert(next.length == strlen(expected[i].spelling));
 		assert(next.location.offset >= previous_offset);
-		assert(memcmp(source.data + next.spelling_location.offset, expected[i].spelling,
-			next.length) == 0);
+		assert(memcmp(next.spelling_location.source->data + next.spelling_location.offset,
+			expected[i].spelling, next.length) == 0);
 		assert(next.kind == token_eof || next.length > 0);
 		previous_offset = next.location.offset;
 		last = next;
@@ -851,8 +853,192 @@ static void test_fixed_argument_limits(void)
 	free(text);
 }
 
+/* Expanded-pp tests do not imply support for C string expressions. */
+static void check_stringizing(const char *text, const char *const *expected, size_t count)
+{
+	struct source source;
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { stream, 0 };
+	struct preprocessor preprocessor;
+	struct pp_token first = { 0 };
+
+	assert(stream);
+	assert(source_from_bytes(&source, "stringizing.c",
+		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	for (size_t i = 0; i < count; i++) {
+		struct pp_token token = preprocess_next_pp(&preprocessor);
+		struct pp_lexer lexer;
+		struct pp_token raw;
+
+		assert(token.kind == pp_string && token.length == strlen(expected[i]));
+		assert(token.location.source != &source && token.location.offset == 0);
+		assert(token.location.source->prepared);
+		assert(token.length == token.location.source->length);
+		assert(token.expansion_location.source == &source);
+		assert(token.expansion_location.offset < source.length && !token.at_line_start);
+		assert(memcmp(token.location.source->data, expected[i], token.length) == 0);
+		assert(token.location.source->data[token.length] == 0);
+		/* Every generated spelling re-lexes as exactly one string token. */
+		pp_lexer_init(&lexer, token.location.source, &diagnostics);
+		raw = pp_lexer_next(&lexer);
+		assert(raw.kind == pp_string && raw.length == token.length);
+		assert(pp_lexer_next(&lexer).kind == pp_eof);
+		if (!i)
+			first = token;
+	}
+	assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+	assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+	assert(!diagnostics.errors);
+	if (count)
+		assert(memcmp(first.location.source->data, expected[0], first.length) == 0);
+	assert(preprocessor.spelling_bytes <= preprocess_spelling_limit);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+static void test_stringizing(void)
+{
+	const char *const raw[] = { "\"A\"", "\"a + b\"", "\"\"", "\"ab\"" };
+	const char *const nested[] = { "\"7\"", "\"\\\"a\\\"\"" };
+	const char *const variadic[] = { "\"\"", "\",\"", "\"a, b\"" };
+	const char *const discarded[] = { "\"BAD(1)\"", "\"12u\"", "\"@\"" };
+	const char *const optional[] = { "\"7\"", "\"a,b\"" };
+	const char *const spacing[] = { "\"a+ b\"", "\"a+ b\"", "\"a+b\"", "\"a +b\"" };
+
+	check_stringizing("#define A 7\n#define S(x) #x\nS(A) S( a\t+\n b ) S() S(a\\\nb)",
+		raw, 4);
+	check_stringizing("#define A 7\n#define S(x) #x\n#define X(x) S(x)\nX(A) X(S(a))",
+		nested, 2);
+	check_stringizing("#define S(...) %: __VA_ARGS__\nS() S(,) S(a, b)", variadic, 3);
+	check_stringizing("#define BAD(x,y) x\n#define S(x) #x\nS(BAD(1)) S(12u) S(@)",
+		discarded, 3);
+	check_stringizing("#define S(x,...) __VA_OPT__(#x)\nS(7) S(7,1)\n"
+		"#define V(...) __VA_OPT__(#__VA_ARGS__)\n#define E\nV(E) V(a,b)", optional, 2);
+	check_stringizing("#define S(x) #x\n#define X(x) S(x)\n"
+		"#define V(...) a+__VA_OPT__() b\nX(V(1)) X(V())\n"
+		"#define F(x) a+x\nX(F( b))\n#undef F\n#define F(x) a x+b\nX(F())", spacing, 4);
+}
+
+static void test_stringizing_errors(void)
+{
+	const struct expected_token definition[] = {
+		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
+	};
+	const struct expected_token literal[] = {
+		{ token_invalid, "\"a\"" }, { token_eof, "" },
+	};
+
+	check_stream("#define S(x) #\n7", definition, 3, 1, "expected a macro parameter");
+	check_stream("#define S(x) %: 1\n7", definition, 3, 1, "expected a macro parameter");
+	check_stream("#define S(x) #x\n#define S(x) #1\n#define DROP(x) 7\nDROP(S(a))",
+		definition, 3, 1, "expected a macro parameter");
+	check_stream("#define S(...) #__VA_OPT__(x)\n7", definition, 3, 1,
+		"stringizing __VA_OPT__ is not supported yet");
+	check_stream("#define S(x) #x\nS(a)", literal, 2, 1, "string literals are not supported yet");
+	check_stream("#define S(x) #x\nS(\\)", (const struct expected_token[]) {
+		{ token_invalid, "#" }, { token_eof, "" },
+	}, 2, 1, "backslash outside a literal");
+}
+
+/* The cumulative byte cap counts quotes and terminating NUL for each view. */
+static void test_stringizing_limits(void)
+{
+	const char *prefix = "#define S(x) #x\nS(";
+	size_t prefix_length = strlen(prefix);
+	char *text = malloc(preprocess_spelling_limit + prefix_length + 4);
+
+	assert(text);
+	for (size_t extra = 0; extra < 2; extra++) {
+		struct source source;
+		FILE *stream = tmpfile();
+		struct diagnostics diagnostics = { stream, 0 };
+		struct preprocessor preprocessor;
+		struct pp_token token;
+		size_t argument_length = preprocess_spelling_limit - 3 + extra;
+
+		assert(stream);
+		memcpy(text, prefix, prefix_length);
+		memset(text + prefix_length, 'a', argument_length);
+		memcpy(text + prefix_length + argument_length, ")", 2);
+		assert(source_from_bytes(&source, "stringizing-limit.c",
+			(const unsigned char *)text, strlen(text)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		token = preprocess_next_pp(&preprocessor);
+		if (extra) {
+			assert(token.kind == pp_invalid && preprocessor.stopped);
+			assert(diagnostics.errors == 1 && !preprocessor.spelling_bytes);
+		} else {
+			assert(token.kind == pp_string && !diagnostics.errors);
+			assert(token.length == preprocess_spelling_limit - 1);
+			assert(preprocessor.spelling_bytes == preprocess_spelling_limit);
+		}
+		assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+		assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		assert(fclose(stream) == 0);
+	}
+	free(text);
+}
+
+static void test_stringizing_cumulative_limit(void)
+{
+	const char *prefix = "#define S(x) #x #x\nS(";
+	size_t prefix_length = strlen(prefix);
+	size_t half_budget = preprocess_spelling_limit / 2;
+	char *text = malloc(prefix_length + half_budget + 4);
+
+	assert(text);
+	for (size_t extra = 0; extra < 2; extra++) {
+		struct source source;
+		FILE *stream = tmpfile();
+		struct diagnostics diagnostics = { stream, 0 };
+		struct preprocessor preprocessor;
+		struct pp_token first;
+		struct pp_token second;
+		size_t argument_length = half_budget - 3 + extra;
+
+		assert(stream);
+		memcpy(text, prefix, prefix_length);
+		memset(text + prefix_length, 'a', argument_length);
+		memcpy(text + prefix_length + argument_length, ")", 2);
+		assert(source_from_bytes(&source, "cumulative-stringizing.c",
+			(const unsigned char *)text, strlen(text)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		first = preprocess_next_pp(&preprocessor);
+		assert(first.kind == pp_string && first.length == argument_length + 2);
+		second = preprocess_next_pp(&preprocessor);
+		if (extra) {
+			assert(second.kind == pp_invalid && preprocessor.stopped);
+			assert(diagnostics.errors == 1);
+			assert(preprocessor.spelling_bytes == half_budget + extra);
+		} else {
+			assert(second.kind == pp_string && !diagnostics.errors);
+			assert(preprocessor.spelling_bytes == preprocess_spelling_limit);
+			assert(first.location.source != second.location.source);
+		}
+		assert(first.location.source->data[0] == '\"');
+		assert(first.location.source->data[first.length] == 0);
+		assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+		assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		assert(fclose(stream) == 0);
+	}
+	free(text);
+}
+
 int main(void)
 {
+	test_stringizing();
+	test_stringizing_errors();
+	test_stringizing_limits();
+	test_stringizing_cumulative_limit();
 	test_null_streams();
 	test_null_directives_in_code();
 	test_known_and_unknown_directives();

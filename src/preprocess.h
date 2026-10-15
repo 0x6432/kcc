@@ -13,6 +13,7 @@
 #define preprocess_auxiliary_limit 65536
 #define preprocess_prescan_limit 64
 #define preprocess_parentheses_limit 128
+#define preprocess_spelling_limit 1048576
 
 struct macro;
 struct macro_token;
@@ -36,6 +37,9 @@ struct expansion_frame {
 	struct macro_argument *arguments;
 	struct source_location invocation;
 	struct macro_hide_set hide;
+	bool first;
+	bool leading_space;
+	bool trailing_space;
 };
 
 /* Main input may read source; isolated argument input must stop at its own EOF. */
@@ -45,6 +49,7 @@ struct expansion_cursor {
 	struct argument_token *input;
 	struct source_location end;
 	bool source_input;
+	bool deferred_space;
 	bool has_pending;
 	struct rescan_token pending;
 };
@@ -62,6 +67,7 @@ struct preprocessor {
 	size_t expansion_work;
 	struct expansion_cursor cursor;
 	size_t auxiliary_records;
+	size_t spelling_bytes;
 	size_t prescan_depth;
 	bool stopped;
 	bool has_lookahead;
@@ -71,6 +77,10 @@ struct preprocessor {
 void preprocess_init(struct preprocessor *preprocessor, const struct source *source,
 	struct diagnostics *diagnostics);
 void preprocess_destroy(struct preprocessor *preprocessor);
+/* Expanded pp reads share the cursor. Do not mix with pending language peek.
+ * Spelling can belong to an arena-owned generated view, not the input source.
+ */
+struct pp_token preprocess_next_pp(struct preprocessor *preprocessor);
 struct token preprocess_next(struct preprocessor *preprocessor);
 struct token preprocess_peek(struct preprocessor *preprocessor);
 
