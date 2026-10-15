@@ -5,8 +5,8 @@
 M11a: raw argument stringizing, owned spellings and expanded-pp inspection.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-Previous M10d final CI passed: https://github.com/0x6432/kcc/actions/runs/38760829356
-M09–M10d are complete for their stated subsets. M11a final validation is pending.
+M11a source CI passed: https://github.com/0x6432/kcc/actions/runs/38763520175
+M09–M11a are complete for their stated subsets. M11b optional operands are next.
 Full preprocessing and full C23 remain incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
@@ -386,3 +386,29 @@ GCC/Clang matrix to protect work from sandbox resets. That matrix and exact
 pushed-commit CI are pending and must be checked separately. The subset excludes
 #__VA_OPT__, ##, directives beyond define/undef/null and C string expressions.
 The host whitespace differences remain a documented conformance-audit gap.
+
+
+## M11a final verification
+
+The pending validation above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/CLI/AST/rejection tests, 564
+language + 142 expanded-pp agreement streams and the five explicit whitespace
+policy groups. QBE/reference execution and separate-object integer ABI tests
+passed with both hosts and sanitizer builds. The eight new discard-path runtime
+programs cover LF, CRLF and lone CR. Generated lifetime, original invocation
+errors, cache/EOF stability and exact single/cumulative spelling caps passed.
+
+Sanitized fuzzing passed 19909 lexer/preprocessor and 114717 pipeline inputs
+(134626 total), without executing arbitrary generated code. Source commit
+3640b6d passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38763520175
+The public API rate limit required authenticated CI reads using already authorized
+GitHub access; temporary credentials were removed, never committed. This following
+documentation-only commit has its own exact-commit CI checked after push.
+
+M11a is complete for raw named/variadic parameter stringizing, not all # operator
+forms or full C23 preprocessing. The five host whitespace disagreements remain
+an explicit interpretation/conformance audit item, not counted as agreement.
+M11b must implement #__VA_OPT__ with correct argument substitution and pre-rescan
+boundaries. Token pasting, includes/conditions and C string semantics remain
+separate future checkpoints. No production change followed the tested source.

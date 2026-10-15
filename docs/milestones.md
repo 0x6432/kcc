@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a raw parameter stringizing under final validation) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a raw parameter stringizing complete; M11b optional operands next) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -601,3 +601,29 @@ GCC/Clang matrix to protect work from sandbox resets. That matrix and exact
 pushed-commit CI are pending and must be checked separately. The subset excludes
 #__VA_OPT__, ##, directives beyond define/undef/null and C string expressions.
 The host whitespace differences remain a documented conformance-audit gap.
+
+
+## M11a final verification
+
+The pending validation above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/CLI/AST/rejection tests, 564
+language + 142 expanded-pp agreement streams and the five explicit whitespace
+policy groups. QBE/reference execution and separate-object integer ABI tests
+passed with both hosts and sanitizer builds. The eight new discard-path runtime
+programs cover LF, CRLF and lone CR. Generated lifetime, original invocation
+errors, cache/EOF stability and exact single/cumulative spelling caps passed.
+
+Sanitized fuzzing passed 19909 lexer/preprocessor and 114717 pipeline inputs
+(134626 total), without executing arbitrary generated code. Source commit
+3640b6d passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38763520175
+The public API rate limit required authenticated CI reads using already authorized
+GitHub access; temporary credentials were removed, never committed. This following
+documentation-only commit has its own exact-commit CI checked after push.
+
+M11a is complete for raw named/variadic parameter stringizing, not all # operator
+forms or full C23 preprocessing. The five host whitespace disagreements remain
+an explicit interpretation/conformance audit item, not counted as agreement.
+M11b must implement #__VA_OPT__ with correct argument substitution and pre-rescan
+boundaries. Token pasting, includes/conditions and C string semantics remain
+separate future checkpoints. No production change followed the tested source.
