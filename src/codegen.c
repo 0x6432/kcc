@@ -260,6 +260,29 @@ static bool codegen_while(struct codegen *codegen,
 	return false;
 }
 
+static bool codegen_do(struct codegen *codegen, const struct ast_do_statement *node)
+{
+	size_t body_label = new_label(codegen);
+	size_t condition_label = new_label(codegen);
+	size_t exit_label = new_label(codegen);
+	size_t condition;
+	bool body_terminated;
+
+	emit(codegen, "\tjmp @b%zu\n", body_label);
+	emit_label(codegen, body_label);
+	body_terminated = codegen_loop_body(codegen, &node->statement,
+		node->body, exit_label, condition_label);
+	if (!body_terminated)
+		emit(codegen, "\tjmp @b%zu\n", condition_label);
+	/* Continue may reach this block even when every body path terminates. */
+	emit_label(codegen, condition_label);
+	condition = codegen_expression(codegen, node->condition);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
+		condition, body_label, exit_label);
+	emit_label(codegen, exit_label);
+	return false;
+}
+
 /* True means the current block has terminated, not an I/O success flag. */
 static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
@@ -282,6 +305,8 @@ static bool codegen_statement(struct codegen *codegen,
 	}
 	case statement_empty:
 		return false;
+	case statement_do:
+		return codegen_do(codegen, (const struct ast_do_statement *)statement);
 	case statement_while:
 		return codegen_while(codegen, (const struct ast_while_statement *)statement);
 	case statement_break: {

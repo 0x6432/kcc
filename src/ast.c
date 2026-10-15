@@ -200,6 +200,21 @@ struct ast_while_statement *ast_new_while(struct arena *arena,
 	return node;
 }
 
+struct ast_do_statement *ast_new_do(struct arena *arena,
+	struct source_location location, struct ast_statement *body,
+	struct ast_expression *condition)
+{
+	struct ast_do_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_do_statement) {
+			.statement = { statement_do, location },
+			.body = body,
+			.condition = condition,
+		};
+	return node;
+}
+
 struct ast_break_statement *ast_new_break(struct arena *arena,
 	struct source_location location)
 {

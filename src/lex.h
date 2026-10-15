@@ -18,6 +18,7 @@ enum token_kind {
 	token_if,
 	token_else,
 	token_while,
+	token_do,
 	token_break,
 	token_continue,
 	token_left_paren,

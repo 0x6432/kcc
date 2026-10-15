@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M07A: While, break and continue. Branch: development.
+M07B: Do/while loops. Branch: development.
 Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local configuration).
 Each M07 subcheckpoint is committed/pushed after testing. Find the latest exact
@@ -23,9 +23,9 @@ hash with git log -1 --oneline; this file avoids a circular reference to itself.
 
 ## Behavior and invariants
 
-While has a distinct AST node. Jump nodes record the nearest enclosing loop during sema. Scope and loop contexts are independent and restore their parents on failure too. QBE while continue targets the condition; break targets the exit. Only an unterminated body gets an implicit back edge.
+A distinct do-statement node executes its body before the condition. Continue targets the condition; break and return bypass it. Body scopes do not leak into the condition. Sema still validates unreachable conditions. QBE emits well-formed condition/exit blocks conservatively without claiming whole-loop reachability inference.
 
-Unsupported: do/while, for, function calls, comma/update/compound-assignment operators and preprocessing.
+Unsupported: for, function calls, comma/update/compound-assignment operators and preprocessing.
 One main(void), only int types. ++, comma expressions and compound assignments
 are not implemented: use i=i+1 for increments. No zero-fill of automatic locals;
 uninitialized reads may be UB. Limits: 16 MiB source, 128 expression/statement
@@ -53,10 +53,10 @@ need the external /data/tools/sanitizer-runtime links and LD_LIBRARY_PATH;
 local tests used -fno-pie and -no-pie. Ubuntu CI needs no workaround.
 
 Normal, semantic-AST, ASan/UBSan and QBE/runtime/reference tests passed.
-Sanitized fuzzing: pipeline: 262257 inputs in 13 seconds.
+Sanitized fuzzing: pipeline: 395480 inputs in 13 seconds.
 Remote CI is checked after push; do not infer it from local passes.
 All executable loop cases are bounded; fuzzing never executes arbitrary inputs.
 
 ## Next milestone
 
-M07b: distinct do/while AST, body-first execution, continue-to-condition and break/return bypass of condition.
+M07c: for headers with optional declaration/expression initialization, optional condition and step; scope the initializer across the loop only and send continue through the step.

@@ -147,6 +147,21 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int main(void) { while(0) ; }", 0),
         ("int main(void) {" + "while(0) "*127 + "; return 4;}", 4),
     ]
+    programs += [
+        ("int main(void) { int i=0; do i=i+1; while(0); return i; }", 1),
+        ("int main(void) { int i=0; do { i=i+1; continue; i=100; } while(i<3); return i; }", 3),
+        ("int main(void) { int x=0; do { break; } while(x=x+1); return x; }", 0),
+        ("int main(void) { int x=0; do return 7; while(1/x); return 0; }", 7),
+        ("int main(void) { int x=0; do break; while(1/x); return 9; }", 9),
+        ("int main(void) { int x=0; do if(1) x=x+1; else x=100; while(x<3); return x; }", 3),
+        ("int main(void) { int x=0; do { int x=1; } while(x); return x; }", 0),
+        ("int main(void) { int i=0; int c=0; do { i=i+1; continue; } while(i<3 && (c=c+1)); return i*10+c; }", 32),
+        ("int main(void) { int i=0; do ; while((i=i+1)<3); return i; }", 3),
+        ("int main(void) { int x; do x=2; while(0); return x; }", 2),
+        ("int main(void) { int i=0; int s=0; while(i<3) { i=i+1; do { s=s+1; break; } while(1); if(i<3) continue; s=s+10; } return s; }", 13),
+        ("int main(void) { do { if(1) break; else continue; } while(1); return 5; }", 5),
+        ("int main(void) {" + "do "*127 + ";" + "while(0);"*127 + "return 3;}", 3),
+    ]
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -254,6 +269,15 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { while(1) { int x=1; break; } return x; }",
         "int main(void) { while(0) ; continue; }",
         "int main(void) {" + "while(0) "*128 + ";}",
+    ]
+    invalid += [
+        "int main(void) { do ; while(0) }",
+        "int main(void) { do ; while(); }",
+        "int main(void) { do ; }",
+        "int main(void) { do break; while(missing); }",
+        "int main(void) { do { int x=0; } while(x); }",
+        "int main(void) { do ; while(0); continue; }",
+        "int main(void) {" + "do "*128 + ";" + "while(0);"*128 + "}",
     ]
     for keyword in ("if", "while", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")

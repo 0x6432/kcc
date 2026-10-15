@@ -413,6 +413,48 @@ static struct ast_while_statement *parse_while_statement(struct parser *parser)
 	return node;
 }
 
+/* do-statement ::= "do" statement "while" "(" expression ")" ";" */
+static struct ast_do_statement *parse_do_contents(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_statement *body;
+	struct ast_expression *condition;
+	struct ast_do_statement *node;
+
+	if (!expect_token(parser, token_do, "expected 'do'", &keyword))
+		return NULL;
+	body = parse_statement(parser);
+	if (!body)
+		return NULL;
+	if (!expect_token(parser, token_while, "expected 'while' after do body", NULL))
+		return NULL;
+	if (!expect_token(parser, token_left_paren, "expected '(' after while", NULL))
+		return NULL;
+	condition = parse_expression(parser, 0);
+	if (!condition)
+		return NULL;
+	if (!expect_token(parser, token_right_paren, "expected ')' after condition", NULL))
+		return NULL;
+	if (!expect_token(parser, token_semicolon, "expected ';' after do/while", NULL))
+		return NULL;
+	node = ast_new_do(parser->arena, keyword.location, body, condition);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
+}
+
+/* do-statement ::= "do" statement "while" "(" expression ")" ";"; guard nesting. */
+static struct ast_do_statement *parse_do_statement(struct parser *parser)
+{
+	struct ast_do_statement *node;
+
+	if (!begin_nested_statement(parser))
+		return NULL;
+	node = parse_do_contents(parser);
+	parser->statement_nesting--;
+	return node;
+}
+
 /* break-statement ::= "break" ";" */
 static struct ast_statement *parse_break_statement(struct parser *parser)
 {
@@ -451,12 +493,19 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
 
 /* statement ::= return-statement | expression-statement | empty-statement
  *             | compound-statement | if-statement | while-statement
- *             | break-statement | continue-statement
+ *             | break-statement | continue-statement | do-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
 
+	if (token.kind == token_do) {
+		struct ast_do_statement *node = parse_do_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
 	if (token.kind == token_while) {
 		struct ast_while_statement *node = parse_while_statement(parser);
 

@@ -107,6 +107,7 @@ enum statement_kind {
 	statement_compound,
 	statement_if,
 	statement_while,
+	statement_do,
 	statement_break,
 	statement_continue,
 };
@@ -141,6 +142,12 @@ struct ast_while_statement {
 	struct ast_statement statement;
 	struct ast_expression *condition;
 	struct ast_statement *body;
+};
+
+struct ast_do_statement {
+	struct ast_statement statement;
+	struct ast_statement *body;
+	struct ast_expression *condition;
 };
 
 struct ast_break_statement {
@@ -224,6 +231,9 @@ struct ast_if_statement *ast_new_if(struct arena *arena,
 struct ast_while_statement *ast_new_while(struct arena *arena,
 	struct source_location location, struct ast_expression *condition,
 	struct ast_statement *body);
+struct ast_do_statement *ast_new_do(struct arena *arena,
+	struct source_location location, struct ast_statement *body,
+	struct ast_expression *condition);
 struct ast_break_statement *ast_new_break(struct arena *arena,
 	struct source_location location);
 struct ast_continue_statement *ast_new_continue(struct arena *arena,

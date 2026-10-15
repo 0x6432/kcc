@@ -175,3 +175,11 @@ While, break and continue. While has a distinct AST node. Jump nodes record the 
 Normal GCC, semantic-AST, ASan/UBSan and QBE/reference executable tests passed.
 Sanitized fuzzing: pipeline: 262257 inputs in 13 seconds. Remote push and CI are verified separately.
 Next: M07b: distinct do/while AST, body-first execution, continue-to-condition and break/return bypass of condition.
+
+## M07B completion record
+
+Do/while loops. A distinct do-statement node executes its body before the condition. Continue targets the condition; break and return bypass it. Body scopes do not leak into the condition. Sema still validates unreachable conditions. QBE emits well-formed condition/exit blocks conservatively without claiming whole-loop reachability inference.
+
+Normal GCC, semantic-AST, ASan/UBSan and QBE/reference executable tests passed.
+Sanitized fuzzing: pipeline: 395480 inputs in 13 seconds. Remote push and CI are verified separately.
+Next: M07c: for headers with optional declaration/expression initialization, optional condition and step; scope the initializer across the loop only and send continue through the step.

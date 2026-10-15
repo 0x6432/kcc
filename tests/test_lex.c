@@ -78,10 +78,10 @@ static void test_condition_tokens(void)
 		token_if, token_else, token_less, token_less_equal, token_greater,
 		token_greater_equal, token_equal_equal, token_not_equal, token_equal,
 		token_bang, token_and_and, token_or_or,
-		token_while, token_break, token_continue,
+		token_while, token_break, token_continue, token_do,
 	};
 
-	check_tokens("if else < <= > >= == != = ! && || while break continue", kinds,
+	check_tokens("if else < <= > >= == != = ! && || while break continue do", kinds,
 		sizeof(kinds) / sizeof(kinds[0]), 0);
 }
 

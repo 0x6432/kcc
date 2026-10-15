@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M07A: while, break and continue. While has a distinct AST node. Jump nodes record the nearest enclosing loop during sema. Scope and loop contexts are independent and restore their parents on failure too. QBE while continue targets the condition; break targets the exit. Only an unterminated body gets an implicit back edge.
+M07B: do/while loops. A distinct do-statement node executes its body before the condition. Continue targets the condition; break and return bypass it. Body scopes do not leak into the condition. Sema still validates unreachable conditions. QBE emits well-formed condition/exit blocks conservatively without claiming whole-loop reachability inference.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -65,8 +65,8 @@ cc build/example.s -o build/example
 ```
 
 Supported: decimal int literals, int locals, simple assignment, arithmetic,
-comparisons, !/&&/||, nested blocks/shadowing, if/else, while, break/continue.
-Unsupported: do/while, for, function calls, comma/update/compound-assignment operators and preprocessing. This is not a complete C23 compiler.
+comparisons, !/&&/||, nested blocks/shadowing, if/else, while, break/continue, do/while.
+Unsupported: for, function calls, comma/update/compound-assignment operators and preprocessing. This is not a complete C23 compiler.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
 Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items
