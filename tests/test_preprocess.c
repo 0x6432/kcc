@@ -1,6 +1,7 @@
 #include "preprocess.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -604,6 +605,7 @@ static void test_fixed_arguments(void)
 static void test_fixed_argument_errors(void)
 {
 	const struct expected_token call_error[] = { { token_invalid, "F" }, { token_eof, "" } };
+	const struct expected_token number[] = { { token_integer, "7" }, { token_eof, "" } };
 	const struct expected_token definition_error[] = {
 		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
 	};
@@ -626,63 +628,84 @@ static void test_fixed_argument_errors(void)
 		"incompatible macro redefinition");
 	check_stream("#define F(x) 7\n#define F(x,x) 8\nF(1)", definition_error, 3, 1,
 		"duplicate macro parameter");
-	check_stream("#define F(x) 7\n#define F( x ) 7\nF(1)", definition_error + 1, 2, 0, NULL);
+	check_stream("#define F(x) 7\n#define F( x ) 7\nF(1)", number, 2, 0, NULL);
+}
+
+/* Generate limit inputs with checked capacity and checked formatting results. */
+static void append_test_text(char *text, size_t capacity, size_t *used,
+	const char *format, ...)
+{
+	va_list arguments;
+	int written;
+
+	assert(*used < capacity);
+	va_start(arguments, format);
+	written = vsnprintf(text + *used, capacity - *used, format, arguments);
+	va_end(arguments);
+	assert(written >= 0 && (size_t)written < capacity - *used);
+	*used += (size_t)written;
 }
 
 static void test_fixed_argument_limits(void)
 {
-	char *text = malloc(400000);
+	const size_t capacity = 400000;
+	char *text = malloc(capacity);
 	size_t used;
 	const struct expected_token last[] = { { token_integer, "127" }, { token_eof, "" } };
 	const struct expected_token one[] = { { token_integer, "1" }, { token_eof, "" } };
 	const struct expected_token seven[] = { { token_integer, "7" }, { token_eof, "" } };
 
 	assert(text);
-	used = (size_t)sprintf(text, "#define F(");
+	used = 0;
+	append_test_text(text, capacity, &used, "#define F(");
 	for (size_t i = 0; i <= preprocess_parameter_limit; i++)
-		used += (size_t)sprintf(text + used, "%sp%zu", i ? "," : "", i);
-	used += (size_t)sprintf(text + used, ") 1\n");
+		append_test_text(text, capacity, &used, "%sp%zu", i ? "," : "", i);
+	append_test_text(text, capacity, &used, ") 1\n");
 	check_resource_failure(text, "macro parameter limit exceeded", 0, 0);
-	used = (size_t)sprintf(text, "#define F(");
+	used = 0;
+	append_test_text(text, capacity, &used, "#define F(");
 	for (size_t i = 0; i < preprocess_parameter_limit; i++)
-		used += (size_t)sprintf(text + used, "%sp%zu", i ? "," : "", i);
-	used += (size_t)sprintf(text + used, ") p127\nF(");
+		append_test_text(text, capacity, &used, "%sp%zu", i ? "," : "", i);
+	append_test_text(text, capacity, &used, ") p127\nF(");
 	for (size_t i = 0; i < preprocess_parameter_limit; i++)
-		used += (size_t)sprintf(text + used, "%s%zu", i ? "," : "", i);
-	used += (size_t)sprintf(text + used, ")\n");
+		append_test_text(text, capacity, &used, "%s%zu", i ? "," : "", i);
+	append_test_text(text, capacity, &used, ")\n");
 	check_stream(text, last, 2, 0, NULL);
 	used = 0;
 	for (size_t i = 0; i <= preprocess_auxiliary_limit / preprocess_parameter_limit; i++) {
-		used += (size_t)sprintf(text + used, "#define F(");
+		append_test_text(text, capacity, &used, "#define F(");
 		for (size_t j = 0; j < preprocess_parameter_limit; j++)
-			used += (size_t)sprintf(text + used, "%sp%zu", j ? "," : "", j);
-		used += (size_t)sprintf(text + used, ") 1\n");
+			append_test_text(text, capacity, &used, "%sp%zu", j ? "," : "", j);
+		append_test_text(text, capacity, &used, ") 1\n");
 	}
-	assert(used < 400000);
+	assert(used < capacity);
 	check_resource_failure(text, "macro auxiliary storage limit exceeded", 0, 0);
-	used = (size_t)sprintf(text, "#define ID(x) x\n");
+	used = 0;
+	append_test_text(text, capacity, &used, "#define ID(x) x\n");
 	for (size_t i = 0; i < preprocess_prescan_limit; i++)
-		used += (size_t)sprintf(text + used, "ID(");
-	used += (size_t)sprintf(text + used, "1");
+		append_test_text(text, capacity, &used, "ID(");
+	append_test_text(text, capacity, &used, "1");
 	for (size_t i = 0; i < preprocess_prescan_limit; i++)
-		used += (size_t)sprintf(text + used, ")");
+		append_test_text(text, capacity, &used, ")");
 	check_stream(text, one, 2, 0, NULL);
 	/* Add one more outer invocation without changing the nested arguments. */
-	used = (size_t)sprintf(text, "#define ID(x) x\n");
+	used = 0;
+	append_test_text(text, capacity, &used, "#define ID(x) x\n");
 	for (size_t i = 0; i <= preprocess_prescan_limit; i++)
-		used += (size_t)sprintf(text + used, "ID(");
-	used += (size_t)sprintf(text + used, "1");
+		append_test_text(text, capacity, &used, "ID(");
+	append_test_text(text, capacity, &used, "1");
 	for (size_t i = 0; i <= preprocess_prescan_limit; i++)
-		used += (size_t)sprintf(text + used, ")");
+		append_test_text(text, capacity, &used, ")");
 	check_resource_failure(text, "macro argument prescan depth limit exceeded", 0, 0);
 	for (size_t extra = 0; extra < 2; extra++) {
-		used = (size_t)sprintf(text, "#define DROP(x) 7\nDROP(");
+		used = 0;
+		append_test_text(text, capacity, &used, "#define DROP(x) 7\nDROP(");
 		for (size_t i = 0; i < preprocess_parentheses_limit + extra; i++)
-			used += (size_t)sprintf(text + used, "(");
-		used += (size_t)sprintf(text + used, "1");
+			append_test_text(text, capacity, &used, "(");
+		append_test_text(text, capacity, &used, "1");
 		for (size_t i = 0; i < preprocess_parentheses_limit + extra; i++)
-			used += (size_t)sprintf(text + used, ")");
-		used += (size_t)sprintf(text + used, ")");
+			append_test_text(text, capacity, &used, ")");
+		append_test_text(text, capacity, &used, ")");
 		if (extra)
 			check_resource_failure(text, "macro argument parentheses limit exceeded", 0, 0);
 		else

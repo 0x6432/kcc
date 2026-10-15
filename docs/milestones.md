@@ -465,7 +465,7 @@ and compare the latest development hash before editing; the sandbox really did
 lose uncommitted files and dependencies during this checkpoint.
 
 
-## M10C implementation checkpoint
+## M10c completed implementation
 
 Design was recorded in m10-fixed-arguments.md before coding. Fixed parameter
 lists are validated and indexed on replacement tokens; redefinitions compare
@@ -506,3 +506,22 @@ each, with new argument corpus seeds. Arbitrary generated code was not executed.
 This checkpoint is pushed before the longer full GCC/Clang normal/ASan/UBSan
 matrix to protect work from resets. That matrix and exact pushed-commit CI are
 still pending here; do not infer them from fuzzing. Final evidence follows later.
+
+
+## M10c final verification
+
+The pending matrix above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/rejection tests, the 374-case
+macro token/spelling oracle, QBE/reference execution and separate-object
+integer ABI tests. The full matrix was rerun after replacing the new limit-test
+string generator with a bounds-checked vsnprintf builder: GCC 11 diagnosed
+its previous unchecked sprintf construction under sanitizer optimization and
+-Werror. No production code changed and no warning was suppressed.
+
+Sanitized fuzzing passed 52567 lexer/preprocessor and 168281 pipeline inputs
+(220848 total), without executing arbitrary generated code. Source checkpoint
+8538ed4 passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38755902384
+The subsequent test/documentation verification commit must have its own remote
+CI checked after push. M10c is complete only for the fixed-parameter subset;
+M10d variadics and M11 macro operators/includes/conditions remain outstanding.

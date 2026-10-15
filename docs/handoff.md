@@ -5,7 +5,7 @@
 M10c: fixed macro parameters, isolated argument prescan and substitution.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M10b final CI passed: https://github.com/0x6432/kcc/actions/runs/38749842378
+M10c source CI passed: https://github.com/0x6432/kcc/actions/runs/38755902384
 M09–M10c are complete for their stated subsets; variadics are next.
 Full M10 and full C23 remain incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
@@ -277,3 +277,22 @@ each, with new argument corpus seeds. Arbitrary generated code was not executed.
 This checkpoint is pushed before the longer full GCC/Clang normal/ASan/UBSan
 matrix to protect work from resets. That matrix and exact pushed-commit CI are
 still pending here; do not infer them from fuzzing. Final evidence follows later.
+
+
+## M10c final verification
+
+The pending matrix above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/rejection tests, the 374-case
+macro token/spelling oracle, QBE/reference execution and separate-object
+integer ABI tests. The full matrix was rerun after replacing the new limit-test
+string generator with a bounds-checked vsnprintf builder: GCC 11 diagnosed
+its previous unchecked sprintf construction under sanitizer optimization and
+-Werror. No production code changed and no warning was suppressed.
+
+Sanitized fuzzing passed 52567 lexer/preprocessor and 168281 pipeline inputs
+(220848 total), without executing arbitrary generated code. Source checkpoint
+8538ed4 passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38755902384
+The subsequent test/documentation verification commit must have its own remote
+CI checked after push. M10c is complete only for the fixed-parameter subset;
+M10d variadics and M11 macro operators/includes/conditions remain outstanding.
