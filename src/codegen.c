@@ -467,7 +467,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
-		emit(&codegen, "\tstorew %%p%zu, %%v%zu\n", parameter_index, parameter->local->slot);
+		emit(&codegen, "\tstorew %%p%zu, %%v%zu\n",
+			parameter_index, parameter->local->slot);
 		parameter_index++;
 	}
 	if (!codegen_block_items(&codegen, function->body->items))

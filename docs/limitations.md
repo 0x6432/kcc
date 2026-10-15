@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M08b. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b.
+Current milestone: M08c. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b/M08c.
 
 ## M00
 
@@ -168,7 +168,7 @@ apply per function; local/loop contexts and QBE counters do not leak between
 definitions. Semantic symbols contain backlinks; do not recursively traverse
 them as ownership edges. Syntax/constraint failures produce no compiler IL.
 
-## M08b (current)
+## M08b
 
 Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
 
@@ -185,3 +185,19 @@ ordering or execute unsequenced undefined behavior. No variadics, pointer calls,
 function values, globals, local prototypes, storage classes or preprocessing.
 Functions are externally visible; unresolved declarations reach the linker.
 Non-main fallthrough filler is not a promised defined return value.
+
+## M08c (current)
+
+M08b's supported syntax and limits remain unchanged. Direct/mutual recursion is
+validated through bounded executable tests. Integer System V ABI acceptance now
+includes separate host/kcc objects, both call directions, register/stack
+arguments through 128, signed int boundaries and cross-compiler recursion.
+This is not aggregate, pointer, floating, variadic or complete C23 ABI coverage.
+No language-level recursion limit or runtime stack guard is added; real programs
+can exhaust their runtime stack. Fuzz inputs are compiled but never executed.
+
+CI runs the integer ABI harness with GCC and Clang and sanitized compiler builds.
+Parameter mutation affects the local copy, not the caller's int object. Ordinary
+argument sequencing still follows C's rules; left-to-right lowering is not a
+portable source guarantee. Earlier M08b restrictions still apply, including
+named definition parameters and zero-parameter main.

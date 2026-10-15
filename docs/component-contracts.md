@@ -203,3 +203,18 @@ shadowing and visible functions, then inserts value conversions in arguments.
 Parameters have semantic local backlinks; these are not AST ownership edges.
 The root scope is explicit so a same-body redeclaration fails. Nested blocks
 may shadow parameters. All scopes/loop contexts reset between definitions.
+
+### M08c acceptance boundary
+
+Recursion needs no special codegen path: a function's canonical symbol exists
+before its own body is checked, and a prototype makes a later mutual callee
+visible. The semantic/compiler traversal never follows call-symbol backlinks
+recursively. Runtime recursion uses the ABI's ordinary call frames.
+
+The ABI harness compiles kcc IL and host C to separate objects and links them,
+so neither compiler can inline across the boundary. It checks full int results
+through comparisons rather than relying only on process exit truncation. The
+128-parameter weighted sum uses a balanced expression to stay within depth 128.
+CI matrix host selection applies to executable/reference and ABI tests; these
+also run after rebuilding the compiler with ASan/UBSan. Fuzzing never executes
+source programs and retains its source-size/time/memory limits.

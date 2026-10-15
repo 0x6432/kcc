@@ -253,6 +253,30 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         programs.append(("int mix(int a,int b,int c,int d) { return a*3+b*5-c*7+d; } "
                          f"int main(void) {{ return mix({argument_text}); }}", expected))
 
+    programs += [
+        ("int fact(int n) { if(n<2) return 1; return n*fact(n-1); } "
+         "int main(void) { return fact(5); }", 120),
+        ("int fib(int n) { if(n<2) return n; return fib(n-1)+fib(n-2); } "
+         "int main(void) { return fib(10); }", 55),
+        ("int odd(int); int even(int n) { if(n==0) return 1; return odd(n-1); } "
+         "int odd(int n) { if(n==0) return 0; return even(n-1); } "
+         "int main(void) { return even(20)*10+odd(19); }", 11),
+        ("int sum(int n,int acc) { if(n==0) return acc; return sum(n-1,acc+n); } "
+         "int main(void) { return sum(20,0); }", 210),
+        ("int f(int n) { int saved=n*3; if(n==0) return 0; "
+         "int child=f(n-1); return saved+child; } "
+         "int main(void) { return f(8); }", 108),
+        ("int f(int n) { if(n==0) return 0; return (n>0 && f(n-1)) || n==3; } "
+         "int main(void) { return f(5); }", 1),
+    ]
+    # Accept the exact external/function resource bounds, not just their failures.
+    for text in ("int f(void);"*512,
+                 "".join(f"int f{i}(void);" for i in range(256))):
+        source.write_text(text)
+        result = subprocess.run([str(compiler), str(source)],
+                                capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and not result.stdout and not result.stderr
+
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],

@@ -2,73 +2,98 @@
 
 ## Current checkpoint
 
-M08b: Integer parameters, arguments and signature checks. Branch: development.
-Public repository: https://github.com/0x6432/kcc
-Commit identity: 0x42 <noreply@localhost> (repository-local configuration).
-Each M08 subcheckpoint is committed/pushed after testing. Find the latest exact
-hash with git log -1 --oneline; this file avoids a circular reference to itself.
+M08c: int functions, prototypes, parameters, direct calls and recursion.
+Branch: development. Public repository: https://github.com/0x6432/kcc
+Commit identity: 0x42 <noreply@localhost> (repository-local).
+M08a and M08b were tested, committed and pushed separately. M08c has the
+recursion/ABI acceptance tests and final documentation. Use git log -1 --oneline
+for the exact latest hash; this file avoids a circular reference to itself.
 
 ## Resume safely
 
-1. Clone/fetch the public repo; reading needs no credentials.
-2. Compare git rev-parse HEAD and git ls-remote origin refs/heads/development.
-3. Preserve uncommitted/divergent work; only fast-forward a clean safe checkout.
-4. Read architecture, milestones, limitations and component contracts.
-5. Run make clean && make test. Build pinned QBE if missing with
-   sh scripts/build_qbe.sh tools; then
+1. Clone/fetch the public repository; reading requires no credentials.
+2. Compare git rev-parse HEAD with git ls-remote origin refs/heads/development.
+3. Preserve uncommitted/divergent work; fast-forward only a clean safe checkout.
+4. Read architecture.md, milestones.md, limitations.md and component-contracts.md.
+5. Run make clean && make test. If needed, build pinned QBE with
+   sh scripts/build_qbe.sh tools, then run
    make test-codegen QBE="$PWD/tools/qbe-1.2/qbe".
 6. Restore Clang/compiler-rt if missing; run make fuzz-lex fuzz-compile.
-7. Obtain push authorization separately. Never keep credentials in this repo,
-   Git remote URLs, documentation or logs. Commit/push each tested milestone.
+7. Obtain push authorization when needed. Do not put credentials in the repo,
+   remote URLs, documentation or logs. Commit/push each tested checkpoint.
 
-## Behavior and invariants
+## Architecture and interactions
 
-Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
+One implementation file per stage, concrete AST structs, on-demand lexer with
+one cached token, recursive descent/BNF comments and Pratt expressions remain.
+The TU contains an ordered external declaration list; prototypes and definitions
+are distinct structs. Each definition references its declaration header. Sema
+registers canonical functions in source order before checking definition bodies;
+there is no forward hoisting. Prototypes share compatible name-independent types.
+Calls resolve visible function symbols, respecting local ordinary-name shadowing.
+Bare function values and indirect calls are unsupported.
 
-Only int signatures; () means zero parameters (C23), as does (void).
-Prototype names optional, definition names required until later C23 work.
-Main must have zero parameters. Limit 128 parameters/arguments, 512 external
-declarations, 256 functions, 256 parameter/local slots and 4096 block items per
-function. Statement/expression nesting and typed depth remain 128. No function
-values/pointers, variadics, local prototypes, globals, storage or preprocessing.
-Library units need no main; unresolved function declarations reach the linker.
+Each parameter has a semantic local backlink. Parameters receive the first slots
+and share the outermost body scope; nested blocks may shadow them. Scoped lookup
+is separate from the all-local storage list. Scope/loop contexts restore on
+failure and reset between functions. Call/loop/parameter semantic backlinks are
+not ownership edges; do not recursively traverse them as AST children.
+Sema runs once and inserts explicit lvalue loads, including in call arguments.
+Source outlives AST/symbol spellings; destroy the arena before the source.
 
-Parser only builds syntax and enforces resource bounds. Sema runs once on a
-fresh AST, inserts explicit load nodes and resolves names/loop jump targets.
-Scope/loop frames are stack-local and restore parents on errors; arena bindings
-retain declarations but never frame pointers. All declarations remain on the
-function-local slot list, distinct from scoped lookup. Don't recurse through
-initializer or jump-target backlinks: they can create reference cycles.
+QBE codegen emits exported int functions with w parameters/results, entry alloc4
+slots and stores for parameters. Local initialization stays at source positions.
+All argument IL, including nested control flow, finishes before emitting a call
+line. Argument lowering is left-to-right, not a C sequencing guarantee. Labels,
+temporaries and loop frames reset per definition. Logical phi predecessors use
+the actual current block label. A terminated block is not proof a loop returns.
 
-Codegen uses validated targets, not source name lookup. A terminated block can
-be return, break or continue; it does not mean all paths through a loop return.
-QBE labels/temporaries have independent counters. Nested logical operands capture
-actual predecessor labels for phi. Initializers execute at their source positions,
-including each loop iteration, although int storage is allocated at function entry.
-Source outlives the AST; destroy the arena before the source.
+## Supported subset and limits
 
-## Verification/environment
+Int literals/locals/parameters/returns; arithmetic, simple assignment, signed
+comparisons, !/&&/||; scoped blocks, if/else, while/do/for, break/continue;
+function prototypes/definitions, direct calls and direct/mutual recursion.
+C23 () and (void) specify zero parameters. Prototype names optional; definition
+names required until later C23 work. Main must take no parameters. Library units
+need no main. Declared undefined functions are the host linker's responsibility.
+Main fallthrough returns zero. Non-main ABI zero filler is not a promised C
+implicit return value. No automatic local zeroing or missing-return warning.
 
-GCC 11.5.0, Clang 15/compiler-rt, Make/Python/Git and QBE 1.2 were used.
-Dependencies can vanish on resets; budget 4 GB. GCC sanitizer SONAME lookup may
-need the external /data/tools/sanitizer-runtime links and LD_LIBRARY_PATH;
-local tests used -fno-pie and -no-pie. Ubuntu CI needs no workaround.
+No preprocessing, other types, pointers/function values, variadics, local
+prototypes, globals/storage classes, comma/update/compound-assignment operators.
+No full C23 conformance claim. Resource limits: 16 MiB source, expression and
+statement nesting/typed depth 128, 512 external declarations, 256 functions,
+128 parameters/arguments, 256 parameter/local slots and 4096 body items/function.
+Runtime recursion has no added stack guard. Tests execute bounded defined C;
+fuzzing compiles arbitrary inputs but never executes them.
 
-Normal, semantic-AST, ASan/UBSan and QBE/runtime/reference tests passed.
-Sanitized fuzzing: lexer: 316096 inputs in 21 seconds; pipeline: 533342 inputs in 21 seconds.
-Remote CI is checked after push; do not infer it from local passes.
-All executable loop cases are bounded; fuzzing never executes arbitrary inputs.
+## Tests and environment
+
+GCC 11.5.0, Clang 15/compiler-rt and QBE 1.2 were used locally. Dependencies may
+vanish after resets; keep artifacts small under the 4 GB sandbox budget. QBE
+release/checksum are pinned in scripts/build_qbe.sh. Locally it is available at
+/data/tools/qbe-1.2/qbe; do not assume that external path survives a reset.
+GCC sanitizer SONAME lookup may need external /data/tools/sanitizer-runtime
+links plus LD_LIBRARY_PATH, -fno-pie and -no-pie. CI needs no local workaround.
+
+Tests cover syntax/constraints/AST, runtime/reference execution, source-order
+visibility, signature compatibility, parameter/body scopes and resource bounds.
+Separate-object ABI cases run both directions with 0/1/2/6/7/8/12/128 arguments,
+signed boundaries and cross-compiler mutual recursion. CI selects GCC/Clang as
+host compilers and runs executable/ABI tests with sanitized compiler builds too.
+Final local results and remote CI verification are appended below after checks.
 
 ## Next milestone
 
-M08c: bounded direct/mutual recursion and bidirectional GCC/Clang ABI cases,
-including more than six arguments. Use executable defined-C cases, never
-unbounded fuzz execution. CI must run host-link tests through test-codegen.
-The compiler implementation already permits recursion via source-order symbol
-registration before a definition body; add explicit runtime acceptance tests.
-Then M09: specify translation phases and on-demand preprocessing token stream
-contracts before implementation; don't start full macro expansion at once.
+M09: specify phase ordering, splicing, preprocessing-token classification and
+source provenance before implementation. Keep on-demand tokens and parser
+contracts explicit. Start with a small tested slice; macro expansion/rescanning
+is M10 and includes/conditionals/stringizing/pasting are M11. Do not implement
+all preprocessing in one commit. Track component impacts and limitations, run
+regressions/sanitizers/fuzzing, commit/push and update this handoff each slice.
 
-M08b verification: GCC/Clang including reference executables and ASan/UBSan
-passed. Sanitized fuzzing: lexer 280937, pipeline 450116 inputs in 16 seconds
-each. M08a remote CI passed (run 38714173006); verify M08b after pushing.
+Final M08c local verification passed: GCC/Clang reference/runtime and ABI
+tests, semantic-AST and ASan/UBSan. Fuzzing: lexer 336767, pipeline 472930
+inputs in 21 seconds each. README example exits 120. M08a/M08b remote CI
+passed (runs 38714173006 and 38714953000). Check M08c CI after its push;
+do not infer remote success from these local passes.

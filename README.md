@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M08b: Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
+M08c: M08 is complete: multiple int functions, prototypes, parameters, direct calls and recursion. Source-order name visibility, signature compatibility, parameter/body scopes and QBE integer calls are tested. Separate-object tests validate host-to-kcc and kcc-to-host calls with register and stack arguments.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -43,29 +43,43 @@ has its own struct. Parser functions will document their BNF productions.
 
 ```sh
 cat > build/example.c <<'EOF'
+int factorial(int n);
+
 int main(void)
 {
-	int sum = 0;
+	return factorial(5);
+}
 
-	for (int i = 0; i < 5; i = i + 1) {
-		if (i == 2)
-			continue;
-		sum = sum + i;
-	}
-	return sum;
+int factorial(int n)
+{
+	if (n < 2)
+		return 1;
+	return n * factorial(n - 1);
 }
 EOF
 ./build/kcc build/example.c > build/example.ssa
 tools/qbe-1.2/qbe -t amd64_sysv -o build/example.s build/example.ssa
 cc build/example.s -o build/example
 ./build/example
-# Exit status: 8
+# Exit status: 120
 ```
 
 Supported: decimal int literals, int locals, simple assignment, arithmetic,
-comparisons, !/&&/||, nested blocks/shadowing, if/else, while, break/continue, do/while, and for (including int initializer declarations).
-Unsupported: function calls/prototypes/parameters, comma/update/compound-assignment operators, other types and preprocessing. This is not a complete C23 compiler.
+comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
+int function prototypes/definitions/parameters, direct calls and recursion.
+Both (void) and C23 empty () specify zero parameters. Prototype names are
+optional; definition parameter names are required in this subset.
+
+Unsupported: preprocessing, other types, globals/storage classes, local
+prototypes, function values/pointers, variadics, comma/update/compound-assignment
+operators. This is not a complete C23 compiler. Main takes no parameters yet.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
-Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items
-and 256 locals across the function.
+Limits: 16 MiB source, 128 expression/statement nesting and typed expression
+depth, 512 external declarations, 256 distinct functions, 128 parameters/call
+arguments, 4096 body items and 256 parameter/local slots per function.
+
+`make test-codegen` also runs separate-object ABI tests with the selected host
+compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
+CI runs GCC and Clang, compiler sanitizers, generated executables, ABI tests
+and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.

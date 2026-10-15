@@ -9,11 +9,11 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | absent | M01, M09-M11, M25 |
 | Tokens and literals | subset (M02) | M02, M12, M20, M23 |
-| Declarations/types | subset (M08b) | M03, M08, M12-M18, M23-M24 |
-| Expressions/statements | subset (M08b) | M03-M08, M13, M19 |
-| Constraint diagnostics | subset (M08b) | every semantic milestone |
+| Declarations/types | subset (M08c) | M03, M08, M12-M18, M23-M24 |
+| Expressions/statements | subset (M08c) | M03-M08, M13, M19 |
+| Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | absent | M09-M11, M25 |
-| Object layout and ABI | subset (int parameters, returns and calls, M08b) | M12-M17, M20-M22, M24 |
+| Object layout and ABI | subset (integer calls, separate-object GCC/Clang tests, M08c) | M12-M17, M20-M22, M24 |
 | C23 additions | absent | M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |
 | Self-hosting | absent | M26 |

@@ -14,7 +14,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
-| M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | in progress (M08a/M08b complete) |
+| M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
@@ -224,3 +224,25 @@ recursion and bidirectional host-compiler ABI testing.
 M08b verification passed: GCC/Clang, semantic-AST, QBE/runtime/reference
 and ASan/UBSan. Sanitized fuzzing: lexer 280937 and pipeline 450116 inputs
 in 16 seconds per harness. Remote push/CI are verified separately.
+
+## M08C completion record
+
+Bounded factorial, Fibonacci, accumulator, local-preservation and mutual
+recursion are tested against host-compiled reference programs. Separate-object
+ABI tests cover both call directions with 0, 1, 2, 6, 7, 8, 12 and 128 int
+arguments, signed boundary values and cross-compiler mutual recursion. Missing
+external definitions compile successfully and are rejected by the host linker.
+The 128-argument weighted sum is balanced to respect the expression-depth bound.
+
+CI now selects the matrix host compiler for runtime/reference tests and also
+runs generated-executable/ABI tests with the sanitized compiler build. Exact
+local verification/fuzz counts follow below. Remote CI is checked after push.
+
+M08 is complete for its stated int-only subset, not for all C23 function
+features. Next is M09: plan preprocessing-token/translation-phase contracts
+before adding line splicing/directives. Macro expansion remains M10/M11.
+
+M08b remote CI passed: https://github.com/0x6432/kcc/actions/runs/38714953000
+M08c verification passed: GCC/Clang reference/runtime and separate-object ABI
+tests, semantic-AST and ASan/UBSan. Sanitized fuzzing: lexer 336767 and
+pipeline 472930 inputs in 21 seconds each. README factorial example exits 120.
