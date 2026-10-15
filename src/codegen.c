@@ -4,8 +4,16 @@
 #include <assert.h>
 #include <stdarg.h>
 
+struct loop_codegen {
+	struct loop_codegen *parent;
+	const struct ast_statement *statement;
+	size_t break_label;
+	size_t continue_label;
+};
+
 struct codegen {
 	FILE *stream;
+	struct loop_codegen *loop;
 	size_t next_temporary;
 	size_t next_label;
 	size_t current_label;
@@ -211,6 +219,47 @@ static bool codegen_if(struct codegen *codegen, const struct ast_if_statement *n
 	return false;
 }
 
+static bool codegen_loop_body(struct codegen *codegen,
+	const struct ast_statement *statement, const struct ast_statement *body,
+	size_t break_label, size_t continue_label)
+{
+	struct loop_codegen context = {
+		.parent = codegen->loop,
+		.statement = statement,
+		.break_label = break_label,
+		.continue_label = continue_label,
+	};
+	bool terminated;
+
+	codegen->loop = &context;
+	terminated = codegen_statement(codegen, body);
+	codegen->loop = context.parent;
+	return terminated;
+}
+
+static bool codegen_while(struct codegen *codegen,
+	const struct ast_while_statement *node)
+{
+	size_t condition_label = new_label(codegen);
+	size_t body_label = new_label(codegen);
+	size_t exit_label = new_label(codegen);
+	size_t condition;
+	bool body_terminated;
+
+	emit(codegen, "\tjmp @b%zu\n", condition_label);
+	emit_label(codegen, condition_label);
+	condition = codegen_expression(codegen, node->condition);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
+		condition, body_label, exit_label);
+	emit_label(codegen, body_label);
+	body_terminated = codegen_loop_body(codegen, &node->statement,
+		node->body, exit_label, condition_label);
+	if (!body_terminated)
+		emit(codegen, "\tjmp @b%zu\n", condition_label);
+	emit_label(codegen, exit_label);
+	return false;
+}
+
 /* True means the current block has terminated, not an I/O success flag. */
 static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
@@ -233,6 +282,24 @@ static bool codegen_statement(struct codegen *codegen,
 	}
 	case statement_empty:
 		return false;
+	case statement_while:
+		return codegen_while(codegen, (const struct ast_while_statement *)statement);
+	case statement_break: {
+		const struct ast_break_statement *node =
+			(const struct ast_break_statement *)statement;
+
+		assert(codegen->loop && node->target == codegen->loop->statement);
+		emit(codegen, "\tjmp @b%zu\n", codegen->loop->break_label);
+		return true;
+	}
+	case statement_continue: {
+		const struct ast_continue_statement *node =
+			(const struct ast_continue_statement *)statement;
+
+		assert(codegen->loop && node->target == codegen->loop->statement);
+		emit(codegen, "\tjmp @b%zu\n", codegen->loop->continue_label);
+		return true;
+	}
 	case statement_if:
 		return codegen_if(codegen, (const struct ast_if_statement *)statement);
 	case statement_compound: {

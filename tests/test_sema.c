@@ -166,11 +166,63 @@ static void test_conditional_scopes_and_logic(void)
 	assert(fclose(stream) == 0);
 }
 
+/* This source is compiled only: executing it would be an infinite loop. */
+static void test_loop_targets(void)
+{
+	const char *text = "int main(void) { while(1) { while(1) { break; } "
+		"continue; } return 0; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { stream, 0 };
+	struct lexer lexer;
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_while_statement *outer;
+	struct ast_while_statement *inner;
+	struct ast_compound_statement *outer_body;
+	struct ast_compound_statement *inner_body;
+	struct ast_break_statement *break_node;
+	struct ast_continue_statement *continue_node;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c",
+		(const unsigned char *)text, strlen(text)));
+	lexer_init(&lexer, &source, &diagnostics);
+	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	item = (struct ast_statement_item *)unit->function->body->items;
+	assert(item->statement->kind == statement_while);
+	outer = (struct ast_while_statement *)item->statement;
+	outer_body = (struct ast_compound_statement *)outer->body;
+	item = (struct ast_statement_item *)outer_body->items;
+	assert(item->statement->kind == statement_while);
+	inner = (struct ast_while_statement *)item->statement;
+	inner_body = (struct ast_compound_statement *)inner->body;
+	{
+		struct ast_statement_item *jump =
+			(struct ast_statement_item *)inner_body->items;
+
+		assert(jump->statement->kind == statement_break);
+		break_node = (struct ast_break_statement *)jump->statement;
+		assert(break_node->target == &inner->statement);
+	}
+	item = (struct ast_statement_item *)item->item.next;
+	assert(item->statement->kind == statement_continue);
+	continue_node = (struct ast_continue_statement *)item->statement;
+	assert(continue_node->target == &outer->statement);
+	arena_destroy(&arena);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
 	test_resolved_tree();
 	test_point_of_declaration();
 	test_conditional_scopes_and_logic();
+	test_loop_targets();
 	puts("Semantic AST tests passed");
 	return 0;
 }

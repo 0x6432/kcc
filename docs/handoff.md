@@ -2,56 +2,61 @@
 
 ## Current checkpoint
 
-M06C: Short-circuit logical operators. Branch: development.
+M07A: While, break and continue. Branch: development.
 Public repository: https://github.com/0x6432/kcc
-Commit identity: 0x42 <noreply@localhost>, configured only for this repository.
-Find the exact current checkpoint with git log -1 --oneline. Each M06 subcheckpoint is committed separately after tests; this file does not embed its own circular hash.
+Commit identity: 0x42 <noreply@localhost> (repository-local configuration).
+Each M07 subcheckpoint is committed/pushed after testing. Find the latest exact
+hash with git log -1 --oneline; this file avoids a circular reference to itself.
 
-## Resume after a reset
+## Resume safely
 
-1. Clone/fetch the public repo (reading requires no credentials).
-2. Compare git rev-parse HEAD with git ls-remote origin refs/heads/development.
-3. Inspect git status and preserve any uncommitted/divergent work. Fast-forward
-   only when safe; never blindly reset to a potentially stale sandbox copy.
-4. Read architecture, milestone ledger, limitations and component contracts.
-5. Run make clean && make test. Rebuild QBE if absent with
-   sh scripts/build_qbe.sh tools, then
+1. Clone/fetch the public repo; reading needs no credentials.
+2. Compare git rev-parse HEAD and git ls-remote origin refs/heads/development.
+3. Preserve uncommitted/divergent work; only fast-forward a clean safe checkout.
+4. Read architecture, milestones, limitations and component contracts.
+5. Run make clean && make test. Build pinned QBE if missing with
+   sh scripts/build_qbe.sh tools; then
    make test-codegen QBE="$PWD/tools/qbe-1.2/qbe".
-6. Restore Clang + compiler-rt if needed. Run make fuzz-lex fuzz-compile.
-7. Obtain push authorization separately. Never store tokens in the repo, Git
-   remote URLs, docs or logs. Commit and push each tested milestone.
+6. Restore Clang/compiler-rt if missing; run make fuzz-lex fuzz-compile.
+7. Obtain push authorization separately. Never keep credentials in this repo,
+   Git remote URLs, documentation or logs. Commit/push each tested milestone.
 
-## Current behavior and invariants
+## Behavior and invariants
 
-Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
+While has a distinct AST node. Jump nodes record the nearest enclosing loop during sema. Scope and loop contexts are independent and restore their parents on failure too. QBE while continue targets the condition; break targets the exit. Only an unterminated body gets an implicit back edge.
 
-One int main(void), int locals, arithmetic, assignment and supported statements.
-Still unsupported: loops, calls and preprocessing.
-Limits: 16 MiB source; expression/statement recursion 128; typed expression
-structural depth 128; 4096 block items and 256 locals per entire function.
-Uninitialized objects are not zero-filled; tests avoid undefined behavior.
+Unsupported: do/while, for, function calls, comma/update/compound-assignment operators and preprocessing.
+One main(void), only int types. ++, comma expressions and compound assignments
+are not implemented: use i=i+1 for increments. No zero-fill of automatic locals;
+uninitialized reads may be UB. Limits: 16 MiB source, 128 expression/statement
+nesting, 128 typed expression depth, 4096 block items and 256 locals/function.
 
-Parser creates distinct node types, never performs semantic lookup. Sema runs
-once on a fresh tree and uses the arena for bindings and explicit load nodes.
-Scope frames are stack-local; bindings do not retain pointers to scope frames.
-All declarations stay on function->locals for slot allocation, but name lookup
-uses scopes, not that list. Do not traverse declaration initializer backlinks:
-self-initializers can create reference cycles. Sema checks unreachable source.
-Codegen relies on validated types/bindings, does not resolve names, and stops
-emitting statements after terminators. Source outlives AST; destroy arena first.
+Parser only builds syntax and enforces resource bounds. Sema runs once on a
+fresh AST, inserts explicit load nodes and resolves names/loop jump targets.
+Scope/loop frames are stack-local and restore parents on errors; arena bindings
+retain declarations but never frame pointers. All declarations remain on the
+function-local slot list, distinct from scoped lookup. Don't recurse through
+initializer backlinks: self-initializers can create reference cycles.
+
+Codegen uses validated targets, not source name lookup. A terminated block can
+be return, break or continue; it does not mean all paths through a loop return.
+QBE labels/temporaries have independent counters. Nested logical operands capture
+actual predecessor labels for phi. Initializers execute at their source positions,
+including each loop iteration, although int storage is allocated at function entry.
+Source outlives the AST; destroy the arena before the source.
 
 ## Verification/environment
 
-GCC 11.5.0, Clang 15 + compiler-rt, Make/Python/Git and pinned QBE 1.2 were used.
-Dependencies may vanish on reset even when /data retains files. Budget 4 GB.
-GCC sanitizer SONAME links may be absent: local tests used external links in
-/data/tools/sanitizer-runtime, LD_LIBRARY_PATH, -fno-pie and -no-pie.
-Ubuntu CI does not need this workaround.
+GCC 11.5.0, Clang 15/compiler-rt, Make/Python/Git and QBE 1.2 were used.
+Dependencies can vanish on resets; budget 4 GB. GCC sanitizer SONAME lookup may
+need the external /data/tools/sanitizer-runtime links and LD_LIBRARY_PATH;
+local tests used -fno-pie and -no-pie. Ubuntu CI needs no workaround.
 
-Normal, sanitizer, semantic AST and QBE/runtime/reference tests passed.
-Sanitized pipeline fuzzing: lexer: 339202 inputs in 21 seconds; pipeline: 622309 inputs in 21 seconds.
-Remote CI is checked after pushing; local passes are not remote-CI results.
+Normal, semantic-AST, ASan/UBSan and QBE/runtime/reference tests passed.
+Sanitized fuzzing: pipeline: 262257 inputs in 13 seconds.
+Remote CI is checked after push; do not infer it from local passes.
+All executable loop cases are bounded; fuzzing never executes arbitrary inputs.
 
-## Next action
+## Next milestone
 
-M07: while/do/for with distinct statement structs, loop scopes and bounded nesting, explicit break/continue targets, and correct QBE back edges. Do not skip ahead to functions.
+M07b: distinct do/while AST, body-first execution, continue-to-condition and break/return bypass of condition.

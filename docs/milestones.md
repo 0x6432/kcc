@@ -13,7 +13,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | complete |
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
-| M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | planned |
+| M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | in progress |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | planned |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
@@ -167,3 +167,11 @@ Next: M07: while/do/for with distinct statement structs, loop scopes and bounded
 
 M06c final verification also passed with Clang as compiler/reference compiler,
 ASan/UBSan executable tests, and 24 deterministic random logical trees.
+
+## M07A completion record
+
+While, break and continue. While has a distinct AST node. Jump nodes record the nearest enclosing loop during sema. Scope and loop contexts are independent and restore their parents on failure too. QBE while continue targets the condition; break targets the exit. Only an unterminated body gets an implicit back edge.
+
+Normal GCC, semantic-AST, ASan/UBSan and QBE/reference executable tests passed.
+Sanitized fuzzing: pipeline: 262257 inputs in 13 seconds. Remote push and CI are verified separately.
+Next: M07b: distinct do/while AST, body-first execution, continue-to-condition and break/return bypass of condition.

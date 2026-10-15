@@ -185,6 +185,45 @@ struct ast_if_statement *ast_new_if(struct arena *arena,
 	return node;
 }
 
+struct ast_while_statement *ast_new_while(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_statement *body)
+{
+	struct ast_while_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_while_statement) {
+			.statement = { statement_while, location },
+			.condition = condition,
+			.body = body,
+		};
+	return node;
+}
+
+struct ast_break_statement *ast_new_break(struct arena *arena,
+	struct source_location location)
+{
+	struct ast_break_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_break_statement) {
+			.statement = { statement_break, location },
+		};
+	return node;
+}
+
+struct ast_continue_statement *ast_new_continue(struct arena *arena,
+	struct source_location location)
+{
+	struct ast_continue_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_continue_statement) {
+			.statement = { statement_continue, location },
+		};
+	return node;
+}
+
 struct ast_local_declaration *ast_new_local(struct arena *arena,
 	struct source_location location, struct token name,
 	struct ast_expression *initializer)

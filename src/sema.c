@@ -14,11 +14,17 @@ struct scope {
 	struct binding *bindings;
 };
 
+struct loop_context {
+	struct loop_context *parent;
+	struct ast_statement *statement;
+};
+
 struct sema {
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	struct ast_function *function;
 	struct scope *scope;
+	struct loop_context *loop;
 	size_t local_count;
 };
 
@@ -248,6 +254,31 @@ static bool sema_if(struct sema *sema, struct ast_if_statement *node)
 	return success;
 }
 
+static bool sema_loop_body(struct sema *sema, struct ast_statement *loop,
+	struct ast_statement *body)
+{
+	struct loop_context context = { sema->loop, loop };
+	bool success;
+
+	sema->loop = &context;
+	success = sema_substatement(sema, body);
+	sema->loop = context.parent;
+	return success;
+}
+
+static bool sema_while(struct sema *sema, struct ast_while_statement *node)
+{
+	struct scope scope = { .parent = sema->scope };
+	bool success;
+
+	sema->scope = &scope;
+	success = sema_expression(sema, &node->condition, true);
+	if (success)
+		success = sema_loop_body(sema, &node->statement, node->body);
+	sema->scope = scope.parent;
+	return success;
+}
+
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
 	switch (statement->kind) {
@@ -265,6 +296,31 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	}
 	case statement_empty:
 		return true;
+	case statement_while:
+		return sema_while(sema, (struct ast_while_statement *)statement);
+	case statement_break: {
+		struct ast_break_statement *node = (struct ast_break_statement *)statement;
+
+		if (!sema->loop) {
+			diagnostic_error(sema->diagnostics, statement->location,
+				"break is only supported inside a loop");
+			return false;
+		}
+		node->target = sema->loop->statement;
+		return true;
+	}
+	case statement_continue: {
+		struct ast_continue_statement *node =
+			(struct ast_continue_statement *)statement;
+
+		if (!sema->loop) {
+			diagnostic_error(sema->diagnostics, statement->location,
+				"continue requires an enclosing loop");
+			return false;
+		}
+		node->target = sema->loop->statement;
+		return true;
+	}
 	case statement_if:
 		return sema_if(sema, (struct ast_if_statement *)statement);
 	case statement_compound:

@@ -132,6 +132,21 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     for _ in range(24):
         expression, value = truth_expression(3)
         programs.append((f"int main(void) {{ return {expression}; }}", value))
+    programs += [
+        ("int main(void) { int i=0; int s=0; while(i<5) { s=s+i; i=i+1; } return s; }", 10),
+        ("int main(void) { int x=7; while(0) x=9; return x; }", 7),
+        ("int main(void) { int i=0; while(i<4) i=i+1; return i; }", 4),
+        ("int main(void) { int i=0; int s=0; while(i<5) { i=i+1; if(i==2) continue; s=s+i; } return s; }", 13),
+        ("int main(void) { int x=0; while(1) { x=x+1; if(x==3) break; } return x; }", 3),
+        ("int main(void) { while(1) return 7; return 2; }", 7),
+        ("int main(void) { while(1) { if(1) break; else continue; } return 8; }", 8),
+        ("int main(void) { int i=0; int s=0; while(i<3) { i=i+1; while(1) { s=s+1; break; } } return s; }", 3),
+        ("int main(void) { int i=0; int s=0; while(i<3) { i=i+1; int j=0; while(j<3) { j=j+1; if(j==2) continue; s=s+1; } } return s; }", 6),
+        ("int main(void) { int i=0; while(i<5 && (i=i+1)) { if(i<5) continue; } return i; }", 5),
+        ("int main(void) { int x=2; while(x>0) { int x=3; x=4; break; } return x; }", 2),
+        ("int main(void) { while(0) ; }", 0),
+        ("int main(void) {" + "while(0) "*127 + "; return 4;}", 4),
+    ]
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -227,6 +242,19 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return !; }",
         "int main(void) { return " + "1&&"*128 + "1; }",
     ]
+    invalid += [
+        "int main(void) { break; }",
+        "int main(void) { continue; }",
+        "int main(void) { if(0) break; }",
+        "int main(void) { return 0; continue; }",
+        "int main(void) { while() ; }",
+        "int main(void) { while(1) }",
+        "int main(void) { while(1) break }",
+        "int main(void) { while(0) return missing; }",
+        "int main(void) { while(1) { int x=1; break; } return x; }",
+        "int main(void) { while(0) ; continue; }",
+        "int main(void) {" + "while(0) "*128 + ";}",
+    ]
     for keyword in ("if", "while", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
@@ -236,6 +264,8 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("int main(void) { break; }", "break is only supported inside a loop"),
+        ("int main(void) { continue; }", "continue requires an enclosing loop"),
         ("int main(void) { return missing; }", "use of undeclared identifier"),
         ("int main(void) { int x; int x; }", "redeclaration of local"),
         ("int main(void) { 1=2; }", "modifiable lvalue"),

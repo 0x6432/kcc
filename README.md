@@ -6,10 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M06C: short-circuit logical operators. Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
+M07A: while, break and continue. While has a distinct AST node. Jump nodes record the nearest enclosing loop during sema. Scope and loop contexts are independent and restore their parents on failure too. QBE while continue targets the condition; break targets the exit. Only an unterminated body gets an implicit back edge.
 
-Unsupported input is rejected. See `docs/milestones.md` and
-`docs/limitations.md`.
+See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
 ## Build and test
 
@@ -65,9 +64,10 @@ cc build/example.s -o build/example
 # Exit status: 42
 ```
 
-Supported: decimal int literals, locals, simple assignment, arithmetic,
-nested blocks and shadowing, comparisons and if/else, and !/&&/||.
-Unsupported: loops, calls and preprocessing. This is not a complete C23 compiler.
+Supported: decimal int literals, int locals, simple assignment, arithmetic,
+comparisons, !/&&/||, nested blocks/shadowing, if/else, while, break/continue.
+Unsupported: do/while, for, function calls, comma/update/compound-assignment operators and preprocessing. This is not a complete C23 compiler.
 
+Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
 Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items
 and 256 locals across the function.

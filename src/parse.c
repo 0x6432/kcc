@@ -375,13 +375,99 @@ static struct ast_if_statement *parse_if_statement(struct parser *parser)
 	return node;
 }
 
+/* while-statement ::= "while" "(" expression ")" statement */
+static struct ast_while_statement *parse_while_contents(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_expression *condition;
+	struct ast_statement *body;
+	struct ast_while_statement *node;
+
+	if (!expect_token(parser, token_while, "expected 'while'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_left_paren, "expected '(' after while", NULL))
+		return NULL;
+	condition = parse_expression(parser, 0);
+	if (!condition)
+		return NULL;
+	if (!expect_token(parser, token_right_paren, "expected ')' after condition", NULL))
+		return NULL;
+	body = parse_statement(parser);
+	if (!body)
+		return NULL;
+	node = ast_new_while(parser->arena, keyword.location, condition, body);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
+}
+
+/* while-statement ::= "while" "(" expression ")" statement; guard nesting. */
+static struct ast_while_statement *parse_while_statement(struct parser *parser)
+{
+	struct ast_while_statement *node;
+
+	if (!begin_nested_statement(parser))
+		return NULL;
+	node = parse_while_contents(parser);
+	parser->statement_nesting--;
+	return node;
+}
+
+/* break-statement ::= "break" ";" */
+static struct ast_statement *parse_break_statement(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_break_statement *node;
+
+	if (!expect_token(parser, token_break, "expected 'break'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_semicolon, "expected ';' after break", NULL))
+		return NULL;
+	node = ast_new_break(parser->arena, keyword.location);
+	if (!node) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	return &node->statement;
+}
+
+/* continue-statement ::= "continue" ";" */
+static struct ast_statement *parse_continue_statement(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_continue_statement *node;
+
+	if (!expect_token(parser, token_continue, "expected 'continue'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_semicolon, "expected ';' after continue", NULL))
+		return NULL;
+	node = ast_new_continue(parser->arena, keyword.location);
+	if (!node) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	return &node->statement;
+}
+
 /* statement ::= return-statement | expression-statement | empty-statement
- *             | compound-statement | if-statement
+ *             | compound-statement | if-statement | while-statement
+ *             | break-statement | continue-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
 
+	if (token.kind == token_while) {
+		struct ast_while_statement *node = parse_while_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
+	if (token.kind == token_break)
+		return parse_break_statement(parser);
+	if (token.kind == token_continue)
+		return parse_continue_statement(parser);
 	if (token.kind == token_if) {
 		struct ast_if_statement *node = parse_if_statement(parser);
 

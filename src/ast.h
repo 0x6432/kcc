@@ -106,6 +106,9 @@ enum statement_kind {
 	statement_empty,
 	statement_compound,
 	statement_if,
+	statement_while,
+	statement_break,
+	statement_continue,
 };
 
 struct ast_statement {
@@ -132,6 +135,22 @@ struct ast_if_statement {
 	struct ast_expression *condition;
 	struct ast_statement *then_branch;
 	struct ast_statement *else_branch;
+};
+
+struct ast_while_statement {
+	struct ast_statement statement;
+	struct ast_expression *condition;
+	struct ast_statement *body;
+};
+
+struct ast_break_statement {
+	struct ast_statement statement;
+	struct ast_statement *target;
+};
+
+struct ast_continue_statement {
+	struct ast_statement statement;
+	struct ast_statement *target;
 };
 
 enum block_item_kind {
@@ -202,6 +221,13 @@ struct ast_empty_statement *ast_new_empty_statement(struct arena *arena,
 struct ast_if_statement *ast_new_if(struct arena *arena,
 	struct source_location location, struct ast_expression *condition,
 	struct ast_statement *then_branch, struct ast_statement *else_branch);
+struct ast_while_statement *ast_new_while(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_statement *body);
+struct ast_break_statement *ast_new_break(struct arena *arena,
+	struct source_location location);
+struct ast_continue_statement *ast_new_continue(struct arena *arena,
+	struct source_location location);
 struct ast_local_declaration *ast_new_local(struct arena *arena,
 	struct source_location location, struct token name,
 	struct ast_expression *initializer);

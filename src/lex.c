@@ -138,6 +138,12 @@ static struct token lex_identifier(struct lexer *lexer)
 		token.kind = token_if;
 	else if (spelling_is(token, "else"))
 		token.kind = token_else;
+	else if (spelling_is(token, "while"))
+		token.kind = token_while;
+	else if (spelling_is(token, "break"))
+		token.kind = token_break;
+	else if (spelling_is(token, "continue"))
+		token.kind = token_continue;
 	else if (is_unsupported_keyword(token))
 		token.kind = token_unsupported_keyword;
 	return token;
@@ -335,6 +341,9 @@ const char *token_kind_name(enum token_kind kind)
 	case token_return: return "return";
 	case token_if: return "if";
 	case token_else: return "else";
+	case token_while: return "while";
+	case token_break: return "break";
+	case token_continue: return "continue";
 	case token_left_paren: return "(";
 	case token_right_paren: return ")";
 	case token_left_brace: return "{";

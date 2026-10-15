@@ -66,7 +66,7 @@ static void test_errors(void)
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };
 
-		check_tokens("while", keyword, 1, 0);
+		check_tokens("switch", keyword, 1, 0);
 		check_tokens("constexpr", keyword, 1, 0);
 		check_tokens("=", equal, 1, 0);
 	}
@@ -78,9 +78,10 @@ static void test_condition_tokens(void)
 		token_if, token_else, token_less, token_less_equal, token_greater,
 		token_greater_equal, token_equal_equal, token_not_equal, token_equal,
 		token_bang, token_and_and, token_or_or,
+		token_while, token_break, token_continue,
 	};
 
-	check_tokens("if else < <= > >= == != = ! && ||", kinds,
+	check_tokens("if else < <= > >= == != = ! && || while break continue", kinds,
 		sizeof(kinds) / sizeof(kinds[0]), 0);
 }
 

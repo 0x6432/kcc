@@ -105,7 +105,7 @@ limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
 function-wide block items, 256 function-wide locals. Tests execute defined C
 only; fuzzing never executes source programs.
 
-## M06C (current)
+## M06C
 
 Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
 
@@ -115,3 +115,15 @@ zero-fill/definite-initialization analysis for uninitialized locals. Resource
 limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
 function-wide block items, 256 function-wide locals. Tests execute defined C
 only; fuzzing never executes source programs.
+
+## M07A (current)
+
+While has a distinct AST node. Jump nodes record the nearest enclosing loop during sema. Scope and loop contexts are independent and restore their parents on failure too. QBE while continue targets the condition; break targets the exit. Only an unterminated body gets an implicit back edge.
+
+One int main(void), int locals, existing arithmetic/assignment/comparisons and
+short-circuit logic, scoped blocks and supported control statements. Unsupported:
+do/while, for, function calls, comma/update/compound-assignment operators and preprocessing. There is no inference of nontermination or complete reachability
+analysis. Jump constraints are checked even in dead source. Runtime tests use
+bounded, defined programs; fuzzing never executes user loops. Source remains
+limited to 16 MiB, expression/statement nesting to 128, block items to 4096
+and locals to 256 per function. Automatic locals are not zero-filled.

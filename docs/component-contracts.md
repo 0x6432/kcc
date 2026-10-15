@@ -111,3 +111,30 @@ reserves an item before descending into it, so nesting cannot bypass the cap.
 Labels/temporaries have independent monotonic counters. Each logical merge
 starts with its phi; predecessor IDs are captured after operand emission, not
 before nested control flow. No eager binary opcode represents && or ||.
+
+## M07 design before implementation
+
+M07a: distinct while/break/continue structs. Sema records the enclosing loop on
+jump nodes, rejecting jumps outside loops even in unreachable source. Its loop
+context is separate from its scope stack. QBE loop contexts carry explicit break
+and continue labels and assert the sema-selected target. While continue returns
+to the condition, never the first body instruction. Only an unterminated body
+gets an implicit back edge. Loop exit labels remain conservatively reachable;
+this checkpoint does not infer nontermination from constant conditions.
+
+M07b: a distinct do-statement struct. Execute body before condition; continue
+jumps to the condition and break bypasses it. Unreachable condition blocks must
+still be well-formed QBE and semantically checked; don't evaluate a condition on
+paths that already broke or returned.
+
+M07c: a distinct for-statement struct with explicit optional init declaration,
+init expression, condition and step. A declaration in the initializer is visible
+through condition/body/step, not after the loop. The body has its own C scope.
+Missing condition means unconditional iteration; missing step means no work.
+For continue executes the step before rechecking the condition. Header parsing
+uses an explicit semicolon contract, not special whole-file token buffering.
+
+All composites share the 128 statement nesting limit. Loop declarations count
+toward 256 locals per function; nested block items remain globally capped at
+4096. Sema validates all syntax, including skipped paths. Fuzzing compiles but
+never runs arbitrary loop inputs; executable tests use bounded, defined cases.
