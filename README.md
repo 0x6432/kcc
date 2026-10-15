@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M08a: Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
+M08b: Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 

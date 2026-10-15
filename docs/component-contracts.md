@@ -190,3 +190,16 @@ The TU owns an ordered external list with distinct declaration/definition
 structs. Definitions reference their own declaration header. Call expressions
 carry a canonical symbol; their callee has a function type, while the call has
 int type. Sema runs once and checks unreachable calls too. No forward hoisting.
+
+### M08b implemented contract
+
+Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
+
+Distinct ast_parameter and ast_argument lists preserve source order. Parameter
+syntax names are separate from function_parameter_type entries. A canonical
+symbol carries compatible type information; type_compatible compares return
+and each parameter type/count, never names. Sema resolves callees against local
+shadowing and visible functions, then inserts value conversions in arguments.
+Parameters have semantic local backlinks; these are not AST ownership edges.
+The root scope is explicit so a same-body redeclaration fails. Nested blocks
+may shadow parameters. All scopes/loop contexts reset between definitions.

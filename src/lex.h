@@ -27,6 +27,7 @@ enum token_kind {
 	token_left_brace,
 	token_right_brace,
 	token_semicolon,
+	token_comma,
 	token_plus,
 	token_minus,
 	token_star,

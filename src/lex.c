@@ -265,6 +265,9 @@ static struct token read_token(struct lexer *lexer)
 	case '}':
 		kind = token_right_brace;
 		break;
+	case ',':
+		kind = token_comma;
+		break;
 	case ';':
 		kind = token_semicolon;
 		break;
@@ -355,6 +358,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_left_brace: return "{";
 	case token_right_brace: return "}";
 	case token_semicolon: return ";";
+	case token_comma: return ",";
 	case token_plus: return "+";
 	case token_minus: return "-";
 	case token_star: return "*";

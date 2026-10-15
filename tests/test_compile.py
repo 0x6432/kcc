@@ -214,6 +214,45 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 0 and not result.stderr, result.stderr
         assert ("export function" in result.stdout) == ("{" in text)
 
+    programs += [
+        ("int main() { return 3; }", 3),
+        ("int f(); int f(void) { return 4; } int main() { return f(); }", 4),
+        ("int id(int x) { return x; } int main(void) { return id(42); }", 42),
+        ("int sub(int a, int b) { return a-b; } int main(void) { return sub(3,9); }", -6),
+        ("int sum(int, int); int main(void) { return sum(5,8); } "
+         "int sum(int a,int b) { return a+b; }", 13),
+        ("int f(int a); int f(int b); int f(int c) { return c; } int f(int d); "
+         "int main(void) { return f(6); }", 6),
+        ("int f(int x) { x=x+5; return x; } int main(void) { int x=7; "
+         "int y=f(x); return x+y; }", 19),
+        ("int f(int x) { { int x=2; x=9; } return x; } "
+         "int main(void) { return f(7); }", 7),
+        ("int f(int x) { int y=x*2; return y; } int main(void) { return f(f(3)); }", 12),
+        ("int f(int x) { return x; } int main(void) { return (f)(1+f(2)*3); }", 7),
+        ("int sum(int a,int b) { return a+b; } int main(void) { int x; int y; "
+         "int z=sum(x=3,y=4); return z+x+y; }", 14),
+        ("int sum(int a,int b) { return a+b; } int main(void) { "
+         "return sum(0 || (1 && 2), (0 || 3) && (1 || 0)); }", 2),
+        ("int f(int a,int b) { return a*10+b; } int main(void) { int x=5; "
+         "return f(x, x+2); }", 57),
+        ("int f(int x) { for(int i=0;i<3;i=i+1) x=x+i; return x; } "
+         "int main(void) { return f(4); }", 7),
+    ]
+    parameter_names = [f"a{i}" for i in range(128)]
+    parameters = ",".join(f"int {name}" for name in parameter_names)
+    arguments = ",".join(str(i) for i in range(128))
+    programs.append((f"int f({parameters}) {{ return a0+a6+a127; }} "
+                     f"int main(void) {{ return f({arguments}); }}", 133))
+    programs.append((f"int f({parameters}) {{ " +
+                     "".join(f"int x{i}=a{i};" for i in range(128)) +
+                     "return x127; } int main(void) { return f(" + arguments + "); }", 127))
+    for _ in range(12):
+        values = [random_source.randrange(-12, 13) for _ in range(4)]
+        argument_text = ",".join(str(value) for value in values)
+        expected = values[0]*3 + values[1]*5 - values[2]*7 + values[3]
+        programs.append(("int mix(int a,int b,int c,int d) { return a*3+b*5-c*7+d; } "
+                         f"int main(void) {{ return mix({argument_text}); }}", expected))
+
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -244,7 +283,6 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "", "int main(void) { return; }", "int main(void) { return 0 }",
         "int main(void) { return 2147483648; }",
         "int main(void) { return 0x10; }", "int main(void) { return 0; } int x;",
-        "int main() { return 0; }",
         "int main(void) { return 1 + ; }",
         "int main(void) { return ++1; }", "int main(void) { return (1; }",
         "int main(void) { return 1 / ; }", "#define X 0\n",
@@ -360,6 +398,31 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "".join(f"int f{i}(void);" for i in range(257)),
         "int f(void); int main(void) { return f" + "()"*128 + "; }",
     ]
+    invalid += [
+        "int f(int x) { int x; return 0; }",
+        "int f(int x,int x) { return x; }",
+        "int f(int x,int x);",
+        "int f(int); int f(void);",
+        "int f(); int f(int x) { return x; }",
+        "int f(int,int); int f(int x) { return x; }",
+        "int f(int); int main(void) { return f(); }",
+        "int f(void); int main(void) { return f(1); }",
+        "int f(int); int main(void) { return f(1,2); }",
+        "int f(int); int main(void) { return f(missing); }",
+        "int f(int); int main(void) { return f(1,); }",
+        "int f(int); int main(void) { return f(,1); }",
+        "int f(int); int main(void) { return f(1 2); }",
+        "int f(void,int x);", "int f(int x,void);", "int f(int x,);",
+        "int f(int x int y);", "int f(int x=1);", "int f(int,...) ;",
+        "int f(int) { return 0; }",
+        "int main(int x) { return x; }",
+        "int f(int f) { return f(0); }",
+        "int f(int x) { return x; } int main(void) { return x; }",
+        "int f(int x) { return x; } int main(void) { return f((1,2)); }",
+        "int f(" + ",".join("int a"+str(i) for i in range(129)) + ");",
+        "int f(void); int main(void) { return f(" + ",".join("0" for _ in range(129)) + "); }",
+        "int f(" + parameters + ") { " + "".join(f"int x{i};" for i in range(129)) + "}",
+    ]
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
@@ -369,6 +432,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("int f(int); int f(void);", "incompatible function declaration"),
+        ("int f(int x,int x);", "duplicate parameter name"),
+        ("int f(int x) { int x; }", "redeclaration of local"),
+        ("int f(int); int main(void) { return f(); }", "argument count"),
+        ("int f(int) { return 0; }", "unnamed definition parameters"),
         ("int main(void) { return f(); }", "call to undeclared function"),
         ("int f(void); int main(void) { int f; f(); }", "not a function"),
         ("int f(void) {} int f(void) {}", "redefinition of function"),

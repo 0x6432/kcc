@@ -14,7 +14,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
-| M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | in progress (M08a complete) |
+| M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | in progress (M08a/M08b complete) |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
@@ -208,3 +208,19 @@ Next: M08b parameter/argument lists and name-independent signature compatibility
 
 M08a sanitizer verification passed with ASan/UBSan, including QBE runtime
 tests. Sanitized pipeline fuzzing completed 349498 inputs in 13 seconds.
+
+M08a remote CI passed: https://github.com/0x6432/kcc/actions/runs/38714173006
+
+## M08B completion record
+
+Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
+
+Acceptance covers argument order/arity, prototype names/compatibility,
+parameter mutation/shadowing/redeclaration, nested call/short-circuit operands,
+128 arguments/parameters and 256 total parameter/local slots.
+Tests and fuzz counts are recorded after verification. Next: M08c direct/mutual
+recursion and bidirectional host-compiler ABI testing.
+
+M08b verification passed: GCC/Clang, semantic-AST, QBE/runtime/reference
+and ASan/UBSan. Sanitized fuzzing: lexer 280937 and pipeline 450116 inputs
+in 16 seconds per harness. Remote push/CI are verified separately.

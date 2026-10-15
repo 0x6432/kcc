@@ -123,11 +123,22 @@ static size_t codegen_expression(struct codegen *codegen,
 		const struct ast_call_expression *node =
 			(const struct ast_call_expression *)expression;
 		struct token name = node->function->name;
-		size_t result = codegen->next_temporary++;
+		size_t arguments[ast_max_arguments];
+		size_t count = 0;
+		size_t result;
 
-		emit(codegen, "\t%%t%zu =w call $%.*s()\n", result,
+		/* Finish each argument's IL, including branches, before the call line. */
+		for (const struct ast_argument *argument = node->arguments; argument;
+			argument = argument->next)
+			arguments[count++] = codegen_expression(codegen, argument->value);
+		assert(count == node->argument_count && count <= ast_max_arguments);
+		result = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w call $%.*s(", result,
 			(int)name.length,
 			(const char *)name.location.source->data + name.location.offset);
+		for (size_t i = 0; i < count; i++)
+			emit(codegen, "%sw %%t%zu", i ? ", " : "", arguments[i]);
+		emit(codegen, ")\n");
 		return result;
 	}
 	case expression_integer: {
@@ -433,17 +444,31 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	};
 	const struct ast_local_declaration *local = function->locals;
 	struct token name = function->declaration->name;
+	size_t parameter_index = 0;
 
 	assert(function->return_type == &type_int);
-	emit(&codegen, "export function w $%.*s() {\n",
+
+	emit(&codegen, "export function w $%.*s(",
 		(int)name.length,
 		(const char *)name.location.source->data + name.location.offset);
+	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
+		parameter = parameter->next) {
+		emit(&codegen, "%sw %%p%zu", parameter_index ? ", " : "", parameter_index);
+		parameter_index++;
+	}
+	emit(&codegen, ") {\n");
 	emit_label(&codegen, 0);
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
 		assert(local->type == &type_int);
 		emit(&codegen, "\t%%v%zu =l alloc4 4\n", local->slot);
 		local = local->next_local;
+	}
+	parameter_index = 0;
+	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
+		parameter = parameter->next) {
+		emit(&codegen, "\tstorew %%p%zu, %%v%zu\n", parameter_index, parameter->local->slot);
+		parameter_index++;
 	}
 	if (!codegen_block_items(&codegen, function->body->items))
 		emit(&codegen, "\tret 0\n");

@@ -120,7 +120,19 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		node->callee->type = &node->function->type->type;
+		if (node->argument_count != node->function->type->parameter_count) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"argument count does not match function signature");
+			return false;
+		}
 		expression->depth = node->callee->depth + 1;
+		for (struct ast_argument *argument = node->arguments; argument;
+			argument = argument->next) {
+			if (!sema_expression(sema, &argument->value, true))
+				return false;
+			if (argument->value->depth + 1 > expression->depth)
+				expression->depth = argument->value->depth + 1;
+		}
 		break;
 	}
 	case expression_integer: {
@@ -438,10 +450,85 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 	return success;
 }
 
+static bool sema_parameter_names(struct sema *sema,
+	struct ast_function_declaration *declaration, bool is_definition)
+{
+	for (struct ast_parameter *parameter = declaration->parameters; parameter;
+		parameter = parameter->next) {
+		if (!parameter->has_name) {
+			if (!is_definition)
+				continue;
+			diagnostic_error(sema->diagnostics, parameter->location,
+				"unnamed definition parameters are not supported yet");
+			return false;
+		}
+		for (struct ast_parameter *prior = declaration->parameters; prior != parameter;
+			prior = prior->next) {
+			if (prior->has_name && same_name(prior->name, parameter->name)) {
+				diagnostic_error(sema->diagnostics, parameter->name.location,
+					"duplicate parameter name");
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+static bool sema_function_body(struct sema *sema, struct ast_function *definition)
+{
+	struct scope scope = { 0 };
+	bool success = false;
+
+	assert(!sema->scope && !sema->loop);
+	sema->function = definition;
+	sema->local_count = 0;
+	sema->scope = &scope;
+	for (struct ast_parameter *parameter = definition->declaration->parameters; parameter;
+		parameter = parameter->next) {
+		parameter->local = ast_new_local(sema->arena, parameter->location,
+			parameter->name, NULL);
+		if (!parameter->local) {
+			diagnostic_error(sema->diagnostics, parameter->location,
+				"out of memory creating parameter local");
+			goto done;
+		}
+		if (!sema_local(sema, parameter->local))
+			goto done;
+	}
+	/* Parameters and outermost body declarations inhabit the same scope. */
+	success = sema_block_items(sema, definition->body->items);
+done:
+	sema->scope = NULL;
+	sema->function = NULL;
+	return success;
+}
+
 static bool sema_function_declaration(struct sema *sema,
 	struct ast_function_declaration *declaration, struct ast_function *definition)
 {
 	struct function_symbol *symbol = find_function(sema, declaration->name);
+	struct function_type *type;
+	struct token main_name = declaration->name;
+
+	if (!sema_parameter_names(sema, declaration, definition != NULL))
+		return false;
+	if (main_name.length == 4 && memcmp(main_name.location.source->data +
+		main_name.location.offset, "main", 4) == 0 && declaration->parameter_count) {
+		diagnostic_error(sema->diagnostics, main_name.location,
+			"only zero-parameter main is supported yet");
+		return false;
+	}
+	type = type_new_int_function(sema->arena, declaration->parameter_count);
+	if (!type) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"out of memory creating function type");
+		return false;
+	}
+	if (symbol && !type_compatible(&symbol->type->type, &type->type)) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"incompatible function declaration");
+		return false;
+	}
 
 	if (!symbol) {
 		if (sema->function_count == ast_max_functions) {
@@ -457,7 +544,7 @@ static bool sema_function_declaration(struct sema *sema,
 		}
 		*symbol = (struct function_symbol) {
 			.name = declaration->name,
-			.type = &type_function_int_void,
+			.type = type,
 			.next = sema->functions,
 		};
 		sema->functions = symbol;
@@ -474,9 +561,7 @@ static bool sema_function_declaration(struct sema *sema,
 	/* Install the definition before its body: direct recursion is visible. */
 	symbol->definition = definition;
 	definition->return_type = symbol->type->return_type;
-	sema->function = definition;
-	sema->local_count = 0;
-	return sema_compound(sema, definition->body);
+	return sema_function_body(sema, definition);
 }
 
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,

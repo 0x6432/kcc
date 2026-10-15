@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M08a: Zero-argument functions, prototypes and calls. Branch: development.
+M08b: Integer parameters, arguments and signature checks. Branch: development.
 Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local configuration).
 Each M08 subcheckpoint is committed/pushed after testing. Find the latest exact
@@ -23,14 +23,15 @@ hash with git log -1 --oneline; this file avoids a circular reference to itself.
 
 ## Behavior and invariants
 
-Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
+Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
 
-Only int returns and `(void)` signatures. Unsupported: parameters, function
-values/pointers, local prototypes, globals, storage classes and preprocessing.
-Library units need no main; unresolved declared functions reach the host linker.
-Main fallthrough returns zero; non-main filler is not a defined C return value.
-Limits: 512 external declarations, 256 functions; per-function 256 locals and
-4096 block items. Expression/statement nesting and typed depth remain 128.
+Only int signatures; () means zero parameters (C23), as does (void).
+Prototype names optional, definition names required until later C23 work.
+Main must have zero parameters. Limit 128 parameters/arguments, 512 external
+declarations, 256 functions, 256 parameter/local slots and 4096 block items per
+function. Statement/expression nesting and typed depth remain 128. No function
+values/pointers, variadics, local prototypes, globals, storage or preprocessing.
+Library units need no main; unresolved function declarations reach the linker.
 
 Parser only builds syntax and enforces resource bounds. Sema runs once on a
 fresh AST, inserts explicit load nodes and resolves names/loop jump targets.
@@ -60,13 +61,14 @@ All executable loop cases are bounded; fuzzing never executes arbitrary inputs.
 
 ## Next milestone
 
-M08b: int parameter/argument lists and real signature compatibility, ignoring
-parameter names. Parameters and root body locals must share one scope. Give
-parameters the first local slots; QBE w entry parameters store into these slots.
-Keep source-order visibility and named direct calls. Empty () means zero
-parameters in C23, not an old-style unspecified-argument function. M08c then
-adds recursion runtime cases and bidirectional GCC/Clang ABI tests, including
-more than six arguments. See the M08 design in component-contracts.md.
+M08c: bounded direct/mutual recursion and bidirectional GCC/Clang ABI cases,
+including more than six arguments. Use executable defined-C cases, never
+unbounded fuzz execution. CI must run host-link tests through test-codegen.
+The compiler implementation already permits recursion via source-order symbol
+registration before a definition body; add explicit runtime acceptance tests.
+Then M09: specify translation phases and on-demand preprocessing token stream
+contracts before implementation; don't start full macro expansion at once.
 
-M08a verification: normal GCC, semantic-AST, QBE/reference execution and
-ASan/UBSan passed. Sanitized pipeline fuzzing: 349498 inputs in 13 seconds.
+M08b verification: GCC/Clang including reference executables and ASan/UBSan
+passed. Sanitized fuzzing: lexer 280937, pipeline 450116 inputs in 16 seconds
+each. M08a remote CI passed (run 38714173006); verify M08b after pushing.

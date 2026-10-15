@@ -323,8 +323,72 @@ static void test_function_symbols(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_parameters_and_arguments(void)
+{
+	const char *text = "int f(int); int f(int x) { int y=x; return y; } "
+		"int main(void) { int a=7; return f(a); }";
+	struct source source = { 0 };
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { stream, 0 };
+	struct lexer lexer;
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_function *function;
+	struct ast_function *main_function;
+	struct ast_parameter *parameter;
+	struct ast_local_declaration *y;
+	struct ast_local_declaration *a;
+	struct ast_statement_item *item;
+	struct ast_call_expression *call;
+	struct ast_load_expression *load;
+	struct function_type *one;
+	struct function_type *another_one;
+	struct function_type *zero;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "parameters.c", (const unsigned char *)text, strlen(text)));
+	lexer_init(&lexer, &source, &diagnostics);
+	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	function = (struct ast_function *)prototype->external.next;
+	main_function = (struct ast_function *)function->external.next;
+	parameter = function->declaration->parameters;
+	assert(parameter->has_name && !parameter->next && parameter->local->slot == 0);
+	assert(function->declaration->symbol == prototype->symbol);
+	assert(prototype->symbol->type->parameter_count == 1);
+	assert(prototype->symbol->type->parameters->type == &type_int);
+	assert(!prototype->parameters->has_name);
+	y = (struct ast_local_declaration *)function->body->items;
+	assert(y->slot == 1 && y->next_local == parameter->local);
+	load = (struct ast_load_expression *)y->initializer;
+	assert(load->expression.kind == expression_load);
+	assert(((struct ast_name_expression *)load->operand)->declaration == parameter->local);
+	a = (struct ast_local_declaration *)main_function->body->items;
+	assert(a->slot == 0);
+	item = (struct ast_statement_item *)a->item.next;
+	call = (struct ast_call_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(call->expression.kind == expression_call && call->argument_count == 1);
+	assert(call->function == prototype->symbol && !call->arguments->next);
+	load = (struct ast_load_expression *)call->arguments->value;
+	assert(load->expression.kind == expression_load);
+	assert(((struct ast_name_expression *)load->operand)->declaration == a);
+	one = type_new_int_function(&arena, 1);
+	another_one = type_new_int_function(&arena, 1);
+	zero = type_new_int_function(&arena, 0);
+	assert(one && another_one && zero);
+	assert(type_compatible(&one->type, &another_one->type));
+	assert(!type_compatible(&one->type, &zero->type));
+	assert(!type_compatible(&one->type, &type_int));
+	arena_destroy(&arena);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_parameters_and_arguments();
 	test_function_symbols();
 	test_resolved_tree();
 	test_point_of_declaration();

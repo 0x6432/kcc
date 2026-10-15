@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M08a. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08a.
+Current milestone: M08b. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b.
 
 ## M00
 
@@ -152,7 +152,7 @@ bounded, defined programs; fuzzing never executes user loops. Source remains
 limited to 16 MiB, expression/statement nesting to 128, block items to 4096
 and locals to 256 per function. Automatic locals are not zero-filled.
 
-## M08a (current)
+## M08a
 
 Ordered external declarations, compatible zero-argument prototypes and multiple int function definitions are supported. Sema installs canonical symbols in source order; calls resolve visible functions, respect local shadowing and reject duplicate definitions. QBE emits each definition independently and direct w-result calls; prototypes emit no IL.
 
@@ -167,3 +167,21 @@ At most 512 external declarations and 256 distinct functions. Previous limits
 apply per function; local/loop contexts and QBE counters do not leak between
 definitions. Semantic symbols contain backlinks; do not recursively traverse
 them as ownership edges. Syntax/constraint failures produce no compiler IL.
+
+## M08b (current)
+
+Integer parameter and argument lists are implemented with name-independent function signatures, source-order prototype visibility and argument-count checks. Parameters receive the first local slots and share scope with the outermost body declarations. QBE w entry values are stored into those slots; nested call arguments finish emitting before the call line.
+
+Supported signatures: int return, up to 128 int parameters, up to 128 call
+arguments. Prototype parameter names are optional; definition names are
+required in this subset (C23 unnamed definition parameters are deferred).
+Empty () explicitly means zero parameters, not an old-style unspecified list.
+Only zero-parameter main is supported until pointer/argv work. Parameters count
+against the existing 256-local function limit; 4096 body items do not count them.
+
+Arguments are emitted left to right as an implementation choice, not a C
+sequencing guarantee. Runtime/differential tests do not depend on unspecified
+ordering or execute unsequenced undefined behavior. No variadics, pointer calls,
+function values, globals, local prototypes, storage classes or preprocessing.
+Functions are externally visible; unresolved declarations reach the linker.
+Non-main fallthrough filler is not a promised defined return value.

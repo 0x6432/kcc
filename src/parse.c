@@ -119,7 +119,46 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 	return expression;
 }
 
-/* postfix-expression ::= primary-expression { "(" ")" } */
+/* argument-expression-list ::= assignment-expression
+ *                              { "," assignment-expression }
+ * The comma operator is not implemented; it is not part of this production.
+ */
+static bool parse_call_arguments(struct parser *parser,
+	struct ast_argument **arguments, size_t *count)
+{
+	struct ast_argument **tail = arguments;
+
+	if (lexer_peek(parser->lexer).kind == token_right_paren)
+		return true;
+	for (;;) {
+		struct ast_expression *value;
+		struct ast_argument *argument;
+
+		if (*count == ast_max_arguments) {
+			diagnostic_error(parser->diagnostics, lexer_peek(parser->lexer).location,
+				"call exceeds argument limit (128)");
+			return false;
+		}
+		value = parse_expression(parser, 0);
+		if (!value)
+			return false;
+		argument = ast_new_argument(parser->arena, value);
+		if (!argument) {
+			allocation_error(parser, value->location);
+			return false;
+		}
+		*tail = argument;
+		tail = &argument->next;
+		(*count)++;
+		if (lexer_peek(parser->lexer).kind != token_comma)
+			return true;
+		lexer_next(parser->lexer);
+	}
+}
+
+/* postfix-expression ::= primary-expression
+ *                        { "(" [ argument-expression-list ] ")" }
+ */
 static struct ast_expression *parse_postfix_expression(struct parser *parser)
 {
 	struct ast_expression *expression = parse_primary_expression(parser);
@@ -128,18 +167,22 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 		return NULL;
 	while (lexer_peek(parser->lexer).kind == token_left_paren) {
 		struct ast_call_expression *node;
+		struct ast_argument *arguments = NULL;
+		size_t count = 0;
 
 		lexer_next(parser->lexer);
+		if (!parse_call_arguments(parser, &arguments, &count))
+			return NULL;
 		if (!expect_token(parser, token_right_paren, "expected ')' after call", NULL))
 			return NULL;
-		if (expression->depth >= ast_max_expression_depth) {
-			diagnostic_error(parser->diagnostics, expression->location,
-				"expression tree exceeds depth limit (128)");
-			return NULL;
-		}
-		node = ast_new_call(parser->arena, expression);
+		node = ast_new_call(parser->arena, expression, arguments, count);
 		if (!node) {
 			allocation_error(parser, expression->location);
+			return NULL;
+		}
+		if (node->expression.depth > ast_max_expression_depth) {
+			diagnostic_error(parser->diagnostics, expression->location,
+				"expression tree exceeds depth limit (128)");
 			return NULL;
 		}
 		expression = &node->expression;
@@ -754,7 +797,53 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 	return node;
 }
 
-/* external-declaration ::= "int" identifier "(" "void" ")"
+/* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
+ * parameter-declaration ::= "int" [ identifier ]
+ * C23's empty list specifies zero parameters, just like (void).
+ */
+static bool parse_parameters(struct parser *parser,
+	struct ast_function_declaration *declaration)
+{
+	struct ast_parameter **tail = &declaration->parameters;
+
+	if (lexer_peek(parser->lexer).kind == token_void) {
+		lexer_next(parser->lexer);
+		return true;
+	}
+	if (lexer_peek(parser->lexer).kind == token_right_paren)
+		return true;
+	for (;;) {
+		struct token beginning;
+		struct token name = { 0 };
+		struct ast_parameter *parameter;
+		bool has_name = false;
+
+		if (declaration->parameter_count == ast_max_parameters) {
+			diagnostic_error(parser->diagnostics, lexer_peek(parser->lexer).location,
+				"function exceeds parameter limit (128)");
+			return false;
+		}
+		if (!expect_token(parser, token_int, "expected 'int' parameter type", &beginning))
+			return false;
+		if (lexer_peek(parser->lexer).kind == token_identifier) {
+			name = lexer_next(parser->lexer);
+			has_name = true;
+		}
+		parameter = ast_new_parameter(parser->arena, beginning.location, name, has_name);
+		if (!parameter) {
+			allocation_error(parser, beginning.location);
+			return false;
+		}
+		*tail = parameter;
+		tail = &parameter->next;
+		declaration->parameter_count++;
+		if (lexer_peek(parser->lexer).kind != token_comma)
+			return true;
+		lexer_next(parser->lexer);
+	}
+}
+
+/* external-declaration ::= "int" identifier "(" parameter-list ")"
  *                          (";" | compound-statement)
  */
 static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
@@ -771,15 +860,15 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '('", NULL))
 		return NULL;
-	if (!expect_token(parser, token_void, "expected 'void' parameter list", NULL))
-		return NULL;
-	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))
-		return NULL;
 	declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
 	if (!declaration) {
 		allocation_error(parser, beginning.location);
 		return NULL;
 	}
+	if (!parse_parameters(parser, declaration))
+		return NULL;
+	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))
+		return NULL;
 	if (lexer_peek(parser->lexer).kind == token_semicolon) {
 		lexer_next(parser->lexer);
 		return &declaration->external;

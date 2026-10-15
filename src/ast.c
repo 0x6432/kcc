@@ -306,19 +306,49 @@ struct ast_compound_statement *ast_new_compound(struct arena *arena,
 	return node;
 }
 
+struct ast_argument *ast_new_argument(struct arena *arena, struct ast_expression *value)
+{
+	struct ast_argument *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_argument) { .value = value };
+	return node;
+}
+
+struct ast_parameter *ast_new_parameter(struct arena *arena,
+	struct source_location location, struct token name, bool has_name)
+{
+	struct ast_parameter *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_parameter) {
+			.location = location,
+			.name = name,
+			.has_name = has_name,
+		};
+	return node;
+}
+
 struct ast_call_expression *ast_new_call(struct arena *arena,
-	struct ast_expression *callee)
+	struct ast_expression *callee, struct ast_argument *arguments, size_t argument_count)
 {
 	struct ast_call_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = callee->depth;
+
+	for (struct ast_argument *argument = arguments; argument; argument = argument->next)
+		if (argument->value->depth > depth)
+			depth = argument->value->depth;
 
 	if (node)
 		*node = (struct ast_call_expression) {
 			.expression = {
 				.kind = expression_call,
 				.location = callee->location,
-				.depth = callee->depth + 1,
+				.depth = depth + 1,
 			},
 			.callee = callee,
+			.arguments = arguments,
+			.argument_count = argument_count,
 		};
 	return node;
 }

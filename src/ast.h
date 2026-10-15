@@ -26,6 +26,8 @@ enum {
 	ast_max_locals = 256,
 	ast_max_external_declarations = 512,
 	ast_max_functions = 256,
+	ast_max_parameters = 128,
+	ast_max_arguments = 128,
 };
 
 struct ast_expression {
@@ -47,9 +49,16 @@ struct ast_name_expression {
 	struct ast_local_declaration *declaration;
 };
 
+struct ast_argument {
+	struct ast_expression *value;
+	struct ast_argument *next;
+};
+
 struct ast_call_expression {
 	struct ast_expression expression;
 	struct ast_expression *callee;
+	struct ast_argument *arguments;
+	size_t argument_count;
 	struct function_symbol *function;
 };
 
@@ -221,10 +230,20 @@ struct ast_external_declaration {
 	struct ast_external_declaration *next;
 };
 
+struct ast_parameter {
+	struct source_location location;
+	struct token name;
+	bool has_name;
+	struct ast_local_declaration *local;
+	struct ast_parameter *next;
+};
+
 struct ast_function_declaration {
 	struct ast_external_declaration external;
 	struct token name;
 	struct function_symbol *symbol;
+	struct ast_parameter *parameters;
+	size_t parameter_count;
 };
 
 struct ast_function {
@@ -240,7 +259,10 @@ struct ast_translation_unit {
 };
 
 struct ast_call_expression *ast_new_call(struct arena *arena,
-	struct ast_expression *callee);
+	struct ast_expression *callee, struct ast_argument *arguments, size_t argument_count);
+struct ast_argument *ast_new_argument(struct arena *arena, struct ast_expression *value);
+struct ast_parameter *ast_new_parameter(struct arena *arena,
+	struct source_location location, struct token name, bool has_name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,
 	struct source_location location, struct token name);
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
