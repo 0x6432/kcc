@@ -36,16 +36,16 @@ static bool begins_integer_type(enum token_kind kind)
 	return kind == token_int || kind == token_signed || kind == token_unsigned || kind == token_long;
 }
 
-/* integer-type ::= permutation of ['signed' | 'unsigned'] ['long'] ['int']
- * At least one specifier is required, with no repeats or conflicting signs.
- * Two long specifiers belong to the later long-long rank increment.
+/* integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
+ * At least one specifier is required, at most two long specifiers,
+ * and no other repeats or conflicting signs.
  */
 static bool parse_integer_type(struct parser *parser, enum integer_specifier *specifier,
 	struct token *beginning)
 {
 	bool seen_int = false;
 	bool seen_sign = false;
-	bool seen_long = false;
+	unsigned long_count = 0;
 	bool unsigned_type = false;
 
 	*beginning = preprocess_peek(parser->preprocessor);
@@ -58,11 +58,11 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 		struct token token = preprocess_next(parser->preprocessor);
 
 		if (token.kind == token_long) {
-			if (seen_long) {
-				diagnostic_error(parser->diagnostics, token.location, "long long is not supported yet");
+			if (long_count == 2) {
+				diagnostic_error(parser->diagnostics, token.location, "too many long type specifiers");
 				return false;
 			}
-			seen_long = true;
+			long_count++;
 		} else if (token.kind == token_int) {
 			if (seen_int) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
@@ -78,7 +78,9 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 			unsigned_type = token.kind == token_unsigned;
 		}
 	}
-	if (seen_long)
+	if (long_count == 2)
+		*specifier = unsigned_type ? integer_specifier_unsigned_long_long : integer_specifier_long_long;
+	else if (long_count == 1)
 		*specifier = unsigned_type ? integer_specifier_unsigned_long : integer_specifier_long;
 	else
 		*specifier = unsigned_type ? integer_specifier_unsigned : integer_specifier_int;

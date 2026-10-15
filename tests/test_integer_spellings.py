@@ -56,8 +56,7 @@ with tempfile.TemporaryDirectory(prefix='kcc integer spelling ') as directory:
         assert expanded.returncode == 0 and 'pp-number:0x2a\n' in expanded.stdout
     for spelling, message in [('08', 'invalid digit'), ('0x', 'expected digits'), ('0b2', 'invalid digit'),
                               ("0x'1", 'invalid separator'), ('0xg', 'expected digits'),
-                              ('42LL', 'unsupported numeric'),
-                              ('42uLL', 'unsupported numeric'), ('42lL', 'unsupported numeric'),
+                              ('42LLL', 'unsupported numeric'), ('42lL', 'unsupported numeric'),
                               ('0x10000000000000000', 'exceeds 64-bit'),
                               ('18446744073709551616', 'exceeds 64-bit')]:
         source.write_text(f'int main(void) {{ return {spelling}; }}\n')

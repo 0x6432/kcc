@@ -96,6 +96,8 @@ static const struct type *specifier_type(enum integer_specifier specifier)
 	case integer_specifier_unsigned: return &type_uint;
 	case integer_specifier_long: return &type_long;
 	case integer_specifier_unsigned_long: return &type_ulong;
+	case integer_specifier_long_long: return &type_long_long;
+	case integer_specifier_unsigned_long_long: return &type_ulong_long;
 	}
 	assert(0 && "unknown integer type specifier");
 	return NULL;

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12e. The chronological entries below describe what each
+Current milestone: M12f. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -719,3 +719,18 @@ comparisons, slots, parameters/returns, calls and shift counts. Every condition
 normalizes its whole word/long value before branching; a high-only-bit long is
 true. Long/ulong storage is eight bytes with eight-byte alignment. No char/short,
 long long, floats, pointers or full C23 claim accompanies this increment.
+
+## M12f
+
+Signed/unsigned long long have distinct type identity and rank above long, though
+all four long types use 64-bit LP64 values. Declaration permutations allow two
+long specifiers, never three. Runtime LL/ULL suffixes now participate in standard
+candidate selection; mixed lL/Ll remain malformed. Decimal magnitudes exceeding
+INT64_MAX without U remain unrepresentable. Equal width never makes long and
+long long function signatures compatible. Shared QBE width/storage/ABI machinery
+needs no new instruction selection for these types.
+
+Ordinary runtime character constants, char/short, floating types and pointers
+remain absent. M12g character constants are designed separately. Earlier LL
+rejection fixtures now use malformed LLL or unsupported floating literals; their
+diagnostic purpose and invocation locations remain covered.

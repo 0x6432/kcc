@@ -6,12 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M12e: LP64 long/unsigned long joins int/unsigned across declarations, literals,
-casts, arithmetic, storage and calls. Explicit AST conversions govern extension
-and narrowing; long conditions inspect every bit. Four-base integer spellings,
-C23 separators and U/L suffixes are supported within implemented type ranges.
-Long long, char/short and other types remain unfinished. Includes retain bounded
-explicit search and direct/computed quoted/basic angle support.
+M12f: int/unsigned, LP64 long/unsigned long and distinct-rank long long/unsigned
+long long support declarations, literals, casts, arithmetic, storage and calls.
+Explicit AST conversions govern extension and narrowing; 64-bit conditions inspect
+every bit. Four-base integer spellings, C23 separators and U/L/LL suffixes follow
+target literal candidate rules. Char/short and other types remain unfinished.
+Includes retain bounded explicit search and direct/computed quoted/basic angles.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior
 macro operators. Repeatable -I dir/-Idir adds ordered explicit search paths; quoted

@@ -76,8 +76,8 @@ with tempfile.TemporaryDirectory(prefix='kcc LP64 runtime ') as directory:
                 ('int main(void) { return 9223372036854775808; }', 'implemented integer type'),
                 ('int main(void) { return 9223372036854775808L; }', 'implemented integer type'),
                 ('int main(void) { return 18446744073709551616UL; }', 'exceeds 64-bit'),
-                ('long long f(void);', 'long long is not supported'),
-                ('int main(void) { return 42LL; }', 'unsupported numeric'),
+                ('long long long f(void);', 'too many long'),
+                ('int main(void) { return 42LLL; }', 'unsupported numeric'),
                 ('long unsigned signed f(void);', 'conflicting integer type')]
     for text, message in rejected:
         source.write_text(text+'\n')

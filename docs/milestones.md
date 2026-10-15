@@ -18,7 +18,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e LP64 long/ulong implemented; remaining ranks planned) |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e LP64 long/ulong and M12f distinct long long implemented; remaining ranks planned) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -864,3 +864,12 @@ with each host, both mixed-width separate-object ABI directions and 107062
 sanitizer-fuzz inputs. Full isolated/remote validation pending. M12c CI
 38816221787 passed; M12c/M12d local GCC passed, remaining verification pending.
 M12f distinct long long rank is pre-designed.
+
+M12c final verification: 37d33e9 passed the isolated GCC/Clang normal and
+ASan/UBSan matrix plus exact-source CI 38816221787. M12d remote CI passed
+38817002032; its local Clang matrix remains pending independently.
+
+M12f source checkpoint: distinct long-long rank and LL/ULL literals passed full
+normal GCC regressions/QBE/reference/ABI, 93 new full-value programs with both
+hosts, both-direction extended ABI checks and bounded sanitized fuzzing. Full
+isolated matrix/exact-source CI remain pending; M12g is pre-designed.

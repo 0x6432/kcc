@@ -473,9 +473,6 @@ static struct token convert_number(struct token token, struct diagnostics *diagn
 		snprintf(message, sizeof(message), "unsupported numeric literal: %s", error);
 		return invalid_language_token(token, diagnostics, message);
 	}
-	if (spelling.long_suffix > 1)
-		return invalid_language_token(token, diagnostics,
-			"unsupported numeric literal: runtime integer suffixes require wider types");
 	token.kind = token_integer;
 	token.integer = spelling.value;
 	token.integer_base = spelling.base;

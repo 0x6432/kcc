@@ -1,5 +1,6 @@
 """Mixed w/l SysV calls and returns in both directions, including stack args."""
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -28,15 +29,19 @@ with tempfile.TemporaryDirectory(prefix='kcc LP64 ABI ') as directory:
     directory = Path(directory)
     kcc_source, host_source, il, assembly, host_object, executable = [directory/name for name in
                                                                   ('k.c', 'h.c', 'k.ssa', 'k.s', 'h.o', 'p')]
-    for kcc_text, host_text in [(prototypes+main, helpers), (helpers, prototypes+main)]:
-        kcc_source.write_text(kcc_text)
-        host_source.write_text(host_text)
-        result = subprocess.run([str(compiler), str(kcc_source)], capture_output=True, text=True, timeout=5)
-        assert result.returncode == 0 and not result.stderr, result.stderr
-        if qbe:
-            il.write_text(result.stdout)
-            subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(assembly), str(il)], check=True, timeout=10)
-            subprocess.run([host, '-std=c2x', '-c', str(host_source), '-o', str(host_object)], check=True, timeout=10)
-            subprocess.run([host, str(assembly), str(host_object), '-o', str(executable)], check=True, timeout=10)
-            assert subprocess.run([str(executable)], timeout=5).returncode == 42
-print(f'Long ABI {"runtime passed both directions" if qbe else "IL checks passed; runtime requires QBE"}; {host}')
+    for long_long in (False, True):
+        for kcc_text, host_text in [(prototypes+main, helpers), (helpers, prototypes+main)]:
+            if long_long:
+                kcc_text = re.sub(r'\blong\b', 'long long', kcc_text)
+                host_text = re.sub(r'\blong\b', 'long long', host_text)
+            kcc_source.write_text(kcc_text)
+            host_source.write_text(host_text)
+            result = subprocess.run([str(compiler), str(kcc_source)], capture_output=True, text=True, timeout=5)
+            assert result.returncode == 0 and not result.stderr, result.stderr
+            if qbe:
+                il.write_text(result.stdout)
+                subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(assembly), str(il)], check=True, timeout=10)
+                subprocess.run([host, '-std=c2x', '-c', str(host_source), '-o', str(host_object)], check=True, timeout=10)
+                subprocess.run([host, str(assembly), str(host_object), '-o', str(executable)], check=True, timeout=10)
+                assert subprocess.run([str(executable)], timeout=5).returncode == 42
+print(f'Long/long-long ABI {"runtime passed both directions" if qbe else "IL checks passed; runtime requires QBE"}; {host}')

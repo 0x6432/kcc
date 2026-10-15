@@ -947,3 +947,29 @@ M12c exact-source CI passed run 38816221787; local GCC matrix passed, local
 Clang remains pending. M12d local GCC likewise passed; Clang/remote still need
 final verification. M12f distinct long-long rank and suffixes are designed in
 m12-long-long.md before coding. Equal width must not imply compatible types.
+
+## M12c final verification
+
+37d33e9 passed the isolated GCC/Clang normal + ASan/UBSan matrix (including
+all QBE/reference/ABI checks). Exact-source CI passed run 38816221787. M12d
+exact-source CI also passed run 38817002032, with its local Clang leg still
+running at this observation. These are separate source-specific results.
+
+## M12f tested source checkpoint
+
+Long long and unsigned long long now have distinct compatible-type identities
+and rank above long, sharing its 64-bit representation. Full six-type conversion
+matrix and literal candidates are covered by AST/type units. Same-width long
+versus long-long prototypes conflict. LL/ULL runtime suffixes and valid two-long
+specifier permutations are accepted; malformed suffixes and three-long remain
+errors. Backend width-based lowering is unchanged.
+
+Full normal GCC regressions/QBE/reference/ABI passed. All 93 new full-width
+model/host/QBE programs passed with GCC and Clang; mixed-width eight-argument
+long and long-long separate-object ABI tests passed both directions with both
+hosts. Sanitized bounded lexer/pipeline fuzzing passed (counts below), without
+executing arbitrary generated programs. Full isolated M12f GCC/Clang normal/
+ASan/UBSan matrix and exact-source CI remain pending. M12g ordinary runtime
+character constants are pre-designed in m12-character-constants.md.
+
+M12f fuzz counts: lexer 23668, pipeline 86086 (109754 total), 26/26 seconds.

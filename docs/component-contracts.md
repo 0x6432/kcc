@@ -866,3 +866,13 @@ Codegen derives w/l from validated types at every value/storage/ABI boundary.
 all control contexts compare the whole value to zero before word jnz. QBE
 shift counts explicitly narrow only after source typing; C-invalid counts remain
 undefined, not a guaranteed masked-count extension.
+
+## M12f rank versus representation
+
+Primitive properties distinguish long long/unsigned long long rank 3 from
+long/unsigned long rank 2 even though both widths are 64. Compatibility compares
+kind; usual conversions compare rank, width and signedness. LL plus unsigned long
+therefore converts both operands to unsigned long long, not unsigned long. The
+shared literal candidate helper returns these distinct types; the lexer only
+decodes base, magnitude and suffix metadata. Existing QBE lowering dispatches on
+width/signedness rather than spelling or rank, so no backend change is needed.

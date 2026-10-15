@@ -11,6 +11,8 @@ enum type_kind {
 	type_kind_uint,
 	type_kind_long,
 	type_kind_ulong,
+	type_kind_long_long,
+	type_kind_ulong_long,
 	type_kind_function,
 };
 
@@ -34,6 +36,8 @@ extern const struct type type_int;
 extern const struct type type_uint;
 extern const struct type type_long;
 extern const struct type type_ulong;
+extern const struct type type_long_long;
+extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
 bool type_is_unsigned(const struct type *type);
 unsigned type_integer_width(const struct type *type);

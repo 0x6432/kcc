@@ -6,6 +6,8 @@ const struct type type_int = { type_kind_int };
 const struct type type_uint = { type_kind_uint };
 const struct type type_long = { type_kind_long };
 const struct type type_ulong = { type_kind_ulong };
+const struct type type_long_long = { type_kind_long_long };
+const struct type type_ulong_long = { type_kind_ulong_long };
 
 struct integer_properties {
 	enum type_kind kind;
@@ -21,6 +23,8 @@ static const struct integer_properties integer_properties[] = {
 	{ type_kind_uint, 32, 1, true, &type_uint },
 	{ type_kind_long, 64, 2, false, &type_ulong },
 	{ type_kind_ulong, 64, 2, true, &type_ulong },
+	{ type_kind_long_long, 64, 3, false, &type_ulong_long },
+	{ type_kind_ulong_long, 64, 3, true, &type_ulong_long },
 };
 
 bool type_is_integer(const struct type *type)
@@ -85,10 +89,10 @@ static bool integer_literal_fits(uint64_t value, const struct type *type)
 const struct type *type_integer_literal(uint64_t value, unsigned base,
 	bool unsigned_suffix, unsigned long_suffix)
 {
-	const struct type *candidates[4];
+	const struct type *candidates[6];
 	size_t count = 0;
 
-	if (long_suffix > 1)
+	if (long_suffix > 2)
 		return NULL;
 	if (!long_suffix) {
 		if (!unsigned_suffix)
@@ -96,10 +100,16 @@ const struct type *type_integer_literal(uint64_t value, unsigned base,
 		if (unsigned_suffix || base != 10)
 			candidates[count++] = &type_uint;
 	}
+	if (long_suffix < 2) {
+		if (!unsigned_suffix)
+			candidates[count++] = &type_long;
+		if (unsigned_suffix || base != 10)
+			candidates[count++] = &type_ulong;
+	}
 	if (!unsigned_suffix)
-		candidates[count++] = &type_long;
+		candidates[count++] = &type_long_long;
 	if (unsigned_suffix || base != 10)
-		candidates[count++] = &type_ulong;
+		candidates[count++] = &type_ulong_long;
 	for (size_t i = 0; i < count; i++)
 		if (integer_literal_fits(value, candidates[i]))
 			return candidates[i];

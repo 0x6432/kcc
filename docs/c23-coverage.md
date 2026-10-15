@@ -27,3 +27,12 @@ Before the final audit, map this inventory to the chosen public C23 draft or
 licensed standard clause by clause. Differential tests exclude undefined,
 unspecified and incompatible implementation-defined behavior. Standard-library
 coverage and compiler-language coverage are reported separately.
+
+### M12f long long increment
+
+Declarations, casts, literals and conversions include signed/unsigned long long
+with rank distinct from long on LP64. LL/ULL suffixes and candidate ordering are
+implemented within uint64 magnitudes. Complete six-type usual-conversion matrix,
+same-width incompatible prototypes, full-width host/model comparisons and both-
+direction mixed-width separate-object ABI tests cover this increment. This is
+not full integer/C23 support: character constants and char/short types are next.
