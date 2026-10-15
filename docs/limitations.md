@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M08c. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b/M08c.
+Current milestone: M09a. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09a additions.
 
 ## M00
 
@@ -186,7 +186,7 @@ function values, globals, local prototypes, storage classes or preprocessing.
 Functions are externally visible; unresolved declarations reach the linker.
 Non-main fallthrough filler is not a promised defined return value.
 
-## M08c (current)
+## M08c
 
 M08b's supported syntax and limits remain unchanged. Direct/mutual recursion is
 validated through bounded executable tests. Integer System V ABI acceptance now
@@ -201,3 +201,28 @@ Parameter mutation affects the local copy, not the caller's int object. Ordinary
 argument sequencing still follows C's rules; left-to-right lowering is not a
 portable source guarantee. Earlier M08b restrictions still apply, including
 named definition parameters and zero-parameter main.
+
+## M09a (current)
+
+Explicit source preparation implements newline normalization and line splicing,
+not full preprocessing. Input accepts LF, CRLF and lone CR as line endings.
+Only backslash immediately followed by a normalized newline splices; no
+whitespace-tolerant extension. A forward pass over physical units does not
+rescan output, preserving the last-backslash-only rule. Splicing precedes
+comment/token recognition. Comments still separate tokens. No trigraph rewrite.
+
+Prepared data/length and token offsets/lengths are logical. Diagnostics and
+--tokens start offsets map to original physical positions. Changed sources
+retain raw bytes and a sparse offset map; unchanged sources need neither extra
+buffer nor map. At the 16 MiB raw limit, additional storage is bounded by one
+logical buffer and at most one checkpoint per offset-changing event. Lone CR
+normalization creates no offset checkpoints. No per-token allocations/vector.
+
+Missing final newlines and final splices continue as acceptance extensions;
+strict final-line validation and complete encoding/UCN/BOM behavior are deferred.
+No preprocessing-token separation, directive handling, macro expansion/includes,
+#line presumed locations or macro expansion provenance yet. These are not
+implemented by running the host preprocessor. All M08 language restrictions
+still apply. source_prepare must run before borrowing any source spelling.
+Allocation-failure behavior is handled transactionally but fault-injection tests
+remain future work. Fuzzing compiles arbitrary inputs, never executes them.

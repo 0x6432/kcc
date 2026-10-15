@@ -1,5 +1,6 @@
 #include "lex.h"
 
+#include <assert.h>
 #include <string.h>
 
 static bool is_digit(unsigned char byte)
@@ -311,6 +312,7 @@ static struct token read_token(struct lexer *lexer)
 void lexer_init(struct lexer *lexer, const struct source *source,
 		struct diagnostics *diagnostics)
 {
+	assert(source->prepared);
 	*lexer = (struct lexer) {
 		.source = source,
 		.diagnostics = diagnostics,

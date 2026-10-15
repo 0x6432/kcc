@@ -277,6 +277,24 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
                                 capture_output=True, text=True, timeout=5)
         assert result.returncode == 0 and not result.stdout and not result.stderr
 
+    phase_programs = [
+        ("in\\\nt ma\\\nin(vo\\\nid) { ret\\\nurn 4\\\n2; }\n", 42),
+        ("int fo\\\no(int); int main(void) { return foo(7); } "
+         "int foo(int x) { return x+1; }\n", 8),
+        ("int main(void) { int lo\\\ncal=8; return local; }\n", 8),
+        ("int f(int na\\\nme) { return name; } int main(void) { return f(9); }\n", 9),
+        ("int main(void) { return 3 >\\\n= 2 &\\\n& 1 =\\\n= 1; }\n", 1),
+        ("int main(void) { // ignored\\\nreturn 99;\nreturn 7; }\n", 7),
+        ("int main(void) { /\\\n* hidden */ return 3; }\n", 3),
+        ("int main(void) { /* hidden *\\\n/ return 4; }\n", 4),
+        ("int main(void) { /\\\n/ hidden\nreturn 5; }\n", 5),
+        ("int main(void) { return 1/**/+2; }\n", 3),
+        ("int main(void) { int x=4; return x/\\\n* separator *\\\n/+1; }\n", 5),
+    ]
+    for text, value in phase_programs:
+        for line_ending in ("\n", "\r\n", "\r"):
+            programs.append((text.replace("\n", line_ending), value))
+
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -447,6 +465,14 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int f(void); int main(void) { return f(" + ",".join("0" for _ in range(129)) + "); }",
         "int f(" + parameters + ") { " + "".join(f"int x{i};" for i in range(129)) + "}",
     ]
+    invalid += [
+        "int ma/**/in(void) { return 0; }\n",
+        "int main(void) { return 1/**/2; }\n",
+        "int main(void) { return 1\\ \n+2; }\n",
+        "int main(void) { return 1\\\t\n+2; }\n",
+        "int main(void) { return " + "\\"*2 + "\n\n42; }\n",
+        "int main(void) { return 1??/\n+2; }\n",
+    ]
     for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
@@ -456,6 +482,10 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("int main(void)\n{\n\tret\\\nurn missing;\n}\n", ":4:5: error:"),
+        ("int main(void) {\nreturn mis\\\nsing;\n}\n", ":2:8: error:"),
+        ("int main(void) {\r\n\treturn 0;\\\r\n\tmissing;\r\n}\r\n", ":3:9: error:"),
+        ("int main(void) {\n/\\\n* unterminated", ":2:1: error:"),
         ("int f(int); int f(void);", "incompatible function declaration"),
         ("int f(int x,int x);", "duplicate parameter name"),
         ("int f(int x) { int x; }", "redeclaration of local"),

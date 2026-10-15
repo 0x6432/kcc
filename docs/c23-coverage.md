@@ -7,7 +7,7 @@ of complete ISO conformance.
 
 | Area | Current status | Owning milestones |
 | --- | --- | --- |
-| Source/translation phases | absent | M01, M09-M11, M25 |
+| Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (M02) | M02, M12, M20, M23 |
 | Declarations/types | subset (M08c) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (M08c) | M03-M08, M13, M19 |

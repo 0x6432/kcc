@@ -15,7 +15,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
-| M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
+| M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | in progress (M09a complete) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
@@ -246,3 +246,47 @@ M08b remote CI passed: https://github.com/0x6432/kcc/actions/runs/38714953000
 M08c verification passed: GCC/Clang reference/runtime and separate-object ABI
 tests, semantic-AST and ASan/UBSan. Sanitized fuzzing: lexer 336767 and
 pipeline 472930 inputs in 21 seconds each. README factorial example exits 120.
+
+M08c remote CI passed: https://github.com/0x6432/kcc/actions/runs/38715578290
+
+## M09 checkpoint plan
+
+- M09a: input newline policy, phase-2 splicing, logical spelling/physical location
+  mapping, source unit/oracle tests and both fuzz paths.
+- M09b: distinct preprocessing tokens, maximal-munch pp numbers, newline/spacing
+  state and deferred language-token classification. Specify APIs before coding.
+- M09c: on-demand preprocessor facade and initial directive dispatch/null
+  directives. Do not silently accept unsupported directives or implement macros.
+  Macro expansion/rescanning is M10; includes/conditions/stringizing/pasting M11.
+
+## M09A completion record
+
+CRLF and lone CR normalize to LF; immediate backslash-newline pairs disappear
+before comments/tokens. Splicing can join names/keywords/operators/comments and
+extend line comments. Output is not rescanned into a second splice. Logical
+spellings remain contiguous for parser/sema/codegen. Physical byte offsets and
+diagnostic lines/columns use retained original bytes and sparse checkpoints.
+Preparation is explicit, idempotent and transactional on allocation failure.
+The existing lexer/parser token API remains; no whole-file token materialization.
+
+Acceptance includes an independent two-phase oracle on 1024 deterministic
+binary inputs, embedded NUL/high bytes, mapping/EOF/idempotence checks, 8192 map
+checkpoints, exact 16 MiB source acceptance and one-byte oversize rejection.
+Executable/reference tests cover 11 phase-ordering cases under LF, CRLF and CR;
+negative tests cover no-rescan, whitespace after backslash and comment separation.
+Diagnostics and token-debug offsets refer to physical positions across splices.
+Both fuzz harnesses prepare sources; lexer fuzzing asserts spelling/mapping
+bounds, monotonicity, stable EOF and progress. Fuzz never executes source C.
+
+Still unsupported: preprocessing tokens as a separate stream, directives/macros,
+encodings/UCNs and full translation phases. Missing-final-newline acceptance
+remains an extension; no synthetic newline is added. Allocation-failure paths
+are checked in implementation but not yet covered by allocator fault injection.
+Final local verification/fuzz results follow below; remote CI is checked after
+push. Next: M09b, not macro expansion.
+
+M09a local verification passed with GCC and Clang, source/oracle/AST tests,
+QBE/reference executables, separate-object integer ABI tests and ASan/UBSan.
+Final sanitized fuzzing: lexer 244776 inputs; compiler pipeline 500452 inputs;
+21 seconds per harness. Earlier 21-second runs also passed (257740/510224).
+Remote CI is verified after push, independently of local passes.

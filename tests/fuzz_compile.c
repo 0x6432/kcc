@@ -21,6 +21,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	assert(stream);
 	diagnostics = (struct diagnostics) { stream, 0 };
 	assert(source_from_bytes(&source, "fuzz.c", data, size));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics)) {

@@ -6,12 +6,24 @@ assembler/linker and system libc; self-hosting later; GitHub Actions CI.
 
 ## Pipeline and stage boundaries
 
-`source -> lexer -> preprocessor -> parser -> sema -> QBE IL`
+`raw source -> source_prepare -> lexer -> [future preprocessor] -> parser -> sema -> QBE IL`
 
-The initial no-directive subset bypasses preprocessing explicitly. It does not
-invoke the host preprocessor. M09 inserts preprocessing without changing the
-parser's token-stream contract. Translation-phase behavior is incomplete until
-then and must be reported as such.
+M09a implements the input-newline policy and line splicing before lexing, not
+full preprocessing. source_prepare is explicit/fallible and runs before any
+borrowed token spelling exists. CRLF and lone CR normalize to LF; only an
+immediate backslash-newline pair is deleted, without rescanning output. Source
+bytes remain bounded buffers; token generation is still on demand. Changed
+sources retain original bytes plus sparse offset checkpoints for physical
+locations. Prepared token offsets index logical bytes; diagnostics translate
+those offsets, while name lookup/codegen read logical spelling slices.
+
+The current subset still bypasses directives/macro expansion and never invokes
+the host preprocessor. M09b/M09c will introduce preprocessing-token and directive
+boundaries without changing the parser's grammar. Complete phase ordering,
+encoding/UCNs and final-line constraints are not claimed. Missing terminal
+newlines remain an acceptance extension; no synthetic newline is appended.
+Reference: WG14 N3096 5.1.1.2 and 6.10,
+https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
 
 One implementation file per stage: `source.c`, `lex.c`, `preprocess.c`, `ast.c`,
 `parse.c`, `type.c`, `sema.c`, `codegen.c`. Supporting files are `main.c`,
@@ -19,7 +31,7 @@ One implementation file per stage: `source.c`, `lex.c`, `preprocess.c`, `ast.c`,
 put in them. Public declarations are in corresponding headers.
 
 Sources are read into bounded byte buffers. Tokens are generated on demand, not
-as a whole-file vector. Lookahead caches at most two parser-visible tokens.
+as a whole-file vector. Lookahead currently caches one parser-visible token.
 Macro expansion uses explicit streams and rescan state; it must not force an
 entire translation unit into a token vector.
 

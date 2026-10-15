@@ -1,6 +1,7 @@
 """Exercise the driver contract, including bounded randomized arguments."""
 import random
 import subprocess
+import tempfile
 from pathlib import Path
 
 compiler = Path(__file__).resolve().parents[1] / "build" / "kcc"
@@ -31,4 +32,16 @@ assert result.returncode == 0 and "0:int\n" in result.stdout
 assert result.stdout.endswith("29:eof\n") and not result.stderr
 result = run(["--tokens", "build/nonexistent.c"])
 assert result.returncode == 1 and result.stderr and not result.stdout
+with tempfile.TemporaryDirectory(prefix="kcc-cli-phase-") as temporary:
+    source = Path(temporary) / "spliced.c"
+    text = b"in\\\nt ma\\\nin(vo\\\nid) { ret\\\nurn 4\\\n2; }\n"
+    source.write_bytes(text)
+    result = run(["--tokens", str(source)])
+    expected = [(0, "int"), (text.index(b"ma"), "identifier"),
+                (text.index(b"("), "("), (text.index(b"vo"), "void"),
+                (text.index(b")"), ")"), (text.index(b"{"), "{"),
+                (text.index(b"ret"), "return"), (text.index(b"4"), "integer"),
+                (text.index(b";"), ";"), (text.index(b"}"), "}"), (len(text), "eof")]
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    assert result.stdout == "".join(f"{offset}:{kind}\n" for offset, kind in expected)
 print("CLI tests passed (including 40 deterministic randomized cases)")

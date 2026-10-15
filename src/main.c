@@ -22,11 +22,17 @@ static int dump_tokens(const char *path)
 		perror(path);
 		return 1;
 	}
+	if (!source_prepare(&source)) {
+		fputs("kcc: error: cannot prepare source\n", stderr);
+		perror(path);
+		source_destroy(&source);
+		return 1;
+	}
 	lexer_init(&lexer, &source, &diagnostics);
 	for (;;) {
 		struct token token = lexer_next(&lexer);
 
-		if (printf("%zu:%s\n", token.location.offset,
+		if (printf("%zu:%s\n", source_physical_offset(token.location),
 				token_kind_name(token.kind)) < 0)
 			output_ok = false;
 		if (token.kind == token_eof)
@@ -52,6 +58,12 @@ static int compile_source(const char *path)
 		perror(path);
 		return 1;
 	}
+	if (!source_prepare(&source)) {
+		fputs("kcc: error: cannot prepare source\n", stderr);
+		perror(path);
+		source_destroy(&source);
+		return 1;
+	}
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics) &&
@@ -73,7 +85,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m07c");
+		puts("kcc milestone m09a");
 		return 0;
 	}
 

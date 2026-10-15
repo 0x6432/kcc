@@ -33,6 +33,7 @@ static void test_resolved_tree(void)
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && diagnostics.errors == 0);
@@ -99,6 +100,7 @@ static void test_point_of_declaration(void)
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
@@ -135,6 +137,7 @@ static void test_conditional_scopes_and_logic(void)
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
@@ -194,6 +197,7 @@ static void test_loop_targets(void)
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
@@ -248,6 +252,7 @@ static void test_for_scope_and_target(void)
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
@@ -306,6 +311,7 @@ static void test_function_symbols(void)
 
 	assert(stream);
 	assert(source_from_bytes(&source, "functions.c", (const unsigned char *)text, sizeof(text) - 1));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
@@ -357,6 +363,7 @@ static void test_parameters_and_arguments(void)
 	assert(stream);
 	assert(source_from_bytes(&source, "parameters.c",
 		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
 	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));

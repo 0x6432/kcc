@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M08c: M08 is complete: multiple int functions, prototypes, parameters, direct calls and recursion. Source-order name visibility, signature compatibility, parameter/body scopes and QBE integer calls are tested. Separate-object tests validate host-to-kcc and kcc-to-host calls with register and stack arguments.
+M09a: source preparation now normalizes CRLF/lone CR to LF and splices backslash-newline pairs before comment recognition. Logical token spellings remain contiguous; sparse mappings preserve physical diagnostic locations. Token generation remains on demand. M08 integer functions and recursion continue to work; directives and macros are not implemented yet.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -64,13 +64,14 @@ cc build/example.s -o build/example
 # Exit status: 120
 ```
 
-Supported: decimal int literals, int locals, simple assignment, arithmetic,
+Supported: normalized line endings, backslash-newline splicing, physical source
+locations, decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: preprocessing, other types, globals/storage classes, local
+Unsupported: directives/macros, other types, globals/storage classes, local
 prototypes, function values/pointers, variadics, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
 

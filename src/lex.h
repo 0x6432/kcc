@@ -45,7 +45,9 @@ enum token_kind {
 	token_or_or,
 };
 
-/* Spelling is source->data + location.offset, with explicit length. */
+/* Spelling is source->data + location.offset, with explicit logical length.
+ * Use source_physical_offset() only for physical positions, not spelling reads.
+ */
 struct token {
 	enum token_kind kind;
 	struct source_location location;
@@ -61,6 +63,7 @@ struct lexer {
 	struct token lookahead;
 };
 
+/* Requires source_prepare() before any source spelling is borrowed. */
 void lexer_init(struct lexer *lexer, const struct source *source,
 		struct diagnostics *diagnostics);
 struct token lexer_next(struct lexer *lexer);

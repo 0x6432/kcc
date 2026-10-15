@@ -15,6 +15,7 @@ static void check_tokens(const char *text, const enum token_kind *kinds,
 	assert(stream);
 	assert(source_from_bytes(&source, "test.c",
 					(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	for (size_t i = 0; i < count; i++) {
 		struct token first = lexer_peek(&lexer);
@@ -96,6 +97,7 @@ static void test_binary_and_values(void)
 
 	assert(stream);
 	assert(source_from_bytes(&source, "binary.c", bytes, sizeof(bytes)));
+	assert(source_prepare(&source));
 	lexer_init(&lexer, &source, &diagnostics);
 	assert(lexer_next(&lexer).kind == token_invalid);
 	assert(lexer_next(&lexer).kind == token_invalid);
@@ -110,8 +112,27 @@ static void test_binary_and_values(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_phase_ordering(void)
+{
+	const enum token_kind kinds[] = {
+		token_int, token_identifier, token_left_paren, token_void,
+		token_right_paren, token_left_brace, token_return, token_integer,
+		token_semicolon, token_right_brace,
+	};
+	const enum token_kind names[] = { token_identifier, token_identifier };
+
+	check_tokens("in\\\nt ma\\\nin(vo\\\nid){ret\\\nurn 4\\\n2;}", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	check_tokens("int main(void){/\\\r\n* hidden *\\\r/return 0;}", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	check_tokens("int main(void){// hidden\\\nreturn 99;\nreturn 0;}", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	check_tokens("ab/**/cd", names, sizeof(names) / sizeof(names[0]), 0);
+}
+
 int main(void)
 {
+	test_phase_ordering();
 	test_basic();
 	test_errors();
 	test_binary_and_values();

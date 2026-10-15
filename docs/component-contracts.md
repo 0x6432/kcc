@@ -6,7 +6,7 @@ and update their tests in the same checkpoint.
 
 | Producer | Consumer | Contract |
 | --- | --- | --- |
-| source | lexer/diagnostics | Owned immutable bytes, explicit length, filename and byte locations; EOF is not a sentinel byte in the input |
+| source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
 | lexer | preprocessor/parser | One token per request; slices refer to live source; stable EOF; invalid bytes produce diagnostics and make forward progress |
 | preprocessor | parser | Same token API; expanded tokens retain spelling and expansion provenance |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
@@ -218,3 +218,74 @@ through comparisons rather than relying only on process exit truncation. The
 CI matrix host selection applies to executable/reference and ABI tests; these
 also run after rebuilding the compiler with ASan/UBSan. Fuzzing never executes
 source programs and retains its source-size/time/memory limits.
+
+## M09 design before implementation
+
+Reference: WG14 N3096, 5.1.1.2 and 6.10:
+https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
+This public C23 draft guides the checkpoint, not a complete conformance claim.
+
+M09a prepares source bytes before any token is borrowed. Phase-1 input policy
+maps CRLF and lone CR end-of-line indicators to LF. Phase 2 deletes only a
+backslash immediately followed by a normalized newline. Perform this in one
+forward traversal of physical units; never rescan newly adjacent output bytes.
+Only the last backslash on a physical line is eligible. This precedes comment
+recognition, so splicing can join identifiers, operators or comment delimiters,
+and can extend a line comment. Comments still separate tokens, not concatenate
+identifiers. Whitespace between backslash and newline is not accepted as a
+splice extension. C23 does not require trigraph replacement; none is added.
+
+source_load/source_from_bytes continue to own raw bytes. New explicit
+source_prepare is fallible, idempotent and transactional: on failure the source
+remains raw, valid and destroyable. Call before lexer_init; never transform a
+source after token spellings have been borrowed. Prepared source.data/length
+are logical bytes; token location.offset and length index those bytes. If
+changed, retain the original bytes and sparse logical-to-physical offset
+checkpoints. Diagnostics use original physical lines/columns; token debug
+output continues reporting physical byte offsets. Semantics/codegen continue
+using contiguous logical spelling slices; they must not use physical offsets
+to index source.data. Source preparation is byte normalization, not eager token
+materialization. Lexer lookahead remains one token.
+
+Keep empty input and the current missing-final-newline acceptance extension;
+do not synthesize a newline or silently introduce a second splice. These
+extensions do not claim strict phase-2 final-line constraint validation. Source
+encoding/UCNs, BOM policy and complete translation phases remain later work.
+Memory stays bounded by the 16 MiB raw-source limit: optional logical bytes plus
+one sparse checkpoint per transformation event at most. No per-token allocation.
+Both fuzz harnesses must call the same preparation API and test logical bounds,
+physical mapping bounds/monotonicity, EOF and progress. Fuzz never executes C.
+
+M09b separates raw preprocessing tokens from language-token conversion. Retain
+newlines, leading whitespace and line-start state for directives/macros; do not
+classify keywords or validate int values prematurely. Preserve maximal munch
+for preprocessing numbers even when the eventual C token is unsupported.
+Keep distinct pp and parser token types, spelling ownership and provenance
+explicit. No whole-file token vectors or pretend macro expansion.
+
+M09c inserts an on-demand preprocessor facade between lexer and parser, with
+one parser-visible cached token, null directives and explicit unsupported or
+malformed directive diagnostics. Reuse language token conversion here; normal
+subset behavior must stay unchanged. Design the exact APIs and newline/comment
+rules before this slice. Macro definitions/rescanning are M10; include search,
+conditionals, stringizing/pasting are M11. Do not add empty speculative stages.
+EOF remains stable, all failures prevent compiler IL, and each tested checkpoint
+gets its own commit/push and handoff/limitations update.
+
+### M09a implemented contract
+
+source_prepare is explicit before lexer_init, including in both fuzz harnesses.
+It leaves unchanged bytes in place when no transformation is needed. Changed
+sources keep original physical bytes, a logical spelling buffer and sparse
+checkpoints only where offsets diverge (CRLF or splice); lone CR needs no map
+entry. Consecutive deletions at one logical offset share the last checkpoint.
+source_physical_offset clamps to logical EOF and binary-searches checkpoints;
+EOF maps to original EOF. source_line_column walks physical bytes with CRLF/CR
+newline policy and eight-column tabs. The --tokens command reports physical
+start offsets; token.length still describes logical spelling bytes.
+
+Two-pass preparation first counts allocation capacity, then transforms original
+physical units once; it never rescans generated output. No token vector is
+introduced. source_destroy releases all optional buffers and resets preparation.
+Parser, AST, type, sema and codegen implementation interfaces are unchanged.
+All lexer callers were updated; adding another caller requires preparation.
