@@ -8,7 +8,7 @@ and update their tests in the same checkpoint.
 | --- | --- | --- |
 | source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
 | lexer | preprocessor | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
-| preprocessor | parser | One cached language token, null/define/undef consumed and object macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
+| preprocessor | parser | One cached language token, null/define/undef consumed and object/zero-parameter macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
 | sema | codegen | Validated typed AST, explicit conversions, resolved declarations; failure prevents codegen |
 | codegen | QBE | Well-formed IL for the pinned target; no source-language validation here |
@@ -479,3 +479,42 @@ terminal error. Diagnostic offsets are nondecreasing (equal for one invocation);
 spelling offsets may go backward, but spelling slices must remain source-bounded.
 No arbitrary generated program is executed. The test-only pp_oracle compares
 actual kind/spelling pairs with host -E -P output; CI uses both GCC and Clang.
+
+
+## M10b zero-parameter function-like contract
+
+M10a's active-frame suppression is superseded. macro has a stable identity index
+and function_like flag; redefinitions must agree on form and body/spacing.
+Definition '(' must be adjacent to the name; whitespace after ')' is optional.
+Empty parameter lists are parsed without storing delimiters. Named/variadic
+parameters reject explicitly. Function bodies reject #/%: and ##/%:%:; object
+bodies retain the earlier literal-marker behavior. Errors preserve old bindings.
+
+rescan_token contains pp spelling/invocation information, source-origin flag and
+an inline macro_hide_set (1024 bits in 64-bit words). Source sets are empty.
+Each replacement frame copies its set onto emitted tokens. Object expansion
+adds itself to the name set; function expansion adds itself to the intersection
+of name/closing-delimiter sets. Availability survives frame popping. This policy
+matches the tested GCC/Clang subset; full arguments need per-token set unions
+and prescan. Some C23 rescan corner cases have unspecified behavior; no unique
+ISO result is asserted for every case. Bit boundaries through ID 1023 are tested.
+Undef/redefine retains identity, including object/function form changes.
+
+The cursor has one pending UNEXPANDED token separate from language lookahead.
+Probing '(' skips raw newlines and crosses streams, but does not expand macros;
+a later object producing '(' cannot retroactively invoke an emitted name.
+Pending visits are not charged twice. Bare function-like names convert normally.
+Invoked macros consume only a raw-empty '(' ')' sequence; nonempty arguments
+reject without expansion. Source directives during probing/delimiters explicitly
+fail instead of changing bindings speculatively. Raw-invalid input retains its
+existing lexical diagnostic. Invocation errors latch EOF; definition errors
+still drain lines. Generated # cannot dispatch, including through lookahead.
+
+Ownership/provenance and all five macro limits are unchanged. Depth counts
+retained streams, not completed logical calls: 201 successive source-delimited
+calls need not occupy 201 frames. Work still counts pushes/replacement visits
+and bounds long/exponential expansion. Fixed hide sets need no heap hide nodes.
+Fuzzing also checks cache reads leave cursor offset/pending/frame/work state
+unchanged. The 97-case object oracle plus 101 new cases make 198 streams tested
+under both host compilers in normal/sanitized CI. No arbitrary generated code
+is executed by fuzzing.

@@ -17,9 +17,9 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-M10a dispatches null/define/undef directives and rescans object-like replacement
-tokens before language conversion. Function-like macros and includes remain
-unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
+M10b dispatches null/define/undef directives and rescans object/zero-parameter
+function-like replacements before language conversion. Named arguments and
+includes remain unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
 not claimed. Missing terminal newlines remain an acceptance extension; no
 synthetic newline is appended. Reference: WG14 N3096 5.1.1.2 and 6.10,
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
@@ -86,12 +86,21 @@ arena; destroy it after AST use, before destroying source. Raw token location
 addresses spelling and expansion_location addresses the outermost invocation.
 Language token spelling_location addresses spelling; location is for diagnostics.
 Sema name comparison and codegen symbol spelling must never use location as text.
-An explicit frame stack rescans replacements, retaining disabled ancestors while
-their final token is examined. Only source frames can dispatch directives.
-Macro-generated # cannot introduce directives. See m10-object-macros.md for
-storage, resource policy, object-only suppression and deferred work. Function
-arguments require a new availability/hide-set review, not naive stack reuse.
-Headers, conditional sections and macro operators remain later milestones.
+M10b replaces active-frame suppression with fixed-size token-carried hide sets.
+A stable macro identity is one bit in that set. Object expansion inherits the
+name's set and adds its own bit; function expansion intersects the name/closing
+parenthesis sets before adding its bit. A cursor owns one pending unexpanded
+token separate from the cached language token. Lookahead can pop completed
+streams without losing availability information. Only source-origin tokens
+can dispatch directives. Generated # never does; source directives encountered
+during invocation probing are explicitly unsupported.
+
+M10b implements empty parameter lists/calls, not argument substitution. See
+m10-zero-parameter-macros.md for boundaries and limits; m10-object-macros.md
+records the preceding object-only design. Parser/AST/sema/QBE APIs are unchanged.
+Future arguments need raw collection, prescan and per-token hide-set union on
+substitution, not one set on an entire argument list. Headers, conditions and
+macro operators remain later milestones.
 
 ## Target model and QBE limits
 

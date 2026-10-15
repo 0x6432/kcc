@@ -333,6 +333,30 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define UNUSED 12u .5 \"unused\"\nint main(void) { return 7; }\n", 7),
         ("int main(void) { return 7; }\n#define X 1\n", 7),
     ]
+    directive_programs += [
+        ("#define VALUE() 42\nint main(void) { return VALUE(); }\n", 42),
+        ("#define TYPE() int\n#define NAME() main\n#define RET() return\n"
+         "TYPE() NAME()(void) { RET() 7; }\n", 7),
+        ("#define VALUE() 7\n#define ALIAS VALUE\n"
+         "int main(void) { return ALIAS(/**/); }\n", 7),
+        ("#define F() 42\nint main(void) { int F=3; return F+F(); }\n", 45),
+        ("#define E()\n#define VALUE() 8\n"
+         "int main(void) { E() return VALUE\n(\n); }\n", 8),
+        ("#define int() 42\nint main(void) { return int(); }\n", 42),
+        ("#define F() 7\nint first(void) { return F(); }\n#undef F\n#define F 3\n"
+         "int main(void) { return first()+F; }\n", 10),
+        ("#define F() 1\n#define G() F() + F()\n#define H() G()+G()\n"
+         "int main(void) { return H(); }\n", 4),
+        ("#define F() call\nint call(void) { return 9; }\n"
+         "int main(void) { return F()(); }\n", 9),
+        ("#define PREFIX F(\n#define F() 7\n"
+         "int main(void) { return PREFIX ); }\n", 7),
+        ("int f(void) { return 7; }\n#define f() f()\n"
+         "int main(void) { return f(); }\n", 7),
+        ("int f(void) { return 9; }\n#define f() g()\n#define g() f()\n"
+         "int main(void) { return f(); }\n", 9),
+        ("int main(void) { return 7; }\n#define UNUSED() 12u \"unused\"\n", 7),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -520,7 +544,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return .5; }", "int main(void) { return 1'000; }",
         "int main(void) { return 'x'; }", "int main(void) { return u8'x'; }",
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
-        "%:define X() 3\nint main(void) { return X; }",
+        "%:define X(x) 3\nint main(void) { return X; }",
     ]
     invalid += [
         "#42\nint main(void) { return 0; }",
@@ -530,7 +554,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { #\nreturn 0; }",
         "int/*\n*/#\nmain(void) { return 0; }",
         "#/*\n*/int main(void) { return 0; }",
-        "int main(void) { return 0; }\n#define X() 1\n",
+        "int main(void) { return 0; }\n#define X(x) 1\n",
         "#\n", "# // comment\n", "%:%:\nint main(void) { return 0; }",
         "#unknown \0\nint main(void) { return 0; }",
     ]
@@ -546,10 +570,16 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define F() 12u\nint main(void) { return F(); }", ":2:25: error: unsupported numeric"),
+        ("#define NAME() main\nint NAME()(int x) { return x; }", ":2:5: error:"),
+        ("#define F() 7\nint main(void) { return F(1); }", "requires no arguments"),
+        ("#define F() 7\nint main(void) { return F(", "unterminated function-like"),
+        ("#define F() 7\nint main(void) { return F(\n#undef F\n); }", "directives during macro invocation"),
+
         ("#define VALUE 12u\nint main(void) { return VALUE; }", ":2:25: error: unsupported numeric"),
         ("#define A B\n#define B missing\nint main(void) { return A; }", ":3:25: error:"),
         ("#define NAME main\nint NAME(int x) { return x; }", ":2:5: error:"),
-        ("#define X() 1\nint main(void) { return 0; }", "function-like macros"),
+        ("#define X(x) 1\nint main(void) { return 0; }", "macro parameters are not supported"),
         ("#define X 1\n#define X 2\nint main(void) { return X; }", "incompatible macro redefinition"),
         ("#define X 1 ## 2\nint main(void) { return 0; }", "macro token pasting"),
 

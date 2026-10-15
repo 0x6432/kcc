@@ -101,12 +101,25 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	for (size_t steps = 0; ; steps++) {
 		struct token peek = preprocess_peek(&preprocessor);
 		size_t errors = diagnostics.errors;
+		size_t work = preprocessor.expansion_work;
+		size_t frames = preprocessor.frame_count;
+		size_t offset = preprocessor.input.offset;
+		bool pending = preprocessor.has_pending;
 		struct token token;
 
 		assert_same_language_token(peek, preprocess_peek(&preprocessor));
 		token = preprocess_next(&preprocessor);
 		assert_same_language_token(peek, token);
 		assert(diagnostics.errors == errors);
+		assert(preprocessor.expansion_work == work);
+		assert(preprocessor.frame_count == frames);
+		assert(preprocessor.input.offset == offset);
+		assert(preprocessor.has_pending == pending);
+		assert(frames <= preprocess_depth_limit && work <= preprocess_work_limit);
+		assert(preprocessor.macro_count <= preprocess_macro_limit);
+		assert(preprocessor.stored_tokens <= preprocess_storage_limit);
+		if (pending)
+			assert(preprocessor.pending.token.kind != pp_newline);
 
 		assert(steps <= source.length + preprocess_work_limit + 1);
 		assert(peek.kind == token.kind);

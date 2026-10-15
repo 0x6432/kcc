@@ -6,12 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M10a: object-like `#define`/`#undef`, empty replacements, aliases and recursive
-rescanning are implemented with explicit token frames and bounded work. Spelling
-locations remain distinct from invocation diagnostics. Function-like macros are
-next; this is still a small C23 subset, not a complete preprocessor/compiler.
+M10b: zero-parameter function-like macros (`#define VALUE() 42`) now expand
+alongside object macros. An unexpanded-token cursor crosses replacement/source
+boundaries, and token-carried hide sets preserve recursive suppression after
+frames disappear. Named/variadic arguments remain separate checkpoints; this
+is still a small C23 subset, not a complete preprocessor/compiler.
 
-See `docs/m10-object-macros.md` for the decisions, limits and unsupported cases.
+See `docs/m10-zero-parameter-macros.md` for decisions and current policies;
+`docs/m10-object-macros.md` records the preceding checkpoint.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -71,13 +73,15 @@ cc build/example.s -o build/example
 ```
 
 Supported: normalized line endings, backslash-newline splicing, physical source
-locations, null directives (#/%:), object-like macros, decimal int literals, int locals, simple assignment, arithmetic,
+locations, null directives (#/%:), object-like and zero-parameter function-like
+macros, decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: function-like macros, token pasting, stringizing, includes,
+Unsupported: named/variadic macro parameters and nonempty macro arguments,
+token pasting, stringizing, includes,
 conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadics, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
@@ -91,14 +95,14 @@ arguments, 4096 body items and 256 parameter/local slots per function. Macros:
 
 `make test-codegen` also runs separate-object ABI tests with the selected host
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
-CI runs GCC and Clang, compiler sanitizers, 97 host-preprocessor token/spelling oracle cases, generated
+CI runs GCC and Clang, compiler sanitizers, 198 host-preprocessor token/spelling oracle cases, generated
 executables, ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
 ## Raw token inspection
 
 `--tokens file.c` dumps language-token kinds and physical starts after null
-directives are removed and object-like macros expanded. Expansion tokens print
+directives are removed and supported macros expanded. Expansion tokens print
 the outermost invocation position, not their definition position.
 `--pp-tokens file.c` dumps the raw stream without dispatching directives or
 converting numbers/keywords. Each line has:
@@ -119,4 +123,19 @@ and operators. Brace digraphs <%/%> are accepted by the current grammar. Raw
 inspection can succeed for text the compiler rejects; it is not a preprocessor
 or conformance check. Null/define/undef directives are handled by the compiler.
 Header-name context, Unicode/UCNs, full expansion-stack diagnostic notes and
-function-like macros remain future work. Both debug dumps may show partial output on lexical errors.
+named-argument macros remain future work. Both debug dumps may show partial output on lexical errors.
+
+
+## Zero-parameter macro example
+
+```c
+#define VALUE() 21
+#define ALIAS VALUE
+int main(void) { return ALIAS() + VALUE(); }
+```
+
+The program exits 42 through the same QBE workflow above. Whitespace/comments/
+newlines may separate the name and invocation parentheses. A bare function-like
+macro name is not expanded. Nonempty arguments are rejected even if they would
+expand to nothing. Source directives encountered while probing an invocation
+are explicitly unsupported, not executed speculatively.

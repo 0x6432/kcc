@@ -2,11 +2,12 @@
 
 ## Current checkpoint
 
-M10a: bounded object-like macro definitions, undefinition and rescanning.
+M10b: zero-parameter function-like macros and token-carried availability.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M09c remote CI passed: https://github.com/0x6432/kcc/actions/runs/38725528977
-M09's stated subset is complete; M10a object macros are complete, M10b is next.
+M10a remote CI passed: https://github.com/0x6432/kcc/actions/runs/38728290388
+M09/M10a are complete for their subsets; M10b zero-parameter calls are done.
+M10c fixed arguments/substitution is next; full M10 is incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
 ## Resume safely
@@ -119,7 +120,8 @@ implicit return value. No automatic local zeroing or missing-return warning.
 
 Raw quoted literals and punctuators do not enable their C semantics. Only brace
 digraphs are newly accepted language spelling; int-only conversion still applies.
-Null/define/undef and object-like macros are supported. No function-like macros,
+Null/define/undef, object-like and zero-parameter function macros are supported.
+No named/variadic macro arguments,
 macro operators, other directives, other types,
 pointers/function values, variadics, local
 prototypes, globals/storage classes, comma/update/compound-assignment operators.
@@ -155,38 +157,50 @@ paths. Final local/fuzz results and remote verification follow below.
 
 ## Next milestone
 
-M10b: function-like definitions and argument substitution. Read
-m10-object-macros.md first. Design balanced argument collection, empty/zero
-arguments, raw vs pre-expanded argument ownership, redefinition comparison,
-parameter substitution, unavailable tokens/hide sets and rescan with following
-source tokens BEFORE coding. The M10a active-frame scheme is object-only; do not
-assume it handles argument rescan boundaries. Choose another small tested slice
-if full function substitution is too large. Variadics may be a separate M10c.
-Stringizing/pasting/includes/conditions remain M11. Preserve the one cached
-language token, deferred conversion, source-order visibility, transactional
-bindings and separate spelling/invocation positions. No whole-TU token vector.
+M10c: fixed parameters and argument substitution. Read
+m10-zero-parameter-macros.md (current), then m10-object-macros.md (historical).
+M10b deliberately implements zero-parameter functions only. Specify balanced
+raw argument collection, parentheses vs commas, zero vs one empty argument,
+parameter-list redefinition, raw/prescanned ownership and per-token availability
+BEFORE coding. Do not disable the outer macro too early during nested F(F(...))
+argument prescan. Preserve suppressed argument tokens after substitution/rescan.
+Decide argument provenance and bounded memory/work for retained/copied tokens,
+even unused arguments or many parameter occurrences. Use another small slice
+if needed; variadics may follow in M10d, operators/includes/conditions in M11.
 
-M10a owns struct arena storage plus macro linked lists and a fixed frame stack
-in struct preprocessor. Each name identity survives #undef; borrowed source
-spellings survive all AST use. preprocess_destroy must follow AST arena use and
-precede source_destroy. Raw pp_token.location is spelling; expansion_location is
-outermost invocation. Language token.location is diagnostic; spelling_location
-is for numeric/name/symbol reads. Error token length is spelling width, not
-invocation width. --tokens shows invocation starts; --pp-tokens remains raw.
+Current preprocessor owns arena definitions and fixed replacement frames.
+Macro identities are stable indexes through undef/redefine. Each rescan_token
+has pp provenance, source-origin flag and a fixed 1024-bit hide set. Object
+expansion adds itself to the name set; zero-parameter function expansion
+intersects name/closing-delimiter sets then adds itself. M10a's active-frame
+suppression is gone. Availability cannot depend on remaining frames after
+lookahead pops them. Future arguments require per-token hide-set union.
 
-Limits: 1024 names, 1024 replacement tokens/definition, 65536 retained tokens
-across attempted definitions, depth 128, 65536 expansion work units (pushes +
-replacement visits). Limit/allocation error returns one invalid token then
-stable EOF. Defined/reserved implementation macro names reject for this subset.
-Function-like definitions and ## reject, unused unsupported literals remain raw.
-Replacement # never dispatches. See component-contracts.md for ownership and
-fuzz bounds. Macro tests include a 97-case token/spelling host oracle, runtime
-programs, recursion/identity/spacing/error/limit checks and seeded fuzzing.
+One pending UNEXPANDED cursor token is separate from language lookahead.
+Calls can cross frames/newlines/comments; a later object producing '(' cannot
+retroactively invoke an emitted name. Bare function macro names convert normally.
+Definition '(' must be adjacent; whitespace after ')' is optional. Function
+bodies reject #/##; object marker behavior is unchanged. Only raw source dispatches
+directives. Source markers during invocation probing/delimiters explicitly fail,
+not execute speculatively. Nonempty arguments reject before any expansion, even
+if they would become empty. Invocation errors stop once then latch EOF;
+definition errors drain their line and preserve the old binding.
+
+Ownership/provenance is unchanged: destroy preprocessor after AST use and before
+source. Raw pp_token.location is spelling, expansion_location outermost call;
+language token.location is diagnostic, spelling_location is for text/value reads.
+Limits: 1024 names, 1024 tokens/definition, 65536 retained tokens, 128 retained
+frames and 65536 work units (pushes + replacement visits). Pending visits are
+not charged twice. Completed streams can disappear, so 201 successive calls
+need not occupy 201 frames. Work bounds long chains; hide storage is fixed.
+Fuzzing checks language-cache reads preserve cursor/pending/frame/work state.
+The 198-case token/spelling oracle covers both GCC and Clang. Old resource,
+provenance, runtime and separate-object ABI checks remain in place.
 
 Run normal GCC/Clang, stream/source/oracle/AST, QBE/reference/ABI, ASan/UBSan and
 both fuzz paths. Clang/compiler-rt vanished on this resume and were restored with
 sudo dnf install -y clang compiler-rt; do not assume dependencies persist. Commit/
-push each tested checkpoint and update docs. Final M10a local/fuzz results are
+push each tested checkpoint and update docs. Final M10b local/fuzz results are
 recorded below; verify its remote CI independently after pushing.
 
 Diagnostic performance note: line/column lookup rescans physical prefixes;
@@ -214,3 +228,15 @@ real macro stage and never execute arbitrary generated code. A final normal
 make test passed and --version reports m10a. Compiler build artifacts remain
 under 10 MiB after cleanup; external tools/logs under 75 MiB. Remote CI is
 verified separately after pushing; obtain the current hash from git log -1.
+
+
+## M10b recovery verification checkpoint
+
+Recovered files passed make test, 198 token/spelling oracle cases with GCC and
+Clang, GCC-host QBE/reference runtime and separate-object ABI tests. Sanitized
+libFuzzer runs passed 60392 lexer/preprocessor and 169562 pipeline inputs in
+26 seconds each, with both new seed files in both harnesses. No arbitrary
+generated programs were executed. The sandbox reset had destroyed uncommitted
+work; this tested recovery checkpoint is pushed before the longer local matrix.
+Normal/sanitized GCC/Clang full-matrix and exact pushed-commit CI verification
+are still pending at this checkpoint. Do not infer those passes from fuzzing.

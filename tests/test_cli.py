@@ -95,4 +95,17 @@ with tempfile.TemporaryDirectory(prefix="kcc-directive-cli-") as temporary:
     result = run(["--tokens", str(source)])
     assert result.returncode == 1 and result.stdout == "0:invalid\n2:eof\n"
     assert result.stderr.count("error:") == 1
+with tempfile.TemporaryDirectory(prefix="kcc-function-macro-cli-") as temporary:
+    source = Path(temporary) / "function-macro.c"
+    text = b"#define F() 7\nF ( ) F\n"
+    source.write_bytes(text)
+    result = run(["--tokens", str(source)])
+    call = text.index(b"F", text.index(b"\n"))
+    bare = text.rindex(b"F")
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    assert result.stdout == f"{call}:integer\n{bare}:identifier\n{len(text)}:eof\n"
+    source.write_bytes(b"#define F() 7\nF(1) int")
+    result = run(["--tokens", str(source)])
+    assert result.returncode == 1 and result.stderr.count("error:") == 1
+    assert result.stdout.endswith("eof\n") and ":int\n" not in result.stdout
 print("CLI tests passed (including 40 deterministic randomized cases)")

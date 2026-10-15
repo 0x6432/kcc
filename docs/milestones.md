@@ -16,7 +16,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
-| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a object macros complete) |
+| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a objects + M10b zero-parameter calls complete) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
@@ -401,3 +401,47 @@ real macro stage and never execute arbitrary generated code. A final normal
 make test passed and --version reports m10a. Compiler build artifacts remain
 under 10 MiB after cleanup; external tools/logs under 75 MiB. Remote CI is
 verified separately after pushing; obtain the current hash from git log -1.
+
+
+## M10B implementation checkpoint
+
+The tentative full function/argument batch was split before implementation:
+M10b zero-parameter functions, M10c fixed arguments/substitution, and optionally
+M10d variadics. m10-zero-parameter-macros.md records design and subset policy.
+An unexpanded-token cursor/pending token crosses replacement/source boundaries;
+fixed token-carried hide sets replace active-frame disabling. Object expansion
+inherits name bits; function expansion intersects name/closing-delimiter bits,
+then adds itself. Storage/provenance, parser/AST/sema/QBE APIs and deferred
+conversion remain unchanged. No re-lexing or whole-TU token vector.
+
+Tests cover empty lists/bodies, whitespace/comments/splices, non-invoked names,
+keywords, aliases, partial delimiters, non-retroactive invocation, recursive
+suppression and all hide-set word boundaries. Form-changing redefinitions reject
+transactionally; undef allows a fresh form. Unsupported parameters/operators,
+nonempty/unterminated calls and the directive-boundary policy diagnose. Cache/
+cursor counters and fatal EOF are tested. Exponential function expansion hits
+the work bound; 201 successive source-delimited calls need not retain 201 frames.
+
+The host oracle now compares 198 kind/spelling streams, retaining all 97 object
+cases. New QBE/reference cases include macros falling through to actual C
+functions, plus LF/CRLF/CR variants. Both sanitizer fuzz paths have function and
+boundary seeds. Sandbox reset lost uncommitted work during validation; the
+reviewed implementation/tests/docs were reconstructed and validated afresh.
+Clang/compiler-rt and pinned QBE were restored; dependencies may disappear again.
+Final local evidence follows below; verify exact pushed-commit CI separately.
+
+Next: M10c fixed parameters, balanced raw argument collection, zero/empty argument
+rules, argument prescan ownership, substitution and per-token availability.
+Stringizing/pasting/includes/conditions remain M11. Full M10 is not complete.
+
+
+## M10b recovery verification checkpoint
+
+Recovered files passed make test, 198 token/spelling oracle cases with GCC and
+Clang, GCC-host QBE/reference runtime and separate-object ABI tests. Sanitized
+libFuzzer runs passed 60392 lexer/preprocessor and 169562 pipeline inputs in
+26 seconds each, with both new seed files in both harnesses. No arbitrary
+generated programs were executed. The sandbox reset had destroyed uncommitted
+work; this tested recovery checkpoint is pushed before the longer local matrix.
+Normal/sanitized GCC/Clang full-matrix and exact pushed-commit CI verification
+are still pending at this checkpoint. Do not infer those passes from fuzzing.

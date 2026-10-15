@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M10a. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10a additions.
+Current milestone: M10b. The chronological entries below describe what each
+checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
 
@@ -285,7 +285,7 @@ large-input CPU guarantee. Review this diagnostic interaction when setting M10
 macro expansion/resource budgets.
 
 
-## M10a (current)
+## M10a
 
 Object-like definitions/undefinitions and rescanning are supported; the earlier
 M09c "no macro" limitations are superseded for this slice only. Null directives
@@ -315,3 +315,29 @@ notes, presumed #line positions and header/source stacks remain absent. Object
 recursion suppression uses active frames and is tested against GCC/Clang; do not
 reuse this as a full function-argument availability/hide-set implementation.
 All prior language/type/ABI/encoding restrictions remain; no full-C23 claim.
+
+
+## M10b (current)
+
+Object plus zero-parameter function-like macros work. No named/variadic
+parameters, nonempty invocation arguments, argument prescan or substitution.
+Even argument tokens expanding to nothing reject in this slice. Stringizing,
+pasting, predefined macros, headers, conditions, #line, non-macro directives and
+full expansion-stack notes remain unsupported. All prior C-language/type/ABI
+and encoding restrictions remain; there is no full-C23 conformance claim.
+
+Source directives encountered while probing a function invocation/delimiters
+are explicitly unsupported; that is a subset policy, not a claim all such
+arrangements have undefined behavior. A later object producing '(' does not
+retroactively invoke an emitted name. Malformed invocations stop once then latch
+EOF. Definition errors remain transactional with line draining. Raw-invalid
+lookahead keeps its existing diagnostic without a duplicate.
+
+Token-carried fixed hide sets supersede active-frame suppression. The tested
+name/closing-delimiter intersection policy matches both hosts for this subset;
+full arguments must preserve/combine per-token availability too. Some C23 rescan
+edge cases have unspecified behavior; a unique ISO result is not claimed for
+all of them. Macro IDs remain stable through undef/redefine. Depth counts retained
+streams, not completed calls. Prior storage/work/source limits and diagnostic
+prefix-rescanning caveats remain; no hostile large-input CPU guarantee, error
+count cap or allocation-failure injection tests have been added.

@@ -268,7 +268,7 @@ static void test_macro_definition_rules(void)
 	};
 	const char *invalid[] = {
 		"#define\nX", "#define 1\nX", "#undef\nX", "#undef 1\nX",
-		"#define X+1\nX", "#define X() 1\nX", "#define X ## 1\nX",
+		"#define X+1\nX", "#define X(x) 1\nX", "#define X ## 1\nX",
 		"#define X 1 %:%: 2\nX", "#define X\v 1\nX", "#define X 1\f\nX",
 		"#undef X trailing\nX", "#undef X\v\nX", "#define defined 1\nX",
 		"#define __LINE__ 1\nX", "#undef _Pragma\nX", "#define X \"bad\nX",
@@ -285,7 +285,7 @@ static void test_macro_definition_rules(void)
 	check_stream("#define X 1\n#undef X extra\nX", unchanged, 3, 1,
 		"unexpected token after macro name");
 	check_stream("#define X 1\n#define X() 2\nX", unchanged, 3, 1,
-		"function-like macros are not supported");
+		"incompatible macro redefinition");
 	for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++)
 		check_stream(invalid[i], bad_name, 3, 1, NULL);
 }
@@ -435,6 +435,143 @@ static void test_macro_limits(void)
 	free(text);
 }
 
+static void test_empty_function_macros(void)
+{
+	const struct expected_token basic[] = {
+		{ token_integer, "42" }, { token_integer, "42" },
+		{ token_identifier, "F" }, { token_eof, "" },
+	};
+	const struct expected_token empty[] = { { token_eof, "" } };
+	const struct expected_token bare[] = { { token_identifier, "F" }, { token_eof, "" } };
+	const struct expected_token not_retroactive[] = {
+		{ token_identifier, "F" }, { token_left_paren, "(" },
+		{ token_right_paren, ")" }, { token_eof, "" },
+	};
+	const struct expected_token number[] = { { token_integer, "7" }, { token_eof, "" } };
+
+	check_stream("#define F()42\n#define F( /* empty */ ) 42\nF() F (\n) F", basic,
+		sizeof(basic) / sizeof(basic[0]), 0, NULL);
+	check_stream("#define F()\nF() F/**/(/**/) F\n(\n)", empty, 1, 0, NULL);
+	check_stream("#define F() unused\nF", bare, 2, 0, NULL);
+	check_stream("#define F() 7\n#define LP (\nF LP )", not_retroactive, 4, 0, NULL);
+	check_stream("#define F() 7\n#define EMPTY\nF EMPTY ()", not_retroactive, 4, 0, NULL);
+	check_stream("#define ALIAS F\n#define F() 7\nALIAS/**/(\n)", number, 2, 0, NULL);
+	check_stream("#define PREFIX F(\n#define F() 7\nPREFIX )", number, 2, 0, NULL);
+	check_stream("#define SUFFIX ()\n#define F() 7\n#define CALL F SUFFIX\nCALL",
+		not_retroactive, 4, 0, NULL);
+	check_stream("%:define F() 7\nF\\\n()", number, 2, 0, NULL);
+}
+
+static void test_function_macro_redefinition(void)
+{
+	const struct expected_token unchanged[] = {
+		{ token_invalid, "#" }, { token_integer, "1" }, { token_eof, "" },
+	};
+	const struct expected_token number[] = { { token_integer, "2" }, { token_eof, "" } };
+	const struct expected_token object[] = {
+		{ token_left_paren, "(" }, { token_right_paren, ")" },
+		{ token_integer, "2" }, { token_eof, "" },
+	};
+
+	check_stream("#define F() 1\n#define F 2\nF()", unchanged, 3, 1,
+		"incompatible macro redefinition");
+	check_stream("#define F() 1\n#define F() 2\nF()", unchanged, 3, 1,
+		"incompatible macro redefinition");
+	check_stream("#define F() 1\n#define F(x) x\nF()", unchanged, 3, 1,
+		"macro parameters are not supported");
+	check_stream("#define F() 1\n#undef F\n#define F 2\nF", number, 2, 0, NULL);
+	check_stream("#define F 1\n#undef F\n#define F() 2\nF()", number, 2, 0, NULL);
+	check_stream("#define F/**/()2\nF", object, 4, 0, NULL);
+}
+
+static void test_function_macro_suppression(void)
+{
+	const struct expected_token recursive[] = {
+		{ token_identifier, "F" }, { token_left_paren, "(" },
+		{ token_right_paren, ")" }, { token_eof, "" },
+	};
+	const struct expected_token alias[] = {
+		{ token_identifier, "A" }, { token_identifier, "A" }, { token_eof, "" },
+	};
+
+	check_stream("#define F() F()\nF()", recursive, 4, 0, NULL);
+	check_stream("#define F() G()\n#define G() F()\nF()", recursive, 4, 0, NULL);
+	check_stream("#define A F()\n#define F() A\nA A", alias, 3, 0, NULL);
+	/* Exercise hide-set word/bit boundaries, including the last identity. */
+	for (size_t boundary = 63; boundary <= 1023; boundary += 64) {
+		char text[20000];
+		size_t used = 0;
+
+		for (size_t i = 0; i < boundary; i++)
+			used += (size_t)sprintf(text + used, "#define M%zu\n", i);
+		used += (size_t)sprintf(text + used, "#define F() F()\nF()");
+		assert(used < sizeof(text));
+		check_stream(text, recursive, 4, 0, NULL);
+	}
+}
+
+static void test_function_definition_errors(void)
+{
+	const struct expected_token invalid[] = {
+		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
+	};
+	const char *inputs[] = {
+		"#define F(x) x\n7", "#define F(...) 1\n7", "#define F(,) 1\n7",
+		"#define F(1) 1\n7", "#define F(\n7", "#define F(\v) 1\n7",
+		"#define F() # X\n7", "#define F() %: X\n7", "#define F() ## X\n7",
+	};
+
+	for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++)
+		check_stream(inputs[i], invalid, 3, 1, NULL);
+}
+
+static void test_function_invocation_errors(void)
+{
+	const struct expected_token invalid_name[] = {
+		{ token_invalid, "F" }, { token_eof, "" },
+	};
+	const struct expected_token invalid_marker[] = {
+		{ token_invalid, "#" }, { token_eof, "" },
+	};
+	const struct expected_token raw_invalid[] = {
+		{ token_invalid, "\"bad" }, { token_eof, "" },
+	};
+
+	check_stream("#define F() 7\nF(", invalid_name, 2, 1, "unterminated");
+	check_stream("#define F() 7\nF(1)", invalid_name, 2, 1, "requires no arguments");
+	check_stream("#define F() 7\n#define E\nF(E)", invalid_name, 2, 1,
+		"requires no arguments");
+	check_stream("#define F() 7\nF(,)", invalid_name, 2, 1, "requires no arguments");
+	check_stream("#define F() 7\nF\n#\n()", invalid_marker, 2, 1,
+		"directives during macro invocation lookahead");
+	check_stream("#define F() 7\nF(\n#undef F\n)", invalid_marker, 2, 1,
+		"directives during macro invocation lookahead");
+	check_stream("#define F() 7\nF \"bad", raw_invalid, 2, 1, "unterminated quoted");
+}
+
+static void test_function_macro_work_and_stream_depth(void)
+{
+	char text[20000];
+	size_t used = (size_t)sprintf(text, "#define F0() 1\n");
+	const struct expected_token number[] = { { token_integer, "1" }, { token_eof, "" } };
+
+	for (size_t i = 1; i <= 16; i++)
+		used += (size_t)sprintf(text + used, "#define F%zu() F%zu() F%zu()\n",
+			i, i - 1, i - 1);
+	used += (size_t)sprintf(text + used, "F16()\n");
+	assert(used < sizeof(text));
+	check_resource_failure(text, "macro expansion work limit exceeded", 1, preprocess_work_limit);
+	used = 0;
+	for (size_t i = 0; i < 200; i++)
+		used += (size_t)sprintf(text + used, "#define F%zu() F%zu\n", i, i + 1);
+	used += (size_t)sprintf(text + used, "#define F200() 1\nF0");
+	for (size_t i = 0; i <= 200; i++)
+		used += (size_t)sprintf(text + used, "()");
+	assert(used < sizeof(text));
+	/* Completed streams are popped: 201 successive calls are not 201 frames. */
+	check_stream(text, number, 2, 0, NULL);
+}
+
 int main(void)
 {
 	test_null_streams();
@@ -450,6 +587,12 @@ int main(void)
 	test_macro_locations();
 	test_macro_identity_reuse();
 	test_macro_limits();
+	test_empty_function_macros();
+	test_function_macro_redefinition();
+	test_function_macro_suppression();
+	test_function_definition_errors();
+	test_function_invocation_errors();
+	test_function_macro_work_and_stream_depth();
 	puts("Preprocessor directive and stream tests passed");
 	return 0;
 }

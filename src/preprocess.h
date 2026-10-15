@@ -13,10 +13,21 @@
 struct macro;
 struct macro_token;
 
+/* A bit per stable macro identity; sets travel with tokens, not the C AST. */
+struct macro_hide_set {
+	uint64_t words[(preprocess_macro_limit + 63) / 64];
+};
+
+struct rescan_token {
+	struct pp_token token;
+	struct macro_hide_set hide;
+	bool from_source;
+};
+
 struct expansion_frame {
-	struct macro *macro;
 	struct macro_token *next;
 	struct source_location invocation;
+	struct macro_hide_set hide;
 };
 
 /* Owns raw input and macro storage. Do not read input independently.
@@ -33,6 +44,8 @@ struct preprocessor {
 	struct expansion_frame frames[preprocess_depth_limit];
 	size_t frame_count;
 	bool stopped;
+	bool has_pending;
+	struct rescan_token pending;
 	bool has_lookahead;
 	struct token lookahead;
 };
