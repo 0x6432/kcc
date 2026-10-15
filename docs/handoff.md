@@ -517,7 +517,7 @@ m11-diagnostic-directives.md before implementation; validation is not yet claime
 #error/#warning implementation, designated diagnostic initialization and separate
 warning counts are implemented. GCC make test and QBE/reference/ABI execution
 passed. The 1008 inherited macro agreement streams and separately counted policy
-cases remain passing. New diagnostic tests cover 96 directive inputs across
+cases remain passing. New diagnostic tests cover 48 directive inputs across
 three driver modes, LF/CRLF/CR and digraph markers, host preprocessing status,
 24 warning-bearing QBE runs, two diagnostics in one compilation, and a long
 adjoining-token message. Unit tests check warning/error counts, stable peek,
@@ -531,3 +531,35 @@ checkpoint. Validation will use a committed isolated snapshot to avoid racing
 continued M11e implementation. The Clang packages disappeared in the sandbox
 reset and were restored. Source/documentation are the durable state, not tools.
 M11e is designed in m11-macro-conditions.md; no implementation claimed yet.
+
+## M11d final verification
+
+The isolated fce649b snapshot passed the full GCC/Clang normal + ASan/UBSan
+unit/CLI/oracle/QBE/reference/ABI matrix. Both MATRIX PASSED records are in
+/data/tools/m11d-final-validation.log (the path is a local aid, not durable
+source evidence). Exact-source remote CI passed:
+https://github.com/0x6432/kcc/actions/runs/38803546331
+M11d is complete within its documented scope. The diagnostic input count above
+is corrected to 48 inputs, each checked in all three driver modes.
+
+## M11e tested source checkpoint
+
+Macro-existence conditionals and excluded-group filtering are implemented.
+GCC make test and QBE/reference/ABI passed. New conditional streams cover 321
+host agreements with each GCC/Clang; four explicit C23 alternative cases agree
+with Clang but are separately counted as legacy GCC 11 nonagreements. Twelve
+new LF/CRLF/CR QBE/reference programs passed. Units cover structural/operand
+errors, 128/129 nesting, define/undef effects, excluded directives, EOF and
+stable caches. Existing macro/diagnostic suites remain passing.
+
+Initial pipeline fuzzing caught a real boundary bug: deferred EOF diagnostics
+could coexist with a non-NULL parser AST. Fixed parse_translation_unit's final
+success check, added a direct AST test and minimized conditional-eof corpus seed.
+The corrected final sanitizer fuzz runs passed 25799 lexer/preprocessor and
+141778 pipeline inputs (167577 total), 26 seconds per target; no generated code
+was executed. Do not count the earlier failing run as successful validation.
+
+Full isolated GCC/Clang normal/sanitizer matrix and exact-source CI are pending
+at this checkpoint. M11f initial expression design is recorded before coding in
+m11-conditional-expressions.md. Active expression #if/#elif remains unsupported
+by M11e; includes and full C23 are unfinished. Preserve the EOF/parser contract.

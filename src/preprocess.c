@@ -532,6 +532,137 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	return true;
 }
 
+static bool conditional_active(const struct preprocessor *preprocessor)
+{
+	return !preprocessor->conditional_count ||
+		preprocessor->conditionals[preprocessor->conditional_count - 1].active;
+}
+
+static bool is_conditional_directive(struct pp_token name)
+{
+	static const char *const names[] = {
+		"if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif",
+	};
+
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+		if (pp_spelling_is(name, names[i]))
+			return true;
+	return false;
+}
+
+/* macro-condition = identifier newline
+ * The identifier is looked up as written, not macro-expanded.
+ */
+static bool read_macro_condition(struct preprocessor *preprocessor,
+	struct pp_token marker, bool negate, bool *value, struct token *error)
+{
+	struct pp_token operand = pp_lexer_next(&preprocessor->input);
+	struct pp_token end;
+	struct macro *macro;
+
+	if (operand.kind == pp_invalid || operand.has_non_directive_space) {
+		*error = reject_directive(preprocessor, marker, operand,
+			operand.kind == pp_invalid ? NULL :
+			"only space and tab are allowed in a preprocessing directive");
+		return false;
+	}
+	if (operand.kind != pp_identifier) {
+		*error = reject_directive(preprocessor, marker, operand,
+			"expected exactly one identifier in macro condition");
+		return false;
+	}
+	end = pp_lexer_next(&preprocessor->input);
+	if (end.kind == pp_invalid || end.has_non_directive_space || !is_directive_end(end)) {
+		*error = reject_directive(preprocessor, marker, end,
+			end.kind == pp_invalid ? NULL :
+			"expected end of line after conditional directive");
+		return false;
+	}
+	macro = find_macro(preprocessor, operand);
+	*value = macro && macro->defined;
+	if (negate)
+		*value = !*value;
+	return true;
+}
+
+/* conditional-control = '#' ('ifdef' | 'ifndef' | 'elifdef' | 'elifndef') macro-condition
+ *                     | '#' ('else' | 'endif') newline
+ * Excluded nested #if/#elif lines are structural only; evaluated expressions
+ * are deliberately deferred to the next milestone.
+ */
+static bool read_conditional_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token name, struct token *error)
+{
+	bool opening = pp_spelling_is(name, "if") || pp_spelling_is(name, "ifdef") ||
+		pp_spelling_is(name, "ifndef");
+	bool closing = pp_spelling_is(name, "endif");
+	bool otherwise = pp_spelling_is(name, "else");
+	bool expression = pp_spelling_is(name, "if") || pp_spelling_is(name, "elif");
+	bool negate = pp_spelling_is(name, "ifndef") || pp_spelling_is(name, "elifndef");
+	struct conditional_group *group = NULL;
+	bool parent_active;
+	bool evaluate;
+	bool selected = false;
+
+	if (opening) {
+		if (preprocessor->conditional_count == preprocess_conditional_limit) {
+			*error = stop_preprocessing(preprocessor, marker,
+				"conditional nesting limit (128) exceeded");
+			return false;
+		}
+		parent_active = conditional_active(preprocessor);
+		evaluate = parent_active;
+	} else {
+		if (!preprocessor->conditional_count) {
+			*error = reject_directive(preprocessor, marker, name,
+				"conditional directive has no matching opener");
+			return false;
+		}
+		group = &preprocessor->conditionals[preprocessor->conditional_count - 1];
+		if (!closing && group->seen_else) {
+			*error = reject_directive(preprocessor, marker, name,
+				"conditional alternative follows #else");
+			return false;
+		}
+		parent_active = group->parent_active;
+		evaluate = parent_active && !group->branch_taken;
+	}
+	if (closing || otherwise) {
+		struct pp_token end = pp_lexer_next(&preprocessor->input);
+
+		if (end.kind == pp_invalid || end.has_non_directive_space || !is_directive_end(end)) {
+			*error = reject_directive(preprocessor, marker, end,
+				end.kind == pp_invalid ? NULL :
+				"expected end of line after conditional directive");
+			return false;
+		}
+		selected = evaluate;
+	} else if (!evaluate) {
+		finish_directive(preprocessor, pp_lexer_next(&preprocessor->input));
+	} else if (expression) {
+		*error = reject_directive(preprocessor, marker, name,
+			"conditional expressions are not supported yet");
+		return false;
+	} else if (!read_macro_condition(preprocessor, marker, negate, &selected, error))
+		return false;
+	if (opening) {
+		group = &preprocessor->conditionals[preprocessor->conditional_count++];
+		*group = (struct conditional_group) {
+			.opening = marker.location,
+			.parent_active = parent_active,
+			.active = parent_active && selected,
+			.branch_taken = selected,
+		};
+	} else if (closing)
+		preprocessor->conditional_count--;
+	else {
+		group->active = parent_active && selected;
+		group->branch_taken |= selected;
+		group->seen_else = otherwise;
+	}
+	return true;
+}
+
 /* diagnostic-directive = '#' ('error' | 'warning') pp-tokens? newline
  * The body is a raw pp-token sequence, never a macro expansion or C expression.
  */
@@ -583,6 +714,7 @@ static bool read_diagnostic_directive(struct preprocessor *preprocessor,
 }
 
 /* control-line = '#' newline | define-directive | undef-directive | diagnostic-directive
+ *              | conditional-control
  * Other C23 control lines are recognized but not implemented yet.
  */
 static bool read_directive(struct preprocessor *preprocessor,
@@ -608,6 +740,12 @@ static bool read_directive(struct preprocessor *preprocessor,
 	}
 	if (is_directive_end(token))
 		return true;
+	if (token.kind == pp_identifier && is_conditional_directive(token))
+		return read_conditional_directive(preprocessor, marker, token, error);
+	if (!conditional_active(preprocessor)) {
+		finish_directive(preprocessor, token);
+		return true;
+	}
 	if (token.kind != pp_identifier) {
 		*error = reject_directive(preprocessor, marker, token,
 			"expected a directive name or end of line after '#'");
@@ -1428,6 +1566,26 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 
 		if (!read_rescan_token(preprocessor, cursor, &input, error))
 			return false;
+		if (input.from_source && input.token.kind == pp_eof &&
+			preprocessor->conditional_count) {
+			struct conditional_group *group =
+				&preprocessor->conditionals[preprocessor->conditional_count - 1];
+
+			diagnostic_error(preprocessor->diagnostics, group->opening,
+				"unterminated conditional group");
+			preprocessor->conditional_count = 0;
+			preprocessor->stopped = true;
+			*result = input;
+			return true;
+		}
+		if (input.from_source && !conditional_active(preprocessor) &&
+			!(input.token.at_line_start && is_directive_marker(input.token))) {
+			if (input.token.kind == pp_invalid) {
+				*result = input;
+				return true;
+			}
+			continue;
+		}
 		if (input.from_source && is_variadic_identifier(input.token)) {
 			*error = stop_preprocessing(preprocessor, input.token,
 				"variadic identifiers require a variadic macro replacement list");

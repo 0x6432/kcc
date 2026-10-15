@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostic directives implemented) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence conditions implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -709,3 +709,15 @@ M11d source checkpoint: diagnostic directives pass GCC unit/CLI/oracle and
 QBE/reference/ABI tests, plus 104347 sanitized fuzz inputs. Full matrix and
 source-commit CI pending. M11e macro-existence conditional design is recorded
 before coding, with expression #if/#elif explicitly deferred.
+
+M11d final verification: committed isolated snapshot fce649b passed GCC/Clang
+normal and ASan/UBSan tests, QBE/reference execution and integer ABI. Remote CI
+run 38803546331 passed. Diagnostic directives are complete for their documented
+scope. No full conditional-expression or include support is implied.
+
+M11e source checkpoint: macro-existence conditions and source exclusion pass
+GCC tests/QBE/reference/ABI, 321 additional stream agreements with each host,
+four independent C23 alternative cases and 167577 corrected sanitizer-fuzz
+inputs. A fuzz-found deferred-EOF/parser-success bug is fixed and regressed.
+Full isolated matrix and exact-source CI remain pending. M11f signed decimal
+#if/#elif expression design is recorded, not yet implemented.

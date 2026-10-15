@@ -916,6 +916,9 @@ struct ast_translation_unit *parse_translation_unit(struct preprocessor *preproc
 		tail = &declaration->next;
 		count++;
 	} while (preprocess_peek(preprocessor).kind != token_eof);
+	/* EOF can carry a deferred preprocessor diagnostic without a C token. */
+	if (diagnostics->errors)
+		return NULL;
 	unit = ast_new_translation_unit(arena, declarations);
 	if (!unit)
 		allocation_error(&parser, declarations->location);

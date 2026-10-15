@@ -411,8 +411,30 @@ static void test_parameters_and_arguments(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_deferred_preprocessor_error(void)
+{
+	const char *text = "int main(void) { return 42; }\n#ifndef X\n";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+
+	assert(source_from_bytes(&source, "eof.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	assert(!parse_translation_unit(&preprocessor, &arena, &diagnostics));
+	assert(diagnostics.errors == 1);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
+	assert(diagnostics.errors == 1);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_deferred_preprocessor_error();
 	test_parameters_and_arguments();
 	test_function_symbols();
 	test_resolved_tree();

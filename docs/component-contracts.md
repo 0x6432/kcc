@@ -717,3 +717,20 @@ errors still suppress all compiler IL. Existing initializers use designated
 stream fields. Diagnostic directive bodies bypass macro expansion and language
 conversion. Temporary text is freed before returning; cache peeks do not repeat
 diagnostics. The raw --pp-tokens driver mode remains directive-agnostic.
+
+## M11e conditional-source contract
+
+A fixed 128-entry preprocessor stack owns conditional branch state and opening
+locations; it is independent of macro rescan frames and parser ASTs. Evaluated
+macro-existence operands are raw identifiers. Excluded source tokens never enter
+macro expansion or language conversion, but still pass through the raw lexer.
+Only source line-start controls can affect the stack. Unknown/excluded directives
+have no define/undef/diagnostic side effects. Evaluated #if/#elif expressions are
+not supported in this increment; skipped nested expressions are balanced only.
+
+M11e EOF integration: the parser must not return a successful translation unit
+when deferred preprocessing errors arrive with EOF. parse_translation_unit now
+checks diagnostics before constructing its success node. Fuzzing found the old
+assumption that EOF always implied no new errors; the minimized conditional-eof
+seed and a direct AST regression preserve this boundary. Warning counts do not
+invalidate parser success.

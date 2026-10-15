@@ -111,8 +111,7 @@ static void test_known_and_unknown_directives(void)
 {
 	const char *names[] = {
 		"include", "embed", "line", "pragma",
-		"if", "ifdef", "ifndef", "elif", "elifdef", "elifndef", "else", "endif",
-	};
+			};
 	const struct expected_token expected[] = {
 		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
 	};
@@ -1284,8 +1283,72 @@ static void test_diagnostic_directives(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_macro_conditions(void)
+{
+	const struct expected_token integer[] = {
+		{ token_integer, "42" }, { token_eof, "" },
+	};
+	const struct expected_token keyword[] = {
+		{ token_int, "int" }, { token_eof, "" },
+	};
+	const struct expected_token rejected[] = {
+		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+	};
+	const struct expected_token empty[] = { { token_eof, "" } };
+	char *text = malloc(8192);
+	size_t used = 0;
+
+	check_stream("#define X 0\n#ifdef X\n42\n#else\n#error bad\n#endif\n",
+		integer, 2, 0, NULL);
+	check_stream("#define X Y\n#ifdef Y\n#error expanded\n#elifdef X\n42\n"
+		"#elifndef X\n#error taken\n#else\n#error bad\n#endif\n", integer, 2, 0, NULL);
+	check_stream("#ifndef X\n#define X 42\n#endif\n#ifdef X\nX\n#endif\n#undef X\n"
+		"#ifdef X\n#error stale\n#endif\n", integer, 2, 0, NULL);
+	check_stream("%:ifdef X\n#define X 7\n#unknown whatever\n#include <none>\n"
+		"#warning hidden\n12u __VA_ARGS__ # not_a_directive\n#if bad(\n"
+		"#ifdef missing more tokens\n#endif\n#else\n#endif\n"
+		"%:else\nint\n%:endif\n", keyword, 2, 0, NULL);
+	check_stream("#define X\n#ifdef X\nint\n#elif no(expression)\n#error hidden\n#endif\n",
+		keyword, 2, 0, NULL);
+	check_stream("#ifdef X\n#error hidden\n#endif\n", empty, 1, 0, NULL);
+	check_stream("#else\nint", rejected, 3, 1, "no matching opener");
+	check_stream("#elifdef X\nint", rejected, 3, 1, "no matching opener");
+	check_stream("#endif\nint", rejected, 3, 1, "no matching opener");
+	check_stream("#ifdef X Y\nint", rejected, 3, 1, "expected end of line");
+	check_stream("#ifdef\nint", rejected, 3, 1, "expected exactly one identifier");
+	check_stream("#ifdef 12u\nint", rejected, 3, 1, "expected exactly one identifier");
+	check_stream("#ifndef X\n#else\n#else\n#endif\nint", rejected, 3, 1,
+		"alternative follows #else");
+	check_stream("#ifndef X\n#else\n#elifdef X\n#endif\nint", rejected, 3, 1,
+		"alternative follows #else");
+	check_stream("#ifndef X\n#endif junk\n#endif\nint", rejected, 3, 1,
+		"expected end of line");
+	check_stream("#ifdef X\n", empty, 1, 1, "directives.c:1:1: error: unterminated");
+	check_stream("#ifndef X\nint", keyword, 2, 1, "unterminated conditional");
+	check_stream("#if 1\nint", rejected, 3, 1, "conditional expressions are not supported");
+	assert(text);
+	for (size_t i = 0; i < preprocess_conditional_limit; i++)
+		used += (size_t)sprintf(text + used, "#ifndef missing\n");
+	used += (size_t)sprintf(text + used, "int\n");
+	for (size_t i = 0; i < preprocess_conditional_limit; i++)
+		used += (size_t)sprintf(text + used, "#endif\n");
+	check_stream(text, keyword, 2, 0, NULL);
+	used = 0;
+	for (size_t i = 0; i <= preprocess_conditional_limit; i++)
+		used += (size_t)sprintf(text + used, "#ifndef missing\n");
+	{
+		const struct expected_token limit[] = {
+			{ token_invalid, "#" }, { token_eof, "" },
+		};
+
+		check_stream(text, limit, 2, 1, "conditional nesting limit (128)");
+	}
+	free(text);
+}
+
 int main(void)
 {
+	test_macro_conditions();
 	test_diagnostic_directives();
 	test_token_pasting();
 	test_pasting_limits();

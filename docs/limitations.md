@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11d. The chronological entries below describe what each
+Current milestone: M11e. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -491,3 +491,22 @@ Malformed lexical input and forbidden directive whitespace are rejected before
 a user message is emitted. A temporary diagnostic buffer is bounded by remaining
 source length plus prefix, immediately freed; it does not use the 1 MiB generated
 macro spelling budget. Conditional exclusion is not implemented in this batch.
+
+## M11e
+
+#ifdef/#ifndef/#elifdef/#elifndef/#else/#endif select source groups with a bounded
+128-entry stack. Macro names are not expanded, and a macro defined as 0 still
+counts as defined. Excluded text bypasses macro expansion and C token conversion;
+raw lexical errors remain errors. Excluded definitions, diagnostics, includes and
+unknown directives have no effects. Nested excluded #if expressions are balanced
+without evaluation. Active #if/#elif evaluation remains explicitly unsupported.
+
+Orphaned/duplicate/misordered controls, bad evaluated operands, trailing tokens
+on else/endif and unterminated groups diagnose. EOF reports an open group once
+then remains stable. Existing directives-during-macro-invocation-lookahead
+restrictions remain; no include-source stack or predefined macros yet.
+
+GCC 11 lacks C23 elifdef/elifndef: it ignores those names in excluded groups and
+rejects them in active groups. Four explicit C23 branch cases are independently
+asserted, not counted as GCC host agreement. Newer hosts must agree; legacy
+expectations are restricted to the observed GCC 11 outputs/statuses.

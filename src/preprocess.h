@@ -14,6 +14,7 @@
 #define preprocess_prescan_limit 64
 #define preprocess_optional_limit 32
 #define preprocess_paste_limit 32
+#define preprocess_conditional_limit 128
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 
@@ -57,6 +58,14 @@ struct expansion_cursor {
 	struct rescan_token pending;
 };
 
+struct conditional_group {
+	struct source_location opening;
+	bool parent_active;
+	bool active;
+	bool branch_taken;
+	bool seen_else;
+};
+
 /* Owns raw input and macro storage. Do not read input independently.
  * Prepared source outlives borrowed spellings; destroy after all AST use.
  */
@@ -65,6 +74,8 @@ struct preprocessor {
 	struct diagnostics *diagnostics;
 	struct arena storage;
 	struct macro *macros;
+	struct conditional_group conditionals[preprocess_conditional_limit];
+	size_t conditional_count;
 	size_t macro_count;
 	size_t stored_tokens;
 	size_t expansion_work;
