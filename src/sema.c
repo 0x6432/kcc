@@ -343,21 +343,31 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->right, true))
 			return false;
 		if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
-			diagnostic_error(sema->diagnostics, expression->location, "pointer binary operators are not supported yet");
-			return false;
-		}
-		if (!convert_expression(sema, &node->left, type_integer_promotion(node->left->type)) ||
-			!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
-			return false;
-		if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
-			result_type = node->left->type;
-		} else {
-			const struct type *common = type_usual_arithmetic(node->left->type, node->right->type);
-
-			if (!convert_expression(sema, &node->left, common) ||
-				!convert_expression(sema, &node->right, common))
+			if (node->operation != binary_equal && node->operation != binary_not_equal) {
+				diagnostic_error(sema->diagnostics, expression->location, "pointer binary operators are not supported yet");
 				return false;
-			result_type = comparison_operator(node->operation) ? &type_int : common;
+			}
+			if (node->left->type->kind != type_kind_pointer || node->right->type->kind != type_kind_pointer ||
+				!type_compatible(node->left->type, node->right->type)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"pointer equality requires compatible pointer operands; null constants are not supported yet");
+				return false;
+			}
+			result_type = &type_int;
+		} else {
+			if (!convert_expression(sema, &node->left, type_integer_promotion(node->left->type)) ||
+				!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+				return false;
+			if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
+				result_type = node->left->type;
+			} else {
+				const struct type *common = type_usual_arithmetic(node->left->type, node->right->type);
+
+				if (!convert_expression(sema, &node->left, common) ||
+					!convert_expression(sema, &node->right, common))
+					return false;
+				result_type = comparison_operator(node->operation) ? &type_int : common;
+			}
 		}
 		depth = node->left->depth > node->right->depth ?
 			node->left->depth : node->right->depth;

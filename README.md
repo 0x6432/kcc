@@ -6,13 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13b: object-pointer declarations now have address-of and indirection, with
+M13c: compatible object pointers now support == and !=. Address-of and
+indirection use
 concrete AST nodes and general lvalue-address lowering. Integer/pointer objects
 support loads, mutations, compatible values, fixed calls/returns/casts and
 scalar truth. Null cancellation &*p evaluates p once without touching its
 pointee. All baseline primitive integer types, ordinary byte characters,
 explicit promotions/conversions and canonical byte/halfword ABIs remain
-supported. Pointer arithmetic/comparison, null constants and full declarators
+supported. Pointer arithmetic/ordering, null constants and full declarators
 remain later increments. C23 bool/true/false spelling and full C23 are
 unfinished. Includes retain bounded explicit search and direct/computed
 quoted/basic angle support.

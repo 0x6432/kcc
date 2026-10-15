@@ -94,9 +94,14 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 
 static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
 {
-	bool unsigned_operands = type_is_unsigned(operand_type);
+	bool unsigned_operands;
 	bool wide = type_value_width(operand_type) == 64;
 
+	if (operand_type->kind == type_kind_pointer) {
+		assert(operation == binary_equal || operation == binary_not_equal);
+		return operation == binary_equal ? "ceql" : "cnel";
+	}
+	unsigned_operands = type_is_unsigned(operand_type);
 	switch (operation) {
 	case binary_add: return "add";
 	case binary_subtract: return "sub";

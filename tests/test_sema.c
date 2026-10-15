@@ -999,8 +999,37 @@ static void test_pointer_lvalue_tree(void)
 	source_destroy(&source);
 }
 
+static void test_pointer_equality_tree(void)
+{
+	const char *text = "int f(int *p,int *q) { return p==q; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_binary_expression *equality;
+
+	assert(source_from_bytes(&source, "pointer-equality.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	item = (struct ast_statement_item *)first_function(unit)->body->items;
+	equality = (struct ast_binary_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(equality->expression.kind == expression_binary && equality->operation == binary_equal);
+	assert(equality->expression.type == &type_int && equality->expression.depth == 3);
+	assert(equality->left->kind == expression_load && equality->right->kind == expression_load);
+	assert(equality->left->type->kind == type_kind_pointer && equality->right->type->kind == type_kind_pointer);
+	assert(type_compatible(equality->left->type, equality->right->type));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_pointer_equality_tree();
 	test_pointer_lvalue_tree();
 	test_pointer_type_syntax_and_values();
 	test_bool_type_and_conversions();

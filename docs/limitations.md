@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13b. The chronological entries below describe what each
+Current milestone: M13c. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -850,3 +850,12 @@ with 63 dereferences reaches depth 128; 64 exceeds it despite legal type syntax.
 The separate declaration/cast pointer-syntax limit stays 64 layers. Inferred
 address types may extend a declared type; expression depth bounds that growth.
 Pointer comparison/arithmetic, null constants and arrays/strings remain later work.
+
+## M13c
+
+Equality/inequality compare full-width values of recursively compatible object
+pointers and produce int. Operands load once without integer promotion or rank
+queries. Host-supplied null pointers compare correctly, including deep pointer
+values. Source null pointer constants and void-pointer compatibility are still
+unsupported. Ordering/arithmetic remain next; unrelated live object equality is
+not confused with an integer comparison. No lifetime or dereference rule changed.

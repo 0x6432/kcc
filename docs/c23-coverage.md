@@ -87,3 +87,11 @@ full-value programs cover mutation/recursion/once-only evaluation; both-directio
 eight-argument host ABI tests verify every memory width, address identity and
 valid null cancellation. Pointer arithmetic/comparison and null constants remain
 later increments; invalid pointer dereferences are never executed by tests.
+
+### M13c pointer equality
+
+Compatible object pointers support ==/!= with full-width values and int results.
+15 both-host/QBE full-value programs, both-direction live/null ABI, typed AST and
+once-only/short-circuit tests cover this increment. The M13a rejection of p==p is
+replaced by permanently invalid p&p; its pointer-operation constraint purpose is
+retained. Pointer ordering/arithmetic and source null constants are not implied.

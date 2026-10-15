@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a declarations and M13b address/indirection implemented; verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a declarations, M13b lvalues and M13c equality implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -928,3 +928,11 @@ M13b source checkpoint: concrete address/indirection and general lvalue-address
 lowering passed full normal GCC suites, 53 both-host/QBE full-value programs,
 both-direction memory ABI/null cancellation, typed AST/depth checks and bounded
 sanitized fuzz. Full isolated/remote checks remain pending. M13c is pre-designed.
+
+M13a exact-source CI b6ba02d passed run 38823808449. M13b 6f5e5ab remains
+in progress on run 38824691700; isolated snapshot validation is separate.
+
+M13c source checkpoint: compatible pointer equality passed full normal GCC suites,
+15 both-host/QBE full-value programs, both-direction live/null ABI, typed AST,
+once-only/short-circuit checks and bounded sanitized fuzz. Full isolated/remote
+verification remains pending. M13d scaled arithmetic/ordering is pre-designed.

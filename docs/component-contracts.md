@@ -959,3 +959,11 @@ can still target their slots directly. Address computation never implicitly load
 a pointee, preserving &*null cancellation and once-only side effects. Returned
 assignment values retain their earlier target-type conversion. No local-slot
 encoding is reused as a fake arbitrary memory address.
+
+## M13c compatible pointer equality
+
+Sema handles pointer ==/!= before integer promotion: both operands must be
+pointers with recursively compatible referents. Generic binary ASTs retain their
+loaded pointer children, checked depth and int result. Backend dispatches pointer
+comparison before integer signedness and uses ceql/cnel with word boolean results.
+No pointer enters integer width/rank helpers. Integer comparisons are unchanged.

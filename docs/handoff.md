@@ -2,8 +2,8 @@
 
 ## Current checkpoint
 
-M13b implementation: concrete address/indirection ASTs and general object lvalue
-addresses, with pointer mutation, compatible values, fixed calls/returns/casts
+M13c implementation: compatible pointer equality plus concrete address/indirection
+ASTs and general object lvalue addresses, with pointer mutation, fixed calls/returns/casts
 and scalar truth. Integer/pointer syntax resolves a separate semantic type graph.
 All baseline primitive integers, ordinary byte characters, explicit conversions,
 on-demand tokens, RDP/Pratt and single-file stages remain intact.
@@ -11,17 +11,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M12j 1735825, run 38822838501, passed GCC/Clang
-normal/sanitizer and fuzz jobs. M13a b6ba02d remote verification remains pending.
-M13b full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13a b6ba02d, run 38823808449, passed GCC/Clang
+normal/sanitizer and fuzz jobs. M13b 6f5e5ab run 38824691700 remains in progress.
+M13c full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated snapshots run independently; M13a queues under an external
 flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13c compatible pointer ==/!=, designed in m13-pointer-equality.md. Pointer
-arithmetic/relational comparison, null constants, void/functions/full declarators,
+Next: M13d scaled pointer arithmetic/ordering, designed in m13-pointer-arithmetic.md.
+Null constants, void/functions/full declarators,
 arrays/strings and remaining C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
 never executed. Read current limitations, not old checkpoint entries alone.
@@ -1179,3 +1179,18 @@ total), 26/26 seconds, without arbitrary generated C execution.
 Full isolated normal/sanitizer matrix and exact-source CI remain pending. M13c
 pointer equality is pre-designed; existing integer comparison semantics must
 remain unchanged and pointers must never enter integer signedness queries.
+
+## M13c tested source checkpoint
+
+Pointer ==/!= requires recursively compatible types and produces int without
+integer promotions or pointer signedness queries. QBE compares full-width long
+addresses. Full normal GCC regressions/QBE/reference/ABI and 15 new full-value
+programs passed; the new suite also passed with Clang. Separate-object live/null
+host tests cover both linkage directions, every primitive and deep referent,
+once-only calls, assignment results and short circuit. Typed AST units pass.
+The earlier now-valid p==p rejection is changed to p&p, a permanent pointer
+operation constraint. No general integer-pointer/null-constant conversion added.
+Sanitized bounded fuzz passed 22894 lexer + 73861 pipeline inputs (96755 total),
+26 seconds each. Arbitrary generated C was not executed. Full isolated matrix
+and exact-source CI remain pending; M13d is designed but not implemented yet.
+M13a exact-source CI passed 38823808449; M13b run 38824691700 is in progress.
