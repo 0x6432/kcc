@@ -734,3 +734,17 @@ checks diagnostics before constructing its success node. Fuzzing found the old
 assumption that EOF always implied no new errors; the minimized conditional-eof
 seed and a direct AST regression preserve this boundary. Warning counts do not
 invalidate parser success.
+
+## M11f conditional-expression contract
+
+#if/#elif collect only one raw directive, replacing literal defined operands
+before isolated macro rescanning. No whole-source token vector or C AST nodes
+are introduced. The evaluator reads expanded pp tokens on demand, uses a Pratt
+binding table and a 128-level recursion bound; raw directives are limited to
+1024 tokens, with macro expansion also subject to existing shared budgets.
+Generated defined results use owned views and the shared spelling-byte budget.
+
+This first expression subset uses signed 64-bit decimal values. Arithmetic
+checks precede host operations; short-circuited operands still parse and expand
+but do not evaluate arithmetic. Diagnostics retain expansion locations. Parser,
+sema and QBE contracts are unchanged except the earlier EOF error-success fix.

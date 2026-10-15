@@ -15,6 +15,8 @@
 #define preprocess_optional_limit 32
 #define preprocess_paste_limit 32
 #define preprocess_conditional_limit 128
+#define preprocess_condition_depth_limit 128
+#define preprocess_condition_token_limit 1024
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 

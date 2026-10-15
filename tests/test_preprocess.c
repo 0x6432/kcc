@@ -1325,7 +1325,7 @@ static void test_macro_conditions(void)
 		"expected end of line");
 	check_stream("#ifdef X\n", empty, 1, 1, "directives.c:1:1: error: unterminated");
 	check_stream("#ifndef X\nint", keyword, 2, 1, "unterminated conditional");
-	check_stream("#if 1\nint", rejected, 3, 1, "conditional expressions are not supported");
+	check_stream("#if 1u\nint", rejected, 3, 1, "only decimal conditional integers");
 	assert(text);
 	for (size_t i = 0; i < preprocess_conditional_limit; i++)
 		used += (size_t)sprintf(text + used, "#ifndef missing\n");
@@ -1346,8 +1346,67 @@ static void test_macro_conditions(void)
 	free(text);
 }
 
+static void test_expression_conditions(void)
+{
+	const struct expected_token integer[] = {
+		{ token_integer, "42" }, { token_eof, "" },
+	};
+	const struct expected_token rejected[] = {
+		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+	};
+	const char *bad[] = {
+		"", "defined", "defined()", "defined(7)", "defined(X", "defined(X,Y)",
+		"1 +", "(1", "1 2", "1/0", "1%0", "9223372036854775808",
+		"9223372036854775807+1", "(-9223372036854775807-1)-1",
+		"-(-9223372036854775807-1)", "(-9223372036854775807-1)/-1",
+		"(-9223372036854775807-1)%-1", "9223372036854775807*2",
+		"0 && (1+)", "1 || (1+)", "__VA_ARGS__", "defined(__VA_OPT__)", "1u", "0x1", "01", "'a'", "1 ? 2 : 3",
+	};
+	char text[8192];
+	size_t used;
+
+	check_stream("#define X missing\n#if defined(X) && !defined missing && X==0\n42\n"
+		"#else\n#error bad\n#endif\n", integer, 2, 0, NULL);
+	check_stream("#define C(a,b) a##b\n#define F(x) x+2\n"
+		"#if F(C(4,0)) == 42 && (1 || 1/0)\n42\n#endif\n", integer, 2, 0, NULL);
+	check_stream("#if 0 && 1/0\n#error bad\n#elif 1 || (9223372036854775807*2)\n42\n"
+		"#elif bad(\n#error bad\n#endif\n", integer, 2, 0, NULL);
+	check_stream("#if true && !false\n42\n#endif\n", integer, 2, 0, NULL);
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		assert(snprintf(text, sizeof(text), "#if %s\nint", bad[i]) > 0);
+		check_stream(text, rejected, 3, 1, NULL);
+	}
+	check_stream("#define D defined\n#if D(X)\nint", rejected, 3, 1,
+		"defined produced by macro expansion");
+	used = (size_t)sprintf(text, "#if ");
+	for (size_t i = 1; i < preprocess_condition_depth_limit; i++)
+		text[used++] = '(';
+	text[used++] = '1';
+	for (size_t i = 1; i < preprocess_condition_depth_limit; i++)
+		text[used++] = ')';
+	sprintf(text + used, "\n42\n#endif\n");
+	check_stream(text, integer, 2, 0, NULL);
+	used = (size_t)sprintf(text, "#if ");
+	for (size_t i = 0; i < preprocess_condition_depth_limit; i++)
+		text[used++] = '(';
+	sprintf(text + used, "1\nint");
+	check_stream(text, rejected, 3, 1, "conditional expression nesting limit (128)");
+	used = (size_t)sprintf(text, "#if +1");
+	for (size_t i = 2; i < preprocess_condition_token_limit; i += 2)
+		used += (size_t)sprintf(text + used, "+0");
+	sprintf(text + used, "\n42\n#endif\n");
+	check_stream(text, integer, 2, 0, NULL);
+	used = (size_t)sprintf(text, "#if + +1");
+	for (size_t i = 2; i < preprocess_condition_token_limit; i += 2)
+		used += (size_t)sprintf(text + used, "+0");
+	sprintf(text + used, "\nint");
+	check_stream(text, rejected, 3, 1, "conditional expression token limit (1024)");
+}
+
+
 int main(void)
 {
+	test_expression_conditions();
 	test_macro_conditions();
 	test_diagnostic_directives();
 	test_token_pasting();

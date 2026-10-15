@@ -585,10 +585,13 @@ static bool read_macro_condition(struct preprocessor *preprocessor,
 	return true;
 }
 
+static bool read_expression_condition(struct preprocessor *preprocessor,
+	struct pp_token marker, bool *value, struct token *error);
+
 /* conditional-control = '#' ('ifdef' | 'ifndef' | 'elifdef' | 'elifndef') macro-condition
  *                     | '#' ('else' | 'endif') newline
- * Excluded nested #if/#elif lines are structural only; evaluated expressions
- * are deliberately deferred to the next milestone.
+ *                     | '#' ('if' | 'elif') expression-condition
+ * Excluded conditions are structural only and do not expand their operands.
  */
 static bool read_conditional_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, struct pp_token name, struct token *error)
@@ -640,9 +643,8 @@ static bool read_conditional_directive(struct preprocessor *preprocessor,
 	} else if (!evaluate) {
 		finish_directive(preprocessor, pp_lexer_next(&preprocessor->input));
 	} else if (expression) {
-		*error = reject_directive(preprocessor, marker, name,
-			"conditional expressions are not supported yet");
-		return false;
+		if (!read_expression_condition(preprocessor, marker, &selected, error))
+			return false;
 	} else if (!read_macro_condition(preprocessor, marker, negate, &selected, error))
 		return false;
 	if (opening) {
@@ -1686,6 +1688,352 @@ static bool prescan_argument(struct preprocessor *preprocessor,
 	preprocessor->prescan_depth--;
 	free(cursor);
 	return success;
+}
+
+enum condition_operation {
+	condition_multiply, condition_divide, condition_remainder,
+	condition_add, condition_subtract,
+	condition_less, condition_less_equal, condition_greater, condition_greater_equal,
+	condition_equal, condition_not_equal, condition_and, condition_or,
+};
+
+struct condition_operator {
+	const char *spelling;
+	unsigned binding_power;
+	enum condition_operation operation;
+};
+
+static const struct condition_operator condition_operators[] = {
+	{ "*", 60, condition_multiply }, { "/", 60, condition_divide },
+	{ "%", 60, condition_remainder },
+	{ "+", 50, condition_add }, { "-", 50, condition_subtract },
+	{ "<", 40, condition_less }, { "<=", 40, condition_less_equal },
+	{ ">", 40, condition_greater }, { ">=", 40, condition_greater_equal },
+	{ "==", 30, condition_equal }, { "!=", 30, condition_not_equal },
+	{ "&&", 20, condition_and }, { "||", 10, condition_or },
+};
+
+struct condition_parser {
+	struct preprocessor *preprocessor;
+	struct expansion_cursor *cursor;
+	struct pp_token token;
+	struct token *error;
+	size_t depth;
+	bool failed;
+};
+
+static void condition_error(struct condition_parser *parser,
+	struct pp_token token, const char *message)
+{
+	if (!parser->failed)
+		diagnostic_error(parser->preprocessor->diagnostics, token.expansion_location, message);
+	parser->failed = true;
+}
+
+static void advance_condition(struct condition_parser *parser)
+{
+	struct rescan_token next;
+
+	if (parser->failed)
+		return;
+	if (!read_expanded_token(parser->preprocessor, parser->cursor, &next, parser->error)) {
+		parser->failed = true;
+		return;
+	}
+	parser->token = next.token;
+	if (next.token.kind == pp_invalid)
+		parser->failed = true;
+}
+
+static int64_t parse_condition_expression(struct condition_parser *parser,
+	unsigned minimum_power, bool evaluate);
+
+/* condition-operand = decimal-integer | identifier | '(' condition-expression ')'
+ *                   | ('+' | '-' | '!') condition-operand
+ * defined was handled before expansion; other identifiers are zero (C23 true is 1).
+ */
+static int64_t parse_condition_operand(struct condition_parser *parser, bool evaluate)
+{
+	struct pp_token token = parser->token;
+	int64_t value = 0;
+
+	if (parser->failed)
+		return 0;
+	if (is_punctuator(token, "+") || is_punctuator(token, "-") || is_punctuator(token, "!")) {
+		advance_condition(parser);
+		value = parse_condition_expression(parser, 70, evaluate);
+		if (!evaluate || parser->failed)
+			return 0;
+		if (is_punctuator(token, "!"))
+			return !value;
+		if (is_punctuator(token, "+"))
+			return value;
+		if (value == INT64_MIN) {
+			condition_error(parser, token, "signed overflow in conditional expression");
+			return 0;
+		}
+		return -value;
+	}
+	if (is_punctuator(token, "(")) {
+		advance_condition(parser);
+		value = parse_condition_expression(parser, 0, evaluate);
+		if (!parser->failed && !is_punctuator(parser->token, ")"))
+			condition_error(parser, parser->token, "expected ')' in conditional expression");
+		advance_condition(parser);
+		return value;
+	}
+	if (token.kind == pp_number) {
+		const unsigned char *text = token.location.source->data + token.location.offset;
+
+		if (token.length > 1 && text[0] == '0')
+			condition_error(parser, token, "only decimal conditional integers are supported yet");
+		for (size_t i = 0; i < token.length && !parser->failed; i++) {
+			unsigned digit;
+
+			if (text[i] < '0' || text[i] > '9') {
+				condition_error(parser, token, "only decimal conditional integers are supported yet");
+				break;
+			}
+			digit = text[i] - '0';
+			if (value > (INT64_MAX - digit) / 10) {
+				condition_error(parser, token, "conditional integer exceeds signed 64-bit range");
+				break;
+			}
+			value = value * 10 + digit;
+		}
+	} else if (token.kind == pp_identifier) {
+		if (pp_spelling_is(token, "defined"))
+			condition_error(parser, token, "defined produced by macro expansion is not supported");
+		value = pp_spelling_is(token, "true");
+	} else {
+		condition_error(parser, token, "expected an operand in conditional expression");
+	}
+	advance_condition(parser);
+	return value;
+}
+
+static bool condition_multiply_overflows(int64_t left, int64_t right)
+{
+	if (left > 0)
+		return (right > 0 && left > INT64_MAX / right) ||
+			(right < 0 && right < INT64_MIN / left);
+	if (left < 0)
+		return (right > 0 && left < INT64_MIN / right) ||
+			(right < 0 && left < INT64_MAX / right);
+	return false;
+}
+
+static int64_t evaluate_condition_operator(struct condition_parser *parser,
+	struct pp_token token, enum condition_operation operation, int64_t left, int64_t right)
+{
+	switch (operation) {
+	case condition_add:
+		if ((right > 0 && left > INT64_MAX - right) ||
+			(right < 0 && left < INT64_MIN - right))
+			break;
+		return left + right;
+	case condition_subtract:
+		if ((right > 0 && left < INT64_MIN + right) ||
+			(right < 0 && left > INT64_MAX + right))
+			break;
+		return left - right;
+	case condition_multiply:
+		if (condition_multiply_overflows(left, right))
+			break;
+		return left * right;
+	case condition_divide:
+	case condition_remainder:
+		if (!right) {
+			condition_error(parser, token, "division by zero in conditional expression");
+			return 0;
+		}
+		if (left == INT64_MIN && right == -1)
+			break;
+		return operation == condition_divide ? left / right : left % right;
+	case condition_less: return left < right;
+	case condition_less_equal: return left <= right;
+	case condition_greater: return left > right;
+	case condition_greater_equal: return left >= right;
+	case condition_equal: return left == right;
+	case condition_not_equal: return left != right;
+	case condition_and: return left && right;
+	case condition_or: return left || right;
+	}
+	condition_error(parser, token, "signed overflow in conditional expression");
+	return 0;
+}
+
+/* condition-expression = condition-operand { binary-operator condition-expression }
+ * All binary operators associate left: parse the right operand above its power.
+ * Short circuit suppresses arithmetic only, not parsing or macro expansion.
+ */
+static int64_t parse_condition_expression(struct condition_parser *parser,
+	unsigned minimum_power, bool evaluate)
+{
+	int64_t value;
+
+	if (parser->failed)
+		return 0;
+	if (parser->depth == preprocess_condition_depth_limit) {
+		condition_error(parser, parser->token, "conditional expression nesting limit (128) exceeded");
+		return 0;
+	}
+	parser->depth++;
+	value = parse_condition_operand(parser, evaluate);
+	while (!parser->failed) {
+		const struct condition_operator *operator = NULL;
+		struct pp_token token = parser->token;
+		bool evaluate_right = evaluate;
+		int64_t right;
+
+		if (token.kind != pp_punctuator)
+			break;
+		for (size_t i = 0; i < sizeof(condition_operators) / sizeof(condition_operators[0]); i++)
+			if (pp_spelling_is(token, condition_operators[i].spelling)) {
+				operator = &condition_operators[i];
+				break;
+			}
+		if (!operator || operator->binding_power < minimum_power)
+			break;
+		if (operator->operation == condition_and && !value)
+			evaluate_right = false;
+		if (operator->operation == condition_or && value)
+			evaluate_right = false;
+		advance_condition(parser);
+		right = parse_condition_expression(parser, operator->binding_power + 1, evaluate_right);
+		if (evaluate && !parser->failed)
+			value = evaluate_condition_operator(parser, token, operator->operation, value, right);
+	}
+	parser->depth--;
+	return value;
+}
+
+/* A raw directive is bounded independently of its expanded macro stream. */
+static bool read_condition_input(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token *token, size_t *count, struct token *error)
+{
+	*token = pp_lexer_next(&preprocessor->input);
+	if (token->kind == pp_invalid || token->has_non_directive_space) {
+		*error = reject_directive(preprocessor, marker, *token,
+			token->kind == pp_invalid ? NULL :
+			"only space and tab are allowed in a preprocessing directive");
+		return false;
+	}
+	if (is_variadic_identifier(*token)) {
+		*error = reject_directive(preprocessor, marker, *token,
+			"variadic identifiers require a variadic macro replacement list");
+		return false;
+	}
+	if (!is_directive_end(*token) && ++*count > preprocess_condition_token_limit) {
+		*error = reject_directive(preprocessor, marker, *token,
+			"conditional expression token limit (1024) exceeded");
+		return false;
+	}
+	return true;
+}
+
+/* defined-operand = 'defined' identifier | 'defined' '(' identifier ')'
+ * Consumed before rescanning; never expand the macro name being tested.
+ */
+static bool replace_defined_operand(struct preprocessor *preprocessor,
+	struct pp_token marker, struct pp_token *token, size_t *count, struct token *error)
+{
+	struct pp_token operator = *token;
+	struct pp_token name;
+	struct macro *macro;
+	struct source *spelling;
+	bool parenthesized;
+
+	if (!read_condition_input(preprocessor, marker, &name, count, error))
+		return false;
+	parenthesized = is_punctuator(name, "(");
+	if (parenthesized && !read_condition_input(preprocessor, marker, &name, count, error))
+		return false;
+	if (name.kind != pp_identifier) {
+		*error = reject_directive(preprocessor, marker, name,
+			"expected an identifier after defined");
+		return false;
+	}
+	if (parenthesized) {
+		struct pp_token close;
+
+		if (!read_condition_input(preprocessor, marker, &close, count, error))
+			return false;
+		if (!is_punctuator(close, ")")) {
+			*error = reject_directive(preprocessor, marker, close,
+				"expected ')' after defined operand");
+			return false;
+		}
+	}
+	spelling = allocate_spelling(preprocessor, 2, operator, error);
+	if (!spelling)
+		return false;
+	macro = find_macro(preprocessor, name);
+	spelling->data[0] = macro && macro->defined ? '1' : '0';
+	spelling->data[1] = 0;
+	*token = (struct pp_token) {
+		.kind = pp_number,
+		.location = { spelling, 0 },
+		.expansion_location = operator.expansion_location,
+		.length = 1,
+		.leading_space = operator.leading_space,
+	};
+	return true;
+}
+
+/* expression-condition = pp-tokens newline
+ * Isolated rescanning prevents macro lookahead from consuming the following line.
+ */
+static bool read_expression_condition(struct preprocessor *preprocessor,
+	struct pp_token marker, bool *value, struct token *error)
+{
+	struct argument_token *head = NULL;
+	struct argument_token **tail = &head;
+	struct pp_token token;
+	struct expansion_cursor *cursor;
+	struct condition_parser parser;
+	size_t count = 0;
+	int64_t result;
+
+	for (;;) {
+		struct argument_token *copy;
+
+		if (!read_condition_input(preprocessor, marker, &token, &count, error))
+			return false;
+		if (is_directive_end(token))
+			break;
+		if (token.kind == pp_identifier && pp_spelling_is(token, "defined") &&
+			!replace_defined_operand(preprocessor, marker, &token, &count, error))
+			return false;
+		copy = copy_argument_token(preprocessor, (struct rescan_token) { .token = token }, marker, error);
+		if (!copy)
+			return false;
+		*tail = copy;
+		tail = &copy->next;
+	}
+	cursor = calloc(1, sizeof(*cursor));
+	if (!cursor) {
+		*error = stop_preprocessing(preprocessor, marker, "cannot allocate conditional macro cursor");
+		return false;
+	}
+	cursor->input = head;
+	cursor->end = token.location;
+	parser = (struct condition_parser) {
+		.preprocessor = preprocessor,
+		.cursor = cursor,
+		.error = error,
+	};
+	advance_condition(&parser);
+	result = parse_condition_expression(&parser, 0, true);
+	if (!parser.failed && parser.token.kind != pp_eof)
+		condition_error(&parser, parser.token, "unsupported or trailing token in conditional expression");
+	free(cursor);
+	if (parser.failed) {
+		*error = invalid_token(marker);
+		return false;
+	}
+	*value = result != 0;
+	return true;
 }
 
 struct pp_token preprocess_next_pp(struct preprocessor *preprocessor)

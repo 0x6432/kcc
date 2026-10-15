@@ -6,13 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11e: macro-existence conditional groups now support `#ifdef` / `#ifndef`,
-C23 `#elifdef` / `#elifndef`, `#else` and `#endif`. Excluded groups bypass macro
-expansion and language conversion; raw lexical errors still diagnose.
+M11f: `#if` / `#elif` now evaluate a signed-decimal expression subset with
+`defined`, arithmetic, comparisons and short-circuit logical operators. Macro
+existence groups, diagnostic directives and previous macro operators remain.
 
-Expression `#if` / `#elif`, includes and full C23 remain unfinished. See
-`docs/m11-macro-conditions.md`, `docs/milestones.md`, `docs/limitations.md`
-and `docs/handoff.md` for contracts, acceptance evidence and remaining work.
+Unsigned/other literals, remaining preprocessing operators, includes and full
+C23 remain unfinished. See `docs/m11-conditional-expressions.md`,
+`docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
 ## Build and test
 
@@ -78,7 +78,7 @@ Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
 Unsupported: C string expressions, includes,
-expression conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
+full conditional expressions, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
 

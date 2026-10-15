@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11e. The chronological entries below describe what each
+Current milestone: M11f. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -510,3 +510,19 @@ GCC 11 lacks C23 elifdef/elifndef: it ignores those names in excluded groups and
 rejects them in active groups. Four explicit C23 branch cases are independently
 asserted, not counted as GCC host agreement. Newer hosts must agree; legacy
 expectations are restricted to the observed GCC 11 outputs/statuses.
+
+## M11f
+
+#if/#elif evaluate decimal signed-64 preprocessing arithmetic, parentheses,
+unary + - !, * / %, + -, comparisons/equality and short-circuit &&/||. Literal
+defined forms test unexpanded macro names; other identifiers become zero, with
+C23 true/false treated as 1/0. A defined identifier produced by macro expansion
+is explicitly diagnosed instead of guessing at undefined standard behavior.
+
+Unsigned/suffixed/nondecimal literals, characters, shifts/bitwise and ?: are
+not supported in this increment. These are expression-subset limitations, not
+full C23 preprocessing claims. Malformed and unsupported expressions diagnose.
+Only arithmetic evaluation, not macro expansion or syntax checking, short
+circuits. Signed overflow, zero division and MIN/-1 are checked without host UB.
+Raw expression lines are limited to 1024 pp tokens and syntax nesting to 128;
+macro expansion retains all earlier storage/work/owned-spelling limits.

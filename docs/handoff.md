@@ -563,3 +563,36 @@ Full isolated GCC/Clang normal/sanitizer matrix and exact-source CI are pending
 at this checkpoint. M11f initial expression design is recorded before coding in
 m11-conditional-expressions.md. Active expression #if/#elif remains unsupported
 by M11e; includes and full C23 are unfinished. Preserve the EOF/parser contract.
+
+## M11e final verification
+
+Isolated committed snapshot de93224 passed the full GCC/Clang normal +
+ASan/UBSan unit/CLI/oracle/QBE/reference/ABI matrix. Exact-source CI passed:
+https://github.com/0x6432/kcc/actions/runs/38805070048
+M11e is complete within its macro-existence scope, including the fuzz-found EOF
+parser-success fix and regression. No production changes were made to its
+validation snapshot while later milestones were developed.
+
+## M11f tested source checkpoint
+
+Initial #if/#elif evaluation is implemented in preprocess.c, using signed-decimal
+64-bit arithmetic and an isolated macro cursor. Literal defined operands are
+handled before expansion; remaining identifiers become zero (C23 true/false
+are 1/0). Arithmetic checks avoid host UB and logical short circuit suppresses
+evaluation, not expansion or syntax checks. Raw reserved variadic identifiers
+are rejected consistently, including inside defined operands.
+
+GCC make test and QBE/reference/ABI passed; 540 new host/model agreements passed
+with each GCC/Clang, plus eighteen LF/CRLF/CR QBE/reference expression programs.
+Units cover precedence, defined/paste/function macros, signed min/max overflow,
+zero division, inactive arithmetic, malformed syntax, explicit unsupported
+literal/operator cases, and exact 128/129 recursion and 1024/1025 raw-token
+limits. Existing tests remain passing. Final sanitized fuzz runs passed 21975
+lexer/preprocessor and 96461 pipeline inputs (118436 total), 21 seconds each.
+No arbitrary generated program was executed. Earlier exploratory runs are not
+included in this final-source count.
+
+Full isolated matrix and exact-source CI remain pending at this source
+checkpoint. See m11-conditional-expressions.md for the supported subset and
+m11-signed-operators.md for M11g's pre-recorded design. Do not claim unsigned,
+nondecimal/character literal, remaining-operator or include support yet.
