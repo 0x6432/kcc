@@ -162,6 +162,35 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int main(void) { do { if(1) break; else continue; } while(1); return 5; }", 5),
         ("int main(void) {" + "do "*127 + ";" + "while(0);"*127 + "return 3;}", 3),
     ]
+    programs += [
+        ("int main(void) { int s=0; for(int i=0; i<5; i=i+1) s=s+i; return s; }", 10),
+        ("int main(void) { int i; for(i=0; i<4; i=i+1) ; return i; }", 4),
+        ("int main(void) { int s=0; for(int i=0; i<5; i=i+1) { if(i==2) continue; s=s+i; } return s; }", 8),
+        ("int main(void) { int x=0; for(;;) { x=x+1; if(x==3) break; } return x; }", 3),
+        ("int main(void) { int i=0; for(; i<3;) i=i+1; return i; }", 3),
+        ("int main(void) { int i=0; for(;;i=i+1) { if(i==2) break; continue; } return i; }", 2),
+        ("int main(void) { int i=7; int s=0; for(int i=0; i<3; i=i+1) s=s+i; return i+s; }", 10),
+        ("int main(void) { int s=0; for(int i=0; i<2; i=i+1) { int i=7; s=s+i; } return s; }", 14),
+        ("int main(void) { for(int i=0; i<2; i=i+1) ; int i=9; return i; }", 9),
+        ("int main(void) { int s=0; for(int i=0; i<2; i=i+1) { for(int i=0; i<3; i=i+1) s=s+1; } return s; }", 6),
+        ("int main(void) { int s=0; for(int i=0; i<2; i=i+1) { for(int j=0; j<4; j=j+1) { if(j==1) continue; if(j==3) break; s=s+1; } } return s; }", 4),
+        ("int main(void) { int i=0; for(; i<3; i=(i+1 || 0)+i) continue; return i; }", 3),
+        ("int main(void) { int i=0; int c=0; for(;i<3 && (c=c+1);i=i+1) continue; return i*10+c; }", 33),
+        ("int main(void) { int x=0; for(;1;x=x+1) break; return x; }", 0),
+        ("int main(void) { int x=0; for(;1;1/x) return 7; return 0; }", 7),
+        ("int main(void) { for(int i=(i=0); i<2; i=i+1) ; return 4; }", 4),
+        ("int main(void) { int x=0; for(x=5;0;x=9) x=8; return x; }", 5),
+        ("int main(void) { int x=0; for(int i=0;i<3;i=i+1) { int y=i+1; x=x+y; } return x; }", 6),
+        ("int main(void) { int i=0; for(;i<3;i=i+1) { while(1) break; if(i<2) continue; } return i; }", 3),
+        ("int main(void) {" + "for(;0;) "*127 + "; return 2;}", 2),
+    ]
+    for _ in range(12):
+        limit = random_source.randrange(1, 8)
+        skipped = random_source.randrange(limit)
+        expected = sum(i for i in range(limit) if i != skipped)
+        text = (f"int main(void) {{ int s=0; for(int i=0;i<{limit};i=i+1) "
+                f"{{ if(i=={skipped}) continue; s=s+i; }} return s; }}")
+        programs.append((text, expected))
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -279,7 +308,20 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { do ; while(0); continue; }",
         "int main(void) {" + "do "*128 + ";" + "while(0);"*128 + "}",
     ]
-    for keyword in ("if", "while", "bool", "true", "nullptr", "static", "struct"):
+    invalid += [
+        "int main(void) { for() ; }",
+        "int main(void) { for(;0) ; }",
+        "int main(void) { for(int i=0 i<2;i=i+1) ; }",
+        "int main(void) { for(int i=0; i<2; i=i+1) ; return i; }",
+        "int main(void) { for(int i=0; i<2; j=j+1) { int j=0; } }",
+        "int main(void) { for(;missing;) ; }",
+        "int main(void) { for(;0;missing) ; }",
+        "int main(void) { for(int i=0,j=0;0;) ; }",
+        "int main(void) { for(int i=0;i<2;i++) ; }",
+        "int main(void) { for(;0;) ; break; }",
+        "int main(void) {" + "for(;0;) "*128 + ";}",
+    ]
+    for keyword in ("if", "while", "do", "for", "break", "continue", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
         source.write_text(text)

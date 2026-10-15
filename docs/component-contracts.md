@@ -138,3 +138,13 @@ All composites share the 128 statement nesting limit. Loop declarations count
 toward 256 locals per function; nested block items remain globally capped at
 4096. Sema validates all syntax, including skipped paths. Fuzzing compiles but
 never runs arbitrary loop inputs; executable tests use bounded, defined cases.
+
+M07 integration notes: jump target pointers are semantic backlinks, not owned
+syntax children. Never recursively traverse target->body from a jump; this
+would create cycles. Loop codegen contexts store labels, not source-name
+bindings. For initializer declarations use the same local-initializer helper
+as block declarations; sema analyzes step in the header scope before body
+locals exist. Header declarations count toward the global local limit but are
+not C block items. All loop forms preserve explicit load nodes and nested
+logical-expression predecessor tracking. Unreachable condition/step blocks
+are intentionally well-formed and may be removed by QBE, not source sema.

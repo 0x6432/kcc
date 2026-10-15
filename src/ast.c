@@ -1,5 +1,7 @@
 #include "ast.h"
 
+#include <assert.h>
+
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token)
 {
@@ -211,6 +213,27 @@ struct ast_do_statement *ast_new_do(struct arena *arena,
 			.statement = { statement_do, location },
 			.body = body,
 			.condition = condition,
+		};
+	return node;
+}
+
+struct ast_for_statement *ast_new_for(struct arena *arena,
+	struct source_location location,
+	struct ast_local_declaration *initializer_declaration,
+	struct ast_expression *initializer_expression, struct ast_expression *condition,
+	struct ast_expression *step, struct ast_statement *body)
+{
+	struct ast_for_statement *node = arena_alloc(arena, sizeof(*node));
+
+	assert(!initializer_declaration || !initializer_expression);
+	if (node)
+		*node = (struct ast_for_statement) {
+			.statement = { statement_for, location },
+			.initializer_declaration = initializer_declaration,
+			.initializer_expression = initializer_expression,
+			.condition = condition,
+			.step = step,
+			.body = body,
 		};
 	return node;
 }

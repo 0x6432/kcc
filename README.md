@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M07B: do/while loops. A distinct do-statement node executes its body before the condition. Continue targets the condition; break and return bypass it. Body scopes do not leak into the condition. Sema still validates unreachable conditions. QBE emits well-formed condition/exit blocks conservatively without claiming whole-loop reachability inference.
+M07C: for loops and complete m07 iteration subset. A distinct for-statement node records optional initializer declaration/expression, condition and step. Initializer declarations are visible in condition/body/step but not after the loop. Continue executes the step before the condition; missing condition means unconditional iteration. All loop kinds preserve scoped local initialization, short-circuit conditions and nearest-loop jump targets.
 
 See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
@@ -45,28 +45,26 @@ has its own struct. Parser functions will document their BNF productions.
 cat > build/example.c <<'EOF'
 int main(void)
 {
-	int value = 3;
+	int sum = 0;
 
-	{
-		int value = 0;
-
-		value = value + 1;
+	for (int i = 0; i < 5; i = i + 1) {
+		if (i == 2)
+			continue;
+		sum = sum + i;
 	}
-	if (value > 1 && value < 4)
-		return 42;
-	return 0;
+	return sum;
 }
 EOF
 ./build/kcc build/example.c > build/example.ssa
 tools/qbe-1.2/qbe -t amd64_sysv -o build/example.s build/example.ssa
 cc build/example.s -o build/example
 ./build/example
-# Exit status: 42
+# Exit status: 8
 ```
 
 Supported: decimal int literals, int locals, simple assignment, arithmetic,
-comparisons, !/&&/||, nested blocks/shadowing, if/else, while, break/continue, do/while.
-Unsupported: for, function calls, comma/update/compound-assignment operators and preprocessing. This is not a complete C23 compiler.
+comparisons, !/&&/||, nested blocks/shadowing, if/else, while, break/continue, do/while, and for (including int initializer declarations).
+Unsupported: function calls/prototypes/parameters, comma/update/compound-assignment operators, other types and preprocessing. This is not a complete C23 compiler.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
 Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items

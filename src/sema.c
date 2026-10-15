@@ -292,6 +292,26 @@ static bool sema_do(struct sema *sema, struct ast_do_statement *node)
 	return success;
 }
 
+static bool sema_for(struct sema *sema, struct ast_for_statement *node)
+{
+	struct scope scope = { .parent = sema->scope };
+	bool success = true;
+
+	sema->scope = &scope;
+	if (node->initializer_declaration)
+		success = sema_local(sema, node->initializer_declaration);
+	if (success && node->initializer_expression)
+		success = sema_expression(sema, &node->initializer_expression, true);
+	if (success && node->condition)
+		success = sema_expression(sema, &node->condition, true);
+	if (success && node->step)
+		success = sema_expression(sema, &node->step, true);
+	if (success)
+		success = sema_loop_body(sema, &node->statement, node->body);
+	sema->scope = scope.parent;
+	return success;
+}
+
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
 	switch (statement->kind) {
@@ -309,6 +329,8 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	}
 	case statement_empty:
 		return true;
+	case statement_for:
+		return sema_for(sema, (struct ast_for_statement *)statement);
 	case statement_do:
 		return sema_do(sema, (struct ast_do_statement *)statement);
 	case statement_while:

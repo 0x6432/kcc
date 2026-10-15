@@ -13,7 +13,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | complete |
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
 | M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
-| M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | in progress |
+| M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | planned |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | planned |
@@ -183,3 +183,16 @@ Do/while loops. A distinct do-statement node executes its body before the condit
 Normal GCC, semantic-AST, ASan/UBSan and QBE/reference executable tests passed.
 Sanitized fuzzing: pipeline: 395480 inputs in 13 seconds. Remote push and CI are verified separately.
 Next: M07c: for headers with optional declaration/expression initialization, optional condition and step; scope the initializer across the loop only and send continue through the step.
+
+## M07C completion record
+
+For loops and complete M07 iteration subset. A distinct for-statement node records optional initializer declaration/expression, condition and step. Initializer declarations are visible in condition/body/step but not after the loop. Continue executes the step before the condition; missing condition means unconditional iteration. All loop kinds preserve scoped local initialization, short-circuit conditions and nearest-loop jump targets.
+
+Normal GCC, semantic-AST, ASan/UBSan and QBE/reference executable tests passed.
+Sanitized fuzzing: lexer: 316096 inputs in 21 seconds; pipeline: 533342 inputs in 21 seconds. Remote push and CI are verified separately.
+Next: M08: integer functions, declarations/prototypes, parameters, calls and recursion. Specify translation-unit function lists, signature compatibility, separate function/local scopes, entry parameter slots and QBE call ABI before implementation.
+
+M07c final verification passed with Clang as compiler/reference and GCC
+ASan/UBSan, including QBE executable tests. Twelve deterministic generated
+for-loop cases exercise continue/step sequencing. Structural tests assert
+header-vs-body-vs-outer bindings and nearest-loop jump targets.

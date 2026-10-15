@@ -455,6 +455,83 @@ static struct ast_do_statement *parse_do_statement(struct parser *parser)
 	return node;
 }
 
+static struct ast_block_item *parse_local_declaration(struct parser *parser);
+
+/* for-statement ::= "for" "(" for-initializer [ expression ] ";"
+ *                   [ expression ] ")" statement
+ * for-initializer ::= local-declaration | [ expression ] ";"
+ * local-declaration already consumes its semicolon; consume it exactly once.
+ */
+static struct ast_for_statement *parse_for_contents(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_local_declaration *initializer_declaration = NULL;
+	struct ast_expression *initializer_expression = NULL;
+	struct ast_expression *condition = NULL;
+	struct ast_expression *step = NULL;
+	struct ast_statement *body;
+	struct ast_for_statement *node;
+
+	if (!expect_token(parser, token_for, "expected 'for'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
+		return NULL;
+	if (lexer_peek(parser->lexer).kind == token_int) {
+		struct ast_block_item *item = parse_local_declaration(parser);
+
+		if (!item)
+			return NULL;
+		assert(item->kind == block_item_declaration);
+		initializer_declaration = (struct ast_local_declaration *)item;
+	} else {
+		if (lexer_peek(parser->lexer).kind != token_semicolon) {
+			initializer_expression = parse_expression(parser, 0);
+			if (!initializer_expression)
+				return NULL;
+		}
+		if (!expect_token(parser, token_semicolon,
+			"expected ';' after for initializer", NULL))
+			return NULL;
+	}
+	if (lexer_peek(parser->lexer).kind != token_semicolon) {
+		condition = parse_expression(parser, 0);
+		if (!condition)
+			return NULL;
+	}
+	if (!expect_token(parser, token_semicolon,
+		"expected ';' after for condition", NULL))
+		return NULL;
+	if (lexer_peek(parser->lexer).kind != token_right_paren) {
+		step = parse_expression(parser, 0);
+		if (!step)
+			return NULL;
+	}
+	if (!expect_token(parser, token_right_paren, "expected ')' after for step", NULL))
+		return NULL;
+	body = parse_statement(parser);
+	if (!body)
+		return NULL;
+	node = ast_new_for(parser->arena, keyword.location, initializer_declaration,
+		initializer_expression, condition, step, body);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
+}
+
+/* for-statement ::= "for" "(" for-initializer [ expression ] ";"
+ *                   [ expression ] ")" statement; guard nesting.
+ */
+static struct ast_for_statement *parse_for_statement(struct parser *parser)
+{
+	struct ast_for_statement *node;
+
+	if (!begin_nested_statement(parser))
+		return NULL;
+	node = parse_for_contents(parser);
+	parser->statement_nesting--;
+	return node;
+}
+
 /* break-statement ::= "break" ";" */
 static struct ast_statement *parse_break_statement(struct parser *parser)
 {
@@ -494,11 +571,19 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
 /* statement ::= return-statement | expression-statement | empty-statement
  *             | compound-statement | if-statement | while-statement
  *             | break-statement | continue-statement | do-statement
+ *             | for-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
 
+	if (token.kind == token_for) {
+		struct ast_for_statement *node = parse_for_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
 	if (token.kind == token_do) {
 		struct ast_do_statement *node = parse_do_statement(parser);
 

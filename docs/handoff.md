@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M07B: Do/while loops. Branch: development.
+M07C: For loops and complete M07 iteration subset. Branch: development.
 Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local configuration).
 Each M07 subcheckpoint is committed/pushed after testing. Find the latest exact
@@ -23,9 +23,9 @@ hash with git log -1 --oneline; this file avoids a circular reference to itself.
 
 ## Behavior and invariants
 
-A distinct do-statement node executes its body before the condition. Continue targets the condition; break and return bypass it. Body scopes do not leak into the condition. Sema still validates unreachable conditions. QBE emits well-formed condition/exit blocks conservatively without claiming whole-loop reachability inference.
+A distinct for-statement node records optional initializer declaration/expression, condition and step. Initializer declarations are visible in condition/body/step but not after the loop. Continue executes the step before the condition; missing condition means unconditional iteration. All loop kinds preserve scoped local initialization, short-circuit conditions and nearest-loop jump targets.
 
-Unsupported: for, function calls, comma/update/compound-assignment operators and preprocessing.
+Unsupported: function calls/prototypes/parameters, comma/update/compound-assignment operators, other types and preprocessing.
 One main(void), only int types. ++, comma expressions and compound assignments
 are not implemented: use i=i+1 for increments. No zero-fill of automatic locals;
 uninitialized reads may be UB. Limits: 16 MiB source, 128 expression/statement
@@ -36,7 +36,7 @@ fresh AST, inserts explicit load nodes and resolves names/loop jump targets.
 Scope/loop frames are stack-local and restore parents on errors; arena bindings
 retain declarations but never frame pointers. All declarations remain on the
 function-local slot list, distinct from scoped lookup. Don't recurse through
-initializer backlinks: self-initializers can create reference cycles.
+initializer or jump-target backlinks: they can create reference cycles.
 
 Codegen uses validated targets, not source name lookup. A terminated block can
 be return, break or continue; it does not mean all paths through a loop return.
@@ -53,10 +53,15 @@ need the external /data/tools/sanitizer-runtime links and LD_LIBRARY_PATH;
 local tests used -fno-pie and -no-pie. Ubuntu CI needs no workaround.
 
 Normal, semantic-AST, ASan/UBSan and QBE/runtime/reference tests passed.
-Sanitized fuzzing: pipeline: 395480 inputs in 13 seconds.
+Sanitized fuzzing: lexer: 316096 inputs in 21 seconds; pipeline: 533342 inputs in 21 seconds.
 Remote CI is checked after push; do not infer it from local passes.
 All executable loop cases are bounded; fuzzing never executes arbitrary inputs.
 
 ## Next milestone
 
-M07c: for headers with optional declaration/expression initialization, optional condition and step; scope the initializer across the loop only and send continue through the step.
+M08: integer functions, declarations/prototypes, parameters, calls and recursion. Specify translation-unit function lists, signature compatibility, separate function/local scopes, entry parameter slots and QBE call ABI before implementation.
+
+M08 planning note: parameter names and outermost function-body declarations
+must share the correct C scope (do not accidentally allow a parameter to be
+redeclared in a newly created outer-body child scope). Reset local/loop contexts
+per function and retain real source-order declaration/prototype visibility.

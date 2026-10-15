@@ -128,13 +128,25 @@ bounded, defined programs; fuzzing never executes user loops. Source remains
 limited to 16 MiB, expression/statement nesting to 128, block items to 4096
 and locals to 256 per function. Automatic locals are not zero-filled.
 
-## M07B (current)
+## M07B
 
 A distinct do-statement node executes its body before the condition. Continue targets the condition; break and return bypass it. Body scopes do not leak into the condition. Sema still validates unreachable conditions. QBE emits well-formed condition/exit blocks conservatively without claiming whole-loop reachability inference.
 
 One int main(void), int locals, existing arithmetic/assignment/comparisons and
 short-circuit logic, scoped blocks and supported control statements. Unsupported:
 for, function calls, comma/update/compound-assignment operators and preprocessing. There is no inference of nontermination or complete reachability
+analysis. Jump constraints are checked even in dead source. Runtime tests use
+bounded, defined programs; fuzzing never executes user loops. Source remains
+limited to 16 MiB, expression/statement nesting to 128, block items to 4096
+and locals to 256 per function. Automatic locals are not zero-filled.
+
+## M07C (current)
+
+A distinct for-statement node records optional initializer declaration/expression, condition and step. Initializer declarations are visible in condition/body/step but not after the loop. Continue executes the step before the condition; missing condition means unconditional iteration. All loop kinds preserve scoped local initialization, short-circuit conditions and nearest-loop jump targets.
+
+One int main(void), int locals, existing arithmetic/assignment/comparisons and
+short-circuit logic, scoped blocks and supported control statements. Unsupported:
+function calls/prototypes/parameters, comma/update/compound-assignment operators, other types and preprocessing. There is no inference of nontermination or complete reachability
 analysis. Jump constraints are checked even in dead source. Runtime tests use
 bounded, defined programs; fuzzing never executes user loops. Source remains
 limited to 16 MiB, expression/statement nesting to 128, block items to 4096
