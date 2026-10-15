@@ -2,29 +2,29 @@
 
 ## Current checkpoint
 
-M13a implementation: restricted object-pointer declarations, compatible values,
-fixed parameters/returns/casts and scalar truth. Concrete integer/pointer syntax
-nodes resolve/cache a separate semantic type graph. All baseline primitive
-integer types, ordinary byte characters and explicit conversions remain intact.
-On-demand tokens, concrete AST structs, RDP/Pratt and single-file stages remain.
+M13b implementation: concrete address/indirection ASTs and general object lvalue
+addresses, with pointer mutation, compatible values, fixed calls/returns/casts
+and scalar truth. Integer/pointer syntax resolves a separate semantic type graph.
+All baseline primitive integers, ordinary byte characters, explicit conversions,
+on-demand tokens, RDP/Pratt and single-file stages remain intact.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M12i 81db52e, run 38821949608, passed GCC/Clang
-normal/sanitizer and fuzz jobs. M12j 1735825 remote verification remains pending.
-M13a full normal GCC and both-host pointer ABI checks passed; bounded fuzz and
-isolated/remote status are recorded in the chronological entries below.
-M12f/g local matrices are complete; M12h/i/j isolated matrices are running.
-They use separate /data/validation-m12* snapshots and /data/tools logs. Verify
-actual logs before claiming completion; never use older-source passing evidence
-as proof for a newer checkpoint. Their lower CPU priority does not omit tests.
+Latest confirmed exact-source CI: M12j 1735825, run 38822838501, passed GCC/Clang
+normal/sanitizer and fuzz jobs. M13a b6ba02d remote verification remains pending.
+M13b full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+passed; full isolated/remote status is recorded chronologically below. Existing
+M12h/i/j isolated snapshots run independently; M13a queues under an external
+flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
+Check actual logs before claiming completion; older-source passing runs do not
+prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13b address-of/indirection with general lvalue-address lowering, designed
-before coding in m13-pointer-lvalues.md. M13a still lacks those expressions,
-pointer arithmetic/comparison, null constants and full declarators. C23 bool/
-true/false, floating, arrays/aggregates, headers/self-hosting and full C23 remain
-unfinished. Read current limitations, not an old chronological checkpoint alone.
+Next: M13c compatible pointer ==/!=, designed in m13-pointer-equality.md. Pointer
+arithmetic/relational comparison, null constants, void/functions/full declarators,
+arrays/strings and remaining C23 features stay unfinished. &*null cancellation
+is valid and tested using host-supplied null; actual invalid dereferences are
+never executed. Read current limitations, not old checkpoint entries alone.
 
 Working policy: continue across small milestones without asking for approval;
 stop only for a real blocker or user interruption. Preserve rigorous regression,
@@ -1151,3 +1151,31 @@ New isolated matrix jobs use an external flock queue and lower CPU priority;
 existing M12h/i/j snapshots finish independently. This scheduling changes no
 validation coverage. Logs/snapshots remain outside the repo and may disappear
 on a sandbox reset; remote exact-source CI is the persistent evidence.
+
+## M12j remote verification
+
+1735825 passed exact-source CI run 38822838501: GCC/Clang normal/sanitizer jobs
+and bounded fuzz completed successfully. Its isolated local GCC normal/sanitizer
+leg passed; Clang is running. M13a remote CI remains pending independently.
+
+## M13b tested source checkpoint
+
+Address-of and indirection now have concrete AST nodes, object-lvalue semantics
+and general address lowering. Address computation is separate from value loads;
+names copy their slot address and indirection evaluates its pointer operand once.
+Every scalar object width/sign uses the existing typed memory helpers. &*E never
+loads the pointee, preserving valid cancellation even for host-supplied null.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 53 new full-value host/model/
+QBE programs passed with GCC and Clang, covering every primitive integer object,
+pointer-to-pointer mutation, recursion, assignment conversion and once-only
+address/load/store operand evaluation. Both-direction eight-argument host memory
+mutation checks verify byte/halfword/word/long/bool/pointer writes, exact address
+identity and &*null cancellation. Typed AST tests and exact 63/64 dereference
+semantic-depth boundaries pass; syntax's separate 64-layer limit is unchanged.
+No invalid/dangling/uninitialized pointer was executed. ASan/UBSan bounded fuzz
+passed 20205 lexer and 59948 pipeline inputs (80153
+total), 26/26 seconds, without arbitrary generated C execution.
+Full isolated normal/sanitizer matrix and exact-source CI remain pending. M13c
+pointer equality is pre-designed; existing integer comparison semantics must
+remain unchanged and pointers must never enter integer signedness queries.

@@ -78,3 +78,12 @@ null-pointer ABI tests cover both linkage arrangements and eight mixed pointer
 arguments; type graphs/AST caches and exact 64/65 syntax bounds are tested.
 Address/dereference, arithmetic/comparison, null constants and full declarators
 remain later work. This is not complete pointer semantics or full C23.
+
+### M13b pointer lvalues
+
+Concrete address/indirection ASTs, general object lvalue addresses and referent
+loads/stores cover all implemented integer and pointer object types. 53 curated
+full-value programs cover mutation/recursion/once-only evaluation; both-direction
+eight-argument host ABI tests verify every memory width, address identity and
+valid null cancellation. Pointer arithmetic/comparison and null constants remain
+later increments; invalid pointer dereferences are never executed by tests.

@@ -943,3 +943,19 @@ _Bool only. Unary arithmetic and all binary arithmetic/comparison diagnose
 pointers before promotion/opcode helpers; !, logical and control flow accept
 scalar truth. Loads/assignment still address named local slots; M13b will add
 address/indirection ASTs and general lvalue-address lowering, not a slot shortcut.
+
+## M13b object lvalue addresses
+
+ast_address_expression analyzes its operand without value conversion; an object
+lvalue yields pointer-to-its-type. ast_indirection_expression analyzes a pointer
+value and yields a referent lvalue. Existing value contexts insert ast_load, with
+all new nodes/loads counted in semantic depth. Object pointers remain scalar
+referents; function/void/array type categories require explicit later changes.
+
+codegen_address returns an l temporary: copy a named %v slot address or evaluate
+an indirection operand once. General assignment and ast_load consume that address,
+selecting memory width/sign by the object type. Known initializer/parameter spills
+can still target their slots directly. Address computation never implicitly loads
+a pointee, preserving &*null cancellation and once-only side effects. Returned
+assignment values retain their earlier target-type conversion. No local-slot
+encoding is reused as a fake arbitrary memory address.

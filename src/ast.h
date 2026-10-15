@@ -11,6 +11,8 @@ struct function_symbol;
 enum expression_kind {
 	expression_integer,
 	expression_character,
+	expression_address,
+	expression_indirection,
 	expression_name,
 	expression_unary,
 	expression_binary,
@@ -53,6 +55,16 @@ struct ast_integer_expression {
 struct ast_character_expression {
 	struct ast_expression expression;
 	int64_t value;
+};
+
+struct ast_address_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
+};
+
+struct ast_indirection_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
 };
 
 struct ast_name_expression {
@@ -342,6 +354,10 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);
 struct ast_character_expression *ast_new_character(struct arena *arena,
 	struct token token);
+struct ast_address_expression *ast_new_address(struct arena *arena,
+	struct source_location location, struct ast_expression *operand);
+struct ast_indirection_expression *ast_new_indirection(struct arena *arena,
+	struct source_location location, struct ast_expression *operand);
 struct ast_name_expression *ast_new_name(struct arena *arena, struct token name);
 struct ast_unary_expression *ast_new_unary(struct arena *arena,
 	struct source_location location, enum unary_operator operation,

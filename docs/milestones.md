@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a restricted pointer declaration values implemented; verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a declarations and M13b address/indirection implemented; verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -920,3 +920,11 @@ values passed full normal GCC suites, AST/cache/compatibility checks, both-host
 live-object ABI/stack arguments, exact 64/65 type bounds, 19 rejection constraints
 and bounded sanitized fuzz. Full isolated/remote verification remains pending.
 M13b address/indirection and general lvalue-address lowering is pre-designed.
+
+M12j exact-source CI passed run 38822838501. Its isolated local GCC leg passed;
+Clang remains in progress. M13a verification remains separate and pending.
+
+M13b source checkpoint: concrete address/indirection and general lvalue-address
+lowering passed full normal GCC suites, 53 both-host/QBE full-value programs,
+both-direction memory ABI/null cancellation, typed AST/depth checks and bounded
+sanitized fuzz. Full isolated/remote checks remain pending. M13c is pre-designed.

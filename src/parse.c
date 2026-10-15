@@ -394,7 +394,38 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 	return &node->expression;
 }
 
+/* pointer-unary-expression ::= ("&" | "*") cast-expression */
+static struct ast_expression *parse_pointer_unary_expression(struct parser *parser)
+{
+	struct token token = preprocess_next(parser->preprocessor);
+	struct ast_expression *operand = parse_expression(parser, 30);
+	struct ast_expression *expression;
+
+	if (!operand)
+		return NULL;
+	if (operand->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, token.location,
+			"expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	if (token.kind == token_ampersand) {
+		struct ast_address_expression *node = ast_new_address(parser->arena, token.location, operand);
+
+		expression = node ? &node->expression : NULL;
+	} else {
+		struct ast_indirection_expression *node;
+
+		assert(token.kind == token_star);
+		node = ast_new_indirection(parser->arena, token.location, operand);
+		expression = node ? &node->expression : NULL;
+	}
+	if (!expression)
+		allocation_error(parser, token.location);
+	return expression;
+}
+
 /* prefix-expression ::= postfix-expression | parenthesized-or-cast
+ *                     | pointer-unary-expression
  *                     | ("+" | "-" | "!" | "~") cast-expression
  * cast-expression ::= prefix-expression (casts are selected after an opening paren)
  */
@@ -407,6 +438,8 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 
 	if (token.kind == token_left_paren)
 		return parse_parenthesized_or_cast(parser);
+	if (token.kind == token_ampersand || token.kind == token_star)
+		return parse_pointer_unary_expression(parser);
 	if (token.kind != token_plus && token.kind != token_minus &&
 		token.kind != token_bang && token.kind != token_tilde)
 		return parse_postfix_expression(parser);

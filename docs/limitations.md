@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13a. The chronological entries below describe what each
+Current milestone: M13b. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -829,3 +829,24 @@ declarator support yet. Even zero is not silently accepted as a pointer; null
 constant semantics need their own increment. Host-driven tests supply real
 live objects and valid host-created null pointers to exercise this subset.
 Uninitialized/dangling pointers are never executed to fabricate test coverage.
+
+## M13b
+
+Address-of object lvalues and indirection through implemented object pointers
+are supported. Dereference yields a modifiable lvalue; value contexts insert
+explicit loads. Assignment through pointers converts to the referent type first,
+including signed/unsigned byte/halfword storage and 0/1 boolean normalization.
+Pointer-to-pointer objects can be loaded/assigned indirectly.
+
+General lvalue-address lowering separates address computation from memory loads.
+&*E evaluates E once without a pointee load, even for a host-supplied null pointer.
+Actual dereference of null/dangling/uninitialized pointers is still undefined,
+never executed by tests. Address-of rvalues and indirection of integers diagnose.
+Operand evaluation uses a C-permitted order; unspecified relative order is not a
+new promise. Function designators/pointers and qualifiers remain unsupported.
+
+Typed-expression limits include inserted dereference loads: a 63-layer parameter
+with 63 dereferences reaches depth 128; 64 exceeds it despite legal type syntax.
+The separate declaration/cast pointer-syntax limit stays 64 layers. Inferred
+address types may extend a declared type; expression depth bounds that growth.
+Pointer comparison/arithmetic, null constants and arrays/strings remain later work.

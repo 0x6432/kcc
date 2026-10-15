@@ -131,19 +131,33 @@ static const char *binary_instruction(enum binary_operator operation, const stru
 	return NULL;
 }
 
-/* Only names denote objects in this subset; sema supplies the declaration. */
-static size_t codegen_local_slot(const struct ast_expression *expression)
-{
-	const struct ast_name_expression *name;
-
-	assert(expression->kind == expression_name && expression->is_lvalue);
-	name = (const struct ast_name_expression *)expression;
-	assert(name->declaration && type_is_scalar(name->declaration->type));
-	return name->declaration->slot;
-}
-
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression);
+
+/* Object lvalues produce addresses; value-context loads are separate nodes. */
+static size_t codegen_address(struct codegen *codegen, const struct ast_expression *expression)
+{
+	assert(expression->is_lvalue);
+	switch (expression->kind) {
+	case expression_name: {
+		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
+		size_t result = codegen->next_temporary++;
+
+		assert(name->declaration && type_is_scalar(name->declaration->type));
+		emit(codegen, "\t%%t%zu =l copy %%v%zu\n", result, name->declaration->slot);
+		return result;
+	}
+	case expression_indirection: {
+		const struct ast_indirection_expression *node =
+			(const struct ast_indirection_expression *)expression;
+
+		return codegen_expression(codegen, node->operand);
+	}
+	default:
+		assert(0 && "unsupported lvalue address");
+		return 0;
+	}
+}
 
 /* Value conversion tests the whole source, unlike narrow ABI normalization. */
 static size_t codegen_truth_value(struct codegen *codegen, size_t value,
@@ -247,6 +261,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, ")\n");
 		return codegen_canonicalize(codegen, result, expression->type);
 	}
+	case expression_address: {
+		const struct ast_address_expression *node = (const struct ast_address_expression *)expression;
+
+		return codegen_address(codegen, node->operand);
+	}
 	case expression_character: {
 		const struct ast_character_expression *node =
 			(const struct ast_character_expression *)expression;
@@ -322,23 +341,24 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_load: {
 		const struct ast_load_expression *node =
 			(const struct ast_load_expression *)expression;
-		size_t slot = codegen_local_slot(node->operand);
+		size_t address = codegen_address(codegen, node->operand);
 
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =%c %s %%v%zu\n", temporary,
-			qbe_type(expression->type), qbe_load_instruction(expression->type), slot);
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
+			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
 		return temporary;
 	}
 	case expression_assignment: {
 		const struct ast_assignment_expression *node =
 			(const struct ast_assignment_expression *)expression;
 		size_t value = codegen_expression(codegen, node->right);
-		size_t slot = codegen_local_slot(node->left);
+		size_t address = codegen_address(codegen, node->left);
 
-		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(node->left->type), value, slot);
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 		return value;
 	}
 	case expression_name:
+	case expression_indirection:
 		assert(0 && "missing lvalue-to-rvalue conversion");
 		return 0;
 	}

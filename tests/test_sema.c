@@ -954,8 +954,54 @@ static void test_pointer_type_syntax_and_values(void)
 	source_destroy(&source);
 }
 
+static void test_pointer_lvalue_tree(void)
+{
+	const char *text = "int main(void) { int x=1; int *p=&x; *p=42; return *p; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *p;
+	struct ast_address_expression *address;
+	struct ast_statement_item *item;
+	struct ast_assignment_expression *assignment;
+	struct ast_indirection_expression *indirection;
+	struct ast_load_expression *load;
+
+	assert(source_from_bytes(&source, "pointer-lvalue.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	x = (struct ast_local_declaration *)first_function(unit)->body->items;
+	p = (struct ast_local_declaration *)x->item.next;
+	address = (struct ast_address_expression *)p->initializer;
+	assert(address->expression.kind == expression_address && !address->expression.is_lvalue);
+	assert(address->operand->kind == expression_name && address->operand->is_lvalue);
+	assert(((struct pointer_type *)address->expression.type)->referent == &type_int);
+	assert(type_compatible(address->expression.type, p->type));
+	item = (struct ast_statement_item *)p->item.next;
+	assignment = (struct ast_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(assignment->expression.kind == expression_assignment && !assignment->expression.is_lvalue);
+	indirection = (struct ast_indirection_expression *)assignment->left;
+	assert(indirection->expression.kind == expression_indirection && indirection->expression.is_lvalue);
+	assert(indirection->expression.type == &type_int);
+	assert(indirection->operand->kind == expression_load && indirection->operand->type->kind == type_kind_pointer);
+	item = (struct ast_statement_item *)item->item.next;
+	load = (struct ast_load_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(load->expression.kind == expression_load && load->expression.type == &type_int);
+	assert(load->expression.depth == 4 && !load->expression.is_lvalue);
+	assert(load->operand->kind == expression_indirection && load->operand->is_lvalue);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_pointer_lvalue_tree();
 	test_pointer_type_syntax_and_values();
 	test_bool_type_and_conversions();
 	test_short_types_and_promotions();

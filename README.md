@@ -6,17 +6,16 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13a: integer-object pointer types now support declarations, compatible values,
-fixed parameters/returns, casts and scalar truth. Concrete integer/pointer type
-syntax resolves to a separate semantic type graph. Object pointers use the LP64
-QBE long ABI; address-of, dereference, pointer arithmetic, comparisons, null
-constants and full declarators remain later increments. All baseline integer
-primitive types, ordinary byte characters, explicit
-promotions/conversions/casts and canonical byte/halfword ABIs remain supported.
-Four-base integer literals, C23 separators and U/L/LL suffixes follow target
-candidate rules. C23 bool/true/ false spelling and full C23 are unfinished.
-Includes retain bounded explicit search and direct/computed quoted/basic angle
-support.
+M13b: object-pointer declarations now have address-of and indirection, with
+concrete AST nodes and general lvalue-address lowering. Integer/pointer objects
+support loads, mutations, compatible values, fixed calls/returns/casts and
+scalar truth. Null cancellation &*p evaluates p once without touching its
+pointee. All baseline primitive integer types, ordinary byte characters,
+explicit promotions/conversions and canonical byte/halfword ABIs remain
+supported. Pointer arithmetic/comparison, null constants and full declarators
+remain later increments. C23 bool/true/false spelling and full C23 are
+unfinished. Includes retain bounded explicit search and direct/computed
+quoted/basic angle support.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior
 macro operators. Repeatable -I dir/-Idir adds ordered explicit search paths; quoted

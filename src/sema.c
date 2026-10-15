@@ -237,6 +237,41 @@ static bool sema_expression(struct sema *sema,
 		}
 		break;
 	}
+	case expression_address: {
+		struct ast_address_expression *node = (struct ast_address_expression *)expression;
+		struct pointer_type *pointer;
+
+		if (!sema_expression(sema, &node->operand, false))
+			return false;
+		if (!node->operand->is_lvalue) {
+			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue");
+			return false;
+		}
+		pointer = type_new_pointer(sema->arena, node->operand->type);
+		if (!pointer) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating address type");
+			return false;
+		}
+		result_type = &pointer->type;
+		expression->depth = node->operand->depth + 1;
+		break;
+	}
+	case expression_indirection: {
+		struct ast_indirection_expression *node = (struct ast_indirection_expression *)expression;
+		const struct pointer_type *pointer;
+
+		if (!sema_expression(sema, &node->operand, true))
+			return false;
+		if (node->operand->type->kind != type_kind_pointer) {
+			diagnostic_error(sema->diagnostics, expression->location, "indirection requires an object pointer");
+			return false;
+		}
+		pointer = (const struct pointer_type *)node->operand->type;
+		result_type = pointer->referent;
+		expression->is_lvalue = true;
+		expression->depth = node->operand->depth + 1;
+		break;
+	}
 	case expression_character:
 		break;
 	case expression_integer: {

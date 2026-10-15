@@ -65,6 +65,40 @@ struct ast_character_expression *ast_new_character(struct arena *arena,
 	return node;
 }
 
+struct ast_address_expression *ast_new_address(struct arena *arena,
+	struct source_location location, struct ast_expression *operand)
+{
+	struct ast_address_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_address_expression) {
+			.expression = {
+				.kind = expression_address,
+				.location = location,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
+		};
+	return node;
+}
+
+struct ast_indirection_expression *ast_new_indirection(struct arena *arena,
+	struct source_location location, struct ast_expression *operand)
+{
+	struct ast_indirection_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_indirection_expression) {
+			.expression = {
+				.kind = expression_indirection,
+				.location = location,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
+		};
+	return node;
+}
+
 struct ast_name_expression *ast_new_name(struct arena *arena, struct token name)
 {
 	struct ast_name_expression *node = arena_alloc(arena, sizeof(*node));
