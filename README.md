@@ -6,13 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11l: direct and macro-computed quoted includes load nested headers, share macro bindings,
+M11m: direct/computed quoted and basic angle includes load nested headers, share macro bindings,
 and retain child source buffers for parsing and diagnostics. File/conditional
 boundaries are explicit; loading and retained bytes have documented bounds.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior
-macro operators. Angle includes, search paths, general encodings
-and full C23 remain unfinished. See `docs/m11-quoted-includes.md`,
+macro operators. Repeatable -I dir/-Idir adds ordered explicit search paths; quoted
+names first search beside the including source. No default system paths or
+provided headers exist. General encodings and full C23 remain unfinished. See `docs/m11-quoted-includes.md`,
 `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
 ## Build and test
@@ -23,6 +24,8 @@ Requires a C11 compiler, Make and Python 3 for tests.
 make
 make test
 ./build/kcc --help
+# Explicit include directories (no default system headers):
+# ./build/kcc -I include -Ivendor/include example.c
 ./build/kcc --tokens tests/corpus/lex/basic.c
 ./build/kcc --pp-tokens tests/corpus/lex/pp-tokens.c
 make fuzz-lex FUZZ_SECONDS=10
@@ -78,7 +81,7 @@ int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: C string expressions, angle includes and search paths,
+Unsupported: C string expressions, general header-name encoding/system headers,
 full conditional expressions, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.

@@ -819,3 +819,12 @@ corrected for conditional expression collection). Expanded format recovery must
 not drain input again: the next source line is already available for normal
 conditional/lexical processing. Raw lexical failures take precedence over
 emitting an additional expanded-header format diagnostic.
+
+M11m: preprocess_set_include_directories borrows up to 32 strings/list entries,
+configured before input; overflow returns false without changing configuration.
+Driver argv owns these strings through compilation. Quote resolution tries the
+directive source directory then -I; angle resolution only -I, unless absolute.
+Each failed loader candidate is destroyed before retry, and all successful
+sources retain existing compilation lifetime. Direct angles bypass expansion;
+computed operands remain isolated. Parser/sema/codegen are unchanged. Pipeline
+fuzz search uses only memory-backed missing/fallback directories, never disk.

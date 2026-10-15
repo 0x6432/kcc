@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11l. The chronological entries below describe what each
+Current milestone: M11m. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -610,3 +610,27 @@ loader. Directive tokens keep individual invocation diagnostics instead of all
 pointing at #. Malformed raw quoted text now produces its lexical diagnostic
 without an extra obsolete unsupported-directive error; this intentional change
 is regression-tested separately from expansion-format errors.
+
+## M11m
+
+Up to 32 explicit -I directories (attached/separate options) are searched in
+order. Quoted names try the including source directory first; angle names use
+only configured directories. Absolute names bypass both lists. Empty directory
+strings mean cwd, and resolution never changes cwd. No default system include
+paths, compiler-provided headers, -iquote/-isystem or environment variables yet.
+One logical include uses one of the existing 128 attempts, with at most 33
+loader candidates. Failed candidates are destroyed before retrying; preparation
+and retained-byte failures after successful loading are fatal. The loader's bool
+interface does not distinguish missing files from other open/read failures.
+
+Direct angles bypass macro expansion; computed names rescan in isolation.
+Angle paths currently allow only ASCII letters/digits/_./-+ with no internal
+whitespace/comments, backslashes, quotes or other punctuation. This explicit
+subset is not contextual header-name lexing. Direct quoted tokens retain the
+M11l trailing-empty-macro extension pending a final header-context audit.
+All prior source-lifetime, macro EOF, conditional-base and diagnostic contracts
+remain. The directory list and strings are borrowed until destruction.
+
+M11l's first sanitizer matrix exposed a GCC format-overflow warning in a test
+fixture builder, not a compiler-source failure. Repair 37857c4 uses explicit
+bounded writes; original 0ffd06c verification is not claimed successful.

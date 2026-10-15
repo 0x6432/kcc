@@ -36,3 +36,10 @@ computed names, unsupported angle spelling, source diagnostics and all newline
 policies. Compare driver/oracle with GCC/Clang using the same explicit directories,
 run QBE/reference cases, and add memory-only search/failure fuzz coverage. Use
 full normal/sanitizer snapshot tests; do not imply libc/header conformance.
+
+Standards audit before coding: an operand beginning literally with < is a direct
+header form; identifiers inside it must NOT macro-expand. Collect that bounded
+raw line using the same spelling validation, but only rescan computed operands.
+Add a collision test (#define local wrong; #include <local.h>) against both hosts.
+Quoted direct forms retain the existing documented token-rescan extension for
+trailing empty macros until a separate contextual-header conformance audit.

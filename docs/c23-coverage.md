@@ -12,7 +12,7 @@ of complete ISO conformance.
 | Declarations/types | subset (M08c) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (M08c) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
-| Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted include subset; M11l) | M09-M11, M25 |
+| Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
 | Object layout and ABI | subset (integer calls, separate-object GCC/Clang tests, M08c) | M12-M17, M20-M22, M24 |
 | C23 additions | preprocessing subset (warning, elifdef/elifndef, optional macros, binary/separator literals); runtime keyword/type additions absent | M10-M11, M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |

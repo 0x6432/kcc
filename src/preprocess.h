@@ -22,6 +22,7 @@
 #define preprocess_include_bytes_limit (64 * 1024 * 1024)
 #define preprocess_include_path_limit 4096
 #define preprocess_header_token_limit 1024
+#define preprocess_include_directory_limit 32
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 
@@ -88,6 +89,8 @@ struct preprocessor {
 	struct include_source *include_sources;
 	bool (*include_loader)(void *context, struct source *source, const char *path);
 	void *include_context;
+	const char *const *include_directories;
+	size_t include_directory_count;
 	size_t include_depth;
 	size_t include_count;
 	size_t include_bytes;
@@ -118,6 +121,9 @@ void preprocess_init(struct preprocessor *preprocessor, const struct source *sou
  */
 void preprocess_set_include_loader(struct preprocessor *preprocessor,
 	bool (*loader)(void *context, struct source *source, const char *path), void *context);
+/* Borrow directory strings/list until destruction; configure before reading. */
+bool preprocess_set_include_directories(struct preprocessor *preprocessor,
+	const char *const *directories, size_t count);
 void preprocess_destroy(struct preprocessor *preprocessor);
 /* Expanded pp reads share the cursor. Do not mix with pending language peek.
  * Spelling can belong to an arena-owned generated view, not the input source.

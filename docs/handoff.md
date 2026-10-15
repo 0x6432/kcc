@@ -774,3 +774,34 @@ Full isolated M11l normal/sanitizer matrix and exact-source CI remain pending.
 M11k exact-source CI passed run 38810635063; its local GCC matrix passed, while
 its local Clang matrix is still running. M11m bounded -I/angle search is designed
 in m11-include-search.md before implementation. No full C23 claim is made.
+
+## M11k final verification / M11l validation repair
+
+326bcc3 passed both isolated GCC/Clang normal + ASan/UBSan matrices with all
+unit/CLI/oracle and QBE/reference/ABI checks. Exact-source CI passed run
+38810635063. M11k is complete within its documented scope.
+
+M11l 0ffd06c normal/runtime and fuzz tests passed, but its isolated GCC sanitizer
+build failed -Werror=format-overflow in test_computed_include_operands. CI run
+38812216340 likewise failed the GCC sanitizer step (fuzz passed, Clang cancelled).
+Repair 37857c4 replaces the fixture's sprintf loop with explicitly bounded byte
+writes and is pushed. Its isolated full matrix and exact-source CI are pending;
+do not claim the original source passed or conflate normal/fuzz with full CI.
+
+## M11m tested source checkpoint
+
+Bounded explicit include search and direct/computed basic angle names are
+implemented. Direct angle identifiers never expand, while computed operands
+retain isolated rescanning. One logical include can try 33 candidates; failed
+candidate buffers are destroyed, and successful source ownership is unchanged.
+The driver and oracle accept ordered attached/separate -I options in all modes.
+
+Full normal GCC regressions, QBE/reference/ABI, targeted GCC ASan/UBSan units,
+and 39 new header streams with each of GCC/Clang passed. All 39 new QBE/host
+programs passed. Tests include quote/angle ordering, nested search, filename
+spaces, direct-macro collisions, absolute and empty-directory behavior, 32/33
+directories, actual 33-candidate cleanup, lexical subset errors and diagnostics.
+Sanitized fuzzing passed 25488 lexer and 92079 memory-only pipeline inputs
+(117567 total), 26 seconds each, without executing arbitrary generated programs.
+Full isolated M11m host/sanitizer matrix and exact-source CI are pending.
+M12a signed-int operators are designed in m12-integer-operators.md before coding.

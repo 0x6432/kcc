@@ -9,6 +9,12 @@ struct include_source {
 	struct include_source *next;
 };
 
+struct include_name {
+	char path[preprocess_include_path_limit];
+	struct pp_token invocation;
+	bool angled;
+};
+
 struct macro_token {
 	struct pp_token token;
 	struct macro_token *next;
@@ -721,89 +727,111 @@ static bool read_diagnostic_directive(struct preprocessor *preprocessor,
 }
 
 static bool expand_include_operand(struct preprocessor *preprocessor,
-	struct pp_token marker, struct pp_token *header, struct token *error);
+	struct pp_token marker, struct include_name *header, struct token *error);
+
+/* Join bounded path slices without changing the process working directory. */
+static bool include_path(struct preprocessor *preprocessor, struct include_name *name,
+	const char *directory, size_t directory_length, char *path, struct token *error)
+{
+	size_t length = strlen(name->path);
+	bool slash = directory_length && directory[directory_length - 1] != '/';
+
+	if (directory_length >= preprocess_include_path_limit ||
+		length + (size_t)slash >= preprocess_include_path_limit - directory_length) {
+		*error = stop_preprocessing(preprocessor, name->invocation, "include path limit exceeded");
+		return false;
+	}
+	memcpy(path, directory, directory_length);
+	if (slash)
+		path[directory_length++] = '/';
+	memcpy(path + directory_length, name->path, length + 1);
+	return true;
+}
+
+/* Quote: including directory, then configured directories. Angle: configured
+ * directories only. Absolute names have one candidate in either form.
+ */
+static bool load_include_source(struct preprocessor *preprocessor,
+	struct pp_token marker, struct include_name *name, struct source *source,
+	struct token *error)
+{
+	const char *parent = marker.location.source->name;
+	bool absolute = name->path[0] == '/';
+	size_t candidates = absolute ? 1 : preprocessor->include_directory_count + !name->angled;
+	char path[preprocess_include_path_limit];
+
+	for (size_t i = 0; i < candidates; i++) {
+		const char *directory = "";
+		size_t length = 0;
+
+		if (!absolute && !name->angled && i == 0) {
+			const char *slash = strrchr(parent, '/');
+
+			directory = parent;
+			if (slash)
+				length = (size_t)(slash - parent) + 1;
+		} else if (!absolute) {
+			directory = preprocessor->include_directories[i - !name->angled];
+			length = strlen(directory);
+		}
+		if (!include_path(preprocessor, name, directory, length, path, error))
+			return false;
+		if (preprocessor->include_loader(preprocessor->include_context, source, path))
+			return true;
+		source_destroy(source);
+	}
+	{
+		char message[preprocess_include_path_limit + 64];
+
+		snprintf(message, sizeof(message), "cannot load %s include '%s'",
+			name->angled ? "angle" : "quoted", name->path);
+		diagnostic_error(preprocessor->diagnostics, name->invocation.expansion_location, message);
+	}
+	*error = invalid_token(marker);
+	return false;
+}
 
 /* include-directive = '#' 'include' include-operand
- * The isolated operand must expand to one quoted name; no escape decoding.
+ * Resolve a validated direct/computed name, retaining every successful source.
  */
 static bool read_include_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, struct token *error)
 {
-	struct pp_token name;
-	const struct source *parent = marker.location.source;
-	const unsigned char *text;
+	struct include_name name;
 	struct include_source *child;
-	size_t directory_length = 0;
-	size_t name_length;
-	char path[preprocess_include_path_limit];
 
 	if (!expand_include_operand(preprocessor, marker, &name, error))
 		return false;
-	text = name.location.source->data + name.location.offset;
-	if (name.kind != pp_string || name.length < 3 || text[0] != '"') {
-		diagnostic_error(preprocessor->diagnostics, name.expansion_location,
-			"include operand must expand to one nonempty unprefixed quoted name");
-		*error = invalid_token(marker);
-		return false;
-	}
-	name_length = name.length - 2;
-	for (size_t i = 1; i <= name_length; i++)
-		if (text[i] == '\\') {
-			diagnostic_error(preprocessor->diagnostics, name.expansion_location,
-				"backslashes in quoted include names are not supported yet");
-			*error = invalid_token(marker);
-			return false;
-		}
-	if (text[1] != '/') {
-		const char *slash = strrchr(parent->name, '/');
-
-		if (slash)
-			directory_length = (size_t)(slash - parent->name) + 1;
-	}
-	if (directory_length >= sizeof(path) || name_length >= sizeof(path) - directory_length) {
-		*error = stop_preprocessing(preprocessor, name, "quoted include path limit exceeded");
-		return false;
-	}
-	memcpy(path, parent->name, directory_length);
-	memcpy(path + directory_length, text + 1, name_length);
-	path[directory_length + name_length] = 0;
 	if (!preprocessor->include_loader) {
-		diagnostic_error(preprocessor->diagnostics, name.expansion_location,
-			"quoted includes require a configured source loader");
+		diagnostic_error(preprocessor->diagnostics, name.invocation.expansion_location,
+			"includes require a configured source loader");
 		*error = invalid_token(marker);
 		return false;
 	}
 	if (preprocessor->include_depth == preprocess_include_depth_limit) {
-		*error = stop_preprocessing(preprocessor, name, "include nesting limit (32) exceeded");
+		*error = stop_preprocessing(preprocessor, name.invocation, "include nesting limit (32) exceeded");
 		return false;
 	}
 	if (preprocessor->include_count == preprocess_include_count_limit) {
-		*error = stop_preprocessing(preprocessor, name, "include attempt limit (128) exceeded");
+		*error = stop_preprocessing(preprocessor, name.invocation, "include attempt limit (128) exceeded");
 		return false;
 	}
-	child = allocate_auxiliary(preprocessor, 1, sizeof(*child), name, error);
+	child = allocate_auxiliary(preprocessor, 1, sizeof(*child), name.invocation, error);
 	if (!child)
 		return false;
 	*child = (struct include_source) { 0 };
 	preprocessor->include_count++;
-	if (!preprocessor->include_loader(preprocessor->include_context, &child->source, path)) {
-		char message[preprocess_include_path_limit + 64];
-
-		snprintf(message, sizeof(message), "cannot load quoted include '%s'", path);
-		diagnostic_error(preprocessor->diagnostics, name.expansion_location, message);
-		source_destroy(&child->source);
-		*error = invalid_token(marker);
+	if (!load_include_source(preprocessor, marker, &name, &child->source, error))
 		return false;
-	}
 	if (child->source.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
 		source_destroy(&child->source);
-		*error = stop_preprocessing(preprocessor, name, "include input byte limit exceeded");
+		*error = stop_preprocessing(preprocessor, name.invocation, "include input byte limit exceeded");
 		return false;
 	}
 	preprocessor->include_bytes += child->source.length;
 	if (!source_prepare(&child->source)) {
 		source_destroy(&child->source);
-		*error = stop_preprocessing(preprocessor, name, "cannot prepare quoted include source");
+		*error = stop_preprocessing(preprocessor, name.invocation, "cannot prepare include source");
 		return false;
 	}
 	child->next = preprocessor->include_sources;
@@ -2474,20 +2502,138 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 	return true;
 }
 
+/* header-name = string-literal | '<' path-token+ '>'
+ * The angle subset has no internal whitespace and uses only ASCII path bytes.
+ */
+static bool append_include_piece(struct preprocessor *preprocessor,
+	struct include_name *name, struct pp_token piece, size_t *length, struct token *error)
+{
+	const unsigned char *text = piece.location.source->data + piece.location.offset;
+
+	if (piece.leading_space) {
+		diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
+			"whitespace inside angle include names is not supported yet");
+		*error = invalid_token(name->invocation);
+		return false;
+	}
+	for (size_t i = 0; i < piece.length; i++) {
+		unsigned char c = text[i];
+
+		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_' || c == '.' || c == '/' ||
+			c == '-' || c == '+')) {
+			diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
+				"unsupported byte in angle include name");
+			*error = invalid_token(name->invocation);
+			return false;
+		}
+	}
+	if (piece.length >= sizeof(name->path) - *length) {
+		*error = stop_preprocessing(preprocessor, piece, "include path limit exceeded");
+		return false;
+	}
+	memcpy(name->path + *length, text, piece.length);
+	*length += piece.length;
+	name->path[*length] = 0;
+	return true;
+}
+
+/* The same bounded cursor reads raw direct-angle or rescanned computed input. */
+static bool read_include_token(struct preprocessor *preprocessor,
+	struct expansion_cursor *cursor, bool direct, struct rescan_token *token, struct token *error)
+{
+	if (!direct)
+		return read_expanded_token(preprocessor, cursor, token, error);
+	if (!cursor->input) {
+		*token = cursor_end(cursor);
+		return true;
+	}
+	*token = cursor->input->input;
+	cursor->input = cursor->input->next;
+	return true;
+}
+
+static bool read_include_name(struct preprocessor *preprocessor,
+	struct expansion_cursor *cursor, bool direct, struct include_name *header, struct token *error)
+{
+	struct rescan_token input;
+	struct pp_token first;
+	size_t length = 0;
+
+	if (!read_include_token(preprocessor, cursor, direct, &input, error))
+		return false;
+	first = input.token;
+	*header = (struct include_name) { .invocation = first };
+	if (first.kind == pp_punctuator && pp_spelling_is(first, "<")) {
+		header->angled = true;
+		for (;;) {
+			if (!read_include_token(preprocessor, cursor, direct, &input, error))
+				return false;
+			if (input.token.kind == pp_eof) {
+				diagnostic_error(preprocessor->diagnostics, first.expansion_location,
+					"expected '>' after angle include name");
+				*error = invalid_token(first);
+				return false;
+			}
+			if (input.token.kind == pp_punctuator && pp_spelling_is(input.token, ">")) {
+				if (!input.token.leading_space && length)
+					break;
+				diagnostic_error(preprocessor->diagnostics, input.token.expansion_location,
+					"angle include name must be nonempty with no internal whitespace");
+				*error = invalid_token(first);
+				return false;
+			}
+			if (!append_include_piece(preprocessor, header, input.token, &length, error))
+				return false;
+		}
+	} else {
+		const unsigned char *text = first.location.source->data + first.location.offset;
+
+		if (first.kind != pp_string || first.length < 3 || text[0] != '"') {
+			diagnostic_error(preprocessor->diagnostics, first.expansion_location,
+				"include operand must expand to one nonempty unprefixed quoted name or angle name");
+			*error = invalid_token(first);
+			return false;
+		}
+		length = first.length - 2;
+		if (length >= sizeof(header->path)) {
+			*error = stop_preprocessing(preprocessor, first, "include path limit exceeded");
+			return false;
+		}
+		for (size_t i = 1; i <= length; i++)
+			if (text[i] == '\\') {
+				diagnostic_error(preprocessor->diagnostics, first.expansion_location,
+					"backslashes in quoted include names are not supported yet");
+				*error = invalid_token(first);
+				return false;
+			}
+		memcpy(header->path, text + 1, length);
+		header->path[length] = 0;
+	}
+	if (!read_include_token(preprocessor, cursor, direct, &input, error))
+		return false;
+	if (input.token.kind != pp_eof) {
+		diagnostic_error(preprocessor->diagnostics, input.token.expansion_location,
+			"expected exactly one include name after macro expansion");
+		*error = invalid_token(first);
+		return false;
+	}
+	return true;
+}
+
 /* include-operand = pp-tokens newline
- * Collect one raw line, then rescan in isolation. Validation must not drain
- * source again: the next directive or C token already follows this operand.
+ * Collect one raw line. Direct angles bypass expansion; other operands rescan
+ * in isolation. Validation must never drain the following source line.
  */
 static bool expand_include_operand(struct preprocessor *preprocessor,
-	struct pp_token marker, struct pp_token *header, struct token *error)
+	struct pp_token marker, struct include_name *header, struct token *error)
 {
 	struct argument_token *head = NULL;
 	struct argument_token **tail = &head;
 	struct expansion_cursor *cursor;
-	struct rescan_token first;
-	struct rescan_token end;
 	struct pp_token token;
 	size_t count = 0;
+	bool direct = false;
 	bool success;
 
 	for (;;) {
@@ -2507,7 +2653,9 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 				"include operand token limit (1024) exceeded");
 			return false;
 		}
-		if (is_variadic_identifier(token)) {
+		if (count == 1)
+			direct = token.kind == pp_punctuator && pp_spelling_is(token, "<");
+		if (!direct && is_variadic_identifier(token)) {
 			*error = reject_directive(preprocessor, marker, token,
 				"variadic identifiers require a variadic macro replacement list");
 			return false;
@@ -2526,19 +2674,11 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 	}
 	cursor->input = head;
 	cursor->end = token.location;
-	success = read_expanded_token(preprocessor, cursor, &first, error) &&
-		read_expanded_token(preprocessor, cursor, &end, error);
+	success = read_include_name(preprocessor, cursor, direct, header, error);
 	free(cursor);
-	if (!success)
-		return false;
-	if (end.token.kind != pp_eof) {
-		diagnostic_error(preprocessor->diagnostics, end.token.expansion_location,
-			"expected exactly one quoted include name after macro expansion");
+	if (!success && !preprocessor->stopped)
 		*error = invalid_token(marker);
-		return false;
-	}
-	*header = first.token;
-	return true;
+	return success;
 }
 
 struct pp_token preprocess_next_pp(struct preprocessor *preprocessor)
@@ -2581,6 +2721,17 @@ void preprocess_set_include_loader(struct preprocessor *preprocessor,
 	assert(!preprocessor->input.offset && !preprocessor->has_lookahead);
 	preprocessor->include_loader = loader;
 	preprocessor->include_context = context;
+}
+
+bool preprocess_set_include_directories(struct preprocessor *preprocessor,
+	const char *const *directories, size_t count)
+{
+	assert(!preprocessor->input.offset && !preprocessor->has_lookahead);
+	if (count > preprocess_include_directory_limit)
+		return false;
+	preprocessor->include_directories = directories;
+	preprocessor->include_directory_count = count;
+	return true;
 }
 
 void preprocess_destroy(struct preprocessor *preprocessor)

@@ -64,6 +64,7 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_character_conditions.py
 	QBE="$(QBE)" python3 tests/test_includes.py
 	QBE="$(QBE)" python3 tests/test_computed_includes.py
+	QBE="$(QBE)" python3 tests/test_include_search.py
 
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
@@ -89,6 +90,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_character_conditions.py
 	python3 tests/test_includes.py
 	python3 tests/test_computed_includes.py
+	python3 tests/test_include_search.py
 
 clean:
 	rm -rf build

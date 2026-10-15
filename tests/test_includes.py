@@ -74,9 +74,9 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
     for directive, message in [
         ('#include "missing.h"', 'cannot load quoted include'),
-        ('#include ""', 'quoted name'), ('#include <x.h>', 'exactly one quoted include name'),
+        ('#include ""', 'quoted name'), ('#include <x.h>', 'cannot load angle include'),
 
-        ('#include "common.h" extra', 'exactly one quoted include name'),
+        ('#include "common.h" extra', 'exactly one include name'),
         (r'#include "a\b.h"', 'backslashes'), ('#include u8"common.h"', 'quoted name'),
     ]:
         source.write_text(directive+'\nint main(void) { return 0; }\n')

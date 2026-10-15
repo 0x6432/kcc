@@ -73,6 +73,8 @@ static void check_stream(const char *text, const struct expected_token *expected
 		bytes = fread(text_buffer, 1, sizeof(text_buffer) - 1, stream);
 		assert(!ferror(stream));
 		text_buffer[bytes] = 0;
+		if (!strstr(text_buffer, message))
+			fprintf(stderr, "expected diagnostic %s; got: %s\n", message, text_buffer);
 		assert(strstr(text_buffer, message));
 	}
 	preprocess_destroy(&preprocessor);
@@ -129,7 +131,7 @@ static void test_known_and_unknown_directives(void)
 	check_stream("#int\nint", expected, sizeof(expected) / sizeof(expected[0]),
 		1, "unknown preprocessing directive");
 	check_stream("#include X 18446744073709551616\nint", expected,
-		sizeof(expected) / sizeof(expected[0]), 1, "exactly one quoted include name");
+		sizeof(expected) / sizeof(expected[0]), 1, "quoted name");
 }
 
 static void test_malformed_and_misplaced(void)
@@ -1636,8 +1638,67 @@ static void test_computed_include_operands(void)
 }
 
 
+struct search_test_context {
+	const char *wanted;
+	size_t calls;
+};
+
+/* Failed candidates deliberately own data, so cleanup is sanitizer-tested. */
+static bool load_search_test(void *context, struct source *source, const char *path)
+{
+	struct search_test_context *search = context;
+
+	search->calls++;
+	assert(source_from_bytes(source, path, (const unsigned char *)"42", 2));
+	return strcmp(path, search->wanted) == 0;
+}
+
+static void test_include_search(void)
+{
+	const char *directories[preprocess_include_directory_limit + 1];
+	char names[preprocess_include_directory_limit][32];
+
+	for (size_t i = 0; i < preprocess_include_directory_limit; i++) {
+		snprintf(names[i], sizeof(names[i]), "search%zu", i);
+		directories[i] = names[i];
+	}
+	directories[preprocess_include_directory_limit] = "extra";
+	for (size_t angled = 0; angled < 2; angled++) {
+		const char *text = angled ? "#include <h>" : "#include \"h\"";
+		struct source source;
+		struct preprocessor preprocessor;
+		struct diagnostics diagnostics = { 0 };
+		struct search_test_context context = { .wanted = "search31/h" };
+		struct token number;
+
+		assert(source_from_bytes(&source, "app/root.c", (const unsigned char *)text, strlen(text)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		preprocess_set_include_loader(&preprocessor, load_search_test, &context);
+		assert(preprocess_set_include_directories(&preprocessor, directories,
+			preprocess_include_directory_limit));
+		assert(!preprocess_set_include_directories(&preprocessor, directories,
+			preprocess_include_directory_limit + 1));
+		assert(preprocessor.include_directory_count == preprocess_include_directory_limit);
+		number = preprocess_next(&preprocessor);
+		assert(number.kind == token_integer && number.integer == 42);
+		assert(preprocess_next(&preprocessor).kind == token_eof);
+		assert(!diagnostics.errors && preprocessor.include_count == 1);
+		assert(context.calls == preprocess_include_directory_limit + !angled);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+	}
+	{
+		const char *text = "#include <h>\n42";
+		struct test_include_context context = { .text = "42" };
+
+		check_include_stream(text, &context, 0, 1, true);
+	}
+}
+
 int main(void)
 {
+	test_include_search();
 	test_computed_include_operands();
 	test_include_byte_budget();
 	test_include_macro_boundary();

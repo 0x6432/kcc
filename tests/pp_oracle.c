@@ -16,9 +16,33 @@ int main(int argc, char **argv)
 	struct diagnostics diagnostics = { .stream = stderr };
 	struct preprocessor preprocessor;
 	bool output_ok = true;
-	bool pp_mode = argc == 3 && strcmp(argv[1], "--pp") == 0;
+	bool pp_mode = false;
+	const char *path = NULL;
+	const char *directories[preprocess_include_directory_limit];
+	size_t directory_count = 0;
 
-	if ((!pp_mode && argc != 2) || !source_load(&source, argv[pp_mode ? 2 : 1]))
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "--pp") == 0) {
+			pp_mode = true;
+		} else if (strncmp(argv[i], "-I", 2) == 0) {
+			const char *directory = argv[i] + 2;
+
+			if (!*directory) {
+				if (++i == argc)
+					return 1;
+				directory = argv[i];
+			}
+			if (directory_count == preprocess_include_directory_limit)
+				return 1;
+			directories[directory_count++] = directory;
+		} else if (argv[i][0] == '-' || path) {
+			return 1;
+		} else {
+			path = argv[i];
+		}
+	}
+
+	if (!path || !source_load(&source, path))
 		return 1;
 	if (!source_prepare(&source)) {
 		source_destroy(&source);
@@ -26,6 +50,11 @@ int main(int argc, char **argv)
 	}
 	preprocess_init(&preprocessor, &source, &diagnostics);
 	preprocess_set_include_loader(&preprocessor, load_include, NULL);
+	if (!preprocess_set_include_directories(&preprocessor, directories, directory_count)) {
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		return 1;
+	}
 	for (;;) {
 		struct source_location spelling;
 		size_t length;

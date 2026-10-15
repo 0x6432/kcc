@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct/M11l computed quoted includes implemented) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct includes complete; M11l computed/M11m include search implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -788,3 +788,21 @@ Full isolated M11l normal/sanitizer matrix and exact-source CI remain pending.
 M11k exact-source CI passed run 38810635063; its local GCC matrix passed, while
 its local Clang matrix is still running. M11m bounded -I/angle search is designed
 in m11-include-search.md before implementation. No full C23 claim is made.
+
+## M11k final verification / M11l validation repair
+
+326bcc3 passed both isolated GCC/Clang normal + ASan/UBSan matrices with all
+unit/CLI/oracle and QBE/reference/ABI checks. Exact-source CI passed run
+38810635063. M11k is complete within its documented scope.
+
+M11l 0ffd06c normal/runtime and fuzz tests passed, but its isolated GCC sanitizer
+build failed -Werror=format-overflow in test_computed_include_operands. CI run
+38812216340 likewise failed the GCC sanitizer step (fuzz passed, Clang cancelled).
+Repair 37857c4 replaces the fixture's sprintf loop with explicitly bounded byte
+writes and is pushed. Its isolated full matrix and exact-source CI are pending;
+do not claim the original source passed or conflate normal/fuzz with full CI.
+
+M11m source checkpoint: bounded -I/basic angle search passed normal GCC full
+regressions/QBE/reference/ABI, GCC ASan/UBSan units, 39 new pp agreements with
+each host and 117567 sanitizer-fuzz inputs. Full isolated/remote validation is
+pending. M12a signed-int operators are pre-designed; other types remain absent.

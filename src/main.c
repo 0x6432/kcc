@@ -5,9 +5,55 @@
 #include <stdio.h>
 #include <string.h>
 
+enum driver_mode {
+	driver_compile,
+	driver_tokens,
+	driver_pp_tokens,
+};
+
+struct driver_options {
+	const char *source;
+	const char *directories[preprocess_include_directory_limit];
+	size_t directory_count;
+	enum driver_mode mode;
+};
+
+static bool parse_options(int argc, char **argv, struct driver_options *options)
+{
+	bool has_mode = false;
+
+	*options = (struct driver_options) { 0 };
+	for (int i = 1; i < argc; i++) {
+		const char *argument = argv[i];
+
+		if (strncmp(argument, "-I", 2) == 0) {
+			const char *directory = argument + 2;
+
+			if (!*directory) {
+				if (++i == argc)
+					return false;
+				directory = argv[i];
+			}
+			if (options->directory_count == preprocess_include_directory_limit)
+				return false;
+			options->directories[options->directory_count++] = directory;
+		} else if (strcmp(argument, "--tokens") == 0 || strcmp(argument, "--pp-tokens") == 0) {
+			if (has_mode)
+				return false;
+			has_mode = true;
+			options->mode = strcmp(argument, "--tokens") == 0 ? driver_tokens : driver_pp_tokens;
+		} else if (argument[0] == '-' || options->source) {
+			return false;
+		} else {
+			options->source = argument;
+		}
+	}
+	return options->source != NULL;
+}
+
 static void print_usage(FILE *stream)
 {
-	fputs("Usage: kcc file.c | --tokens file.c | --pp-tokens file.c | ", stream);
+	fputs("Usage: kcc [-I dir] [--tokens | --pp-tokens] file.c | ", stream);
 	fputs("--help | --version\n", stream);
 	fputs("Educational C23 subset compiler; output is QBE IL.\n", stream);
 }
@@ -18,13 +64,18 @@ static bool load_include(void *context, struct source *source, const char *path)
 	return source_load(source, path);
 }
 
-static bool dump_language_tokens(const struct source *source, struct diagnostics *diagnostics)
+static bool dump_language_tokens(const struct source *source, struct diagnostics *diagnostics,
+	const struct driver_options *options)
 {
 	struct preprocessor preprocessor;
 	bool output_ok = true;
 
 	preprocess_init(&preprocessor, source, diagnostics);
 	preprocess_set_include_loader(&preprocessor, load_include, NULL);
+	if (!preprocess_set_include_directories(&preprocessor, options->directories, options->directory_count)) {
+		preprocess_destroy(&preprocessor);
+		return false;
+	}
 	for (;;) {
 		struct token token = preprocess_next(&preprocessor);
 
@@ -56,8 +107,9 @@ static bool dump_pp_tokens(const struct source *source, struct diagnostics *diag
 	}
 }
 
-static int dump_tokens(const char *path, bool preprocessing)
+static int dump_tokens(const struct driver_options *options)
 {
+	const char *path = options->source;
 	struct source source;
 	struct diagnostics diagnostics = { .stream = stderr };
 	bool output_ok;
@@ -72,18 +124,19 @@ static int dump_tokens(const char *path, bool preprocessing)
 		source_destroy(&source);
 		return 1;
 	}
-	if (preprocessing)
+	if (options->mode == driver_pp_tokens)
 		output_ok = dump_pp_tokens(&source, &diagnostics);
 	else
-		output_ok = dump_language_tokens(&source, &diagnostics);
+		output_ok = dump_language_tokens(&source, &diagnostics, options);
 	if (fflush(stdout) != 0)
 		output_ok = false;
 	source_destroy(&source);
 	return diagnostics.errors || !output_ok ? 1 : 0;
 }
 
-static int compile_source(const char *path)
+static int compile_source(const struct driver_options *options)
 {
+	const char *path = options->source;
 	struct source source;
 	struct arena arena = { 0 };
 	struct diagnostics diagnostics = { .stream = stderr };
@@ -104,6 +157,11 @@ static int compile_source(const char *path)
 	}
 	preprocess_init(&preprocessor, &source, &diagnostics);
 	preprocess_set_include_loader(&preprocessor, load_include, NULL);
+	if (!preprocess_set_include_directories(&preprocessor, options->directories, options->directory_count)) {
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		return 1;
+	}
 	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics) &&
 		diagnostics.errors == 0) {
@@ -119,24 +177,23 @@ static int compile_source(const char *path)
 
 int main(int argc, char **argv)
 {
+	struct driver_options options;
+
 	if (argc == 2 && strcmp(argv[1], "--help") == 0) {
 		print_usage(stdout);
 		return 0;
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m11l");
+		puts("kcc milestone m11m");
 		return 0;
 	}
 
-	if (argc == 3 && strcmp(argv[1], "--tokens") == 0)
-		return dump_tokens(argv[2], false);
-
-	if (argc == 3 && strcmp(argv[1], "--pp-tokens") == 0)
-		return dump_tokens(argv[2], true);
-
-	if (argc == 2 && argv[1][0] != '-')
-		return compile_source(argv[1]);
+	if (parse_options(argc, argv, &options)) {
+		if (options.mode != driver_compile)
+			return dump_tokens(&options);
+		return compile_source(&options);
+	}
 
 	fputs("kcc: error: expected a source file or supported option\n", stderr);
 	print_usage(stderr);

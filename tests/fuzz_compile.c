@@ -16,7 +16,7 @@ static bool load_fuzz_include(void *context, struct source *source, const char *
 {
 	struct fuzz_include_context *input = context;
 
-	if (strstr(path, "missing"))
+	if (strstr(path, "missing") && strncmp(path, "fallback/", 9) != 0)
 		return false;
 	return source_from_bytes(source, path, input->data, input->length);
 }
@@ -31,6 +31,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	FILE *stream;
 	struct diagnostics diagnostics;
 	struct fuzz_include_context includes;
+	const char *directories[] = { "missing", "fallback" };
 
 	if (size > 65536)
 		return 0;
@@ -48,6 +49,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 			break;
 		}
 	preprocess_set_include_loader(&preprocessor, load_fuzz_include, &includes);
+	assert(preprocess_set_include_directories(&preprocessor, directories, 2));
 	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics)) {
 		assert(diagnostics.errors == 0);
