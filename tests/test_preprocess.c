@@ -1595,13 +1595,23 @@ static void test_computed_include_operands(void)
 	check_include_stream("#define E\n#include E\n42", &context, 0, 1, true);
 	context = (struct test_include_context) { .text = "42" };
 	check_include_stream("#define H \"h\" \"j\"\n#include H\n42", &context, 0, 1, true);
-	used = (size_t)sprintf(text, "#define E\n#define H \"h\"\n#include ");
-	for (size_t i = 1; i < preprocess_header_token_limit; i++)
-		used += (size_t)sprintf(text + used, "E ");
-	sprintf(text + used, "H");
+	{
+		const char prefix[] = "#define E\n#define H \"h\"\n#include ";
+
+		used = sizeof(prefix) - 1;
+		memcpy(text, prefix, used);
+	}
+	for (size_t i = 1; i < preprocess_header_token_limit; i++) {
+		assert(used + 2 < sizeof(text));
+		text[used++] = 'E';
+		text[used++] = ' ';
+	}
+	assert(used + 4 <= sizeof(text));
+	text[used] = 'H';
+	text[used + 1] = 0;
 	context = (struct test_include_context) { .text = "42" };
 	check_include_stream(text, &context, 1, 0, true);
-	sprintf(text + used, "E H");
+	memcpy(text + used, "E H", 4);
 	context = (struct test_include_context) { .text = "42" };
 	check_include_stream(text, &context, 0, 1, false);
 	{
