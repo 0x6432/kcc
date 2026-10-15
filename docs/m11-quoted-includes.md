@@ -16,7 +16,10 @@ at preprocess_destroy. AST/source spelling lifetimes therefore do not change.
 No global include cache or path canonicalization is needed in this increment.
 
 Keep a bounded stack of parent pp_lexer states. Reading a child's EOF through
-ordinary source rescanning restores its parent and continues; directive readers
+ordinary expansion restores its parent and continues; macro-invocation probing
+still sees file EOF so function calls/arguments cannot cross that boundary.
+GCC/Clang confirmed F at header EOF followed by () in the parent remains F ().
+Directive readers
 still see that child's EOF as a line end and cannot accidentally eat the next
 file. Include directives themselves contribute no parser tokens. Macros persist
 across files; skipped includes perform no loader calls. Expansion and source

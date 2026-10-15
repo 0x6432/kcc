@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11j. The chronological entries below describe what each
+Current milestone: M11k. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -577,3 +577,20 @@ Preprocessing character values intentionally match that narrow target policy.
 Empty/multicharacter, prefixed L/u/U/u8, non-ASCII source bytes, universal names
 and unknown escapes diagnose rather than receiving guessed values. This does
 not add runtime C char types/character expressions or general encoding support.
+
+## M11k
+
+Direct, unprefixed, nonempty quoted includes load absolute paths or resolve
+relative names against the including file's directory. Macro-computed names,
+angle names, -I/system search, backslashes/escaped names and general header-name
+lexing remain later work. Excluded includes perform no loading. Source loading
+is opt-in; the default preprocessor cannot open files. Driver and pp oracle use
+file loading, while pipeline fuzzing uses a memory-only callback.
+
+Child sources are retained until compilation ends for borrowed spelling/location
+ownership. Active includes are capped at 32, attempts at 128, cumulative child
+raw bytes at 64 MiB and constructed paths at 4096 bytes including the terminator;
+each loaded source retains the earlier 16 MiB limit. File EOF is not transparent
+to macro invocation probing: incomplete calls cannot continue into a parent.
+Conditional groups cannot cross file boundaries. Root public EOF stays stable.
+These are bounded subset semantics, not a claim of complete C23 include search.

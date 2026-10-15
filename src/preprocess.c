@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct include_source {
+	struct source source;
+	struct include_source *next;
+};
+
 struct macro_token {
 	struct pp_token token;
 	struct macro_token *next;
@@ -616,7 +621,7 @@ static bool read_conditional_directive(struct preprocessor *preprocessor,
 		parent_active = conditional_active(preprocessor);
 		evaluate = parent_active;
 	} else {
-		if (!preprocessor->conditional_count) {
+		if (preprocessor->conditional_count == preprocessor->conditional_base) {
 			*error = reject_directive(preprocessor, marker, name,
 				"conditional directive has no matching opener");
 			return false;
@@ -715,7 +720,111 @@ static bool read_diagnostic_directive(struct preprocessor *preprocessor,
 	return false;
 }
 
+/* include-directive = '#' 'include' '"' q-char-sequence '"' newline
+ * This increment accepts direct quoted names only, without escape decoding.
+ */
+static bool read_include_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct token *error)
+{
+	struct pp_token name = pp_lexer_next(&preprocessor->input);
+	const struct source *parent = name.location.source;
+	const unsigned char *text = parent->data + name.location.offset;
+	struct pp_token end;
+	struct include_source *child;
+	size_t directory_length = 0;
+	size_t name_length;
+	char path[preprocess_include_path_limit];
+
+	if (name.kind == pp_invalid || name.has_non_directive_space) {
+		*error = reject_directive(preprocessor, marker, name,
+			name.kind == pp_invalid ? NULL :
+			"only space and tab are allowed in a preprocessing directive");
+		return false;
+	}
+	if (name.kind != pp_string || name.length < 3 || text[0] != '"') {
+		*error = reject_directive(preprocessor, marker, name,
+			"only direct nonempty quoted includes are supported yet");
+		return false;
+	}
+	name_length = name.length - 2;
+	for (size_t i = 1; i <= name_length; i++)
+		if (text[i] == '\\') {
+			*error = reject_directive(preprocessor, marker, name,
+				"backslashes in quoted include names are not supported yet");
+			return false;
+		}
+	end = pp_lexer_next(&preprocessor->input);
+	if (end.kind == pp_invalid || end.has_non_directive_space || !is_directive_end(end)) {
+		*error = reject_directive(preprocessor, marker, end,
+			end.kind == pp_invalid ? NULL : "expected end of line after quoted include");
+		return false;
+	}
+	if (text[1] != '/') {
+		const char *slash = strrchr(parent->name, '/');
+
+		if (slash)
+			directory_length = (size_t)(slash - parent->name) + 1;
+	}
+	if (directory_length >= sizeof(path) || name_length >= sizeof(path) - directory_length) {
+		*error = stop_preprocessing(preprocessor, name, "quoted include path limit exceeded");
+		return false;
+	}
+	memcpy(path, parent->name, directory_length);
+	memcpy(path + directory_length, text + 1, name_length);
+	path[directory_length + name_length] = 0;
+	if (!preprocessor->include_loader) {
+		diagnostic_error(preprocessor->diagnostics, name.location,
+			"quoted includes require a configured source loader");
+		*error = invalid_token(marker);
+		return false;
+	}
+	if (preprocessor->include_depth == preprocess_include_depth_limit) {
+		*error = stop_preprocessing(preprocessor, name, "include nesting limit (32) exceeded");
+		return false;
+	}
+	if (preprocessor->include_count == preprocess_include_count_limit) {
+		*error = stop_preprocessing(preprocessor, name, "include attempt limit (128) exceeded");
+		return false;
+	}
+	child = allocate_auxiliary(preprocessor, 1, sizeof(*child), name, error);
+	if (!child)
+		return false;
+	*child = (struct include_source) { 0 };
+	preprocessor->include_count++;
+	if (!preprocessor->include_loader(preprocessor->include_context, &child->source, path)) {
+		char message[preprocess_include_path_limit + 64];
+
+		snprintf(message, sizeof(message), "cannot load quoted include '%s'", path);
+		diagnostic_error(preprocessor->diagnostics, name.location, message);
+		source_destroy(&child->source);
+		*error = invalid_token(marker);
+		return false;
+	}
+	if (child->source.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
+		source_destroy(&child->source);
+		*error = stop_preprocessing(preprocessor, name, "include input byte limit exceeded");
+		return false;
+	}
+	preprocessor->include_bytes += child->source.length;
+	if (!source_prepare(&child->source)) {
+		source_destroy(&child->source);
+		*error = stop_preprocessing(preprocessor, name, "cannot prepare quoted include source");
+		return false;
+	}
+	child->next = preprocessor->include_sources;
+	preprocessor->include_sources = child;
+	preprocessor->include_frames[preprocessor->include_depth++] = (struct include_frame) {
+		.parent = preprocessor->input,
+		.conditional_base = preprocessor->conditional_base,
+	};
+	preprocessor->conditional_base = preprocessor->conditional_count;
+	pp_lexer_init(&preprocessor->input, &child->source, preprocessor->diagnostics);
+	preprocessor->cursor.deferred_space = true;
+	return true;
+}
+
 /* control-line = '#' newline | define-directive | undef-directive | diagnostic-directive
+ *              | include-directive
  *              | conditional-control
  * Other C23 control lines are recognized but not implemented yet.
  */
@@ -753,6 +862,8 @@ static bool read_directive(struct preprocessor *preprocessor,
 			"expected a directive name or end of line after '#'");
 		return false;
 	}
+	if (pp_spelling_is(token, "include"))
+		return read_include_directive(preprocessor, marker, error);
 	if (pp_spelling_is(token, "define") || pp_spelling_is(token, "undef"))
 		return read_macro_directive(preprocessor, marker,
 			pp_spelling_is(token, "define"), error);
@@ -1556,6 +1667,30 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 	}
 }
 
+/* File EOF is visible to macro invocation lookahead. Only ordinary expansion
+ * resumes the parent: a function-like macro cannot acquire '(' from that file.
+ */
+static bool finish_include(struct preprocessor *preprocessor)
+{
+	struct include_frame *frame;
+
+	if (preprocessor->conditional_count != preprocessor->conditional_base) {
+		struct conditional_group *group =
+			&preprocessor->conditionals[preprocessor->conditional_count - 1];
+
+		diagnostic_error(preprocessor->diagnostics, group->opening,
+			"unterminated conditional group in included source");
+		preprocessor->conditional_count = 0;
+		preprocessor->stopped = true;
+		return false;
+	}
+	frame = &preprocessor->include_frames[--preprocessor->include_depth];
+	preprocessor->input = frame->parent;
+	preprocessor->conditional_base = frame->conditional_base;
+	preprocessor->cursor.deferred_space = true;
+	return true;
+}
+
 /* Expansion stays in pp tokens, including during isolated argument prescan. */
 static bool read_expanded_token(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error)
@@ -1568,6 +1703,13 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 
 		if (!read_rescan_token(preprocessor, cursor, &input, error))
 			return false;
+		if (input.from_source && input.token.kind == pp_eof && preprocessor->include_depth) {
+			if (!finish_include(preprocessor)) {
+				*result = cursor_end(cursor);
+				return true;
+			}
+			continue;
+		}
 		if (input.from_source && input.token.kind == pp_eof &&
 			preprocessor->conditional_count) {
 			struct conditional_group *group =
@@ -2370,8 +2512,18 @@ void preprocess_init(struct preprocessor *preprocessor, const struct source *sou
 	preprocessor->cursor.end = (struct source_location) { source, source->length };
 }
 
+void preprocess_set_include_loader(struct preprocessor *preprocessor,
+	bool (*loader)(void *context, struct source *source, const char *path), void *context)
+{
+	assert(!preprocessor->input.offset && !preprocessor->has_lookahead);
+	preprocessor->include_loader = loader;
+	preprocessor->include_context = context;
+}
+
 void preprocess_destroy(struct preprocessor *preprocessor)
 {
+	for (struct include_source *child = preprocessor->include_sources; child; child = child->next)
+		source_destroy(&child->source);
 	arena_destroy(&preprocessor->storage);
 	*preprocessor = (struct preprocessor) { 0 };
 }

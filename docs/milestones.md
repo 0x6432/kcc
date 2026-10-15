@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11g operators complete; M11h literals/M11i unsigned/M11j characters implemented) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters/M11k quoted includes implemented) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -756,3 +756,13 @@ full regressions/QBE/reference/ABI, 126 target host/model checks with each host
 and 132477 sanitizer-fuzz inputs. Full isolated matrix/CI pending. M11h source
 CI run 38807421895 passed; local verification pending. M11k direct quoted include
 design is recorded before coding, including ownership and memory-only fuzz I/O.
+
+M11h/M11i final verification: 26e27e4 and 0e0a0db passed full isolated normal/
+sanitizer host matrices plus QBE/reference/ABI. CI runs 38807421895 and
+38808207982 passed. M11j source CI run 38809079871 passed; local matrix pending.
+
+M11k source checkpoint: direct quoted includes pass GCC full tests/QBE/reference/
+ABI, ten pp agreements with each host, actual byte/path/depth/attempt limits,
+retained-source/conditional/EOF regressions and 134920 sanitizer-fuzz inputs.
+Full isolated matrix/CI pending. M11l computed quoted operands are pre-designed,
+including generated spelling provenance and isolated-line recovery contracts.

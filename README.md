@@ -6,15 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11j: `#if` / `#elif` evaluate intmax/uintmax expressions with `defined`,
-arithmetic, shifts, bitwise/comparison/logical operators and short-circuit `?:`. Macro
-existence groups, diagnostic directives and previous macro operators remain.
-Conditional integers accept octal/hex/binary, digit separators and U/L/LL suffixes.
-Unsigned arithmetic wraps; ternary common types include unselected branches.
-Ordinary ASCII/escaped single-byte character constants follow target signed-char policy.
+M11k: direct quoted includes now load nested headers, share macro bindings,
+and retain child source buffers for parsing and diagnostics. File/conditional
+boundaries are explicit; loading and retained bytes have documented bounds.
 
-General character encodings, includes and full
-C23 remain unfinished. See `docs/m11-conditional-expressions.md`,
+Preprocessing supports integer/ordinary-byte character conditions and the prior
+macro operators. Macro-computed/angle includes, search paths, general encodings
+and full C23 remain unfinished. See `docs/m11-quoted-includes.md`,
 `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 
 ## Build and test
@@ -80,7 +78,7 @@ int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: C string expressions, includes,
+Unsupported: C string expressions, macro-computed/angle includes and search paths,
 full conditional expressions, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.

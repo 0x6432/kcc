@@ -4,6 +4,12 @@
 #include <stdio.h>
 #include <string.h>
 
+static bool load_include(void *context, struct source *source, const char *path)
+{
+	(void)context;
+	return source_load(source, path);
+}
+
 int main(int argc, char **argv)
 {
 	struct source source;
@@ -19,6 +25,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	preprocess_init(&preprocessor, &source, &diagnostics);
+	preprocess_set_include_loader(&preprocessor, load_include, NULL);
 	for (;;) {
 		struct source_location spelling;
 		size_t length;

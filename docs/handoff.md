@@ -704,3 +704,46 @@ checks. M11g local/remote verification is complete as recorded above.
 M11k direct quoted includes are designed in m11-quoted-includes.md before coding;
 loader/source ownership and fuzz-safe memory-only loading are required. Do not
 claim include support, header search paths or full C23 at this checkpoint.
+
+## M11h/M11i final verification
+
+Isolated snapshots 26e27e4 and 0e0a0db both passed full GCC/Clang normal +
+ASan/UBSan unit/CLI/oracle and QBE/reference/ABI matrices. Exact-source CI passed:
+https://github.com/0x6432/kcc/actions/runs/38807421895
+https://github.com/0x6432/kcc/actions/runs/38808207982
+M11h/M11i are complete within their documented integer subsets. M11j remote CI
+also passed run 38809079871, but its separate local matrix was still running
+when this entry was written. Keep that distinction explicit.
+
+## M11k tested source checkpoint
+
+Direct quoted includes now use an explicit loader, resolve relative to the
+including source or use an absolute path, retain child source buffers until
+preprocessor destruction, and share macro state. Conditional bases prevent
+cross-file groups. Raw directive readers and macro invocation lookahead see
+file EOF; only ordinary expansion resumes the parent. A GCC/Clang audit found
+and fixed the initial boundary mistake where header F acquired parent ().
+The header EOF regression also rejects incomplete macro calls across files.
+
+GCC make test and QBE/reference/ABI passed. Ten include pp streams agree with
+each host, including all nine root/header newline combinations and the macro
+EOF boundary. Nine nested-header programs passed QBE/reference execution;
+absolute paths, missing final newlines, guards, skipped loads, malformed names,
+load errors and original/spliced child diagnostics are covered. Unit memory
+loaders check retained spellings, conditional isolation and stable root EOF,
+32/33 active-depth and 128/129 attempt limits, 4095/4096 path bytes, plus actual
+four 16 MiB child loads at the 64 MiB byte budget and a rejected fifth load.
+
+Sanitizer fuzzing passed 27441 lexer/preprocessor and 107479 pipeline inputs
+(134920 total), 26 seconds per target. Pipeline includes are memory-only: requested
+paths never reach the filesystem, while arbitrary header bytes, loader failures,
+recursion and successful prototype-only units exercise the new boundaries. No
+arbitrary generated C is executed. The lexer fuzz preprocessor remains loader-
+disabled, preserving its root/generated-spelling provenance assertions.
+
+Full isolated M11k matrix and exact-source CI are pending. M11j source CI passed,
+but its local matrix still needs its final result checked. M11l macro-computed
+quoted operands are designed in m11-computed-includes.md before coding. Anchor
+relative search to the directive source (not generated/header-definition spelling
+sources) and never drain the next source line after isolated operand validation.
+No angle/system/-I support or complete C23 claim is made yet.

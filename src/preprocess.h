@@ -17,6 +17,10 @@
 #define preprocess_conditional_limit 128
 #define preprocess_condition_depth_limit 128
 #define preprocess_condition_token_limit 1024
+#define preprocess_include_depth_limit 32
+#define preprocess_include_count_limit 128
+#define preprocess_include_bytes_limit (64 * 1024 * 1024)
+#define preprocess_include_path_limit 4096
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 
@@ -24,6 +28,7 @@ struct macro;
 struct macro_token;
 struct macro_argument;
 struct argument_token;
+struct include_source;
 
 /* A bit per stable macro identity; sets travel with tokens, not the C AST. */
 struct macro_hide_set {
@@ -68,11 +73,24 @@ struct conditional_group {
 	bool seen_else;
 };
 
+struct include_frame {
+	struct pp_lexer parent;
+	size_t conditional_base;
+};
+
 /* Owns raw input and macro storage. Do not read input independently.
  * Prepared source outlives borrowed spellings; destroy after all AST use.
  */
 struct preprocessor {
 	struct pp_lexer input;
+	struct include_frame include_frames[preprocess_include_depth_limit];
+	struct include_source *include_sources;
+	bool (*include_loader)(void *context, struct source *source, const char *path);
+	void *include_context;
+	size_t include_depth;
+	size_t include_count;
+	size_t include_bytes;
+	size_t conditional_base;
 	struct diagnostics *diagnostics;
 	struct arena storage;
 	struct macro *macros;
@@ -94,6 +112,11 @@ struct preprocessor {
 
 void preprocess_init(struct preprocessor *preprocessor, const struct source *source,
 	struct diagnostics *diagnostics);
+/* Configure before reading. NULL (the default) performs no file loading.
+ * Loader initializes a fresh raw source; the preprocessor owns successful data.
+ */
+void preprocess_set_include_loader(struct preprocessor *preprocessor,
+	bool (*loader)(void *context, struct source *source, const char *path), void *context);
 void preprocess_destroy(struct preprocessor *preprocessor);
 /* Expanded pp reads share the cursor. Do not mix with pending language peek.
  * Spelling can belong to an arena-owned generated view, not the input source.

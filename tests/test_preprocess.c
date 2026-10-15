@@ -110,7 +110,7 @@ static void test_null_directives_in_code(void)
 static void test_known_and_unknown_directives(void)
 {
 	const char *names[] = {
-		"include", "embed", "line", "pragma",
+		"embed", "line", "pragma",
 			};
 	const struct expected_token expected[] = {
 		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
@@ -127,7 +127,7 @@ static void test_known_and_unknown_directives(void)
 	check_stream("#int\nint", expected, sizeof(expected) / sizeof(expected[0]),
 		1, "unknown preprocessing directive");
 	check_stream("#include X 18446744073709551616\nint", expected,
-		sizeof(expected) / sizeof(expected[0]), 1, "not supported yet");
+		sizeof(expected) / sizeof(expected[0]), 1, "only direct nonempty quoted includes");
 }
 
 static void test_malformed_and_misplaced(void)
@@ -1431,8 +1431,158 @@ static void test_conditional_operator_depth(void)
 }
 
 
+struct test_include_context {
+	const char *text;
+	size_t calls;
+	size_t recursive;
+	size_t path_length;
+};
+
+static bool load_test_include(void *context, struct source *source, const char *path)
+{
+	struct test_include_context *input = context;
+	const char *text = input->text;
+
+	input->calls++;
+	input->path_length = strlen(path);
+	if (!text)
+		return false;
+	if (input->recursive)
+		text = input->calls < input->recursive ? "#include \"h\"\n" : "42";
+	return source_from_bytes(source, path, (const unsigned char *)text, strlen(text));
+}
+
+static void check_include_stream(const char *text, struct test_include_context *context,
+	size_t expected_calls, size_t expected_errors, bool number)
+{
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct token token;
+	size_t numbers = 0;
+
+	assert(source_from_bytes(&source, "root.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	preprocess_set_include_loader(&preprocessor, load_test_include, context);
+	for (size_t steps = 0; ; steps++) {
+		assert(steps < 256);
+		token = preprocess_peek(&preprocessor);
+		assert_same_token(token, preprocess_peek(&preprocessor));
+		assert_same_token(token, preprocess_next(&preprocessor));
+		assert(preprocessor.include_depth <= preprocess_include_depth_limit);
+		assert(preprocessor.include_count <= preprocess_include_count_limit);
+		assert(preprocessor.include_bytes <= preprocess_include_bytes_limit);
+		if (token.kind == token_eof)
+			break;
+		assert(token.kind == token_invalid || token.kind == token_integer);
+		if (token.kind == token_integer) {
+			assert(token.integer == 42);
+			assert(memcmp(token.spelling_location.source->data + token.spelling_location.offset,
+				"42", 2) == 0);
+			numbers++;
+		}
+	}
+	assert(token.location.source == &source && token.location.offset == source.length);
+	assert(numbers == (number ? 1u : 0u));
+	assert(context->calls == expected_calls && diagnostics.errors == expected_errors);
+	assert_same_token(token, preprocess_next(&preprocessor));
+	assert(diagnostics.errors == expected_errors);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+static void test_quoted_includes(void)
+{
+	struct test_include_context context = { .text = "#define VALUE 42\n" };
+	char text[preprocess_include_path_limit + 64];
+	size_t used;
+
+	check_include_stream("#include \"h\"\nVALUE", &context, 1, 0, true);
+	context = (struct test_include_context) { .text = "42" };
+	check_include_stream("%:include \"h\"", &context, 1, 0, true);
+	context = (struct test_include_context) { .text = "" };
+	check_include_stream("#if 0\n#include \"missing\"\n#endif\n42", &context, 0, 0, true);
+	context = (struct test_include_context) { 0 };
+	check_include_stream("#include \"missing\"\n42", &context, 1, 1, true);
+	context = (struct test_include_context) { .text = "#endif\n" };
+	check_include_stream("#if 1\n#include \"h\"\n#endif\n42", &context, 1, 1, true);
+	context = (struct test_include_context) { .text = "#if 1\n42" };
+	check_include_stream("#include \"h\"\n99", &context, 1, 1, true);
+	context = (struct test_include_context) { .text = "", .recursive = 32 };
+	check_include_stream("#include \"h\"", &context, 32, 0, true);
+	context = (struct test_include_context) { .text = "", .recursive = 33 };
+	check_include_stream("#include \"h\"", &context, 32, 1, false);
+	used = 0;
+	for (size_t i = 0; i < preprocess_include_count_limit; i++)
+		used += (size_t)sprintf(text + used, "#include \"h\"\n");
+	context = (struct test_include_context) { .text = "" };
+	check_include_stream(text, &context, 128, 0, false);
+	sprintf(text + used, "#include \"h\"\n");
+	context = (struct test_include_context) { .text = "" };
+	check_include_stream(text, &context, 128, 1, false);
+	used = (size_t)sprintf(text, "#include \"");
+	memset(text + used, 'a', preprocess_include_path_limit - 1);
+	strcpy(text + used + preprocess_include_path_limit - 1, "\"");
+	context = (struct test_include_context) { .text = "" };
+	check_include_stream(text, &context, 1, 0, false);
+	assert(context.path_length == preprocess_include_path_limit - 1);
+	text[used + preprocess_include_path_limit - 1] = 'a';
+	strcpy(text + used + preprocess_include_path_limit, "\"");
+	context = (struct test_include_context) { .text = "" };
+	check_include_stream(text, &context, 0, 1, false);
+}
+
+
+static void test_include_macro_boundary(void)
+{
+	const char *text = "#include \"h\"\n()";
+	struct test_include_context context = { .text = "#define F() 42\nF" };
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+
+	assert(source_from_bytes(&source, "root.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	preprocess_set_include_loader(&preprocessor, load_test_include, &context);
+	assert(preprocess_next(&preprocessor).kind == token_identifier);
+	assert(preprocess_next(&preprocessor).kind == token_left_paren);
+	assert(preprocess_next(&preprocessor).kind == token_right_paren);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
+	assert(!diagnostics.errors && !preprocessor.include_depth);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	context = (struct test_include_context) { .text = "#define F(a) a\nF(" };
+	check_include_stream("#include \"h\"\n)42", &context, 1, 1, false);
+}
+
+static void test_include_byte_budget(void)
+{
+	size_t length = 16 * 1024 * 1024;
+	char *body = malloc(length + 1);
+	char text[128];
+	size_t used = 0;
+	struct test_include_context context;
+
+	assert(body);
+	memset(body, ' ', length);
+	body[length] = 0;
+	for (size_t i = 0; i < 4; i++)
+		used += (size_t)sprintf(text + used, "#include \"h\"\n");
+	context = (struct test_include_context) { .text = body };
+	check_include_stream(text, &context, 4, 0, false);
+	sprintf(text + used, "#include \"h\"\n");
+	context = (struct test_include_context) { .text = body };
+	check_include_stream(text, &context, 5, 1, false);
+	free(body);
+}
+
 int main(void)
 {
+	test_include_byte_budget();
+	test_include_macro_boundary();
+	test_quoted_includes();
 	test_conditional_operator_depth();
 	test_expression_conditions();
 	test_macro_conditions();

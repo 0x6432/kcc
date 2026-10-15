@@ -12,12 +12,19 @@ static void print_usage(FILE *stream)
 	fputs("Educational C23 subset compiler; output is QBE IL.\n", stream);
 }
 
+static bool load_include(void *context, struct source *source, const char *path)
+{
+	(void)context;
+	return source_load(source, path);
+}
+
 static bool dump_language_tokens(const struct source *source, struct diagnostics *diagnostics)
 {
 	struct preprocessor preprocessor;
 	bool output_ok = true;
 
 	preprocess_init(&preprocessor, source, diagnostics);
+	preprocess_set_include_loader(&preprocessor, load_include, NULL);
 	for (;;) {
 		struct token token = preprocess_next(&preprocessor);
 
@@ -96,6 +103,7 @@ static int compile_source(const char *path)
 		return 1;
 	}
 	preprocess_init(&preprocessor, &source, &diagnostics);
+	preprocess_set_include_loader(&preprocessor, load_include, NULL);
 	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics) &&
 		diagnostics.errors == 0) {
@@ -117,7 +125,7 @@ int main(int argc, char **argv)
 	}
 
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-		puts("kcc milestone m11j");
+		puts("kcc milestone m11k");
 		return 0;
 	}
 

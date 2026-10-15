@@ -792,3 +792,18 @@ Simple/octal/hex escapes are checked before conversion. Literal validation and
 result typing apply even to unselected operands. Prefixes, multicharacter forms,
 non-ASCII source bytes and universal names remain explicitly unsupported.
 No runtime char type, C character-expression conversion or Unicode claim.
+
+## M11k direct quoted include contract
+
+Source loading is an explicit callback, disabled by default. Driver/oracle opt
+into file loading; pipeline fuzzing supplies only owned memory sources and never
+opens requested paths. Successful child buffers remain alive through AST/sema/
+codegen use and are destroyed before the preprocessor arena. Parent lexer states
+and conditional bases form a bounded stack; macros are shared across sources.
+
+Only ordinary expansion pops a header at EOF. Macro invocation probing sees
+that file's EOF so F at header end cannot acquire () from its parent. Directive
+readers similarly cannot consume parent lines. A child cannot close a parent's
+conditional group. Unclosed child conditionals diagnose then return stable root
+EOF; parser must reject its deferred diagnostic. Include filenames/physical
+locations remain the child's own, not the root's or a generated spelling view.
