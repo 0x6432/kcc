@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11i. The chronological entries below describe what each
+Current milestone: M11j. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -567,3 +567,13 @@ fit INT64_MAX; all spellings must fit UINT64_MAX before evaluation.
 This does not implement C runtime unsigned integers, character constants,
 _BitInt suffixes or include handling. Character/encoding/predefined-macro work
 remains explicit. A uint64 storage representation is not a full-C23 claim.
+
+## M11j
+
+Preprocessing conditions accept ordinary single-byte ASCII character constants
+and standard simple/octal/hex escapes. Numeric escapes must fit 0..255; target
+signed plain-char interpretation sign-extends bytes 128..255 into intmax.
+Preprocessing character values intentionally match that narrow target policy.
+Empty/multicharacter, prefixed L/u/U/u8, non-ASCII source bytes, universal names
+and unknown escapes diagnose rather than receiving guessed values. This does
+not add runtime C char types/character expressions or general encoding support.

@@ -1779,6 +1779,95 @@ static int condition_digit(unsigned char byte)
 	return -1;
 }
 
+/* condition-character = "'" (ascii-character | simple-escape | octal-escape
+ *                         | hexadecimal-escape) "'"
+ * One target byte only; prefixed/Unicode/multicharacter forms are separate work.
+ */
+static struct condition_value parse_condition_character(struct condition_parser *parser,
+	struct pp_token token)
+{
+	const unsigned char *text = token.location.source->data + token.location.offset;
+	size_t offset = 1;
+	unsigned value;
+
+	if (text[0] != '\'') {
+		condition_error(parser, token, "prefixed conditional characters are not supported yet");
+		return signed_condition(0);
+	}
+	if (token.length < 3) {
+		condition_error(parser, token, "expected one character in conditional constant");
+		return signed_condition(0);
+	}
+	value = text[offset++];
+	if (value == '\\') {
+		unsigned char escape = text[offset++];
+
+		switch (escape) {
+		case '\'': case '"': case '?': case '\\':
+			value = escape;
+			break;
+		case 'a': value = 7; break;
+		case 'b': value = 8; break;
+		case 'f': value = 12; break;
+		case 'n': value = 10; break;
+		case 'r': value = 13; break;
+		case 't': value = 9; break;
+		case 'v': value = 11; break;
+		case 'x': {
+			size_t digits = 0;
+
+			value = 0;
+			while (offset < token.length - 1) {
+				int digit = condition_digit(text[offset]);
+
+				if (digit < 0)
+					break;
+				if (value > (255 - (unsigned)digit) / 16) {
+					condition_error(parser, token, "conditional character escape exceeds one byte");
+					return signed_condition(0);
+				}
+				value = value * 16 + (unsigned)digit;
+				offset++;
+				digits++;
+			}
+			if (!digits) {
+				condition_error(parser, token, "expected digits in hexadecimal character escape");
+				return signed_condition(0);
+			}
+			break;
+		}
+		default:
+			if (escape < '0' || escape > '7') {
+				condition_error(parser, token, "unsupported conditional character escape");
+				return signed_condition(0);
+			}
+			value = escape - '0';
+			for (size_t digits = 1; digits < 3 && offset < token.length - 1; digits++) {
+				unsigned char next = text[offset];
+
+				if (next < '0' || next > '7')
+					break;
+				value = value * 8 + next - '0';
+				offset++;
+			}
+			if (value > 255) {
+				condition_error(parser, token, "conditional character escape exceeds one byte");
+				return signed_condition(0);
+			}
+			break;
+		}
+	} else if (value >= 128) {
+		condition_error(parser, token, "non-ASCII conditional characters are not supported yet");
+		return signed_condition(0);
+	}
+	if (offset != token.length - 1) {
+		condition_error(parser, token, "multicharacter conditional constants are not supported yet");
+		return signed_condition(0);
+	}
+	/* Target signed plain char; conversion is independent of host char signedness. */
+	return signed_condition(value < 128 ? (int64_t)value : (int64_t)value - 256);
+}
+
 /* condition-integer = (decimal | octal | hexadecimal | binary) integer-suffix?
  * Separators occur only between valid base digits. This increment accepts only
  * signed-intmax values, with no suffix or a signed l/L/ll/LL suffix.
@@ -1869,7 +1958,7 @@ static struct condition_value parse_condition_integer(struct condition_parser *p
 static struct condition_value parse_condition_expression(struct condition_parser *parser,
 	unsigned minimum_power, bool evaluate);
 
-/* condition-operand = condition-integer | identifier | '(' condition-expression ')'
+/* condition-operand = condition-integer | condition-character | identifier | '(' condition-expression ')'
  *                   | ('+' | '-' | '!' | '~') condition-operand
  * defined was handled before expansion; other identifiers are zero (C23 true is 1).
  */
@@ -1915,6 +2004,8 @@ static struct condition_value parse_condition_operand(struct condition_parser *p
 	}
 	if (token.kind == pp_number) {
 		value = parse_condition_integer(parser, token);
+	} else if (token.kind == pp_character) {
+		value = parse_condition_character(parser, token);
 	} else if (token.kind == pp_identifier) {
 		if (pp_spelling_is(token, "defined"))
 			condition_error(parser, token, "defined produced by macro expansion is not supported");

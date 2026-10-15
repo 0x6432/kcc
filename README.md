@@ -6,13 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11i: `#if` / `#elif` evaluate intmax/uintmax expressions with `defined`,
+M11j: `#if` / `#elif` evaluate intmax/uintmax expressions with `defined`,
 arithmetic, shifts, bitwise/comparison/logical operators and short-circuit `?:`. Macro
 existence groups, diagnostic directives and previous macro operators remain.
 Conditional integers accept octal/hex/binary, digit separators and U/L/LL suffixes.
 Unsigned arithmetic wraps; ternary common types include unselected branches.
+Ordinary ASCII/escaped single-byte character constants follow target signed-char policy.
 
-Character literals, includes and full
+General character encodings, includes and full
 C23 remain unfinished. See `docs/m11-conditional-expressions.md`,
 `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
 

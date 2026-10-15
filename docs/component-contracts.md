@@ -783,3 +783,12 @@ Ternary signedness depends on both branches, not only the selected one, and the
 chosen bits are converted to that common type. This invariant also applies to
 unselected unary, binary and nested conditional expressions. Macro-generated
 numeric spellings follow the same literal scanner and ownership contracts.
+
+## M11j conditional character contract
+
+A private decoder maps ordinary single-byte character tokens to signed-intmax
+values using target ASCII/signed-char rules, independently of host char type.
+Simple/octal/hex escapes are checked before conversion. Literal validation and
+result typing apply even to unselected operands. Prefixes, multicharacter forms,
+non-ASCII source bytes and universal names remain explicitly unsupported.
+No runtime char type, C character-expression conversion or Unicode claim.

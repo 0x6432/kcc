@@ -672,3 +672,35 @@ passed run 38806781592, but its longer local matrix and M11h's full validation
 still need final checks. M11j ordinary single-byte preprocessing characters are
 designed in m11-character-conditions.md, not yet implemented. Keep signed target
 character policy explicit; do not silently extend runtime types or Unicode.
+
+## M11g final verification
+
+Isolated a934115 passed the full GCC/Clang normal + ASan/UBSan unit/CLI/oracle
+and QBE/reference/ABI matrix. Its exact-source remote CI also passed:
+https://github.com/0x6432/kcc/actions/runs/38806781592
+M11g is complete within its signed-operator scope. M11h/M11i later source
+checkpoints retain their independent pending validation status until checked.
+
+## M11j tested source checkpoint
+
+Ordinary preprocessing characters now decode single ASCII bytes and standard
+simple/octal/hex escapes. Numeric escapes are checked to 0..255 and mapped via
+the chosen signed plain-char target policy. Empty/multicharacter, prefixes,
+non-ASCII source bytes, universal names and unknown escapes remain explicit
+rejections. No C runtime char type or general encoding support is implied.
+
+GCC make test and QBE/reference/ABI passed. New character tests passed 126
+chosen-target host/model agreements with each GCC/Clang, including printable
+ASCII, all simple escapes, numeric boundaries/sign extension, unsigned/ternary
+conversions and macro expansion/identity pasting. Twelve LF/CRLF/CR character
+selection programs passed QBE/reference execution. Invalid/unsupported literal
+forms diagnose even when unselected. Sanitizer fuzzing passed 26062 lexer/
+preprocessor and 106415 pipeline inputs (132477 total), 26 seconds each, without
+executing arbitrary generated code. All inherited suites remain passing.
+
+M11j full isolated matrix and exact-source CI are pending. M11h source CI passed
+run 38807421895; its local matrix and M11i full verification still need final
+checks. M11g local/remote verification is complete as recorded above.
+M11k direct quoted includes are designed in m11-quoted-includes.md before coding;
+loader/source ownership and fuzz-safe memory-only loading are required. Do not
+claim include support, header search paths or full C23 at this checkpoint.
