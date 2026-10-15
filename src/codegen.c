@@ -416,6 +416,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 		return value;
 	}
+	case expression_subscript:
 	case expression_name:
 	case expression_indirection:
 		assert(0 && "missing lvalue-to-rvalue conversion");

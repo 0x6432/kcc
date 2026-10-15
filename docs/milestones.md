@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-d declarations/lvalues, comparisons and scaled arithmetic implemented; later verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-e declarations/lvalues, comparisons, arithmetic and pointer subscripts implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -946,3 +946,13 @@ compatible ordering passed full normal GCC suites, 14 both-host/QBE programs,
 13 referent sizes x all integer indices in both ABI directions, typed-tree/depth
 and bounded sanitized fuzz checks. Full isolated/remote verification remains
 pending. M13e pointer subscripts are designed before implementation.
+
+M12h/M12i final verification: 76944c4/81db52e passed isolated GCC/Clang normal +
+ASan/UBSan matrices and exact-source CI 38821148738/38821949608. M13b 6f5e5ab
+passed exact-source CI 38824691700. Later snapshots remain independent/pending.
+
+M13e source checkpoint: pointer subscripts passed full normal GCC suites,
+15 both-host/QBE full-value programs, all referent/index types in both read/write
+ABI directions, chained/postfix/digraph/once-only and typed-depth checks plus
+bounded sanitized fuzz. Full isolated/remote checks remain pending. M13f fixed
+local arrays and explicit decay/layout contracts are pre-designed.

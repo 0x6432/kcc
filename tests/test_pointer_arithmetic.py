@@ -131,8 +131,8 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer arithmetic ') as directory:
             assert 'depth' in result.stderr, result.stderr
 
     rejected = [
-        ('int *f(int *p,int *q) { return p+q; }', 'pointer arithmetic'),
-        ('int *f(int *p) { return 1-p; }', 'pointer arithmetic'),
+        ('int *f(int *p,int *q) { return p+q; }', 'pointer offset'),
+        ('int *f(int *p) { return 1-p; }', 'pointer offset'),
         ('long f(int *p,unsigned *q) { return p-q; }', 'compatible pointer'),
         ('int f(char *p,signed char *q) { return p<q; }', 'compatible pointer'),
         ('int f(int *p,int **q) { return p>=q; }', 'compatible pointer'),

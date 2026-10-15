@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M13d implementation: scaled pointer offsets, signed-long differences and compatible
+M13e implementation: pointer subscripts, scaled offsets, signed-long differences and compatible
 comparisons, plus concrete address/indirection ASTs and general object lvalue
 addresses, with pointer mutation, fixed calls/returns/casts
 and scalar truth. Integer/pointer syntax resolves a separate semantic type graph.
@@ -12,16 +12,16 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13a b6ba02d, run 38823808449, passed GCC/Clang
-normal/sanitizer and fuzz jobs. M13b 6f5e5ab run 38824691700 remains in progress.
-M13d full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13b 6f5e5ab, run 38824691700, passed GCC/Clang
+normal/sanitizer and fuzz jobs. M13c/d remote checks remain in progress.
+M13e full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
-M12h/i/j isolated snapshots run independently; M13a queues under an external
-flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
+M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
+external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13e pointer subscripts, designed in m13-pointer-subscripts.md.
+Next: M13f fixed local arrays, designed in m13-local-arrays.md.
 Null constants, void/functions/full declarators,
 arrays/strings and remaining C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
@@ -1221,3 +1221,29 @@ arbitrary generated C was executed. Bounded sanitized fuzz passed
 26/26 seconds. Full isolated/remote matrix remains pending.
 M12j 1735825 completed both local normal/sanitizer compiler legs, with previously
 passed exact-source CI 38822838501. M13e pointer subscripts are pre-designed.
+
+## M13e tested source checkpoint
+
+Parsed subscript ASTs lower to shared typed pointer offsets plus indirection;
+ordinary value completion inserts loads, address contexts do not. Factored
+pointer-offset construction preserves prior arithmetic checks without fake
+binary syntax or analyzing typed children twice. Postfix suffixes alternate
+calls/indexing with normal binding, and language brackets include digraphs.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 15 new full-value programs
+and both-direction read/write ABI passed with GCC and Clang, covering every
+primitive/pointer referent and integer index, symmetric/negative/chained indexing,
+assignment results, once-only calls, macros, digraphs and one-past address-only
+uses. Typed units prove syntax replacement, explicit promotion, lvalue/load
+separation and exact depth. 42/43 chained subscripts test typed 128/131 depth;
+deep nested indices separately diagnose parser nesting. Earlier invalid arithmetic
+fixtures remain invalid with more precise offset diagnostics; no rejection test
+was silently dropped. No undefined pointer program or arbitrary generated C was
+executed. Sanitized bounded fuzz passed 23753 lexer + 35805 pipeline
+inputs (59558 total), 26/26 seconds.
+Full isolated/remote verification remains pending. M13f fixed local arrays,
+explicit decay and bounded target layout are designed before implementation.
+
+M12h/M12i 76944c4/81db52e now passed both isolated compiler normal/sanitizer legs,
+with prior exact-source CI 38821148738/38821949608. M13b 6f5e5ab exact-source CI
+passed 38824691700. M13c/d and queued M13 local matrices remain pending separately.

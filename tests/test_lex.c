@@ -54,6 +54,16 @@ static void test_basic(void)
 	check_tokens("%: /* null */\n", NULL, 0, 0);
 }
 
+static void test_bracket_tokens(void)
+{
+	const enum token_kind kinds[] = { token_left_bracket, token_right_bracket,
+		token_left_bracket, token_right_bracket };
+
+	check_tokens("[] <: :>", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_left_bracket), "[") == 0);
+	assert(strcmp(token_kind_name(token_right_bracket), "]") == 0);
+}
+
 static void test_errors(void)
 {
 	const enum token_kind invalid[] = { token_invalid };
@@ -247,6 +257,7 @@ int main(void)
 	test_bitwise_tokens();
 	test_phase_ordering();
 	test_basic();
+	test_bracket_tokens();
 	test_errors();
 	test_binary_and_values();
 	test_condition_tokens();

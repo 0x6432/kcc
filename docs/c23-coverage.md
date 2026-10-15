@@ -107,3 +107,14 @@ assert replacement, target sizes, explicit index promotion and signed-long
 differences; exact 128/129 typed-depth cases pass. Previously rejected p+1 and
 p<p fixtures now use permanently invalid p*2 and p/p, preserving their pointer
 operation constraint purpose. Arrays/subscripts/null constants are not implied.
+
+### M13e pointer subscripts
+
+15 both-host/QBE full-value programs plus both-direction read/write array ABI
+cover all thirteen current referent categories and all twelve integer indices.
+Separate chained-pointer host arrays, parser/postfix/digraph/macro tests, once-
+only/address-without-load cases, typed AST replacement/promotion and exact 42/43
+chain-depth limits pass. Array declarations/decay/string literals are not yet
+implemented, so live array storage is supplied by the host in ABI tests.
+The arithmetic suite's invalid pointer+pointer/integer-pointer cases remain;
+the factored builder now diagnoses their more specific offset constraint.

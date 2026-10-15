@@ -99,6 +99,26 @@ struct ast_indirection_expression *ast_new_indirection(struct arena *arena,
 	return node;
 }
 
+struct ast_subscript_expression *ast_new_subscript(struct arena *arena,
+	struct source_location location, struct ast_expression *left,
+	struct ast_expression *right)
+{
+	struct ast_subscript_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_subscript_expression) {
+			.expression = {
+				.kind = expression_subscript,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.left = left,
+			.right = right,
+		};
+	return node;
+}
+
 struct ast_name_expression *ast_new_name(struct arena *arena, struct token name)
 {
 	struct ast_name_expression *node = arena_alloc(arena, sizeof(*node));

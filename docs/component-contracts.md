@@ -985,3 +985,17 @@ by referent size. Compatible pointer ordering dispatches before integer property
 queries and uses full-width unsigned address comparisons on the flat LP64 target.
 The backend does not supply runtime array bounds/lifetime checks. Every operand
 is evaluated once, in a C-permitted order, including symmetric integer+pointer.
+
+## M13e postfix subscript lowering
+
+Lexer conversion owns bracket/digraph language-token mapping without changing
+pp-token identity. The shared postfix suffix loop accepts calls/subscripts and
+checks depth after each suffix; each index enters parse_expression's nesting
+budget. Parsed ast_subscript_expression retains left/right syntax children.
+
+Sema analyzes/loads children once, normalizes pointer/index roles with the
+factored typed lower_pointer_offset builder, then replaces syntax through its
+slot with an indirection lvalue around the offset. The common completion path
+checks/annotates that lvalue and inserts a value load only when required. No fake
+parsed binary node is built/reanalyzed. Offset/difference semantics are unchanged;
+backend needs no new address/load/store path and rejects unlowered subscript ASTs.

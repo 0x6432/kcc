@@ -316,35 +316,73 @@ static bool parse_call_arguments(struct parser *parser,
 	}
 }
 
-/* postfix-suffix ::= { "(" [ argument-expression-list ] ")" }
- * Shared by identifier/integer atoms and parenthesized primary expressions.
+/* call-suffix ::= "(" [ argument-expression-list ] ")" */
+static struct ast_expression *parse_call_suffix(struct parser *parser,
+	struct ast_expression *callee)
+{
+	struct ast_call_expression *node;
+	struct ast_argument *arguments = NULL;
+	size_t count = 0;
+
+	preprocess_next(parser->preprocessor);
+	if (!parse_call_arguments(parser, &arguments, &count))
+		return NULL;
+	if (!expect_token(parser, token_right_paren, "expected ')' after call", NULL))
+		return NULL;
+	node = ast_new_call(parser->arena, callee, arguments, count);
+	if (!node) {
+		allocation_error(parser, callee->location);
+		return NULL;
+	}
+	return &node->expression;
+}
+
+/* subscript-suffix ::= "[" assignment-expression "]"
+ * The comma operator remains unsupported; parse_expression enters the shared
+ * recursive nesting budget for each index expression.
+ */
+static struct ast_expression *parse_subscript_suffix(struct parser *parser,
+	struct ast_expression *left)
+{
+	struct token opening = preprocess_next(parser->preprocessor);
+	struct ast_expression *right = parse_expression(parser, 0);
+	struct ast_subscript_expression *node;
+
+	if (!right)
+		return NULL;
+	if (!expect_token(parser, token_right_bracket, "expected ']' after subscript", NULL))
+		return NULL;
+	node = ast_new_subscript(parser->arena, opening.location, left, right);
+	if (!node) {
+		allocation_error(parser, opening.location);
+		return NULL;
+	}
+	return &node->expression;
+}
+
+/* postfix-suffix ::= { call-suffix | subscript-suffix }
+ * Shared by atoms and parenthesized primary expressions. A suffix binds more
+ * tightly than prefix/infix operators; chains associate left to right.
  */
 static struct ast_expression *parse_postfix_suffix(struct parser *parser,
 	struct ast_expression *expression)
 {
-	if (!expression)
-		return NULL;
-	while (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
-		struct ast_call_expression *node;
-		struct ast_argument *arguments = NULL;
-		size_t count = 0;
+	while (expression) {
+		struct token token = preprocess_peek(parser->preprocessor);
 
-		preprocess_next(parser->preprocessor);
-		if (!parse_call_arguments(parser, &arguments, &count))
+		if (token.kind == token_left_paren)
+			expression = parse_call_suffix(parser, expression);
+		else if (token.kind == token_left_bracket)
+			expression = parse_subscript_suffix(parser, expression);
+		else
+			break;
+		if (!expression)
 			return NULL;
-		if (!expect_token(parser, token_right_paren, "expected ')' after call", NULL))
-			return NULL;
-		node = ast_new_call(parser->arena, expression, arguments, count);
-		if (!node) {
-			allocation_error(parser, expression->location);
-			return NULL;
-		}
-		if (node->expression.depth > ast_max_expression_depth) {
+		if (expression->depth > ast_max_expression_depth) {
 			diagnostic_error(parser->diagnostics, expression->location,
 				"expression tree exceeds depth limit (128)");
 			return NULL;
 		}
-		expression = &node->expression;
 	}
 	return expression;
 }

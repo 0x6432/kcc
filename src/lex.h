@@ -31,6 +31,8 @@ enum token_kind {
 	token_continue,
 	token_left_paren,
 	token_right_paren,
+	token_left_bracket,
+	token_right_bracket,
 	token_left_brace,
 	token_right_brace,
 	token_semicolon,

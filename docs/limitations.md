@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13d. The chronological entries below describe what each
+Current milestone: M13e. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -876,3 +876,19 @@ nonrepresentable differences remain undefined; tests never execute them. No
 runtime bound checks are promised. Null+0 is not silently made defined. Source
 null constants, subscripting, array/string declarations, void/function pointers,
 qualifiers and full declarators remain future work.
+
+## M13e
+
+Postfix subscripts support pointer[integer] and integer[pointer], with the same
+integer promotions and complete scalar referents as pointer addition. Chained
+pointer-to-pointer indexing, assignment results, address-of and alternating
+call/subscript suffixes preserve normal precedence. Bracket digraphs <:/:> map
+to the same language tokens; raw pp spellings remain unchanged.
+
+Subscript syntax lowers to explicit pointer offset and indirection, then a load
+only in value contexts. Address-of a one-past subscript computes its address
+without loading it; invalid/null/out-of-bounds arithmetic and actual invalid
+loads remain undefined and are not executed. Every lowering node/promotion/load
+counts toward typed depth: 42 chained pointer subscripts reach depth 128, 43
+exceed it. The parser separately bounds recursive index nesting. Local array
+and string declarations, decay, null constants and full declarators remain later.

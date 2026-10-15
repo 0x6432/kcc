@@ -1087,8 +1087,67 @@ static void test_pointer_arithmetic_tree(void)
 	source_destroy(&source);
 }
 
+static void test_pointer_subscript_tree(void)
+{
+	const char *text = "int f(int *p,unsigned short n) { return n[p]; } "
+		"int *g(int *p) { return &p[1]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_return_statement *statement;
+	struct ast_subscript_expression *parsed;
+	struct ast_load_expression *load;
+	struct ast_indirection_expression *indirection;
+	struct ast_pointer_offset_expression *offset;
+	struct ast_conversion_expression *promotion;
+	struct ast_address_expression *address;
+
+	assert(source_from_bytes(&source, "subscript.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	statement = (struct ast_return_statement *)item->statement;
+	assert(statement->value->kind == expression_subscript);
+	parsed = (struct ast_subscript_expression *)statement->value;
+	assert(parsed->left->kind == expression_name && parsed->right->kind == expression_name);
+	assert(parsed->expression.depth == 2);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(statement->value != &parsed->expression && statement->value->kind == expression_load);
+	load = (struct ast_load_expression *)statement->value;
+	assert(load->expression.type == &type_int && load->expression.depth == 6);
+	assert(load->operand->kind == expression_indirection && load->operand->is_lvalue);
+	indirection = (struct ast_indirection_expression *)load->operand;
+	assert(indirection->expression.type == &type_int && indirection->expression.depth == 5);
+	assert(indirection->operand->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->base == parsed->right && offset->element_size == 4 && !offset->subtract);
+	assert(offset->expression.depth == 4 && offset->base->kind == expression_load);
+	promotion = require_conversion(offset->index, &type_int, &type_ushort);
+	assert(promotion->operand == parsed->left && promotion->operand->kind == expression_load);
+	function = (struct ast_function *)function->external.next;
+	item = (struct ast_statement_item *)function->body->items;
+	statement = (struct ast_return_statement *)item->statement;
+	assert(statement->value->kind == expression_address);
+	address = (struct ast_address_expression *)statement->value;
+	assert(address->expression.type->kind == type_kind_pointer && address->expression.depth == 5);
+	assert(address->operand->kind == expression_indirection && address->operand->is_lvalue);
+	indirection = (struct ast_indirection_expression *)address->operand;
+	assert(indirection->operand->kind == expression_pointer_offset && indirection->expression.depth == 4);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_pointer_subscript_tree();
 	test_pointer_arithmetic_tree();
 	test_pointer_equality_tree();
 	test_pointer_lvalue_tree();

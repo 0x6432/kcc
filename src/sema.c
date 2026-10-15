@@ -185,21 +185,57 @@ static bool comparison_operator(enum binary_operator operation)
 	}
 }
 
-/* Operands have already been analyzed and loaded. Replace the parsed binary
- * node, never reinterpret its layout or reanalyze its shared children.
+/* Both operands are already analyzed/loaded. Only the integer is promoted;
+ * the pointer type and the index's promoted signedness remain explicit.
+ */
+static struct ast_pointer_offset_expression *lower_pointer_offset(struct sema *sema,
+	struct source_location location, struct ast_expression *left,
+	struct ast_expression *right, bool subtract)
+{
+	struct ast_expression *base;
+	struct ast_expression *index;
+	const struct pointer_type *pointer;
+	struct ast_pointer_offset_expression *offset;
+
+	if (left->type->kind == type_kind_pointer && type_is_integer(right->type)) {
+		base = left;
+		index = right;
+	} else if (!subtract && type_is_integer(left->type) && right->type->kind == type_kind_pointer) {
+		base = right;
+		index = left;
+	} else {
+		diagnostic_error(sema->diagnostics, location,
+			"pointer offset/subscript requires one pointer and one integer operand");
+		return NULL;
+	}
+	if (!convert_expression(sema, &index, type_integer_promotion(index->type)))
+		return NULL;
+	pointer = (const struct pointer_type *)base->type;
+	offset = ast_new_pointer_offset(sema->arena, location,
+		base, index, type_object_size(pointer->referent), subtract);
+	if (!offset) {
+		diagnostic_error(sema->diagnostics, location, "out of memory lowering pointer offset");
+		return NULL;
+	}
+	offset->expression.type = base->type;
+	if (!check_expression_depth(sema, &offset->expression))
+		return NULL;
+	return offset;
+}
+
+/* Replace parsed syntax through its slot; never reinterpret its layout or
+ * reanalyze shared typed children. Subtraction has target ptrdiff_t = long.
  */
 static bool lower_pointer_arithmetic(struct sema *sema,
 	struct ast_expression **slot, struct ast_binary_expression *binary)
 {
 	struct ast_expression *left = binary->left;
 	struct ast_expression *right = binary->right;
-	struct ast_expression *base;
-	struct ast_expression *index;
 	struct ast_expression *result;
-	const struct pointer_type *pointer;
 	bool subtract = binary->operation == binary_subtract;
 
 	if (subtract && left->type->kind == type_kind_pointer && right->type->kind == type_kind_pointer) {
+		const struct pointer_type *pointer = (const struct pointer_type *)left->type;
 		struct ast_pointer_difference_expression *difference;
 
 		if (!type_compatible(left->type, right->type)) {
@@ -207,47 +243,27 @@ static bool lower_pointer_arithmetic(struct sema *sema,
 				"pointer subtraction requires compatible pointer operands");
 			return false;
 		}
-		pointer = (const struct pointer_type *)left->type;
 		difference = ast_new_pointer_difference(sema->arena, binary->expression.location,
 			left, right, type_object_size(pointer->referent));
-		if (!difference)
-			goto out_of_memory;
-		result = &difference->expression;
-		/* The selected LP64 target uses signed long for ptrdiff_t. */
-		result->type = &type_long;
-	} else {
-		struct ast_pointer_offset_expression *offset;
-
-		if (left->type->kind == type_kind_pointer && type_is_integer(right->type)) {
-			base = left;
-			index = right;
-		} else if (!subtract && type_is_integer(left->type) && right->type->kind == type_kind_pointer) {
-			base = right;
-			index = left;
-		} else {
+		if (!difference) {
 			diagnostic_error(sema->diagnostics, binary->expression.location,
-				"pointer arithmetic requires pointer plus/minus integer or compatible pointer subtraction");
+				"out of memory lowering pointer difference");
 			return false;
 		}
-		if (!convert_expression(sema, &index, type_integer_promotion(index->type)))
-			return false;
-		pointer = (const struct pointer_type *)base->type;
-		offset = ast_new_pointer_offset(sema->arena, binary->expression.location,
-			base, index, type_object_size(pointer->referent), subtract);
+		result = &difference->expression;
+		result->type = &type_long;
+	} else {
+		struct ast_pointer_offset_expression *offset = lower_pointer_offset(sema,
+			binary->expression.location, left, right, subtract);
+
 		if (!offset)
-			goto out_of_memory;
+			return false;
 		result = &offset->expression;
-		result->type = base->type;
 	}
 	if (!check_expression_depth(sema, result))
 		return false;
 	*slot = result;
 	return true;
-
-out_of_memory:
-	diagnostic_error(sema->diagnostics, binary->expression.location,
-		"out of memory lowering pointer arithmetic");
-	return false;
 }
 
 /* Resolve/types are independent of parsing. Value contexts explicitly load
@@ -319,6 +335,32 @@ static bool sema_expression(struct sema *sema,
 		}
 		result_type = &pointer->type;
 		expression->depth = node->operand->depth + 1;
+		break;
+	}
+	case expression_subscript: {
+		struct ast_subscript_expression *node = (struct ast_subscript_expression *)expression;
+		struct ast_pointer_offset_expression *offset;
+		struct ast_indirection_expression *indirection;
+		const struct pointer_type *pointer;
+
+		if (!sema_expression(sema, &node->left, true) || !sema_expression(sema, &node->right, true))
+			return false;
+		offset = lower_pointer_offset(sema, expression->location, node->left, node->right, false);
+		if (!offset)
+			return false;
+		indirection = ast_new_indirection(sema->arena, expression->location, &offset->expression);
+		if (!indirection) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory lowering subscript");
+			return false;
+		}
+		pointer = (const struct pointer_type *)offset->expression.type;
+		result_type = pointer->referent;
+		expression = &indirection->expression;
+		expression->is_lvalue = true;
+		*expression_slot = expression;
+		/* Common completion below annotates/checks the lvalue and inserts a
+		 * load only for value contexts. No typed operand is analyzed twice.
+		 */
 		break;
 	}
 	case expression_indirection: {
