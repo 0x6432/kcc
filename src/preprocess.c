@@ -6,7 +6,9 @@
 struct macro_token {
 	struct pp_token token;
 	struct macro_token *next;
+	struct macro_token *va_opt_end;
 	size_t parameter_index;
+	bool va_opt_close;
 };
 
 struct macro_parameter {
@@ -35,6 +37,7 @@ struct macro {
 	size_t identity;
 	bool defined;
 	bool function_like;
+	bool variadic;
 };
 
 static bool same_spelling(struct pp_token left, struct pp_token right)
@@ -50,6 +53,12 @@ static bool pp_spelling_is(struct pp_token token, const char *spelling)
 
 	return token.length == length &&
 		memcmp(token.location.source->data + token.location.offset, spelling, length) == 0;
+}
+
+static bool is_variadic_identifier(struct pp_token token)
+{
+	return token.kind == pp_identifier &&
+		(pp_spelling_is(token, "__VA_ARGS__") || pp_spelling_is(token, "__VA_OPT__"));
 }
 
 static bool is_directive_marker(struct pp_token token)
@@ -205,9 +214,11 @@ static bool check_parameter_token(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* function-parameters = '(' (identifier (',' identifier)*)? ')' */
+/* function-parameters = '(' ')' | '(' '...' ')'
+ *                     | '(' identifier (',' identifier)* (',' '...')? ')'
+ */
 static bool read_parameters(struct preprocessor *preprocessor, struct pp_token marker,
-	struct macro_parameter **parameters, size_t *count, struct token *error)
+	struct macro_parameter **parameters, size_t *count, bool *variadic, struct token *error)
 {
 	struct pp_token token = pp_lexer_next(&preprocessor->input);
 	struct macro_parameter **tail = parameters;
@@ -221,10 +232,21 @@ static bool read_parameters(struct preprocessor *preprocessor, struct pp_token m
 
 		if (!check_parameter_token(preprocessor, marker, token, error))
 			return false;
-		if (token.kind != pp_identifier || pp_spelling_is(token, "__VA_ARGS__") ||
-			pp_spelling_is(token, "__VA_OPT__")) {
+		if (token.kind == pp_punctuator && pp_spelling_is(token, "...")) {
+			token = pp_lexer_next(&preprocessor->input);
+			if (!check_parameter_token(preprocessor, marker, token, error))
+				return false;
+			if (token.kind != pp_punctuator || !pp_spelling_is(token, ")")) {
+				*error = reject_directive(preprocessor, marker, token,
+					"expected ')' after variadic ellipsis");
+				return false;
+			}
+			*variadic = true;
+			return true;
+		}
+		if (token.kind != pp_identifier || is_variadic_identifier(token)) {
 			*error = reject_directive(preprocessor, marker, token,
-				"expected a fixed macro parameter (variadics are not supported yet)");
+				"expected a macro parameter or final ellipsis");
 			return false;
 		}
 		if (parameter_index(*parameters, token) != SIZE_MAX) {
@@ -256,10 +278,57 @@ static bool read_parameters(struct preprocessor *preprocessor, struct pp_token m
 	}
 }
 
+/* va-opt-replacement = '__VA_OPT__' '(' preprocessing-token* ')'
+ * Match parentheses iteratively; nested optional regions are a constraint error.
+ * Preserve all raw tokens for redefinition comparison and future #/## work.
+ */
+static bool validate_optional_replacements(struct preprocessor *preprocessor,
+	struct pp_token marker, struct macro_token *replacement, struct token *error)
+{
+	for (struct macro_token *item = replacement; item; item = item->next) {
+		struct macro_token *end;
+		size_t depth = 1;
+
+		if (!pp_spelling_is(item->token, "__VA_OPT__"))
+			continue;
+		if (!item->next || item->next->token.kind != pp_punctuator ||
+			!pp_spelling_is(item->next->token, "(")) {
+			*error = invalid_token(marker);
+			diagnostic_error(preprocessor->diagnostics, item->token.location,
+				"expected '(' after __VA_OPT__");
+			return false;
+		}
+		for (end = item->next->next; end; end = end->next) {
+			if (pp_spelling_is(end->token, "__VA_OPT__")) {
+				*error = invalid_token(marker);
+				diagnostic_error(preprocessor->diagnostics, end->token.location,
+					"nested __VA_OPT__ is not allowed");
+				return false;
+			}
+			if (end->token.kind == pp_punctuator && pp_spelling_is(end->token, "("))
+				depth++;
+			else if (end->token.kind == pp_punctuator && pp_spelling_is(end->token, ")"))
+				depth--;
+			if (!depth)
+				break;
+		}
+		if (!end) {
+			*error = invalid_token(marker);
+			diagnostic_error(preprocessor->diagnostics, item->token.location,
+				"unterminated __VA_OPT__ replacement");
+			return false;
+		}
+		item->va_opt_end = end;
+		end->va_opt_close = true;
+		item = end;
+	}
+	return true;
+}
+
 /* define-directive = '#' 'define' identifier function-parameters? replacement-list newline
  * undef-directive = '#' 'undef' identifier newline
  * replacement-list = preprocessing-token*
- * Variadic parameters and token pasting remain deferred.
+ * Stringizing and token pasting remain deferred.
  */
 static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, bool define, struct token *error)
@@ -273,6 +342,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct macro_parameter *parameters = NULL;
 	size_t parameter_count = 0;
 	bool function_like = false;
+	bool variadic = false;
 
 	if (name.kind == pp_invalid) {
 		*error = reject_directive(preprocessor, marker, name, NULL);
@@ -297,7 +367,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	if (define && token.kind == pp_punctuator && !token.leading_space &&
 		pp_spelling_is(token, "(")) {
 		function_like = true;
-		if (!read_parameters(preprocessor, marker, &parameters, &parameter_count, error))
+		if (!read_parameters(preprocessor, marker, &parameters, &parameter_count, &variadic, error))
 			return false;
 		token = pp_lexer_next(&preprocessor->input);
 	} else if (define && !is_directive_end(token) && !token.leading_space &&
@@ -325,6 +395,11 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 				"unexpected token after macro name in #undef");
 			return false;
 		}
+		if (is_variadic_identifier(token) && !variadic) {
+			*error = reject_directive(preprocessor, marker, token,
+				"variadic identifiers require a variadic macro replacement list");
+			return false;
+		}
 		if (token.kind == pp_punctuator &&
 			(pp_spelling_is(token, "##") || pp_spelling_is(token, "%:%:"))) {
 			*error = reject_directive(preprocessor, marker, token,
@@ -350,7 +425,8 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 		}
 		*item = (struct macro_token) {
 			.token = token,
-			.parameter_index = parameter_index(parameters, token),
+			.parameter_index = is_variadic_identifier(token) ? parameter_count :
+				parameter_index(parameters, token),
 		};
 		*tail = item;
 		tail = &item->next;
@@ -363,8 +439,10 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 			macro->defined = false;
 		return true;
 	}
+	if (!validate_optional_replacements(preprocessor, marker, replacement, error))
+		return false;
 	if (macro && macro->defined) {
-		if (macro->function_like == function_like &&
+		if (macro->function_like == function_like && macro->variadic == variadic &&
 			same_parameters(macro->parameters, parameters) &&
 			same_replacement(macro->replacement, replacement))
 			return true;
@@ -394,6 +472,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	macro->parameters = parameters;
 	macro->parameter_count = parameter_count;
 	macro->function_like = function_like;
+	macro->variadic = variadic;
 	macro->replacement = replacement;
 	macro->defined = true;
 	return true;
@@ -563,6 +642,22 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 			frame->replacement = replacement->next;
 			*result = (struct rescan_token) { .token = replacement->token, .hide = frame->hide };
 			result->token.expansion_location = frame->invocation;
+			if (replacement->va_opt_close) {
+				if (!spend_expansion_work(preprocessor, result->token, error))
+					return false;
+				continue;
+			}
+			if (replacement->va_opt_end) {
+				struct macro_argument *variable =
+					&frame->arguments[replacement->parameter_index];
+
+				if (!spend_expansion_work(preprocessor, result->token, error) ||
+					!prescan_argument(preprocessor, variable, result->token, error))
+					return false;
+				frame->replacement = variable->expanded ? replacement->next->next :
+					replacement->va_opt_end->next;
+				continue;
+			}
 			if (replacement->parameter_index != SIZE_MAX) {
 				struct macro_argument *argument =
 					&frame->arguments[replacement->parameter_index];
@@ -611,6 +706,11 @@ static bool check_invocation_input(struct preprocessor *preprocessor,
 		*error = invalid_token(input.token);
 		return false;
 	}
+	if (input.from_source && is_variadic_identifier(input.token)) {
+		*error = stop_preprocessing(preprocessor, input.token,
+			"variadic identifiers require a variadic macro replacement list");
+		return false;
+	}
 	if (input.from_source && input.token.at_line_start && is_directive_marker(input.token)) {
 		*error = stop_preprocessing(preprocessor, input.token,
 			"directives during macro invocation lookahead are not supported yet");
@@ -637,6 +737,7 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 	struct argument_token **tail = NULL;
 	size_t index = 0;
 	size_t parentheses = 0;
+	size_t argument_count = macro->parameter_count + (macro->variadic ? 1 : 0);
 
 	*invoked = false;
 	if (!read_rescan_token(preprocessor, cursor, &next, error) ||
@@ -647,12 +748,12 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 		cursor->has_pending = true;
 		return true;
 	}
-	if (macro->parameter_count) {
-		*arguments = allocate_auxiliary(preprocessor, macro->parameter_count,
+	if (argument_count) {
+		*arguments = allocate_auxiliary(preprocessor, argument_count,
 			sizeof(**arguments), name.token, error);
 		if (!*arguments)
 			return false;
-		for (size_t i = 0; i < macro->parameter_count; i++)
+		for (size_t i = 0; i < argument_count; i++)
 			(*arguments)[i] = (struct macro_argument) { 0 };
 		tail = &(*arguments)[0].raw;
 	}
@@ -671,7 +772,9 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 			return false;
 		if (is_punctuator(next.token, ")") && !parentheses) {
 			/* Empty () is one empty argument only when parameters exist. */
-			if (macro->parameter_count && index + 1 != macro->parameter_count) {
+			if ((macro->variadic && index + 1 < macro->parameter_count) ||
+				(!macro->variadic && macro->parameter_count &&
+				index + 1 != macro->parameter_count)) {
 				*error = stop_preprocessing(preprocessor, name.token,
 					"macro argument count does not match parameters");
 				return false;
@@ -680,14 +783,16 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 			*invoked = true;
 			return true;
 		}
-		if (!macro->parameter_count) {
+		if (!argument_count) {
 			*error = stop_preprocessing(preprocessor, name.token,
 				"zero-parameter macro invocation requires no arguments");
 			return false;
 		}
-		if (is_punctuator(next.token, ",") && !parentheses) {
+		/* Separators after the named arguments belong to the variable slot. */
+		if (is_punctuator(next.token, ",") && !parentheses &&
+			(!macro->variadic || index < macro->parameter_count)) {
 			index++;
-			if (index == macro->parameter_count) {
+			if (index == argument_count) {
 				*error = stop_preprocessing(preprocessor, name.token,
 					"macro argument count does not match parameters");
 				return false;
@@ -724,6 +829,11 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 
 		if (!read_rescan_token(preprocessor, cursor, &input, error))
 			return false;
+		if (input.from_source && is_variadic_identifier(input.token)) {
+			*error = stop_preprocessing(preprocessor, input.token,
+				"variadic identifiers require a variadic macro replacement list");
+			return false;
+		}
 		if (input.from_source && is_directive_marker(input.token)) {
 			if (!read_directive(preprocessor, input.token, error))
 				return false;

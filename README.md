@@ -6,15 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M10c: fixed-parameter function-like macros now collect raw arguments, prescan
-used arguments in isolated streams, and substitute with per-token suppression
-preserved. Empty arguments, nested calls and callbacks are supported. Variadics,
-macro operators and full C23 coverage remain unfinished.
+M10d: variadic function-like macros support `__VA_ARGS__` and `__VA_OPT__`,
+including C23 omitted variable tails and arguments that expand to nothing.
+Object-like, zero-parameter and fixed-parameter macros remain supported.
+Macro operators and full C23 coverage remain unfinished.
 
-See `docs/m10-fixed-arguments.md` for ownership, limits and subset policy.
-Previous M10a/M10b design documents remain as historical checkpoints.
-
-See `docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
+See `docs/m10-variadics.md` for ownership, limits and subset policy, plus
+`docs/milestones.md`, `docs/limitations.md` and `docs/handoff.md`.
+Earlier M10 design documents describe the incremental checkpoints.
 
 ## Build and test
 
@@ -72,17 +71,16 @@ cc build/example.s -o build/example
 ```
 
 Supported: normalized line endings, backslash-newline splicing, physical source
-locations, null directives (#/%:), object-like and fixed-parameter function-like
-macros, decimal int literals, int locals, simple assignment, arithmetic,
+locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
+macros (including __VA_ARGS__/__VA_OPT__), decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: variadic macro parameters/arguments and __VA_OPT__,
-token pasting, stringizing, includes,
+Unsupported: token pasting, stringizing, includes,
 conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
-prototypes, function values/pointers, variadics, comma/update/compound-assignment
+prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
@@ -91,12 +89,12 @@ depth, 512 external declarations, 256 distinct functions, 128 parameters/call
 arguments, 4096 body items and 256 parameter/local slots per function. Macros:
 1024 distinct names, 1024 tokens/definition, 65536 retained replacement tokens,
 128 retained expansion frames and 65536 work units (pushes, visits, argument
-collection/copies). Arguments: 128 fixed parameters, 128 nested parentheses,
+collection/copies). Arguments: 128 named parameters plus one variadic slot, 128 nested parentheses,
 64 nested prescans and 65536 auxiliary records (parameters/arguments/token copies).
 
 `make test-codegen` also runs separate-object ABI tests with the selected host
 compiler. Use `HOST_CC=clang make test-codegen QBE=/path/to/qbe` for Clang.
-CI runs GCC and Clang, compiler sanitizers, 374 host-preprocessor token/spelling oracle cases, generated
+CI runs GCC and Clang, compiler sanitizers, 564 host-preprocessor token/spelling oracle cases, generated
 executables, ABI tests
 and bounded lexer/pipeline fuzzing. Fuzzing never runs generated arbitrary code.
 
@@ -123,8 +121,7 @@ those language features: conversion still rejects unsupported constants, types
 and operators. Brace digraphs <%/%> are accepted by the current grammar. Raw
 inspection can succeed for text the compiler rejects; it is not a preprocessor
 or conformance check. Null/define/undef directives are handled by the compiler.
-Header-name context, Unicode/UCNs, full expansion-stack diagnostic notes and
-variadic macros remain future work. Both debug dumps may show partial output on lexical errors.
+Header-name context, Unicode/UCNs, full expansion-stack diagnostic notes remain future work. Both debug dumps may show partial output on lexical errors.
 
 
 ## Zero-parameter macro example
@@ -149,4 +146,21 @@ int main(void) { return ADD(ID(ID(20)), 22); }
 
 This also exits 42. Arguments are collected before expansion; only parentheses
 protect commas. An unused argument is not macro-expanded. Argument prescan
-cannot consume the source after the enclosing invocation. Variadics are next.
+cannot consume the source after the enclosing invocation.
+
+
+## Variadic macro example
+
+```c
+#define PLUS(x, ...) x __VA_OPT__(+ __VA_ARGS__)
+#define EMPTY
+int main(void) { return PLUS(20, 22) + PLUS(0, EMPTY); }
+```
+
+This exits 42 through the QBE workflow above. `PLUS(42)`, `PLUS(42,)` and
+`PLUS(42, EMPTY)` all expand to `42`. The optional region depends on whether
+the variable arguments expand to any tokens, not whether their raw text is empty.
+Trailing variable arguments retain separator commas; only parentheses protect
+commas during collection. Nested `__VA_OPT__` is rejected at definition time.
+GNU named ellipses and comma-swallowing extensions are not implemented.
+Variadic macros do not enable variadic C functions or their ABI.

@@ -2,11 +2,11 @@
 
 ## Current checkpoint
 
-M10c: fixed macro parameters, isolated argument prescan and substitution.
+M10d: variadic macro collection, __VA_ARGS__ and streamed __VA_OPT__ regions.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-M10c source CI passed: https://github.com/0x6432/kcc/actions/runs/38755902384
-M09–M10c are complete for their stated subsets; variadics are next.
+Previous M10c final CI passed: https://github.com/0x6432/kcc/actions/runs/38757262652
+M09–M10c are complete for their stated subsets; M10d validation is in progress.
 Full M10 and full C23 remain incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
@@ -120,10 +120,9 @@ implicit return value. No automatic local zeroing or missing-return warning.
 
 Raw quoted literals and punctuators do not enable their C semantics. Only brace
 digraphs are newly accepted language spelling; int-only conversion still applies.
-Null/define/undef, object-like and fixed-parameter function macros are supported.
-No variadic macro arguments,
-macro operators, other directives, other types,
-pointers/function values, variadics, local
+Null/define/undef, object-like and fixed/variadic function macros are supported,
+including __VA_ARGS__/__VA_OPT__. No macro operators, other directives, other
+types, pointers/function values, variadic functions, local
 prototypes, globals/storage classes, comma/update/compound-assignment operators.
 Partial phases only: no header-name context, encoding/UCNs/BOM,
 #line presumed locations or full expansion-stack notes yet. Missing terminal newlines
@@ -157,13 +156,13 @@ paths. Final local/fuzz results and remote verification follow below.
 
 ## Next milestone
 
-M10d: variadic macros. Read m10-fixed-arguments.md first; M10a/M10b files are
-historical. Decide minimum fixed arity, empty vs omitted variable tails, retained
-comma tokens, __VA_ARGS__ indexing and __VA_OPT__ balanced replacement parsing/
-nonempty rules before implementation. Compare with N3096 and both hosts; do not
-silently add GNU comma-swallowing or implement #/## early. Decide bounds and
-ownership for any new metadata. M11 owns operators/includes/conditions and the
-remaining directive integration. M25 needs richer predefined-location provenance.
+M11: macro operators and directive integration, still to be split into small
+implementation checkpoints before coding. Start with stringizing/token pasting
+in isolation; decide spelling ownership, re-lex validation, raw argument and
+placemarker semantics, including __VA_OPT__ interactions. Do not silently add
+GNU comma swallowing. Includes/conditions require separate bounded source and
+evaluation designs. Read m10-variadics.md and the existing fixed-argument contract.
+M25 needs richer predefined-location provenance than outermost diagnostics.
 
 M10c uses concrete arena-owned macro_parameter, macro_argument and argument_token
 records. Definition tokens have parameter_index or SIZE_MAX. Parameter name/order
@@ -296,3 +295,34 @@ https://github.com/0x6432/kcc/actions/runs/38755902384
 The subsequent test/documentation verification commit must have its own remote
 CI checked after push. M10c is complete only for the fixed-parameter subset;
 M10d variadics and M11 macro operators/includes/conditions remain outstanding.
+
+
+## M10d implementation checkpoint
+
+Read m10-variadics.md for decisions recorded before coding. Variadic macros
+allocate one final argument slot, retain internal raw commas and reuse isolated
+lazy prescan. Optional regions are validated/annotated on the flat definition
+list and stream through the current replacement frame when selected. Empty
+expanded variable arguments suppress them. Definition validation and compatible
+redefinition remain transactional. No parser/AST/sema/QBE API changed.
+
+New tests cover omitted/empty/expanded-empty tails, callbacks and rescan across
+optional boundaries, suppression, arity/definition/provenance errors and exact
+limits. Both fuzz paths have variadic/optional seeds. Final validation evidence
+will be recorded below; do not infer passes from this implementation record.
+
+
+## M10d tested implementation checkpoint
+
+make test passed with 564 token-kind/spelling oracle cases; the same oracle
+passed with Clang. GCC-host QBE/reference programs and separate-object ABI
+tests passed, including 16 new variadic runtime programs under LF/CRLF/CR.
+Unit tests cover 128 named parameters plus a variable slot, exact 1024-token
+optional definitions, 64/65 nested variadic prescans and bounded large tails.
+Sanitized fuzzing completed 40473 lexer/preprocessor and 170004 pipeline inputs
+(210477 total) in 26 seconds each, without executing arbitrary generated code.
+
+The source checkpoint is pushed now to protect against sandbox resets. The
+full GCC/Clang normal/ASan/UBSan matrix and exact-commit remote CI are pending;
+these results must be checked separately before marking M10 complete. No new
+parser, AST, sema or QBE interfaces; M11 operator/directive work remains deferred.

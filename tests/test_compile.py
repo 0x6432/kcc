@@ -382,6 +382,42 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
          "int main(void) { DECL(int,x,7); return x; }\n", 7),
         ("#define BOTH(x) ((x)&&(x))\nint main(void) { int x=0; BOTH(x=x+1); return x; }\n", 2),
     ]
+    directive_programs += [
+        ("#define V(...) __VA_ARGS__\nint main(void) { return V(42); }\n", 42),
+        ("#define V(x,...) x __VA_OPT__(+ __VA_ARGS__)\n"
+         "int main(void) { return V(42); }\n", 42),
+        ("#define V(x,...) x __VA_OPT__(+ __VA_ARGS__)\n"
+         "int main(void) { return V(42,); }\n", 42),
+        ("#define V(x,...) x __VA_OPT__(+ __VA_ARGS__)\n#define E\n"
+         "int main(void) { return V(42,E); }\n", 42),
+        ("#define V(x,...) x __VA_OPT__(+ __VA_ARGS__)\n"
+         "int main(void) { return V(20,22); }\n", 42),
+        ("#define CALL(f,...) f(__VA_ARGS__)\n"
+         "int add(int x,int y) { return x+y; }\n"
+         "int main(void) { return CALL(add,20,22); }\n", 42),
+        ("#define CALL(f,...) f(__VA_ARGS__)\nint value(void) { return 42; }\n"
+         "int main(void) { return CALL(value); }\n", 42),
+        ("#define CALL(...) add(20 __VA_OPT__(,) __VA_ARGS__)\n"
+         "int add(int x,int y) { return x+y; }\n"
+         "int main(void) { return CALL(22); }\n", 42),
+        ("#define V(...) __VA_OPT__(int x=__VA_ARGS__;)\n"
+         "int main(void) { V(42) return x; }\n", 42),
+        ("#define V(...) __VA_OPT__(int x=__VA_ARGS__;)\n#define E\n"
+         "int main(void) { V(E) return 42; }\n", 42),
+        ("#define V(...) __VA_OPT__(__VA_ARGS__)\n"
+         "int main(void) { return V(V(42)); }\n", 42),
+        ("#define DROP(...) 42\n#define BAD(x,y) x+y\n"
+         "int main(void) { return DROP(BAD(1),12u); }\n", 42),
+        ("#define LP() (\n#define G(x) 42\n"
+         "#define V(r,x,...) __VA_OPT__(G r x) )\n"
+         "int main(void) { return V(LP(),0,1); }\n", 42),
+        ("#define V(...) __VA_OPT__(G)\n#define G(x) x\n"
+         "int main(void) { return V(1)(42); }\n", 42),
+        ("int f(int x) { return x; }\n#define f(...) f(__VA_ARGS__)\n"
+         "int main(void) { return f(42); }\n", 42),
+        ("#define BOTH(...) ((__VA_ARGS__) && (__VA_ARGS__))\n"
+         "int main(void) { int x=0; BOTH(x=x+1); return x; }\n", 2),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -579,7 +615,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { #\nreturn 0; }",
         "int/*\n*/#\nmain(void) { return 0; }",
         "#/*\n*/int main(void) { return 0; }",
-        "int main(void) { return 0; }\n#define X(...) 1\n",
+        "int main(void) { return 0; }\n#define X(...,x) 1\n",
         "#\n", "# // comment\n", "%:%:\nint main(void) { return 0; }",
         "#unknown \0\nint main(void) { return 0; }",
     ]
@@ -595,6 +631,12 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define V(...) __VA_ARGS__\nint main(void) { return V(missing); }", ":2:25: error:"),
+        ("#define V(...) __VA_OPT__(missing)\nint main(void) { return V(1); }", ":2:25: error:"),
+        ("#define V(...) __VA_ARGS__\nint main(void) { return V(12u); }", ":2:25: error: unsupported numeric"),
+        ("#define V(x,y,...) x\nint main(void) { return V(); }", "macro argument count"),
+        ("#define V(...) __VA_OPT__(__VA_OPT__(1))\nint main(void) { return 0; }", "nested __VA_OPT__"),
+        ("#define V(...) __VA_OPT__ 1\nint main(void) { return 0; }", "expected '(' after __VA_OPT__"),
         ("#define ID(x) x\nint main(void) { return ID(missing); }", ":2:25: error:"),
         ("#define ID(x) x\nint main(void) { return ID(12u); }", ":2:25: error: unsupported numeric"),
         ("#define F(a,b) a+b\nint main(void) { return F(1); }", "macro argument count"),
@@ -609,7 +651,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define VALUE 12u\nint main(void) { return VALUE; }", ":2:25: error: unsupported numeric"),
         ("#define A B\n#define B missing\nint main(void) { return A; }", ":3:25: error:"),
         ("#define NAME main\nint NAME(int x) { return x; }", ":2:5: error:"),
-        ("#define X(...) 1\nint main(void) { return 0; }", "variadics are not supported"),
+        ("#define X(...,x) 1\nint main(void) { return 0; }", "expected ')' after variadic ellipsis"),
         ("#define X 1\n#define X 2\nint main(void) { return X; }", "incompatible macro redefinition"),
         ("#define X 1 ## 2\nint main(void) { return 0; }", "macro token pasting"),
 

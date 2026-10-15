@@ -17,9 +17,9 @@ sources retain original bytes plus sparse offset checkpoints for physical
 locations. Prepared token offsets index logical bytes; diagnostics translate
 those offsets, while name lookup/codegen read logical spelling slices.
 
-M10c dispatches null/define/undef directives and rescans object/fixed-parameter
-function-like replacements before language conversion. Variadics and includes
-remain unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
+M10d dispatches null/define/undef directives and rescans object/fixed/variadic
+function-like replacements before language conversion. Includes remain
+unsupported; the host preprocessor is not invoked by the compiler. Complete phase ordering, encoding/UCNs and final-line constraints are
 not claimed. Missing terminal newlines remain an acceptance extension; no
 synthetic newline is appended. Reference: WG14 N3096 5.1.1.2 and 6.10,
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf
@@ -104,9 +104,16 @@ token's hide set with the invocation base. Unused arguments are not expanded;
 language conversion happens only on final output, not prescan. Temporary heap
 cursors are freed on success/error; all retained records/work are bounded.
 
-See m10-fixed-arguments.md for the current contract. M10a/M10b documents describe
-historical designs. Parser/AST/sema/QBE APIs are unchanged. Variadics, headers,
-conditions and macro operators remain later checkpoints. Predefined location
+M10d adds one argument slot after the named parameters, retaining raw separator
+commas in its token list. __VA_ARGS__ indexes that slot. __VA_OPT__ markers and
+closing boundaries are annotated on the flat immutable replacement list after
+balanced definition-time validation. The variable slot's cached prescan decides
+presence; selected bodies stay in the current replacement stream so rescan can
+cross optional boundaries. No recursive optional-body cursor or new record kind.
+
+See m10-variadics.md and m10-fixed-arguments.md for current contracts. Earlier
+M10 documents describe the incremental checkpoints. Parser/AST/sema/QBE APIs are
+unchanged. Headers, conditions and macro operators remain later checkpoints. Predefined location
 macros will require richer provenance than the current outermost diagnostic
 location; do not implement __LINE__ by guessing from definition spelling.
 

@@ -139,6 +139,56 @@ for _ in range(60):
                  + " ".join(name + "(3)" for name in names) + "\n")
     examples.append("".join(lines))
 
+# C23 variadics: omitted and expanded-empty tails, comma retention and boundaries.
+examples += [
+    "#define V(...) __VA_ARGS__\nV() V(1) V(1,2,3) V(,) V(,,)\n",
+    "#define V(x,...) x __VA_ARGS__\nV() V(1) V(1,) V(1,2,3)\n",
+    "#define V(x,y,...) x y __VA_ARGS__\nV(,) V(1,2) V(1,2,) V(1,2,3,4)\n",
+    "#define V(...) __VA_OPT__(7)\n#define E\nV() V(E) V(,) V(E,E)\n",
+    "#define E()\n#define V(...) __VA_OPT__(__VA_ARGS__)\nV(E()) V(7) V(1,2)\n",
+    "#define V(...) f(0 __VA_OPT__(,) __VA_ARGS__)\nV() V(a,b,c)\n",
+    "#define V(x,...) f(0,x __VA_OPT__(,) __VA_ARGS__)\nV(a) V(a,) V(a,b,c)\n",
+    "#define V(...) __VA_OPT__() __VA_OPT__() __VA_ARGS__\nV() V(7)\n",
+    "#define V(...) __VA_OPT__((__VA_ARGS__))\nV() V(1,2)\n",
+    "#define DROP(...) 7\n#define BAD(x,y) x\nDROP(BAD(1)) DROP(@,#,12u)\n",
+    "#define V(...) __VA_OPT__(7)\nV(12u) V(@) V(#)\n",
+    "#define V(...) V(__VA_ARGS__)\nV() V(7) V(V(1))\n",
+    "#define V(...) W(__VA_ARGS__)\n#define W(...) V(__VA_ARGS__)\nV(7) W(1,2)\n",
+    "#define V(...) __VA_ARGS__ __VA_ARGS__\nV(V(7))\n",
+    "#define V(...) __VA_OPT__(V(__VA_ARGS__))\nV() V(7) V(V(7))\n",
+    "#define V(...) __VA_OPT__(G)\n#define G(x) x\nV(1)(7)\n",
+    "#define V(...) __VA_OPT__(G() __VA_ARGS__)\n#define G() 7\nV(2)\n",
+    "#define LP() (\n#define G(x) 42\n#define V(r,x,...) __VA_OPT__(G r x) )\nV(LP(),0,1)\n",
+    "#define V(x,...) __VA_OPT__(x) (7)\n#define G(x) x\nV(G,1)\n",
+    "#define V(x,...) x __VA_OPT__() ()\n#define G() 7\nV(G) V(G,1)\n",
+    "#define V(...) __VA_ARGS__\n#define CALL(...) V(__VA_ARGS__)\n#define C 1,2\nCALL(C)\n",
+    "#define V(...) __VA_OPT__(7)\n#define DROP(...)\nV(DROP(1,2))\n",
+    "#define V(...) __VA_OPT__(DROP(__VA_ARGS__))\n#define DROP(...)\nV(1,2)\n",
+    "#define V(...) __VA_OPT__(7)\n#define CALL(x,...) V(__VA_ARGS__)\nCALL(0) CALL(0,) CALL(0,1,2)\n",
+    "#define V(...) __VA_OPT__(1) + __VA_OPT__(2)\nV() V(7)\n",
+    "#define V(...) __VA_OPT__(7)\n#define V( ... ) __VA_OPT__(7)\nV(1)\n",
+    "#define V(x,...) x __VA_ARGS__\n#undef V\n#define V(...) __VA_OPT__(7)\nV(1)\n",
+    "#define V(...) __VA_OPT__(7)\nV({1,2}) V([1,2]) V((1,2))\n",
+    "#define V(...) __VA_OPT__(7)\nV(/**/) V(\n) V(\\\n7)\n",
+    "#define V(...) __VA_OPT__(G)\n#define G(x) 7\n#define A V(1)\nA(2)\n",
+]
+# Generated presence combinations include empty macros that expand to commas.
+for _ in range(100):
+    values = [random_source.choice(["", "E", "Z()", "7", "C", "(1,2)"])
+              for _ in range(random_source.randrange(5))]
+    examples.append("#define E\n#define Z()\n#define C ,\n"
+                    "#define V(...) __VA_OPT__((__VA_ARGS__))\nV("
+                    + ",".join(values) + ")\n")
+# Recursive variadic graphs stress suppression in selected bodies and arguments.
+for _ in range(60):
+    names = [f"V{i}" for i in range(4)]
+    lines = []
+    for name in names:
+        target = random_source.choice(names)
+        lines.append(f"#define {name}(...) __VA_OPT__({target}(__VA_ARGS__))\n")
+    lines.append(" ".join(name + "(7)" for name in names) + "\n")
+    examples.append("".join(lines))
+
 with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
     source = Path(directory) / "input.c"
     expanded = Path(directory) / "expanded.c"

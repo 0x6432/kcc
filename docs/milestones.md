@@ -16,7 +16,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | complete |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
-| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a–M10c fixed macros complete; variadics pending) |
+| M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | in progress (M10a–M10c complete; M10d variadics under final validation) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | planned |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
@@ -525,3 +525,29 @@ https://github.com/0x6432/kcc/actions/runs/38755902384
 The subsequent test/documentation verification commit must have its own remote
 CI checked after push. M10c is complete only for the fixed-parameter subset;
 M10d variadics and M11 macro operators/includes/conditions remain outstanding.
+
+
+## M10d planned implementation
+
+Design decisions and acceptance criteria are recorded in m10-variadics.md before
+coding. Extend fixed parameters with a trailing variadic slot, preserve raw
+separator commas, reuse isolated lazy prescan, and stream validated optional
+replacement regions without isolating rescan boundaries. M11 operators and
+directive integration remain deferred. No implementation or validation is
+claimed by this planning checkpoint.
+
+
+## M10d tested implementation checkpoint
+
+make test passed with 564 token-kind/spelling oracle cases; the same oracle
+passed with Clang. GCC-host QBE/reference programs and separate-object ABI
+tests passed, including 16 new variadic runtime programs under LF/CRLF/CR.
+Unit tests cover 128 named parameters plus a variable slot, exact 1024-token
+optional definitions, 64/65 nested variadic prescans and bounded large tails.
+Sanitized fuzzing completed 40473 lexer/preprocessor and 170004 pipeline inputs
+(210477 total) in 26 seconds each, without executing arbitrary generated code.
+
+The source checkpoint is pushed now to protect against sandbox resets. The
+full GCC/Clang normal/ASan/UBSan matrix and exact-commit remote CI are pending;
+these results must be checked separately before marking M10 complete. No new
+parser, AST, sema or QBE interfaces; M11 operator/directive work remains deferred.

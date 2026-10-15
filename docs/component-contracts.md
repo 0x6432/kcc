@@ -8,7 +8,7 @@ and update their tests in the same checkpoint.
 | --- | --- | --- |
 | source | lexer/diagnostics | Prepare raw bytes before borrowing; immutable logical spelling slices, explicit length and physical diagnostic mappings; EOF is not an input sentinel |
 | lexer | preprocessor | Distinct pp_token on demand, borrowed logical spelling, newline/spacing state, no keyword/value classification; conversion is separate |
-| preprocessor | parser | One cached language token, null/define/undef consumed and object/fixed-parameter macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
+| preprocessor | parser | One cached language token, null/define/undef consumed and object/fixed/variadic macros rescanned before conversion; separate spelling/invocation locations; errors prevent IL |
 | parser | sema | Distinct concrete AST structs, source locations, no inferred semantics |
 | sema | codegen | Validated typed AST, explicit conversions, resolved declarations; failure prevents codegen |
 | codegen | QBE | Well-formed IL for the pinned target; no source-language validation here |
@@ -568,3 +568,39 @@ is retained. M25 predefined-location macros need additional provenance review:
 outermost diagnostic position alone is not the semantic __LINE__ expansion site.
 The host oracle now has 374 streams, retaining all 198 prior cases, under both
 hosts; it includes cyclic fixed-parameter graphs, callbacks and unused arguments.
+
+
+## M10d variadic contract
+
+Supersedes the M10c variadic exclusions only. macro.parameter_count still counts
+named parameters, bounded at 128; macro.variadic records the trailing ellipsis.
+The invocation array has named_count + 1 slots for variadic macros, even when
+all variable arguments are omitted. At least the named arguments must exist;
+an empty () supplies one empty argument when needed. Once collection reaches
+the variable slot, top-level commas are copied rather than consumed as slot
+separators. The separator introducing that slot is not part of its contents.
+
+__VA_ARGS__ and __VA_OPT__ definition tokens carry the variable slot index.
+Optional markers also point at their matching closing definition token, which
+is tagged as a structural non-emitting boundary. All raw spelling/spacing stays
+available to compatible-redefinition checks, which now compare variadic form.
+Validation is iterative, bounded by replacement-token limits and transactional.
+It rejects nested/malformed optional regions, GNU named ellipses and either
+special identifier outside a variadic function-like replacement list. Special
+source identifiers are rejected even in otherwise unused arguments.
+
+Optional substitution requests the variable slot's lazy cached prescan. Empty
+expanded output skips the whole region; nonempty output streams the region in
+the same frame, without its operator delimiters. Parameter injection retains
+the existing token hide-set union and outermost-call provenance. Crossing an
+optional boundary must not isolate following replacement or source tokens.
+Inactive regions do not expand their parameters. No synthetic spelling or
+placemarker is needed without #/##; M11 must add real operator/placemarker
+semantics rather than treating this subset as a complete operator implementation.
+
+Arena ownership, public APIs, cursor/cache invariants and budgets are unchanged.
+The extra variable slot and raw/cached commas consume auxiliary records; optional
+selection and closing-boundary visits consume work. The full oracle has 564
+streams under GCC and Clang, retaining all 374 prior cases. Fuzz cache checks
+also require that repeated peeks do not allocate additional auxiliary records.
+Variadic macros do not change the parser's fixed-arity function signatures or ABI.

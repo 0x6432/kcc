@@ -45,6 +45,8 @@ static void check_stream(const char *text, const struct expected_token *expected
 		assert_same_token(first, second);
 		assert_same_token(first, next);
 		assert(diagnostics.errors == errors);
+		if (next.kind != expected[i].kind || next.length != strlen(expected[i].spelling))
+			fprintf(stderr, "stream mismatch at %zu: %s (wanted %s)\n", i, text, expected[i].spelling);
 		assert(next.kind == expected[i].kind);
 		assert(next.length == strlen(expected[i].spelling));
 		assert(next.location.offset >= previous_offset);
@@ -517,7 +519,7 @@ static void test_function_definition_errors(void)
 		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
 	};
 	const char *inputs[] = {
-		"#define F(x,x) x\n7", "#define F(...) 1\n7", "#define F(,) 1\n7",
+		"#define F(x,x) x\n7", "#define F(...,x) 1\n7", "#define F(,) 1\n7",
 		"#define F(1) 1\n7", "#define F(\n7", "#define F(\v) 1\n7",
 		"#define F() # X\n7", "#define F() %: X\n7", "#define F() ## X\n7",
 	};
@@ -615,7 +617,7 @@ static void test_fixed_argument_errors(void)
 	};
 	const char *definitions[] = {
 		"#define F(x,x) x\n7", "#define F(x,) x\n7", "#define F(x y) x\n7",
-		"#define F(... ) 1\n7", "#define F(x,...) x\n7",
+		"#define F(x...) 1\n7", "#define F(x,...,y) x\n7",
 		"#define F(__VA_ARGS__) 1\n7", "#define F(__VA_OPT__) 1\n7",
 		"#define F(x\v,y) x\n7",
 	};
@@ -644,6 +646,141 @@ static void append_test_text(char *text, size_t capacity, size_t *used,
 	va_end(arguments);
 	assert(written >= 0 && (size_t)written < capacity - *used);
 	*used += (size_t)written;
+}
+
+static void test_variadic_arguments(void)
+{
+	const struct expected_token empty[] = { { token_eof, "" } };
+	const struct expected_token seven[] = { { token_integer, "7" }, { token_eof, "" } };
+	const struct expected_token sum[] = {
+		{ token_integer, "3" }, { token_plus, "+" }, { token_integer, "4" }, { token_eof, "" },
+	};
+	const struct expected_token comma[] = { { token_comma, "," }, { token_eof, "" } };
+	const struct expected_token call[] = {
+		{ token_identifier, "F" }, { token_left_paren, "(" }, { token_integer, "7" },
+		{ token_right_paren, ")" }, { token_eof, "" },
+	};
+
+	check_stream("#define F(...) __VA_ARGS__\nF() F(/**/)", empty, 1, 0, NULL);
+	check_stream("#define F(...) __VA_ARGS__\nF(,)", comma, 2, 0, NULL);
+	check_stream("#define F(x,...) x\nF(7)", seven, 2, 0, NULL);
+	check_stream("#define F(x,...) x\nF(7,)", seven, 2, 0, NULL);
+	check_stream("#define F(x,y,...) 7\nF(,)", seven, 2, 0, NULL);
+	check_stream("#define F(...) 7\n#define BAD(x,y) x\nF(BAD(1))", seven, 2, 0, NULL);
+	check_stream("#define F(...) 7\nF(12u,@,#)", seven, 2, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__(7)\nF(,)", seven, 2, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__(7)\n#define E\nF() F(E)", empty, 1, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__(__VA_ARGS__)\nF(7)", seven, 2, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__() __VA_OPT__()\nF(7) F()", empty, 1, 0, NULL);
+	check_stream("#define F(x,...) x __VA_OPT__(+ __VA_ARGS__)\nF(3,4)", sum, 4, 0, NULL);
+	check_stream("#define LP() (\n#define G(x) 7\n"
+		"#define F(r,x,...) __VA_OPT__(G r x) )\nF(LP(),0,1)", seven, 2, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__(G)\n#define G(x) x\nF(1)(7)", seven, 2, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__(G()\n7", (const struct expected_token[]) {
+		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
+	}, 3, 1, "unterminated __VA_OPT__");
+	check_stream("#define F(...) F(__VA_ARGS__)\nF(7)", call, 5, 0, NULL);
+	check_stream("#define F(...) __VA_ARGS__\n#define G(...) F(__VA_ARGS__)\nG(F(7))",
+		seven, 2, 0, NULL);
+	check_stream("#define F(...) 7\n#define F( ... ) 7\nF()", seven, 2, 0, NULL);
+	check_stream("#define F(x,...) 7\n#define F(x,...) 7\nF()", seven, 2, 0, NULL);
+	check_stream("#define F(...) __VA_OPT__(7)\n#undef F\n#define F() 7\nF()",
+		seven, 2, 0, NULL);
+}
+
+static void test_variadic_errors(void)
+{
+	const struct expected_token definition_error[] = {
+		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
+	};
+	const struct expected_token call_error[] = { { token_invalid, "F" }, { token_eof, "" } };
+	const char *definitions[] = {
+		"#define F(...,x) 1\n7", "#define F(...,...) 1\n7",
+		"#define F(x...) 1\n7", "#define F(x,...,) 1\n7",
+		"#define F(x) __VA_ARGS__\n7", "#define F __VA_ARGS__\n7",
+		"#define F(x) __VA_OPT__(1)\n7", "#define F __VA_OPT__(1)\n7",
+		"#define F(...) __VA_OPT__\n7", "#define F(...) __VA_OPT__ 1\n7",
+		"#define F(...) __VA_OPT__((1)\n7",
+		"#define F(...) __VA_OPT__(__VA_OPT__(1))\n7",
+		"#define F(...) __VA_OPT__(# x)\n7",
+		"#define F(...) __VA_OPT__(x ## y)\n7",
+	};
+
+	for (size_t i = 0; i < sizeof(definitions) / sizeof(definitions[0]); i++)
+		check_stream(definitions[i], definition_error, 3, 1, NULL);
+	check_stream("#define F(x,y,...) x\nF()", call_error, 2, 1, "argument count");
+	check_stream("#define F(...) __VA_ARGS__\nF(", call_error, 2, 1, "unterminated");
+	check_stream("#define F() 7\n#define F(...) 7\nF()", definition_error, 3, 1,
+		"incompatible macro redefinition");
+	check_stream("#define F(x,...) 7\n#define F(x) 7\nF(1)", definition_error, 3, 1,
+		"incompatible macro redefinition");
+	check_stream("#define F(...) 7\n#define F(...) __VA_OPT__(\nF()", definition_error, 3, 1,
+		"unterminated __VA_OPT__");
+	check_stream("#define F(...) __VA_OPT__(7)\n#define BAD(x,y) x\nF(BAD(1))",
+		(const struct expected_token[]) {
+			{ token_invalid, "BAD" }, { token_eof, "" },
+		}, 2, 1, "argument count");
+	check_stream("#define F(x,...) x\n#define F(x,...) x __VA_OPT__(+)\nF(7)",
+		definition_error, 3, 1, "incompatible macro redefinition");
+	check_stream("#define F(...) 7\nF(__VA_ARGS__)", (const struct expected_token[]) {
+		{ token_invalid, "__VA_ARGS__" }, { token_eof, "" },
+	}, 2, 1, "variadic identifiers require");
+	check_stream("__VA_OPT__", (const struct expected_token[]) {
+		{ token_invalid, "__VA_OPT__" }, { token_eof, "" },
+	}, 2, 1, "variadic identifiers require");
+}
+
+static void test_variadic_limits(void)
+{
+	const size_t capacity = 200000;
+	char *text = malloc(capacity);
+	size_t used = 0;
+	const struct expected_token one[] = { { token_integer, "1" }, { token_eof, "" } };
+
+	assert(text);
+	/* The variadic slot does not reduce the named-parameter allowance. */
+	append_test_text(text, capacity, &used, "#define F(");
+	for (size_t i = 0; i < preprocess_parameter_limit; i++)
+		append_test_text(text, capacity, &used, "%sp%zu", i ? "," : "", i);
+	append_test_text(text, capacity, &used, ",...) __VA_ARGS__\nF(");
+	for (size_t i = 0; i < preprocess_parameter_limit; i++)
+		append_test_text(text, capacity, &used, "%s0", i ? "," : "");
+	append_test_text(text, capacity, &used, ",1)\n");
+	check_stream(text, one, 2, 0, NULL);
+	for (size_t extra = 0; extra < 2; extra++) {
+		used = 0;
+		append_test_text(text, capacity, &used,
+			"#define V(...) __VA_OPT__(__VA_ARGS__)\n");
+		for (size_t i = 0; i < preprocess_prescan_limit + extra; i++)
+			append_test_text(text, capacity, &used, "V(");
+		append_test_text(text, capacity, &used, "1");
+		for (size_t i = 0; i < preprocess_prescan_limit + extra; i++)
+			append_test_text(text, capacity, &used, ")");
+		if (extra)
+			check_resource_failure(text, "macro argument prescan depth limit exceeded", 0, 0);
+		else
+			check_stream(text, one, 2, 0, NULL);
+	}
+	/* Delimiters and inactive content all consume definition-token storage. */
+	for (size_t extra = 0; extra < 2; extra++) {
+		used = 0;
+		append_test_text(text, capacity, &used, "#define V(...) __VA_OPT__(");
+		for (size_t i = 0; i < preprocess_replacement_limit - 3 + extra; i++)
+			append_test_text(text, capacity, &used, "1 ");
+		append_test_text(text, capacity, &used, ")\nV() 1\n");
+		if (extra)
+			check_resource_failure(text, "macro replacement storage limit exceeded", 0, 0);
+		else
+			check_stream(text, one, 2, 0, NULL);
+	}
+	used = 0;
+	append_test_text(text, capacity, &used, "#define DROP(...) 1\nDROP(");
+	for (size_t i = 0; i < preprocess_auxiliary_limit; i++)
+		append_test_text(text, capacity, &used, ",");
+	append_test_text(text, capacity, &used, ")");
+	/* Collection/copy work reaches its cap before this raw stream fills storage. */
+	check_resource_failure(text, "macro expansion work limit exceeded", 0, 0);
+	free(text);
 }
 
 static void test_fixed_argument_limits(void)
@@ -729,6 +866,9 @@ int main(void)
 	test_macro_locations();
 	test_macro_identity_reuse();
 	test_macro_limits();
+	test_variadic_limits();
+	test_variadic_arguments();
+	test_variadic_errors();
 	test_fixed_arguments();
 	test_fixed_argument_errors();
 	test_fixed_argument_limits();

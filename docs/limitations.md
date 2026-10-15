@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M10c. The chronological entries below describe what each
+Current milestone: M10d. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -343,7 +343,7 @@ prefix-rescanning caveats remain; no hostile large-input CPU guarantee, error
 count cap or allocation-failure injection tests have been added.
 
 
-## M10c (current)
+## M10c
 
 Fixed parameter lists/arguments, empty arguments, isolated lazy prescan and
 suppression-preserving substitution are supported. No variadic definitions,
@@ -371,3 +371,29 @@ This is not enough provenance for every future predefined-location macro case;
 M25 must review __LINE__/__FILE__ semantics rather than reuse diagnostic offsets.
 Some rescan cases have unspecified C23 behavior; oracle agreement is scoped
 validation, not proof of a unique ISO result or complete preprocessing.
+
+
+## M10d (current)
+
+Variadic definitions/invocations, __VA_ARGS__ and __VA_OPT__ are supported.
+C23 omitted tails and explicit empty tails are accepted; optional regions use
+expanded emptiness, so a macro expanding to nothing suppresses them. Variable
+arguments retain internal separating commas. Nested optional regions and
+malformed definitions reject even if unused. Earlier fixed/object macros remain
+supported. GNU named ellipses/comma swallowing, #/##, includes/conditions and
+other directives, predefined macros and full C23 preprocessing remain absent.
+
+The named parameter cap remains 128, with one additional variable argument slot.
+That slot and raw/cached copies share the 65536 auxiliary-record budget. Definition
+and expansion work/frame/prescan/parenthesis/source bounds remain unchanged.
+Flat optional annotations allocate no extra records and require no recursive
+parsing. Without #/##, optional emptiness emits no tokens; future operators need
+placemarker semantics. Raw strings and unsupported C literals can only be stored
+or discarded, not compiled merely because macros now accept them.
+
+The parser, sema and QBE interfaces are unchanged: variadic C functions/ABI,
+other types/operators, encoding/Unicode/header-name context and full provenance
+remain future work. Source directives during invocation lookahead still reject.
+Location caveats, unspecified rescan cases, diagnostic prefix scanning and lack
+of allocation-failure injection remain as documented above. Oracle agreement
+and bounded fuzzing are not a full-conformance or hostile-input CPU guarantee.
