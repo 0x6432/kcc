@@ -116,6 +116,8 @@ static void assert_same_language_token(struct token left, struct token right)
 	assert(left.spelling_location.source == right.spelling_location.source);
 	assert(left.spelling_location.offset == right.spelling_location.offset);
 	assert(left.length == right.length && left.integer == right.integer);
+	assert(left.integer_base == right.integer_base);
+	assert(left.integer_unsigned_suffix == right.integer_unsigned_suffix);
 }
 
 static void fuzz_integer_spelling(const unsigned char *data, size_t size)

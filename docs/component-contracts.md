@@ -842,3 +842,11 @@ performs no source I/O, allocation, diagnostics or target type selection. Empty
 slices need no readable byte. Callers must not use partial output after error.
 preprocess.c applies its intmax model; token_from_pp currently rejects suffixes,
 and sema retains the signed-int literal bound. AST/ABI interfaces stay unchanged.
+
+M12c: tokens/AST integer leaves retain base/U spelling facts, not inferred types.
+Parser stores integer specifier enums separately from semantic type annotations;
+common AST headers remain first members. type_new_function copies a return type
+and parameter-type array into arena-owned signature records. Sema inserts
+concrete conversion nodes, annotates all int/uint expressions and recomputes
+depths. Codegen selects signedness only from validated types. int/uint have
+identical word storage/call ABI; conversion copies preserve low 32 bits.

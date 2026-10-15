@@ -13,6 +13,8 @@ enum token_kind {
 	token_unsupported_keyword,
 	token_integer,
 	token_int,
+	token_signed,
+	token_unsigned,
 	token_void,
 	token_return,
 	token_if,
@@ -74,6 +76,8 @@ struct token {
 	struct source_location spelling_location;
 	size_t length;
 	uint64_t integer;
+	unsigned integer_base;
+	bool integer_unsigned_suffix;
 };
 
 enum pp_token_kind {

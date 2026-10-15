@@ -1,8 +1,15 @@
 #include "type.h"
 
 const struct type type_int = { type_kind_int };
+const struct type type_uint = { type_kind_uint };
 
-struct function_type *type_new_int_function(struct arena *arena, size_t parameter_count)
+bool type_is_integer(const struct type *type)
+{
+	return type->kind == type_kind_int || type->kind == type_kind_uint;
+}
+
+struct function_type *type_new_function(struct arena *arena, const struct type *return_type,
+	const struct type *const *parameters, size_t parameter_count)
 {
 	struct function_type *type = arena_alloc(arena, sizeof(*type));
 	struct function_parameter_type **tail;
@@ -11,7 +18,7 @@ struct function_type *type_new_int_function(struct arena *arena, size_t paramete
 		return NULL;
 	*type = (struct function_type) {
 		.type = { type_kind_function },
-		.return_type = &type_int,
+		.return_type = return_type,
 		.parameter_count = parameter_count,
 	};
 	tail = &type->parameters;
@@ -20,7 +27,7 @@ struct function_type *type_new_int_function(struct arena *arena, size_t paramete
 
 		if (!parameter)
 			return NULL;
-		*parameter = (struct function_parameter_type) { .type = &type_int };
+		*parameter = (struct function_parameter_type) { .type = parameters[i] };
 		*tail = parameter;
 		tail = &parameter->next;
 	}
@@ -36,7 +43,7 @@ bool type_compatible(const struct type *left, const struct type *right)
 
 	if (left->kind != right->kind)
 		return false;
-	if (left->kind == type_kind_int)
+	if (type_is_integer(left))
 		return true;
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;

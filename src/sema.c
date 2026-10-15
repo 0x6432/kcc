@@ -89,6 +89,43 @@ static bool check_expression_depth(struct sema *sema,
 	return true;
 }
 
+static const struct type *specifier_type(enum integer_specifier specifier)
+{
+	return specifier == integer_specifier_unsigned ? &type_uint : &type_int;
+}
+
+static bool convert_expression(struct sema *sema, struct ast_expression **slot,
+	const struct type *target)
+{
+	struct ast_conversion_expression *conversion;
+
+	assert(type_is_integer((*slot)->type) && type_is_integer(target));
+	if (type_compatible((*slot)->type, target))
+		return true;
+	conversion = ast_new_conversion(sema->arena, *slot, target);
+	if (!conversion) {
+		diagnostic_error(sema->diagnostics, (*slot)->location,
+			"out of memory inserting integer conversion");
+		return false;
+	}
+	if (!check_expression_depth(sema, &conversion->expression))
+		return false;
+	*slot = &conversion->expression;
+	return true;
+}
+
+static bool comparison_operator(enum binary_operator operation)
+{
+	switch (operation) {
+	case binary_equal: case binary_not_equal:
+	case binary_less: case binary_less_equal:
+	case binary_greater: case binary_greater_equal:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /* Resolve/types are independent of parsing. Value contexts explicitly load
  * lvalues; assignment's left operand must remain an object, not a loaded value.
  */
@@ -96,11 +133,13 @@ static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required)
 {
 	struct ast_expression *expression = *expression_slot;
+	const struct type *result_type = &type_int;
 
 	switch (expression->kind) {
 	case expression_call: {
 		struct ast_call_expression *node = (struct ast_call_expression *)expression;
 		struct ast_name_expression *callee;
+		const struct function_parameter_type *parameter;
 
 		if (node->callee->kind != expression_name) {
 			diagnostic_error(sema->diagnostics, node->callee->location,
@@ -125,11 +164,15 @@ static bool sema_expression(struct sema *sema,
 				"argument count does not match function signature");
 			return false;
 		}
+		result_type = node->function->type->return_type;
+		parameter = node->function->type->parameters;
 		expression->depth = node->callee->depth + 1;
 		for (struct ast_argument *argument = node->arguments; argument;
 			argument = argument->next) {
-			if (!sema_expression(sema, &argument->value, true))
+			if (!sema_expression(sema, &argument->value, true) ||
+				!convert_expression(sema, &argument->value, parameter->type))
 				return false;
+			parameter = parameter->next;
 			if (argument->value->depth + 1 > expression->depth)
 				expression->depth = argument->value->depth + 1;
 		}
@@ -139,11 +182,15 @@ static bool sema_expression(struct sema *sema,
 		struct ast_integer_expression *node =
 			(struct ast_integer_expression *)expression;
 
-		if (node->value > INT32_MAX) {
+		bool unsigned_type = node->unsigned_suffix ||
+			(node->base && node->base != 10 && node->value > INT32_MAX);
+
+		if (node->value > (unsigned_type ? UINT32_MAX : (uint64_t)INT32_MAX)) {
 			diagnostic_error(sema->diagnostics, expression->location,
-				"literal does not fit the supported int type");
+				"literal does not fit the supported int type; wider integer types are not implemented");
 			return false;
 		}
+		result_type = unsigned_type ? &type_uint : &type_int;
 		break;
 	}
 	case expression_name: {
@@ -156,6 +203,7 @@ static bool sema_expression(struct sema *sema,
 				"use of undeclared identifier");
 			return false;
 		}
+		result_type = node->declaration->type;
 		expression->is_lvalue = true;
 		break;
 	}
@@ -165,11 +213,13 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, true))
 			return false;
+		if (node->operation != unary_not)
+			result_type = node->operand->type;
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
-	/* Arithmetic/bitwise/shift operands are all int in M12a. Integer
-	 * promotions are identity; wider-type conversions remain M12b work.
+	/* Integer promotions are identity for int/uint. Usual conversions apply
+	 * to arithmetic/comparisons; shifts promote operands independently.
 	 */
 	case expression_binary: {
 		struct ast_binary_expression *node =
@@ -180,6 +230,17 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!sema_expression(sema, &node->right, true))
 			return false;
+		if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
+			result_type = node->left->type;
+		} else {
+			const struct type *common = node->left->type == &type_uint ||
+				node->right->type == &type_uint ? &type_uint : &type_int;
+
+			if (!convert_expression(sema, &node->left, common) ||
+				!convert_expression(sema, &node->right, common))
+				return false;
+			result_type = comparison_operator(node->operation) ? &type_int : common;
+		}
 		depth = node->left->depth > node->right->depth ?
 			node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
@@ -212,19 +273,22 @@ static bool sema_expression(struct sema *sema,
 				"assignment requires a modifiable lvalue");
 			return false;
 		}
-		if (!sema_expression(sema, &node->right, true))
+		if (!sema_expression(sema, &node->right, true) ||
+			!convert_expression(sema, &node->right, node->left->type))
 			return false;
+		result_type = node->left->type;
 		depth = node->left->depth > node->right->depth ?
 			node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_conversion:
 	case expression_load:
 		/* Conversion nodes are introduced below; sema is a single pass. */
-		assert(0 && "load node before semantic analysis");
+		assert(0 && "conversion node before semantic analysis");
 		return false;
 	}
-	expression->type = &type_int;
+	expression->type = result_type;
 	if (!check_expression_depth(sema, expression))
 		return false;
 
@@ -236,7 +300,7 @@ static bool sema_expression(struct sema *sema,
 				"out of memory inserting lvalue conversion");
 			return false;
 		}
-		load->expression.type = &type_int;
+		load->expression.type = expression->type;
 		if (!check_expression_depth(sema, &load->expression))
 			return false;
 		*expression_slot = &load->expression;
@@ -269,12 +333,13 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 	sema->scope->bindings = binding;
 
 	/* C's point of declaration is before the initializer is analyzed. */
-	local->type = &type_int;
+	local->type = specifier_type(local->specifier);
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
 	if (local->initializer)
-		return sema_expression(sema, &local->initializer, true);
+		return sema_expression(sema, &local->initializer, true) &&
+			convert_expression(sema, &local->initializer, local->type);
 	return true;
 }
 
@@ -373,7 +438,8 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 		struct ast_return_statement *node =
 			(struct ast_return_statement *)statement;
 
-		return sema_expression(sema, &node->value, true);
+		return sema_expression(sema, &node->value, true) &&
+			convert_expression(sema, &node->value, sema->function->return_type);
 	}
 	case statement_expression: {
 		struct ast_expression_statement *node =
@@ -495,6 +561,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 				"out of memory creating parameter local");
 			goto done;
 		}
+		parameter->local->specifier = parameter->specifier;
 		if (!sema_local(sema, parameter->local))
 			goto done;
 	}
@@ -512,6 +579,8 @@ static bool sema_function_declaration(struct sema *sema,
 	struct function_symbol *symbol = find_function(sema, declaration->name);
 	struct function_type *type;
 	struct token main_name = declaration->name;
+	const struct type *parameters[ast_max_parameters];
+	size_t parameter_count = 0;
 
 	if (!sema_parameter_names(sema, declaration, definition != NULL))
 		return false;
@@ -521,7 +590,17 @@ static bool sema_function_declaration(struct sema *sema,
 			"only zero-parameter main is supported yet");
 		return false;
 	}
-	type = type_new_int_function(sema->arena, declaration->parameter_count);
+	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
+		main_name.spelling_location.offset, "main", 4) == 0 &&
+		declaration->return_specifier != integer_specifier_int) {
+		diagnostic_error(sema->diagnostics, main_name.location, "main must return int");
+		return false;
+	}
+	for (struct ast_parameter *parameter = declaration->parameters; parameter; parameter = parameter->next)
+		parameters[parameter_count++] = specifier_type(parameter->specifier);
+	assert(parameter_count == declaration->parameter_count && parameter_count <= ast_max_parameters);
+	type = type_new_function(sema->arena, specifier_type(declaration->return_specifier),
+		parameters, parameter_count);
 	if (!type) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"out of memory creating function type");

@@ -15,6 +15,7 @@ enum expression_kind {
 	expression_binary,
 	expression_assignment,
 	expression_load,
+	expression_conversion,
 	expression_logical,
 	expression_call,
 };
@@ -41,6 +42,8 @@ struct ast_expression {
 struct ast_integer_expression {
 	struct ast_expression expression;
 	uint64_t value;
+	unsigned base;
+	bool unsigned_suffix;
 };
 
 struct ast_name_expression {
@@ -123,6 +126,17 @@ struct ast_assignment_expression {
 struct ast_load_expression {
 	struct ast_expression expression;
 	struct ast_expression *operand;
+};
+
+/* Inserted by sema for arithmetic/assignment/call/return conversion contexts. */
+struct ast_conversion_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
+};
+
+enum integer_specifier {
+	integer_specifier_int,
+	integer_specifier_unsigned,
 };
 
 enum statement_kind {
@@ -208,6 +222,7 @@ struct ast_block_item {
 
 struct ast_local_declaration {
 	struct ast_block_item item;
+	enum integer_specifier specifier;
 	struct token name;
 	struct ast_expression *initializer;
 	const struct type *type;
@@ -237,6 +252,7 @@ struct ast_external_declaration {
 };
 
 struct ast_parameter {
+	enum integer_specifier specifier;
 	struct source_location location;
 	struct token name;
 	bool has_name;
@@ -246,6 +262,7 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
+	enum integer_specifier return_specifier;
 	struct token name;
 	struct function_symbol *symbol;
 	struct ast_parameter *parameters;
@@ -288,6 +305,8 @@ struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 	struct ast_expression *right);
 struct ast_load_expression *ast_new_load(struct arena *arena,
 	struct ast_expression *operand);
+struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
+	struct ast_expression *operand, const struct type *target);
 struct ast_return_statement *ast_new_return(struct arena *arena,
 	struct source_location location, struct ast_expression *value);
 struct ast_expression_statement *ast_new_expression_statement(struct arena *arena,

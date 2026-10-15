@@ -15,6 +15,8 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 				.depth = 1,
 			},
 			.value = token.integer,
+			.base = token.integer_base,
+			.unsigned_suffix = token.integer_unsigned_suffix,
 		};
 	return node;
 }
@@ -126,6 +128,24 @@ struct ast_load_expression *ast_new_load(struct arena *arena,
 			.expression = {
 				.kind = expression_load,
 				.location = operand->location,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
+		};
+	return node;
+}
+
+struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
+	struct ast_expression *operand, const struct type *target)
+{
+	struct ast_conversion_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_conversion_expression) {
+			.expression = {
+				.kind = expression_conversion,
+				.location = operand->location,
+				.type = target,
 				.depth = operand->depth + 1,
 			},
 			.operand = operand,

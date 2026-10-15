@@ -19,6 +19,8 @@ static void assert_same_token(struct token left, struct token right)
 	assert(left.spelling_location.source == right.spelling_location.source);
 	assert(left.spelling_location.offset == right.spelling_location.offset);
 	assert(left.length == right.length && left.integer == right.integer);
+	assert(left.integer_base == right.integer_base);
+	assert(left.integer_unsigned_suffix == right.integer_unsigned_suffix);
 }
 
 static void check_stream(const char *text, const struct expected_token *expected,
@@ -1152,8 +1154,8 @@ static void test_token_pasting(void)
 	check_stream("#define C(a,b) a##b\nC(x,+)", (const struct expected_token[]) {
 		{ token_invalid, "##" }, { token_eof, "" },
 	}, 2, 1, "exactly one preprocessing token");
-	check_stream("#define C(a,b) a##b\nC(1,u)", (const struct expected_token[]) {
-		{ token_invalid, "1u" }, { token_eof, "" },
+	check_stream("#define C(a,b) a##b\nC(1,l)", (const struct expected_token[]) {
+		{ token_invalid, "1l" }, { token_eof, "" },
 	}, 2, 1, "unsupported numeric");
 	check_stream("#define C(a,b) a##b\n#define C(a,b) ##a\nC(4,2)",
 		(const struct expected_token[]) {

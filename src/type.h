@@ -7,6 +7,7 @@
 
 enum type_kind {
 	type_kind_int,
+	type_kind_uint,
 	type_kind_function,
 };
 
@@ -27,8 +28,10 @@ struct function_type {
 };
 
 extern const struct type type_int;
-/* Current syntax supports int returns and int parameters only. */
-struct function_type *type_new_int_function(struct arena *arena, size_t parameter_count);
+extern const struct type type_uint;
+bool type_is_integer(const struct type *type);
+struct function_type *type_new_function(struct arena *arena, const struct type *return_type,
+	const struct type *const *parameters, size_t parameter_count);
 bool type_compatible(const struct type *left, const struct type *right);
 
 #endif

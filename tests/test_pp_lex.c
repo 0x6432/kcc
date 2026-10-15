@@ -242,7 +242,7 @@ static void test_conversion_boundary(void)
 {
 	const char *spellings[] = { "int", "42", "12u", "#", "\"x\"", "'x'", "'", "<%" };
 	const enum token_kind expected[] = {
-		token_int, token_integer, token_invalid, token_invalid, token_invalid,
+		token_int, token_integer, token_integer, token_invalid, token_invalid,
 		token_invalid, token_invalid, token_left_brace,
 	};
 
@@ -266,7 +266,9 @@ static void test_conversion_boundary(void)
 		assert(diagnostics.errors == (token.kind == token_invalid ? 1u : 0u));
 		assert(token.location.offset == raw.location.offset && token.length == raw.length);
 		if (token.kind == token_integer)
-			assert(token.integer == 42);
+			assert(token.integer == (i == 2 ? 12u : 42u));
+		if (i == 2)
+			assert(token.integer_unsigned_suffix);
 		source_destroy(&source);
 		assert(fclose(stream) == 0);
 	}

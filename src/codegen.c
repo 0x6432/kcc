@@ -42,25 +42,25 @@ static void emit_label(struct codegen *codegen, size_t label)
 	codegen->current_label = label;
 }
 
-static const char *binary_instruction(enum binary_operator operation)
+static const char *binary_instruction(enum binary_operator operation, bool unsigned_operands)
 {
 	switch (operation) {
 	case binary_add: return "add";
 	case binary_subtract: return "sub";
 	case binary_multiply: return "mul";
-	case binary_divide: return "div";
-	case binary_remainder: return "rem";
+	case binary_divide: return unsigned_operands ? "udiv" : "div";
+	case binary_remainder: return unsigned_operands ? "urem" : "rem";
 	case binary_bit_and: return "and";
 	case binary_bit_xor: return "xor";
 	case binary_bit_or: return "or";
 	case binary_shift_left: return "shl";
-	case binary_shift_right: return "sar";
+	case binary_shift_right: return unsigned_operands ? "shr" : "sar";
 	case binary_equal: return "ceqw";
 	case binary_not_equal: return "cnew";
-	case binary_less: return "csltw";
-	case binary_less_equal: return "cslew";
-	case binary_greater: return "csgtw";
-	case binary_greater_equal: return "csgew";
+	case binary_less: return unsigned_operands ? "cultw" : "csltw";
+	case binary_less_equal: return unsigned_operands ? "culew" : "cslew";
+	case binary_greater: return unsigned_operands ? "cugtw" : "csgtw";
+	case binary_greater_equal: return unsigned_operands ? "cugew" : "csgew";
 	}
 	assert(0 && "unknown binary operator");
 	return NULL;
@@ -73,7 +73,7 @@ static size_t codegen_local_slot(const struct ast_expression *expression)
 
 	assert(expression->kind == expression_name && expression->is_lvalue);
 	name = (const struct ast_name_expression *)expression;
-	assert(name->declaration && name->declaration->type == &type_int);
+	assert(name->declaration && type_is_integer(name->declaration->type));
 	return name->declaration->slot;
 }
 
@@ -122,7 +122,7 @@ static size_t codegen_expression(struct codegen *codegen,
 {
 	size_t temporary;
 
-	assert(expression->type == &type_int);
+	assert(type_is_integer(expression->type));
 	switch (expression->kind) {
 	case expression_call: {
 		const struct ast_call_expression *node =
@@ -185,7 +185,17 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =w %s %%t%zu, %%t%zu\n", temporary,
-			binary_instruction(node->operation), left, right);
+			binary_instruction(node->operation, node->left->type == &type_uint), left, right);
+		return temporary;
+	}
+	case expression_conversion: {
+		const struct ast_conversion_expression *node =
+			(const struct ast_conversion_expression *)expression;
+		size_t operand = codegen_expression(codegen, node->operand);
+
+		/* int/uint conversion preserves the low 32 bits on this target. */
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w copy %%t%zu\n", temporary, operand);
 		return temporary;
 	}
 	case expression_logical:
@@ -454,7 +464,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	struct token name = function->declaration->name;
 	size_t parameter_index = 0;
 
-	assert(function->return_type == &type_int);
+	assert(type_is_integer(function->return_type));
 
 	emit(&codegen, "export function w $%.*s(",
 		(int)name.length,
@@ -468,7 +478,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	emit_label(&codegen, 0);
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
-		assert(local->type == &type_int);
+		assert(type_is_integer(local->type));
 		emit(&codegen, "\t%%v%zu =l alloc4 4\n", local->slot);
 		local = local->next_local;
 	}

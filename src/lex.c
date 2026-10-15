@@ -326,9 +326,9 @@ static bool is_unsupported_keyword(struct token token)
 	static const char *const keywords[] = {
 		"auto", "break", "case", "char", "const", "continue", "default",
 		"do", "double", "else", "enum", "extern", "float", "for", "goto",
-		"if", "inline", "long", "register", "restrict", "short", "signed",
+		"if", "inline", "long", "register", "restrict", "short",
 		"sizeof", "static", "struct", "switch", "typedef", "union",
-		"unsigned", "volatile", "while", "_Alignas", "_Alignof", "_Atomic",
+		"volatile", "while", "_Alignas", "_Alignof", "_Atomic",
 		"_Bool", "_Complex", "_Decimal32", "_Decimal64", "_Decimal128",
 		"_Generic", "_Imaginary", "_Noreturn", "_Static_assert",
 		"_Thread_local", "_BitInt", "alignas", "alignof", "bool",
@@ -348,7 +348,7 @@ struct keyword {
 };
 
 static const struct keyword keywords[] = {
-	{ "int", token_int }, { "void", token_void }, { "return", token_return },
+	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue },
@@ -473,11 +473,13 @@ static struct token convert_number(struct token token, struct diagnostics *diagn
 		snprintf(message, sizeof(message), "unsupported numeric literal: %s", error);
 		return invalid_language_token(token, diagnostics, message);
 	}
-	if (spelling.unsigned_suffix || spelling.long_suffix)
+	if (spelling.long_suffix)
 		return invalid_language_token(token, diagnostics,
 			"unsupported numeric literal: runtime integer suffixes require wider types");
 	token.kind = token_integer;
 	token.integer = spelling.value;
+	token.integer_base = spelling.base;
+	token.integer_unsigned_suffix = spelling.unsigned_suffix;
 	return token;
 }
 
@@ -560,6 +562,8 @@ const char *token_kind_name(enum token_kind kind)
 	case token_unsupported_keyword: return "unsupported-keyword";
 	case token_integer: return "integer";
 	case token_int: return "int";
+	case token_signed: return "signed";
+	case token_unsigned: return "unsigned";
 	case token_void: return "void";
 	case token_return: return "return";
 	case token_if: return "if";

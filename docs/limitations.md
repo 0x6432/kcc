@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12b. The chronological entries below describe what each
+Current milestone: M12c. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -666,3 +666,24 @@ values cannot silently become signed int; unary minus does not rescue a positive
 literal requiring a wider type. No declarations/types/ABI change is implied.
 GCC 11 separator rejection is counted separately, with model/QBE and Clang
 coverage rather than being mislabeled host agreement.
+
+## M12c
+
+Runtime signed/unsigned 32-bit int declarations, parameters and return types are
+supported, with int/signed/unsigned specifiers in either valid order and no
+repeated/conflicting specifiers. main still requires signed int and no args.
+U literals fit UINT32_MAX; unsuffixed nondecimal picks int then uint, while
+unsuffixed decimal still must fit INT32_MAX. L/LL and wider types remain absent.
+
+Sema introduces explicit int/uint conversion nodes for usual arithmetic,
+assignment, initialization, calls and returns; loads retain object type.
+Comparisons/logical results remain int, shifts retain left type. Both types have
+identity promotions. Unsigned arithmetic wraps modulo 2^32 and signed/unsigned
+conversion preserves target two's-complement bits; signed overflow/invalid
+shifts remain undefined inputs. QBE selects unsigned division/remainder,
+comparisons and logical right shift from operand types, never spelling.
+
+Function compatibility distinguishes signed/unsigned signatures; slots and ABI
+remain four-byte/QBE word. Typed depths include all newly inserted conversions.
+No explicit cast syntax, other integer ranks/promotions, void objects/returns,
+float/pointer types or full C23 claim is included in this increment.

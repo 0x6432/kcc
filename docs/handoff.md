@@ -859,3 +859,35 @@ M11m remote CI passed run 38813251318; its local GCC normal/sanitizer matrix
 passed, local Clang still running. M12a local GCC likewise passed; local Clang
 and exact-source CI still need final verification. M12c unsigned-int types and
 explicit AST conversions are designed in m12-unsigned-int.md before coding.
+
+## M11m and M12a final verification
+
+d33f7ae and b80ec53 each passed their full isolated GCC/Clang normal + ASan/UBSan
+matrices, including unit/CLI/oracle and QBE/reference/ABI execution. Exact-source
+CI passed for M11m run 38813251318 and M12a run 38813971204. Both are complete
+within their documented scopes. M12b validation remains independent.
+
+## M12c tested source checkpoint
+
+Signed/unsigned 32-bit int now flows through declaration syntax, literal base/U
+metadata, distinct semantic types, generic function signatures and explicit
+integer conversion AST nodes. Sema implements usual arithmetic conversions and
+destination contexts; shifts retain left type and logical/comparison results
+remain int. QBE uses validated types to choose unsigned division, remainder,
+comparisons/right shift, while low-word copies implement int/uint conversion.
+Common AST headers remain first; type specifiers are separate from annotations.
+
+GCC full normal regressions/QBE/reference/ABI passed. New typed AST tests cover
+loads and conversion placement in initialization, assignment, arithmetic, calls
+and returns; conversion-only depth overflow is rejected. Both GCC and Clang
+passed 130 full-value model/QBE programs and separate-object mixed int/uint ABI
+calls in both directions, including high bits and eight arguments. Malformed
+specifier/signature/range cases and old diagnostic-provenance regressions pass.
+Former U rejection fixtures now use still-unsupported L suffixes intentionally.
+Sanitized fuzzing passed 24121 lexer and 85617 pipeline inputs (109738 total),
+26 seconds each, with no arbitrary generated program execution. Full isolated
+M12c normal/sanitizer matrix and exact-source CI are pending.
+
+M12b exact-source CI passed run 38815061741; its isolated local full matrix is
+still running and must be checked separately. M12d explicit int/unsigned casts
+are pre-designed in m12-integer-casts.md. Other integer ranks remain absent.

@@ -31,6 +31,46 @@ static void allocation_error(struct parser *parser, struct source_location locat
 	diagnostic_error(parser->diagnostics, location, "out of memory building AST");
 }
 
+static bool begins_integer_type(enum token_kind kind)
+{
+	return kind == token_int || kind == token_signed || kind == token_unsigned;
+}
+
+/* integer-type ::= 'int' | ('signed' | 'unsigned') ['int']
+ *                | 'int' ('signed' | 'unsigned')
+ * Sign and int specifiers occur at most once, in either order.
+ */
+static bool parse_integer_type(struct parser *parser, enum integer_specifier *specifier,
+	struct token *beginning)
+{
+	bool seen_int = false;
+	bool seen_sign = false;
+
+	*beginning = preprocess_peek(parser->preprocessor);
+	*specifier = integer_specifier_int;
+	if (!begins_integer_type(beginning->kind)) {
+		if (beginning->kind != token_invalid)
+			diagnostic_error(parser->diagnostics, beginning->location, "expected integer type specifier");
+		return false;
+	}
+	while (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+		struct token token = preprocess_next(parser->preprocessor);
+
+		if ((token.kind == token_int && seen_int) || (token.kind != token_int && seen_sign)) {
+			diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
+			return false;
+		}
+		if (token.kind == token_int) {
+			seen_int = true;
+		} else {
+			seen_sign = true;
+			if (token.kind == token_unsigned)
+				*specifier = integer_specifier_unsigned;
+		}
+	}
+	return true;
+}
+
 /* integer-expression ::= integer-token (decimal/octal/hex/binary, separators allowed) */
 static struct ast_expression *parse_integer_expression(struct parser *parser)
 {
@@ -560,7 +600,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
-	if (preprocess_peek(parser->preprocessor).kind == token_int) {
+	if (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
 		struct ast_block_item *item = parse_local_declaration(parser);
 
 		if (!item)
@@ -712,15 +752,16 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* local-declaration ::= "int" identifier [ "=" expression ] ";" */
+/* local-declaration ::= integer-type identifier [ "=" expression ] ";" */
 static struct ast_block_item *parse_local_declaration(struct parser *parser)
 {
+	enum integer_specifier specifier;
 	struct token beginning;
 	struct token name;
 	struct ast_expression *initializer = NULL;
 	struct ast_local_declaration *node;
 
-	if (!expect_token(parser, token_int, "expected 'int'", &beginning))
+	if (!parse_integer_type(parser, &specifier, &beginning))
 		return NULL;
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
@@ -738,6 +779,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 		allocation_error(parser, beginning.location);
 		return NULL;
 	}
+	node->specifier = specifier;
 	return &node->item;
 }
 
@@ -747,7 +789,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 	struct ast_statement *statement;
 	struct ast_statement_item *node;
 
-	if (preprocess_peek(parser->preprocessor).kind == token_int)
+	if (begins_integer_type(preprocess_peek(parser->preprocessor).kind))
 		return parse_local_declaration(parser);
 	statement = parse_statement(parser);
 	if (!statement)
@@ -811,7 +853,7 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 }
 
 /* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
- * parameter-declaration ::= "int" [ identifier ]
+ * parameter-declaration ::= integer-type [ identifier ]
  * C23's empty list specifies zero parameters, just like (void).
  */
 static bool parse_parameters(struct parser *parser,
@@ -829,6 +871,7 @@ static bool parse_parameters(struct parser *parser,
 		struct token beginning;
 		struct token name = { 0 };
 		struct ast_parameter *parameter;
+		enum integer_specifier specifier;
 		bool has_name = false;
 
 		if (declaration->parameter_count == ast_max_parameters) {
@@ -837,7 +880,7 @@ static bool parse_parameters(struct parser *parser,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
-		if (!expect_token(parser, token_int, "expected 'int' parameter type", &beginning))
+		if (!parse_integer_type(parser, &specifier, &beginning))
 			return false;
 		if (preprocess_peek(parser->preprocessor).kind == token_identifier) {
 			name = preprocess_next(parser->preprocessor);
@@ -848,6 +891,7 @@ static bool parse_parameters(struct parser *parser,
 			allocation_error(parser, beginning.location);
 			return false;
 		}
+		parameter->specifier = specifier;
 		*tail = parameter;
 		tail = &parameter->next;
 		declaration->parameter_count++;
@@ -857,18 +901,19 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* external-declaration ::= "int" identifier "(" parameter-list ")"
+/* external-declaration ::= integer-type identifier "(" parameter-list ")"
  *                          (";" | compound-statement)
  */
 static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
 {
+	enum integer_specifier specifier;
 	struct token beginning;
 	struct token name;
 	struct ast_function_declaration *declaration;
 	struct ast_compound_statement *body;
 	struct ast_function *function;
 
-	if (!expect_token(parser, token_int, "expected 'int' return type", &beginning))
+	if (!parse_integer_type(parser, &specifier, &beginning))
 		return NULL;
 	if (!expect_token(parser, token_identifier, "expected function name", &name))
 		return NULL;
@@ -879,6 +924,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		allocation_error(parser, beginning.location);
 		return NULL;
 	}
+	declaration->return_specifier = specifier;
 	if (!parse_parameters(parser, declaration))
 		return NULL;
 	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))

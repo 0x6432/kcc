@@ -398,9 +398,9 @@ static void test_parameters_and_arguments(void)
 	load = (struct ast_load_expression *)call->arguments->value;
 	assert(load->expression.kind == expression_load);
 	assert(((struct ast_name_expression *)load->operand)->declaration == a);
-	one = type_new_int_function(&arena, 1);
-	another_one = type_new_int_function(&arena, 1);
-	zero = type_new_int_function(&arena, 0);
+	one = type_new_function(&arena, &type_int, (const struct type *[]) { &type_int }, 1);
+	another_one = type_new_function(&arena, &type_int, (const struct type *[]) { &type_int }, 1);
+	zero = type_new_function(&arena, &type_int, NULL, 0);
 	assert(one && another_one && zero);
 	assert(type_compatible(&one->type, &another_one->type));
 	assert(!type_compatible(&one->type, &zero->type));
@@ -481,8 +481,80 @@ static void test_bitwise_expression_tree(void)
 	source_destroy(&source);
 }
 
+static struct ast_conversion_expression *require_conversion(struct ast_expression *expression,
+	const struct type *target, const struct type *operand_type)
+{
+	struct ast_conversion_expression *conversion;
+
+	assert(expression->kind == expression_conversion && expression->type == target);
+	assert(!expression->is_lvalue);
+	conversion = (struct ast_conversion_expression *)expression;
+	assert(conversion->operand->type == operand_type);
+	assert(expression->depth == conversion->operand->depth + 1);
+	return conversion;
+}
+
+static void test_unsigned_conversion_tree(void)
+{
+	const char *text = "unsigned f(int a,unsigned b) { unsigned x=a; int y=b; x=y; return x+y; }"
+		"int main(void) { return f(-1,1); }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_function *main_function;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *y;
+	struct ast_statement_item *item;
+	struct ast_assignment_expression *assignment;
+	struct ast_binary_expression *sum;
+	struct ast_conversion_expression *conversion;
+	struct ast_call_expression *call;
+
+	assert(source_from_bytes(&source, "unsigned.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	function = first_function(unit);
+	main_function = (struct ast_function *)function->external.next;
+	assert(function->return_type == &type_uint);
+	assert(function->declaration->symbol->type->parameters->type == &type_int);
+	assert(function->declaration->symbol->type->parameters->next->type == &type_uint);
+	x = (struct ast_local_declaration *)function->body->items;
+	y = (struct ast_local_declaration *)x->item.next;
+	assert(x->type == &type_uint && y->type == &type_int);
+	conversion = require_conversion(x->initializer, &type_uint, &type_int);
+	assert(conversion->operand->kind == expression_load);
+	assert(((struct ast_load_expression *)conversion->operand)->operand->type == &type_int);
+	require_conversion(y->initializer, &type_int, &type_uint);
+	item = (struct ast_statement_item *)y->item.next;
+	assignment = (struct ast_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(assignment->expression.kind == expression_assignment && assignment->expression.type == &type_uint);
+	require_conversion(assignment->right, &type_uint, &type_int);
+	item = (struct ast_statement_item *)item->item.next;
+	sum = (struct ast_binary_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(sum->expression.kind == expression_binary && sum->expression.type == &type_uint);
+	assert(sum->left->kind == expression_load && sum->left->type == &type_uint);
+	require_conversion(sum->right, &type_uint, &type_int);
+	item = (struct ast_statement_item *)main_function->body->items;
+	conversion = require_conversion(((struct ast_return_statement *)item->statement)->value,
+		&type_int, &type_uint);
+	assert(conversion->operand->kind == expression_call);
+	call = (struct ast_call_expression *)conversion->operand;
+	assert(call->arguments->value->type == &type_int);
+	require_conversion(call->arguments->next->value, &type_uint, &type_int);
+	assert(!type_compatible(&type_int, &type_uint) && type_is_integer(&type_uint));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_unsigned_conversion_tree();
 	test_bitwise_expression_tree();
 	test_deferred_preprocessor_error();
 	test_parameters_and_arguments();

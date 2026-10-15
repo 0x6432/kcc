@@ -18,7 +18,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct includes complete; M11l computed/M11m include search implemented) |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a operators/M12b integer spellings implemented; other types planned) |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a operators/M12b spellings/M12c int-uint conversions implemented; other types planned) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -829,3 +829,17 @@ passed full normal GCC regressions/QBE/reference/ABI, 90 decoder combinations,
 sanitizer-fuzz inputs. Full isolated/remote checks pending. M11m CI 38813251318
 passed; M11m/M12a isolated GCC passed, their Clang verification remains pending.
 M12c unsigned int and explicit conversions are pre-designed.
+
+## M11m and M12a final verification
+
+d33f7ae and b80ec53 each passed their full isolated GCC/Clang normal + ASan/UBSan
+matrices, including unit/CLI/oracle and QBE/reference/ABI execution. Exact-source
+CI passed for M11m run 38813251318 and M12a run 38813971204. Both are complete
+within their documented scopes. M12b validation remains independent.
+
+M12c source checkpoint: signed/unsigned int, generic signatures and explicit
+conversions passed full normal GCC regressions/QBE/reference/ABI, 130 full-value
+model/runtime programs with each host, both separate-object ABI directions,
+AST/constraint/depth tests and 109738 sanitizer-fuzz inputs. Full isolated/remote
+checks pending. M12b CI 38815061741 passed; local full matrix still running.
+M12d explicit casts are pre-designed.

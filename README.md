@@ -6,13 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M12b: a shared bounded integer decoder handles runtime unsuffixed decimal,
-octal, hex, binary and C23 separators (values must still fit signed int).
-Signed-int ~, &, ^, |, << and >> expressions reach QBE with
-standard Pratt precedence. Direct/computed quoted and basic angle includes load
-nested headers, share macro bindings,
-and retain child source buffers for parsing and diagnostics. File/conditional
-boundaries are explicit; loading and retained bytes have documented bounds.
+M12c: signed and unsigned 32-bit int declarations, literals, arithmetic and
+explicit typed-AST conversions now reach QBE. Unsuffixed decimal/octal/hex/binary
+and C23 separators are supported within their implemented type ranges; U is
+supported, L/LL and other integer types remain unfinished. Bitwise/shift
+operators use standard Pratt precedence. Direct/computed quoted and basic angle
+includes share macro bindings with bounded explicit include search.
 
 Preprocessing supports integer/ordinary-byte character conditions and the prior
 macro operators. Repeatable -I dir/-Idir adds ordered explicit search paths; quoted
@@ -79,16 +78,16 @@ cc build/example.s -o build/example
 
 Supported: normalized line endings, backslash-newline splicing, physical source
 locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
-macros, diagnostic directives (including #warning), macro operators (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), unsuffixed signed-int literals in four bases with separators, int locals, simple assignment, arithmetic,
+macros, diagnostic directives (including #warning), macro operators (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), int/unsigned literals in four bases with separators, int/unsigned locals, simple assignment, arithmetic,
 comparisons, !/&&/||, ~ and bitwise/shift operators, scoped blocks, if/else, while/do/for, break/continue,
-int function prototypes/definitions/parameters, direct calls and recursion.
+int/unsigned function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
 Unsupported: C string expressions, general header-name encoding/system headers,
-full conditional expressions, predefined/reserved macro names, other types, globals/storage classes, local
+full conditional expressions, predefined/reserved macro names, wider/other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
-operators. Runtime arithmetic remains signed int; invalid shifts have C
+operators. Runtime arithmetic supports int/unsigned; invalid shifts have C
 undefined behavior, not a defined masked-count extension. This is not a complete C23 compiler. Main takes no parameters yet.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
