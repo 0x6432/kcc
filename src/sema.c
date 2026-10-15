@@ -207,6 +207,15 @@ static bool sema_expression(struct sema *sema,
 		expression->is_lvalue = true;
 		break;
 	}
+	case expression_cast: {
+		struct ast_cast_expression *node = (struct ast_cast_expression *)expression;
+
+		if (!sema_expression(sema, &node->operand, true))
+			return false;
+		result_type = specifier_type(node->specifier);
+		expression->depth = node->operand->depth + 1;
+		break;
+	}
 	case expression_unary: {
 		struct ast_unary_expression *node =
 			(struct ast_unary_expression *)expression;

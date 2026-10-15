@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M12c. The chronological entries below describe what each
+Current milestone: M12d. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -687,3 +687,18 @@ Function compatibility distinguishes signed/unsigned signatures; slots and ABI
 remain four-byte/QBE word. Typed depths include all newly inserted conversions.
 No explicit cast syntax, other integer ranks/promotions, void objects/returns,
 float/pointer types or full C23 claim is included in this increment.
+
+## M12d
+
+Explicit (int), (signed [int]), (unsigned [int]) and int signed/int unsigned
+casts now produce distinct concrete cast nodes, separate from sema-inserted
+conversions. One-token parsing consumes an opening parenthesis before selecting
+type syntax or a grouped expression. Shared postfix suffix parsing preserves
+named calls through groups; cast operands bind at prefix power. Parenthesized
+expressions retain their prior AST identity/lvalue behavior, while casts never
+produce lvalues. Sema value-loads operands, assigns requested types and checks
+post-load depths. QBE word copies preserve the implemented 32-bit bit pattern.
+
+No void/wider/pointer casts, compound literals or typedef-name disambiguation is
+included. Those need their respective future grammar/type milestones. C casts
+do not define signed-overflow/invalid-shift programs or relax literal typing.

@@ -6,7 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M12c: signed and unsigned 32-bit int declarations, literals, arithmetic and
+M12d: explicit int/unsigned casts, signed and unsigned 32-bit int declarations,
+literals, arithmetic and
 explicit typed-AST conversions now reach QBE. Unsuffixed decimal/octal/hex/binary
 and C23 separators are supported within their implemented type ranges; U is
 supported, L/LL and other integer types remain unfinished. Bitwise/shift

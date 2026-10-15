@@ -135,6 +135,25 @@ struct ast_load_expression *ast_new_load(struct arena *arena,
 	return node;
 }
 
+struct ast_cast_expression *ast_new_cast(struct arena *arena,
+	struct source_location location, enum integer_specifier specifier,
+	struct ast_expression *operand)
+{
+	struct ast_cast_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_cast_expression) {
+			.expression = {
+				.kind = expression_cast,
+				.location = location,
+				.depth = operand->depth + 1,
+			},
+			.specifier = specifier,
+			.operand = operand,
+		};
+	return node;
+}
+
 struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	struct ast_expression *operand, const struct type *target)
 {

@@ -891,3 +891,25 @@ M12c normal/sanitizer matrix and exact-source CI are pending.
 M12b exact-source CI passed run 38815061741; its isolated local full matrix is
 still running and must be checked separately. M12d explicit int/unsigned casts
 are pre-designed in m12-integer-casts.md. Other integer ranks remain absent.
+
+## M12d tested source checkpoint
+
+Explicit int/unsigned casts now have their own concrete AST nodes. Parser
+consumes '(' before choosing type syntax or a grouped primary with the shared
+postfix suffix helper; the public token cache remains one token. Sema loads and
+types cast operands, preserves non-lvalue results and checks structural depth.
+QBE copies target word bits; implicit conversion nodes remain distinct.
+
+Full normal GCC regressions/QBE/reference/ABI passed. All 71 new full-value
+model/host/QBE programs passed with GCC and Clang, including nested casts,
+comparison/division/right-shift signedness, grouped named calls, macro type
+specifiers and side effects. Typed cast/load AST checks, malformed casts,
+non-lvalue assignments and exact parser/typed-depth boundaries pass. Sanitized
+fuzzing passed 25342 lexer and 87518 pipeline inputs (112860 total), 26 seconds
+each, without arbitrary generated C execution. Full isolated M12d normal/
+sanitizer matrix and exact-source CI remain pending.
+
+M12b/M12c full local verification remains pending independently; M12c remote CI
+is still running. M12e LP64 long/unsigned long is designed before implementation
+in m12-long-integers.md, including a successful curated QBE width/extension probe.
+Do not claim compiler long support until that separate increment is implemented.

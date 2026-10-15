@@ -18,7 +18,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct includes complete; M11l computed/M11m include search implemented) |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a operators/M12b spellings/M12c int-uint conversions implemented; other types planned) |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a operators/M12b spellings/M12c int-uint/M12d casts implemented; wider types planned) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -843,3 +843,9 @@ model/runtime programs with each host, both separate-object ABI directions,
 AST/constraint/depth tests and 109738 sanitizer-fuzz inputs. Full isolated/remote
 checks pending. M12b CI 38815061741 passed; local full matrix still running.
 M12d explicit casts are pre-designed.
+
+M12d source checkpoint: explicit casts and one-token cast/group disambiguation
+passed full normal GCC regressions/QBE/reference/ABI, 71 full-value host/model/
+QBE programs with each host, typed AST/depth/constraint tests and 112860
+sanitizer-fuzz inputs. Full isolated/remote verification remains pending.
+M12e LP64 long/ulong is pre-designed with a successful QBE mechanics probe.

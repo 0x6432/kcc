@@ -188,6 +188,14 @@ static size_t codegen_expression(struct codegen *codegen,
 			binary_instruction(node->operation, node->left->type == &type_uint), left, right);
 		return temporary;
 	}
+	case expression_cast: {
+		const struct ast_cast_expression *node = (const struct ast_cast_expression *)expression;
+		size_t operand = codegen_expression(codegen, node->operand);
+
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w copy %%t%zu\n", temporary, operand);
+		return temporary;
+	}
 	case expression_conversion: {
 		const struct ast_conversion_expression *node =
 			(const struct ast_conversion_expression *)expression;

@@ -552,8 +552,45 @@ static void test_unsigned_conversion_tree(void)
 	source_destroy(&source);
 }
 
+static void test_explicit_cast_tree(void)
+{
+	const char *text = "int main(void) { unsigned x=0xffffffff; return (int)(unsigned int)(int)x; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *local;
+	struct ast_statement_item *item;
+	struct ast_cast_expression *outer;
+	struct ast_cast_expression *middle;
+	struct ast_cast_expression *inner;
+
+	assert(source_from_bytes(&source, "casts.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	local = (struct ast_local_declaration *)first_function(unit)->body->items;
+	item = (struct ast_statement_item *)local->item.next;
+	outer = (struct ast_cast_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(outer->expression.kind == expression_cast && outer->expression.type == &type_int);
+	assert(outer->operand->kind == expression_cast && !outer->expression.is_lvalue);
+	middle = (struct ast_cast_expression *)outer->operand;
+	assert(middle->specifier == integer_specifier_unsigned && middle->expression.type == &type_uint);
+	assert(middle->operand->kind == expression_cast);
+	inner = (struct ast_cast_expression *)middle->operand;
+	assert(inner->specifier == integer_specifier_int && inner->expression.type == &type_int);
+	assert(inner->operand->kind == expression_load && inner->operand->type == &type_uint);
+	assert(outer->expression.depth == 5);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_explicit_cast_tree();
 	test_unsigned_conversion_tree();
 	test_bitwise_expression_tree();
 	test_deferred_preprocessor_error();

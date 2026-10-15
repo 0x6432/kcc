@@ -16,6 +16,7 @@ enum expression_kind {
 	expression_assignment,
 	expression_load,
 	expression_conversion,
+	expression_cast,
 	expression_logical,
 	expression_call,
 };
@@ -137,6 +138,12 @@ struct ast_conversion_expression {
 enum integer_specifier {
 	integer_specifier_int,
 	integer_specifier_unsigned,
+};
+
+struct ast_cast_expression {
+	struct ast_expression expression;
+	enum integer_specifier specifier;
+	struct ast_expression *operand;
 };
 
 enum statement_kind {
@@ -304,6 +311,9 @@ struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 	struct source_location location, struct ast_expression *left,
 	struct ast_expression *right);
 struct ast_load_expression *ast_new_load(struct arena *arena,
+	struct ast_expression *operand);
+struct ast_cast_expression *ast_new_cast(struct arena *arena,
+	struct source_location location, enum integer_specifier specifier,
 	struct ast_expression *operand);
 struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	struct ast_expression *operand, const struct type *target);

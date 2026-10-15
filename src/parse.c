@@ -131,11 +131,12 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 static struct ast_expression *parse_expression(struct parser *parser,
 	unsigned minimum_binding_power);
 
-/* primary-expression ::= integer-expression | identifier | "(" expression ")" */
+/* primary-atom ::= integer-expression | identifier
+ * Parenthesized primaries share cast disambiguation after one opening parenthesis.
+ */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
-	struct ast_expression *expression;
 
 	if (token.kind == token_identifier) {
 		struct ast_name_expression *node;
@@ -153,15 +154,7 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 			"keyword is not supported in this expression");
 		return NULL;
 	}
-	if (token.kind != token_left_paren)
-		return parse_integer_expression(parser);
-	preprocess_next(parser->preprocessor);
-	expression = parse_expression(parser, 0);
-	if (!expression)
-		return NULL;
-	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))
-		return NULL;
-	return expression;
+	return parse_integer_expression(parser);
 }
 
 /* argument-expression-list ::= assignment-expression
@@ -202,13 +195,12 @@ static bool parse_call_arguments(struct parser *parser,
 	}
 }
 
-/* postfix-expression ::= primary-expression
- *                        { "(" [ argument-expression-list ] ")" }
+/* postfix-suffix ::= { "(" [ argument-expression-list ] ")" }
+ * Shared by identifier/integer atoms and parenthesized primary expressions.
  */
-static struct ast_expression *parse_postfix_expression(struct parser *parser)
+static struct ast_expression *parse_postfix_suffix(struct parser *parser,
+	struct ast_expression *expression)
 {
-	struct ast_expression *expression = parse_primary_expression(parser);
-
 	if (!expression)
 		return NULL;
 	while (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
@@ -236,7 +228,54 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 	return expression;
 }
 
-/* prefix-expression ::= postfix-expression | ("+" | "-" | "!" | "~") prefix-expression */
+/* postfix-expression ::= primary-atom postfix-suffix */
+static struct ast_expression *parse_postfix_expression(struct parser *parser)
+{
+	return parse_postfix_suffix(parser, parse_primary_expression(parser));
+}
+
+/* parenthesized-or-cast ::= '(' expression ')' postfix-suffix
+ *                        | '(' integer-type ')' cast-expression
+ * One opening token is consumed before choosing from the current token.
+ * Cast operands bind at prefix power, including postfix calls but no infix.
+ */
+static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
+{
+	struct token opening = preprocess_next(parser->preprocessor);
+	struct ast_expression *operand;
+	struct ast_cast_expression *node;
+	enum integer_specifier specifier;
+	struct token beginning;
+
+	if (!begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+		operand = parse_expression(parser, 0);
+		if (!operand || !expect_token(parser, token_right_paren, "expected ')'", NULL))
+			return NULL;
+		return parse_postfix_suffix(parser, operand);
+	}
+	if (!parse_integer_type(parser, &specifier, &beginning) ||
+		!expect_token(parser, token_right_paren, "expected ')' after cast type", NULL))
+		return NULL;
+	operand = parse_expression(parser, 30);
+	if (!operand)
+		return NULL;
+	if (operand->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, opening.location,
+			"expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node = ast_new_cast(parser->arena, opening.location, specifier, operand);
+	if (!node) {
+		allocation_error(parser, opening.location);
+		return NULL;
+	}
+	return &node->expression;
+}
+
+/* prefix-expression ::= postfix-expression | parenthesized-or-cast
+ *                     | ("+" | "-" | "!" | "~") cast-expression
+ * cast-expression ::= prefix-expression (casts are selected after an opening paren)
+ */
 static struct ast_expression *parse_prefix_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
@@ -244,6 +283,8 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	struct ast_unary_expression *node;
 	enum unary_operator operation;
 
+	if (token.kind == token_left_paren)
+		return parse_parenthesized_or_cast(parser);
 	if (token.kind != token_plus && token.kind != token_minus &&
 		token.kind != token_bang && token.kind != token_tilde)
 		return parse_postfix_expression(parser);

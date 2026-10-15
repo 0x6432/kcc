@@ -850,3 +850,10 @@ and parameter-type array into arena-owned signature records. Sema inserts
 concrete conversion nodes, annotates all int/uint expressions and recomputes
 depths. Codegen selects signedness only from validated types. int/uint have
 identical word storage/call ABI; conversion copies preserve low 32 bits.
+
+M12d: parser disambiguates casts/groups with only the current token after '('.
+AST cast specifiers record syntax separately from sema result annotations.
+Grouped expressions reuse their existing nodes and shared postfix suffixes;
+cast nodes always value-convert operands and are non-lvalues. Their structural
+depth includes operand loads. Codegen copies the validated int/uint word; no
+parser heuristic or requested-type inference is deferred to the backend.
