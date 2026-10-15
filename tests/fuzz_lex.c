@@ -78,15 +78,18 @@ static void check_expanded_stream(const struct source *source, FILE *stream)
 		assert(preprocessor.spelling_bytes <= preprocess_spelling_limit);
 		assert(preprocessor.prescan_depth == 0);
 		assert(preprocessor.optional_depth == 0);
+		assert(preprocessor.paste_depth == 0);
 		if (spelling != source) {
 			struct pp_lexer lexer;
 			struct pp_token raw;
 
-			assert(token.kind == pp_string && token.location.offset == 0);
+			assert(token.kind != pp_eof && token.location.offset == 0);
 			assert(token.length == spelling->length && spelling->data[token.length] == 0);
 			pp_lexer_init(&lexer, spelling, &diagnostics);
 			raw = pp_lexer_next(&lexer);
-			assert(raw.kind == pp_string && raw.length == token.length);
+			assert(raw.kind != pp_invalid && raw.kind != pp_eof && raw.length == token.length);
+			if (token.kind != pp_invalid)
+				assert(raw.kind == token.kind);
 			assert(pp_lexer_next(&lexer).kind == pp_eof);
 		}
 		if (token.kind == pp_eof) {
@@ -177,6 +180,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(preprocessor.auxiliary_records <= preprocess_auxiliary_limit);
 		assert(preprocessor.prescan_depth == 0);
 		assert(preprocessor.optional_depth == 0);
+		assert(preprocessor.paste_depth == 0);
 		if (pending)
 			assert(preprocessor.cursor.pending.token.kind != pp_newline);
 
@@ -192,7 +196,8 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		assert(token.spelling_location.offset <= token.spelling_location.source->length);
 		assert(token.length <= token.spelling_location.source->length - token.spelling_location.offset);
 		if (token.spelling_location.source != &source)
-			assert(token.kind == token_invalid);
+			assert(token.kind != token_eof && token.spelling_location.source->data[
+				token.spelling_location.source->length] == 0);
 		assert(preprocessor.spelling_bytes <= preprocess_spelling_limit);
 		if (token.kind == token_eof) {
 			assert(token.location.offset == source.length && token.length == 0);

@@ -682,3 +682,20 @@ placemarkers and optional-region/operator interactions before implementation.
 Includes/conditions, predefined macros, C string expressions and full C23 remain
 unfinished. Preserve the exclusive substitution-only range contract when adding
 operator phases; do not substitute a full ordinary macro rescan for it.
+
+
+## M11c planned implementation
+
+Design recorded in m11-token-pasting.md before coding: bounded invocation-local
+substitution/paste ranges, explicit placemarkers, quiet single-token re-lex and
+owned generated spellings. Existing non-paste streaming remains unchanged.
+User requested continuous milestone execution with tests/commits/pushes; do not
+stop for routine milestone approval. No validation is claimed by this plan.
+
+M11c implementation checkpoint: production token pasting and its bounded range
+builder are implemented. Unit/CLI/oracle and GCC-host QBE/reference/ABI tests
+passed; GCC and Clang each agree on 564 language + 444 expanded-pp streams.
+One C23 normative example and six inherited policy groups are tested separately.
+Sanitized fuzzing passed 21801 lexer/preprocessor + 137656 pipeline inputs.
+The full four-build host/sanitizer matrix and exact-source remote CI are pending
+at this checkpoint; do not confuse this local evidence with completed CI.

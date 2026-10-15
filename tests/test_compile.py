@@ -455,6 +455,22 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define DROP(x) 40\n#define A 7\n#define V(x,...) DROP(#__VA_OPT__(x A))+x\n"
          "int main(void) { return V(2,1); }\n", 42),
     ]
+    directive_programs += [
+        ("#define C(a,b) a##b\nC(in,t) C(ma,in)(C(vo,id)) { C(ret,urn) C(4,2); }\n", 42),
+        ("#define C(a,b) a##b\nint main(void) { int C(va,r)=42; return C(va,r); }\n", 42),
+        ("#define C(a,b) a##b\nint C(ad,d)(int x) { return x+2; }\n"
+         "int main(void) { return C(ad,d)(40); }\n", 42),
+        ("#define C(a,b) a %:%: b\n#define forty_two 42\n"
+         "int main(void) { return C(forty_,two); }\n", 42),
+        ("#define C(a,b,c) a##b##c\nint main(void) { return C(4,,2); }\n", 42),
+        ("#define C(a,b) a##b\nint main(void) { return C(,42); }\n", 42),
+        ("#define V(...) 4 ## __VA_OPT__(2)\nint main(void) { return V(1); }\n", 42),
+        ("#define V(...) __VA_OPT__(4) ## 2\nint main(void) { return V(1); }\n", 42),
+        ("#define DROP(x) 42\n#define V(x,...) DROP(#__VA_OPT__(x##x x##x))\n"
+         "int main(void) { return V(,1); }\n", 42),
+        ("#define C(a,b) a##b\n#define RAW42() 42\n"
+         "int main(void) { return C(RAW,42)(); }\n", 42),
+    ]
     for text, value in directive_programs:
         for ending in ("\n", "\r\n", "\r"):
             programs.append((text.replace("\n", ending), value))
@@ -668,6 +684,9 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert result.returncode == 1 and "error:" in result.stderr, text
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
+        ("#define C(a,b) a##b\nint main(void) { return C(x,+); }", ":2:25: error: token pasting must produce exactly one preprocessing token"),
+        ("#define C(a,b) a##b\nint main(void) { return C(1,u); }", ":2:25: error: unsupported numeric"),
+        ("#define C(a,b) a##b\nint main(void) { return C(miss,ing); }", ":2:25: error:"),
         ("#define V(x,...) #__VA_OPT__(x)\nint main(void) { return V(7,1); }", ":2:25: error: string literals are not supported yet"),
         ("#define OUT(x,...) V(x,__VA_ARGS__)\n#define V(x,...) #__VA_OPT__(x)\nint main(void) { return OUT(7,1); }", ":3:25: error: string literals are not supported yet"),
         ("#define BAD(a,b) a+b\n#define V(x,...) #__VA_OPT__(x)\nint main(void) { return V(BAD(1),1); }", ":3:25: error: macro argument count"),
@@ -697,7 +716,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define NAME main\nint NAME(int x) { return x; }", ":2:5: error:"),
         ("#define X(...,x) 1\nint main(void) { return 0; }", "expected ')' after variadic ellipsis"),
         ("#define X 1\n#define X 2\nint main(void) { return X; }", "incompatible macro redefinition"),
-        ("#define X 1 ## 2\nint main(void) { return 0; }", "macro token pasting"),
+        ("#define X 1 ##\nint main(void) { return 0; }", "token pasting requires an operand"),
 
         ("#include X 12u\nint main(void) { return 0; }", "preprocessing directive is not supported"),
         ("#unknown 12u\nint main(void) { return 0; }", "unknown preprocessing directive"),

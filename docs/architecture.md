@@ -172,3 +172,21 @@ outside the repository; never commit binaries or fuzz corpora generated during
 runs. Fuzz runs have time, input-size and memory limits. Track retained corpus
 size. Add limits for parser nesting and macro expansion before fuzzing those
 features, and report limit failures rather than crash.
+
+## M11c token-pasting contract
+
+See m11-token-pasting.md for the phase and ownership design. Paste-bearing
+invocations build a bounded per-invocation list, not a translation-unit vector.
+Definition-origin operators are distinct from argument/generated ## tokens.
+Raw boundary operands are substituted, paste pairs are re-lexed as exactly one
+pp token, placemarkers are removed only after enclosing operator phases, then
+ordinary rescanning applies the invocation hide set. Real concatenations use
+operand hide-set intersection. The substitution-only optional stringizer may
+paste but must not perform an ordinary macro rescan.
+
+All synthesized token kinds may borrow arena-owned generated source views.
+Consumers must not assume only strings have generated spellings. The shared
+spelling-byte budget includes each NUL terminator. A NULL diagnostic stream
+counts errors without resolving/outputting locations, allowing speculative
+re-lexing to report one final user-call-site diagnostic instead. All active paste,
+prescan and optional-range counters unwind on both success and failure.

@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 struct diagnostics {
+	/* NULL counts errors without writing or resolving line/column. */
 	FILE *stream;
 	size_t errors;
 };

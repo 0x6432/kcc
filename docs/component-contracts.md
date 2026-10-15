@@ -690,3 +690,21 @@ allows the observed GCC diagnostic versus Clang acceptance; it is not agreement
 or a settled standards ruling. Unit limits cover 32/33 active helper nesting
 without exponential string growth, using prescan-then-discard forwarding macros.
 Fuzzers check zero active helper depth, owned spellings and stable cache/EOF.
+
+## M11c token-pasting contract
+
+See m11-token-pasting.md for the phase and ownership design. Paste-bearing
+invocations build a bounded per-invocation list, not a translation-unit vector.
+Definition-origin operators are distinct from argument/generated ## tokens.
+Raw boundary operands are substituted, paste pairs are re-lexed as exactly one
+pp token, placemarkers are removed only after enclosing operator phases, then
+ordinary rescanning applies the invocation hide set. Real concatenations use
+operand hide-set intersection. The substitution-only optional stringizer may
+paste but must not perform an ordinary macro rescan.
+
+All synthesized token kinds may borrow arena-owned generated source views.
+Consumers must not assume only strings have generated spellings. The shared
+spelling-byte budget includes each NUL terminator. A NULL diagnostic stream
+counts errors without resolving/outputting locations, allowing speculative
+re-lexing to report one final user-call-site diagnostic instead. All active paste,
+prescan and optional-range counters unwind on both success and failure.

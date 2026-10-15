@@ -275,6 +275,64 @@ for depth in range(1, 9):
     expression = 'V(' * depth + '7' + ',1)' * depth
     pp_examples.append('#define V(x,...) #__VA_OPT__(x)\n' + expression + '\n')
 
+# Pasting acts on definition operators only, before ordinary macro rescan.
+pp_examples += [
+    '#define C(a,b) a##b\nC(a,b) C(,b) C(a,) C(,) C(a b,c d)\n',
+    '#define C(a,b,c) a##b##c\nC(a,b,c) C(a,,c) C(,b,) C(,,)\n',
+    '#define C(a,b) a %:%: b\nC(a,b) C(1,2)\n',
+    '#define X 1 ## 2\nX\n',
+    '#define A 7\n#define C(a,b) a##b\n#define X(a,b) C(a,b)\nC(A,B) X(A,B) C(A,)\n',
+    '#define C(a,b) a##b\nC(+,=) C(<,=) C(+, +) C(1,e2) C(1.,5)\n',
+    '#define C(a,b) a##b\nC(L,"x") C(u8,"x") C(U,\'x\')\n',
+    '#define W(x) L ## #x\nW(a+b) W()\n',
+    '#define C(a,b) a##b\n#define ab 7\nC(a,b)\n',
+    '#define C(a,b) a##b\n#define ID(x) x\nC(I,D)(7)\n',
+    '#define C(a,b) a##b\n#define A C(A,)\nA\n',
+    '#define C(a,b) a##b\n#define A B\n#define B A\nC(A,) C(,B)\n',
+    '#define hash_hash # ## #\n#define mkstr(a) #a\n#define between(a) mkstr(a)\n'
+    '#define join(c,d) between(c hash_hash d)\njoin(x,y)\n',
+    '#define C(a,b) a##b\nC(,##) C(##,)\n',
+    '#define C(a,b) a##b\n#define S(x) #x\n#define X(x) S(x)\nX(C(a b,c d))\n',
+    '#define F(x,...) #__VA_OPT__(x##x x##x)\nF(,0) F(a,1) F(a)\n',
+    '#define F(...) a ## __VA_OPT__(b)\nF() F(1)\n',
+    '#define F(...) __VA_OPT__(a) ## b\nF() F(1)\n',
+    '#define F(...) __VA_OPT__(a) ## __VA_OPT__(b)\nF() F(1)\n',
+    '#define F(...) a ## __VA_OPT__() ## b\nF() F(1)\n',
+    '#define A 7\n#define F(...) X ## __VA_OPT__(__VA_ARGS__)\nF(A) F()\n',
+    '#define F(x,...) #__VA_OPT__(x##y)\n#define A 7\nF(A,1)\n',
+    '#define F(x,...) #__VA_OPT__(x##y) )\nF(a,1)\n',
+    '#define F(x) x##x\nF(a b) F()\n',
+    '#define F(x,y) x##y #x y\n#define A 7\nF(A,B)\n',
+    '#define F(...) a##__VA_ARGS__\nF() F(b,c)\n',
+    '#define F(x,y) x##y\nF(ret,urn) F(4,2)\n',
+]
+# Enumerate all empty-operand combinations and multi-token boundaries.
+for a in ['', 'a', 'a b']:
+    for b in ['', 'b', 'b c']:
+        for c in ['', 'c', 'c d']:
+            pp_examples.append('#define C(a,b,c) a##b##c\n' + f'C({a},{b},{c})\n')
+for _ in range(70):
+    a = random_source.choice(['', 'a', 'b', 'c'])
+    b = random_source.choice(['', 'a', 'b', 'c'])
+    pp_examples.append('#define C(a,b) a##b\n#define X(a,b) C(a,b)\n'
+                       '#define a 1\n#define b 2\n#define c 3\n'
+                       + f'C({a},{b}) X({a},{b})\n')
+
+pp_examples += [
+    '#define BAD(a,b) a+b\n#define C(x) pre##x\nC(BAD(1))\n',
+    '#define C(a,b) a##b\n#define F(x) C(x,)\nF(F)(1)\n',
+    '#define C(a,b) a##b\n#define A C(A,)\n#define B C(A,)\nB\n',
+    '#define C(a,b) a##b\n#define F(x) x\n#define G(x) C(F,)(x)\nG(G)(7)\n',
+]
+for _ in range(40):
+    names = [f'N{i}' for i in range(4)]
+    lines = ['#define C(a,b) a##b\n']
+    for name in names:
+        target = random_source.randrange(4)
+        lines.append(f'#define {name}(x) C(N,{target})(x)\n')
+    lines.append(' '.join(name + '(7)' for name in names) + '\n')
+    pp_examples.append(''.join(lines))
+
 # Observed GCC/Clang whitespace disagreements are explicit policy regressions,
 # not claimed cross-host agreement or a ruling on ISO's intended interpretation.
 policy_prefix = '#define S(x) #x\n#define X(x) S(x)\n'
@@ -324,6 +382,19 @@ with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
         assert actual.returncode == expected.returncode == 0, (text, actual.stderr, expected.stderr)
         assert actual.stdout == chosen_dump, (text, actual.stdout, chosen_dump)
         assert expected.stdout in (chosen_dump, alternate_dump), (text, expected.stdout)
+    # N3096 6.10.4.1 example H4 retains inner placemarkers for the outer paste.
+    # Legacy hosts can remove them early and emit ab; never call that agreement.
+    source.write_text('#define F(x,...) __VA_OPT__(a x##x) ## b\nF(,1) F(x,1) F(x)\n')
+    actual = subprocess.run([str(driver), "--pp", str(source)], capture_output=True, text=True, timeout=5)
+    reference = subprocess.run(host + ["-std=c2x", "-E", "-P", str(source)], capture_output=True, text=True, timeout=5)
+    assert reference.returncode == 0, reference.stderr
+    expanded.write_text(reference.stdout)
+    observed = subprocess.run([str(driver), "--pp", str(expanded)], capture_output=True, text=True, timeout=5)
+    standard = 'identifier:a\nidentifier:b\nidentifier:a\nidentifier:xxb\nidentifier:b\n'
+    legacy = 'identifier:ab\nidentifier:a\nidentifier:xxb\nidentifier:b\n'
+    assert actual.returncode == observed.returncode == 0, (actual.stderr, observed.stderr)
+    assert actual.stdout == standard, actual.stdout
+    assert observed.stdout in (standard, legacy), observed.stdout
     # This inactive-body arity diagnostic differs between the two local hosts.
     # kcc intentionally does not expand named parameters of an inactive region.
     source.write_text('#define BAD(a,b) a+b\n#define E\n'
@@ -338,4 +409,5 @@ with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
         assert "macro" in reference.stderr and "argument" in reference.stderr, reference.stderr
 print(f"Macro token/spelling oracle passed ({len(examples)} language + "
       f"{len(pp_examples)} expanded-pp agreements; "
-      f"{len(policy_examples)} whitespace + 1 inactive-argument diagnostic policies; {host[0]})")
+      f"1 C23 normative example; {len(policy_examples)} whitespace + "
+      f"1 inactive-argument diagnostic policies; {host[0]})")

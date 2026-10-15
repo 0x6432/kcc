@@ -100,11 +100,21 @@ static void test_arena(void)
 	arena_destroy(&arena);
 }
 
+static void test_quiet_diagnostic(void)
+{
+	struct diagnostics quiet = { 0 };
+
+	/* Count-only mode must not require a printable source location. */
+	diagnostic_error(&quiet, (struct source_location) { 0 }, "quiet error");
+	assert(quiet.errors == 1);
+}
+
 int main(void)
 {
 	test_source();
 	test_source_file();
 	test_diagnostic();
+	test_quiet_diagnostic();
 	test_arena();
 	puts("Support tests passed");
 	return 0;

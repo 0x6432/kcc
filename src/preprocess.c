@@ -11,6 +11,7 @@ struct macro_token {
 	size_t parameter_index;
 	bool va_opt_close;
 	bool stringize;
+	bool optional_has_paste;
 };
 
 struct macro_parameter {
@@ -22,6 +23,8 @@ struct macro_parameter {
 struct argument_token {
 	struct rescan_token input;
 	struct argument_token *next;
+	bool placemarker;
+	bool paste_operator;
 };
 
 struct macro_argument {
@@ -41,6 +44,7 @@ struct macro {
 	bool defined;
 	bool function_like;
 	bool variadic;
+	bool has_paste;
 };
 
 static bool same_spelling(struct pp_token left, struct pp_token right)
@@ -68,6 +72,12 @@ static bool is_directive_marker(struct pp_token token)
 {
 	return token.kind == pp_punctuator &&
 		(pp_spelling_is(token, "#") || pp_spelling_is(token, "%:"));
+}
+
+static bool is_paste_operator(struct pp_token token)
+{
+	return token.kind == pp_punctuator &&
+		(pp_spelling_is(token, "##") || pp_spelling_is(token, "%:%:"));
 }
 
 static bool is_known_directive(struct pp_token token)
@@ -290,6 +300,8 @@ static bool validate_optional_replacements(struct preprocessor *preprocessor,
 			return false;
 		}
 		for (end = item->next->next; end; end = end->next) {
+			if (is_paste_operator(end->token))
+				item->optional_has_paste = true;
 			if (pp_spelling_is(end->token, "__VA_OPT__")) {
 				*error = invalid_token(marker);
 				diagnostic_error(preprocessor->diagnostics, end->token.location,
@@ -337,10 +349,45 @@ static bool validate_stringizing(struct preprocessor *preprocessor,
 	return true;
 }
 
+/* paste-range = operand ('##' operand | operand)*
+ * Optional bodies form independent replacement ranges with the same constraints.
+ */
+static bool validate_pastes(struct preprocessor *preprocessor, struct pp_token marker,
+	struct macro_token *first, struct macro_token *end, struct token *error)
+{
+	bool operand = false;
+
+	for (struct macro_token *item = first; item != end;) {
+		struct macro_token *after = item->next;
+		struct macro_token *optional = item->stringize ? item->next : item;
+
+		if (is_paste_operator(item->token)) {
+			if (!operand || after == end || is_paste_operator(after->token)) {
+				diagnostic_error(preprocessor->diagnostics, item->token.location,
+					"token pasting requires an operand on both sides");
+				*error = invalid_token(marker);
+				return false;
+			}
+			operand = false;
+		} else {
+			operand = true;
+			if (optional->va_opt_end) {
+				if (!validate_pastes(preprocessor, marker, optional->next->next,
+					optional->va_opt_end, error))
+					return false;
+				after = optional->va_opt_end->next;
+			} else if (item->stringize)
+				after = optional->next;
+		}
+		item = after;
+	}
+	return true;
+}
+
 /* define-directive = '#' 'define' identifier function-parameters? replacement-list newline
  * undef-directive = '#' 'undef' identifier newline
  * replacement-list = preprocessing-token*
- * Token pasting remains deferred.
+ * Operator results are rescanned only after substitution and paste resolution.
  */
 static bool read_macro_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, bool define, struct token *error)
@@ -355,6 +402,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	size_t parameter_count = 0;
 	bool function_like = false;
 	bool variadic = false;
+	bool has_paste = false;
 
 	if (name.kind == pp_invalid) {
 		*error = reject_directive(preprocessor, marker, name, NULL);
@@ -412,12 +460,8 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 				"variadic identifiers require a variadic macro replacement list");
 			return false;
 		}
-		if (token.kind == pp_punctuator &&
-			(pp_spelling_is(token, "##") || pp_spelling_is(token, "%:%:"))) {
-			*error = reject_directive(preprocessor, marker, token,
-				"macro token pasting is not supported yet");
-			return false;
-		}
+		if (is_paste_operator(token))
+			has_paste = true;
 		if (count == preprocess_replacement_limit ||
 			preprocessor->stored_tokens == preprocess_storage_limit) {
 			*error = stop_preprocessing(preprocessor, marker,
@@ -447,7 +491,8 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 		return true;
 	}
 	if (!validate_optional_replacements(preprocessor, marker, replacement, error) ||
-		(function_like && !validate_stringizing(preprocessor, marker, replacement, error)))
+		(function_like && !validate_stringizing(preprocessor, marker, replacement, error)) ||
+		!validate_pastes(preprocessor, marker, replacement, NULL, error))
 		return false;
 	if (macro && macro->defined) {
 		if (macro->function_like == function_like && macro->variadic == variadic &&
@@ -481,6 +526,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 	macro->parameter_count = parameter_count;
 	macro->function_like = function_like;
 	macro->variadic = variadic;
+	macro->has_paste = has_paste;
 	macro->replacement = replacement;
 	macro->defined = true;
 	return true;
@@ -633,6 +679,33 @@ static bool add_stringizing_bytes(struct preprocessor *preprocessor, size_t *len
 	return true;
 }
 
+/* Arena-owned view: callers fill logical bytes and never source_destroy it. */
+static struct source *allocate_spelling(struct preprocessor *preprocessor, size_t length,
+	struct pp_token blame, struct token *error)
+{
+	struct source *spelling;
+	unsigned char *text;
+
+	if (length > preprocess_spelling_limit - preprocessor->spelling_bytes) {
+		*error = stop_preprocessing(preprocessor, blame, "macro synthesized spelling limit exceeded");
+		return NULL;
+	}
+	spelling = allocate_auxiliary(preprocessor, 1, sizeof(*spelling), blame, error);
+	if (!spelling)
+		return NULL;
+	text = arena_alloc(&preprocessor->storage, length);
+	if (!text) {
+		*error = stop_preprocessing(preprocessor, blame, "cannot allocate synthesized spelling");
+		return NULL;
+	}
+	*spelling = (struct source) {
+		.name = "<macro spelling>", .data = text, .length = length - 1,
+		.physical_length = length - 1, .prepared = true,
+	};
+	preprocessor->spelling_bytes += length;
+	return spelling;
+}
+
 /* Stringize raw tokens, not the prescan cache. Two bounded passes avoid a
  * growing temporary buffer; literal-token quotes/backslashes alone are escaped.
  */
@@ -669,14 +742,10 @@ static bool stringize_argument(struct preprocessor *preprocessor,
 				return false;
 		}
 	}
-	spelling = allocate_auxiliary(preprocessor, 1, sizeof(*spelling), operator, error);
+	spelling = allocate_spelling(preprocessor, length, operator, error);
 	if (!spelling)
 		return false;
-	text = arena_alloc(&preprocessor->storage, length);
-	if (!text) {
-		*error = stop_preprocessing(preprocessor, operator, "cannot allocate synthesized spelling");
-		return false;
-	}
+	text = spelling->data;
 	text[used++] = '"';
 	for (struct argument_token *item = argument->raw; item; item = item->next) {
 		struct pp_token token = item->input.token;
@@ -694,15 +763,6 @@ static bool stringize_argument(struct preprocessor *preprocessor,
 	text[used++] = '"';
 	text[used++] = 0;
 	assert(used == length);
-	/* Arena-owned view: never source_destroy this record or its borrowed name. */
-	*spelling = (struct source) {
-		.name = "<macro spelling>",
-		.data = text,
-		.length = length - 1,
-		.physical_length = length - 1,
-		.prepared = true,
-	};
-	preprocessor->spelling_bytes += length;
 	*result = (struct pp_token) {
 		.kind = pp_string,
 		.location = { spelling, 0 },
@@ -857,6 +917,259 @@ static bool read_rescan_token(struct preprocessor *preprocessor,
 	return true;
 }
 
+struct substitution_list {
+	struct argument_token *head;
+	struct argument_token *tail;
+};
+
+static bool build_paste_range(struct preprocessor *preprocessor,
+	struct macro_token *first, struct macro_token *end, struct macro_argument *arguments,
+	struct source_location invocation, struct macro_hide_set hide, bool leading_space,
+	struct substitution_list *list, struct pp_token blame, struct token *error);
+
+static void append_substitution(struct substitution_list *list, struct argument_token *item)
+{
+	item->next = NULL;
+	if (list->tail)
+		list->tail->next = item;
+	else
+		list->head = item;
+	list->tail = item;
+}
+
+static void join_substitution(struct substitution_list *list, struct substitution_list body)
+{
+	if (!body.head)
+		return;
+	if (list->tail)
+		list->tail->next = body.head;
+	else
+		list->head = body.head;
+	list->tail = body.tail;
+}
+
+/* Markers are private zero-token operands; they never reach ordinary rescan. */
+static void remove_placemarkers(struct substitution_list *list)
+{
+	struct argument_token *item = list->head;
+	bool space = false;
+
+	*list = (struct substitution_list) { 0 };
+	while (item) {
+		struct argument_token *next = item->next;
+
+		if (item->placemarker)
+			space |= item->input.token.leading_space;
+		else {
+			item->input.token.leading_space |= space;
+			space = false;
+			append_substitution(list, item);
+		}
+		item = next;
+	}
+}
+
+static bool append_operand(struct preprocessor *preprocessor, struct substitution_list *list,
+	struct rescan_token input, bool placemarker, bool paste_operator,
+	struct pp_token blame, struct token *error)
+{
+	struct argument_token *copy = copy_argument_token(preprocessor, input, blame, error);
+
+	if (!copy)
+		return false;
+	copy->placemarker = placemarker;
+	copy->paste_operator = paste_operator;
+	append_substitution(list, copy);
+	return true;
+}
+
+static bool paste_pair(struct preprocessor *preprocessor, struct argument_token *left,
+	const struct argument_token *right, struct pp_token operator, struct token *error)
+{
+	struct pp_token a = left->input.token;
+	struct pp_token b = right->input.token;
+	struct source *spelling;
+	struct pp_lexer lexer;
+	struct pp_token token;
+	struct diagnostics quiet = { 0 };
+	size_t length;
+
+	if (!spend_expansion_work(preprocessor, operator, error))
+		return false;
+	if (left->placemarker) {
+		left->input = right->input;
+		left->input.token.leading_space = a.leading_space;
+		left->placemarker = right->placemarker;
+		return true;
+	}
+	if (right->placemarker)
+		return true;
+	if (a.length > preprocess_spelling_limit || b.length > preprocess_spelling_limit - a.length) {
+		*error = stop_preprocessing(preprocessor, operator, "macro synthesized spelling limit exceeded");
+		return false;
+	}
+	length = a.length + b.length;
+	spelling = allocate_spelling(preprocessor, length + 1, operator, error);
+	if (!spelling)
+		return false;
+	memcpy(spelling->data, a.location.source->data + a.location.offset, a.length);
+	memcpy(spelling->data + a.length, b.location.source->data + b.location.offset, b.length);
+	spelling->data[length] = 0;
+	/* Logical spelling is already prepared. Never splice it or dispatch directives. */
+	pp_lexer_init(&lexer, spelling, &quiet);
+	token = pp_lexer_next(&lexer);
+	if (token.kind == pp_invalid || token.kind == pp_eof || token.kind == pp_newline ||
+		token.location.offset != 0 || token.length != length ||
+		pp_lexer_next(&lexer).kind != pp_eof || quiet.errors) {
+		*error = stop_preprocessing(preprocessor, operator,
+			"token pasting must produce exactly one preprocessing token");
+		return false;
+	}
+	token.expansion_location = operator.expansion_location;
+	token.leading_space = a.leading_space;
+	left->input = (struct rescan_token) {
+		.token = token,
+		.hide = hide_intersection(&left->input.hide, &right->input.hide),
+	};
+	return true;
+}
+
+/* Evaluate definition-origin operators left to right, retaining markers. */
+static bool resolve_pastes(struct preprocessor *preprocessor, struct substitution_list *list,
+	struct token *error)
+{
+	struct argument_token *item = list->head;
+
+	*list = (struct substitution_list) { 0 };
+	while (item) {
+		struct argument_token *next = item->next;
+
+		if (item->paste_operator) {
+			assert(list->tail && next && !next->paste_operator);
+			if (!paste_pair(preprocessor, list->tail, next, item->input.token, error))
+				return false;
+			item = next->next;
+		} else {
+			append_substitution(list, item);
+			item = next;
+		}
+	}
+	return true;
+}
+
+static bool substitute_paste_range(struct preprocessor *preprocessor,
+	struct macro_token *first, struct macro_token *end, struct macro_argument *arguments,
+	struct source_location invocation, struct macro_hide_set hide, bool leading_space,
+	struct substitution_list *list, struct pp_token blame, struct token *error)
+{
+	bool first_token = true;
+	bool paste_before = false;
+
+	for (struct macro_token *item = first; item != end;) {
+		struct macro_token *after = item->next;
+		struct rescan_token input = { .token = item->token };
+
+		if (!spend_expansion_work(preprocessor, blame, error))
+			return false;
+		input.token.expansion_location = invocation;
+		input.token.at_line_start = false;
+		if (first_token) {
+			input.token.leading_space = leading_space;
+			first_token = false;
+		}
+		if (is_paste_operator(item->token)) {
+			if (!append_operand(preprocessor, list, input, false, true, blame, error))
+				return false;
+			paste_before = true;
+			item = after;
+			continue;
+		}
+		if (item->stringize) {
+			struct macro_token *operand = item->next;
+			struct expansion_frame frame = { .arguments = arguments, .invocation = invocation, .hide = hide };
+
+			if (operand->va_opt_end) {
+				after = operand->va_opt_end->next;
+				if (!stringize_optional(preprocessor, operand, &frame, input.token, &input.token, error))
+					return false;
+			} else {
+				after = operand->next;
+				if (!stringize_argument(preprocessor, &arguments[item->parameter_index],
+					input.token, &input.token, error))
+					return false;
+			}
+			if (!append_operand(preprocessor, list, input, false, false, blame, error))
+				return false;
+		} else if (item->va_opt_end) {
+			struct macro_argument *variable = &arguments[item->parameter_index];
+			struct substitution_list body = { 0 };
+
+			after = item->va_opt_end->next;
+			if (!prescan_argument(preprocessor, variable, input.token, error))
+				return false;
+			if (variable->expanded && !build_paste_range(preprocessor, item->next->next,
+				item->va_opt_end, arguments, invocation, hide, input.token.leading_space,
+				&body, blame, error))
+				return false;
+			if (body.head)
+				join_substitution(list, body);
+			else if (!append_operand(preprocessor, list, input, true, false, blame, error))
+				return false;
+		} else if (item->parameter_index != SIZE_MAX) {
+			struct macro_argument *argument = &arguments[item->parameter_index];
+			bool raw = paste_before || (after != end && is_paste_operator(after->token));
+			struct argument_token *tokens;
+			bool first_argument = true;
+
+			if (!raw && !prescan_argument(preprocessor, argument, input.token, error))
+				return false;
+			tokens = raw ? argument->raw : argument->expanded;
+			if (!tokens) {
+				input.token.leading_space |= !raw && argument->trailing_space;
+				if (!append_operand(preprocessor, list, input, true, false, blame, error))
+					return false;
+			}
+			for (; tokens; tokens = tokens->next) {
+				struct rescan_token token = tokens->input;
+
+				if (first_argument) {
+					token.token.leading_space |= input.token.leading_space;
+					first_argument = false;
+				}
+				if (!append_operand(preprocessor, list, token, false, false, blame, error))
+					return false;
+			}
+			if (!raw && argument->expanded && argument->trailing_space) {
+				input.token.leading_space = true;
+				if (!append_operand(preprocessor, list, input, true, false, blame, error))
+					return false;
+			}
+		} else if (!append_operand(preprocessor, list, input, false, false, blame, error))
+			return false;
+		paste_before = false;
+		item = after;
+	}
+	return true;
+}
+
+static bool build_paste_range(struct preprocessor *preprocessor,
+	struct macro_token *first, struct macro_token *end, struct macro_argument *arguments,
+	struct source_location invocation, struct macro_hide_set hide, bool leading_space,
+	struct substitution_list *list, struct pp_token blame, struct token *error)
+{
+	bool success;
+
+	if (preprocessor->paste_depth == preprocess_paste_limit) {
+		*error = stop_preprocessing(preprocessor, blame, "macro paste substitution depth limit exceeded");
+		return false;
+	}
+	preprocessor->paste_depth++;
+	success = substitute_paste_range(preprocessor, first, end, arguments, invocation,
+		hide, leading_space, list, blame, error) && resolve_pastes(preprocessor, list, error);
+	preprocessor->paste_depth--;
+	return success;
+}
+
 /* A stringized optional body gets parameter substitution and inner #, but
  * not ordinary macro rescan. Its exclusive range end cannot read the suffix.
  */
@@ -879,6 +1192,16 @@ static bool stringize_optional(struct preprocessor *preprocessor,
 		return false;
 	if (!variable->expanded)
 		return stringize_argument(preprocessor, &body, operator, result, error);
+	if (optional->optional_has_paste) {
+		struct substitution_list list = { 0 };
+
+		if (!build_paste_range(preprocessor, optional->next->next, optional->va_opt_end,
+			frame->arguments, frame->invocation, frame->hide, false, &list, operator, error))
+			return false;
+		remove_placemarkers(&list);
+		body.raw = list.head;
+		return stringize_argument(preprocessor, &body, operator, result, error);
+	}
 	cursor = malloc(sizeof(*cursor));
 	if (!cursor) {
 		*error = stop_preprocessing(preprocessor, operator,
@@ -1081,6 +1404,22 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 			}
 		}
 		hide_add(&hide, macro);
+		if (macro->has_paste) {
+			struct substitution_list list = { 0 };
+
+			if (!build_paste_range(preprocessor, macro->replacement, NULL, arguments,
+				input.token.expansion_location, hide, input.token.leading_space,
+				&list, input.token, error))
+				return false;
+			remove_placemarkers(&list);
+			if (!push_frame(preprocessor, cursor, (struct expansion_frame) {
+				.argument = list.head, .hide = hide,
+				.invocation = input.token.expansion_location,
+				.first = true, .leading_space = input.token.leading_space,
+			}, input.token, error))
+				return false;
+			continue;
+		}
 		if (!push_frame(preprocessor, cursor, (struct expansion_frame) {
 			.replacement = macro->replacement,
 			.arguments = arguments,

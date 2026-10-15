@@ -6,13 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11b: `#__VA_OPT__(...)` and its `%:` spelling now substitute selected optional
-bodies and stringize them before ordinary macro rescanning. Raw named/variadic
-stringizing, earlier macro features and bounded owned spellings remain supported.
+M11c: `##` / `%:%:` token pasting now supports raw argument boundaries,
+placemarkers, generated identifiers/keywords and interactions with `__VA_OPT__`
+and stringizing. Concatenations must re-lex as exactly one preprocessing token.
 
-This is preprocessing-token string generation, not C string-expression support.
-Token pasting and full C23 coverage remain unfinished. See
-`docs/m11-optional-stringizing.md`, `docs/milestones.md`, `docs/limitations.md`
+This is preprocessing support, not C string-expression support or full C23.
+See `docs/m11-token-pasting.md`, `docs/milestones.md`, `docs/limitations.md`
 and `docs/handoff.md` for contracts, acceptance evidence and remaining work.
 
 ## Build and test
@@ -72,13 +71,13 @@ cc build/example.s -o build/example
 
 Supported: normalized line endings, backslash-newline splicing, physical source
 locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
-macros (including __VA_ARGS__/__VA_OPT__ and raw parameter stringizing), decimal int literals, int locals, simple assignment, arithmetic,
+macros (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), decimal int literals, int locals, simple assignment, arithmetic,
 comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
 
-Unsupported: token pasting, C string expressions, includes,
+Unsupported: C string expressions, includes,
 conditional directives, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
 operators. This is not a complete C23 compiler. Main takes no parameters yet.

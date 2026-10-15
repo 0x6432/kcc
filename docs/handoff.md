@@ -479,3 +479,25 @@ placemarkers and optional-region/operator interactions before implementation.
 Includes/conditions, predefined macros, C string expressions and full C23 remain
 unfinished. Preserve the exclusive substitution-only range contract when adding
 operator phases; do not substitute a full ordinary macro rescan for it.
+
+## M11c source checkpoint
+
+Implemented ##/%:%: with definition validation, raw argument boundary pastes,
+placemarkers, generated token re-lexing, optional-region and stringizing phases.
+See m11-token-pasting.md for rationale. No parser/sema/codegen expansion needed;
+generated keywords and names flow through existing language conversion.
+
+Local make test, GCC-host QBE/reference execution and separate-object ABI passed.
+GCC/Clang oracles each passed 564 language + 444 expanded-pp agreements; one
+normative C23 H4 example (legacy GCC disagreement) and five whitespace plus one
+inactive-argument diagnostic policy groups are counted separately. Sanitized
+fuzzing passed 21801 lexer/preprocessor and 137656 pipeline inputs (159457 total),
+26 seconds per target, without executing arbitrary generated code. Exact 32/33
+paste nesting and shared 1 MiB spelling boundary tests passed, with counter
+cleanup and failed-definition recovery. Full GCC/Clang normal + ASan/UBSan
+matrix and source-commit CI are pending and must be recorded after completion.
+
+The user's updated instruction is to continue across milestones without asking
+for approval, stopping only for a real blocker or interruption. Next implement
+small diagnostic directives, then continue the preprocessing roadmap. Keep
+checkpoint pushes and handoff evidence current. Do not claim full C23 coverage.

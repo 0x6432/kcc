@@ -6,8 +6,10 @@ void diagnostic_error(struct diagnostics *diagnostics,
 	size_t line;
 	size_t column;
 
-	source_line_column(location, &line, &column);
-	fprintf(diagnostics->stream, "%s:%zu:%zu: error: %s\n",
-		location.source->name, line, column, message);
+	if (diagnostics->stream) {
+		source_line_column(location, &line, &column);
+		fprintf(diagnostics->stream, "%s:%zu:%zu: error: %s\n",
+			location.source->name, line, column, message);
+	}
 	diagnostics->errors++;
 }

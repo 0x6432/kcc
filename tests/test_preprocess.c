@@ -274,7 +274,7 @@ static void test_macro_definition_rules(void)
 	const char *invalid[] = {
 		"#define\nX", "#define 1\nX", "#undef\nX", "#undef 1\nX",
 		"#define X+1\nX", "#define X(x,x) 1\nX", "#define X ## 1\nX",
-		"#define X 1 %:%: 2\nX", "#define X\v 1\nX", "#define X 1\f\nX",
+		"#define X 1 %:%: \nX", "#define X\v 1\nX", "#define X 1\f\nX",
 		"#undef X trailing\nX", "#undef X\v\nX", "#define defined 1\nX",
 		"#define __LINE__ 1\nX", "#undef _Pragma\nX", "#define X \"bad\nX",
 	};
@@ -382,7 +382,7 @@ static void check_resource_failure(const char *text, const char *message,
 	}
 	assert(integers >= minimum_integers && integers <= maximum_integers);
 	assert(token.length > 0 && preprocessor.stopped && diagnostics.errors == 1);
-	assert(!preprocessor.optional_depth && !preprocessor.prescan_depth);
+	assert(!preprocessor.optional_depth && !preprocessor.prescan_depth && !preprocessor.paste_depth);
 	token = preprocess_peek(&preprocessor);
 	assert(token.kind == token_eof && token.location.offset == source.length);
 	assert_same_token(token, preprocess_peek(&preprocessor));
@@ -706,7 +706,7 @@ static void test_variadic_errors(void)
 		"#define F(...) __VA_OPT__((1)\n7",
 		"#define F(...) __VA_OPT__(__VA_OPT__(1))\n7",
 		"#define F(...) __VA_OPT__(# x)\n7",
-		"#define F(...) __VA_OPT__(x ## y)\n7",
+		"#define F(...) __VA_OPT__(x ##)\n7",
 	};
 
 	for (size_t i = 0; i < sizeof(definitions) / sizeof(definitions[0]); i++)
@@ -874,7 +874,7 @@ static void check_stringizing(const char *text, const char *const *expected, siz
 		struct pp_token raw;
 
 		assert(token.kind == pp_string && token.length == strlen(expected[i]));
-		assert(!preprocessor.optional_depth && !preprocessor.prescan_depth);
+		assert(!preprocessor.optional_depth && !preprocessor.prescan_depth && !preprocessor.paste_depth);
 		assert(token.location.source != &source && token.location.offset == 0);
 		assert(token.location.source->prepared);
 		assert(token.length == token.location.source->length);
@@ -1081,7 +1081,7 @@ static void test_optional_stringizing_recovery(void)
 	token = preprocess_next_pp(&preprocessor);
 	assert(token.kind == pp_string && token.length == 3);
 	assert(memcmp(token.location.source->data, "\"7\"", 3) == 0);
-	assert(!preprocessor.optional_depth && !preprocessor.prescan_depth);
+	assert(!preprocessor.optional_depth && !preprocessor.prescan_depth && !preprocessor.paste_depth);
 	assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
 	assert(preprocess_next_pp(&preprocessor).kind == pp_eof && diagnostics.errors == 1);
 	preprocess_destroy(&preprocessor);
@@ -1123,8 +1123,116 @@ static void test_optional_stringizing_limits(void)
 	free(text);
 }
 
+static void test_token_pasting(void)
+{
+	const struct expected_token tokens[] = {
+		{ token_int, "int" }, { token_integer, "42" }, { token_identifier, "ab" },
+		{ token_identifier, "a" }, { token_identifier, "bc" }, { token_identifier, "d" },
+		{ token_eof, "" },
+	};
+	const struct expected_token empty[] = { { token_eof, "" } };
+	const struct expected_token standard[] = {
+		{ token_identifier, "a" }, { token_identifier, "b" }, { token_eof, "" },
+	};
+	const char *const quoted[] = { "\"\"", "\"aa aa\"" };
+
+	check_stream("#define C(a,b) a##b\nC(in,t) C(4,2) C(a,b) C(a b,c d)", tokens, 7, 0, NULL);
+	check_stream("#define C(a,b,c) a##b##c\nC(,,)", empty, 1, 0, NULL);
+	check_stream("#define F(x,...) __VA_OPT__(a x##x) ## b\nF(,1)", standard, 3, 0, NULL);
+	check_stringizing("#define F(x,...) #__VA_OPT__(x##x x##x)\nF(,1) F(a,1)", quoted, 2);
+	check_stream("#define C(a,b) a##b\nC(/,*)", (const struct expected_token[]) {
+		{ token_invalid, "##" }, { token_eof, "" },
+	}, 2, 1, "exactly one preprocessing token");
+	check_stream("#define C(a,b) a##b\nC(+,*)", (const struct expected_token[]) {
+		{ token_invalid, "##" }, { token_eof, "" },
+	}, 2, 1, "exactly one preprocessing token");
+	check_stream("#define C(a,b) a##b\nC(x,+)", (const struct expected_token[]) {
+		{ token_invalid, "##" }, { token_eof, "" },
+	}, 2, 1, "exactly one preprocessing token");
+	check_stream("#define C(a,b) a##b\nC(1,u)", (const struct expected_token[]) {
+		{ token_invalid, "1u" }, { token_eof, "" },
+	}, 2, 1, "unsupported numeric");
+	check_stream("#define C(a,b) a##b\n#define C(a,b) ##a\nC(4,2)",
+		(const struct expected_token[]) {
+			{ token_invalid, "#" }, { token_integer, "42" }, { token_eof, "" },
+		}, 3, 1, "operand on both sides");
+	check_stream("#define F(...) __VA_OPT__(##x)\n7", (const struct expected_token[]) {
+		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
+	}, 3, 1, "operand on both sides");
+}
+
+static void test_pasting_limits(void)
+{
+	const size_t capacity = preprocess_spelling_limit + 1024;
+	char *text = malloc(capacity);
+	size_t used;
+
+	assert(text);
+	for (size_t extra = 0; extra < 2; extra++) {
+		struct source source;
+		FILE *stream = tmpfile();
+		struct diagnostics diagnostics = { stream, 0 };
+		struct preprocessor preprocessor;
+		struct pp_token token;
+
+		assert(stream);
+		used = 0;
+		append_test_text(text, capacity, &used, "#define C(a,b) a##b\nC(");
+		memset(text + used, 'a', preprocess_spelling_limit - 2 + extra);
+		used += preprocess_spelling_limit - 2 + extra;
+		append_test_text(text, capacity, &used, ",b)");
+		assert(source_from_bytes(&source, "pasting-limit.c", (const unsigned char *)text, used));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		token = preprocess_next_pp(&preprocessor);
+		if (extra) {
+			assert(token.kind == pp_invalid && preprocessor.stopped && diagnostics.errors == 1);
+		} else {
+			assert(token.kind == pp_identifier && !diagnostics.errors);
+			assert(token.length == preprocess_spelling_limit - 1);
+			assert(preprocessor.spelling_bytes == preprocess_spelling_limit);
+		}
+		assert(!preprocessor.paste_depth && !preprocessor.prescan_depth && !preprocessor.optional_depth);
+		assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+		assert(preprocess_next_pp(&preprocessor).kind == pp_eof);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		assert(fclose(stream) == 0);
+	}
+	for (size_t extra = 0; extra < 2; extra++) {
+		used = 0;
+		append_test_text(text, capacity, &used, "#define V(x) x+a##b\n");
+		for (size_t i = 0; i < preprocess_paste_limit + extra; i++)
+			append_test_text(text, capacity, &used, "V(");
+		append_test_text(text, capacity, &used, "7");
+		for (size_t i = 0; i < preprocess_paste_limit + extra; i++)
+			append_test_text(text, capacity, &used, ")");
+		if (extra)
+			check_resource_failure(text, "macro paste substitution depth limit exceeded", 0, 0);
+		else {
+			struct source source;
+			struct diagnostics diagnostics = { 0 };
+			struct preprocessor preprocessor;
+			size_t count = 0;
+
+			assert(source_from_bytes(&source, "paste-depth.c", (const unsigned char *)text, used));
+			assert(source_prepare(&source));
+			preprocess_init(&preprocessor, &source, &diagnostics);
+			while (preprocess_next_pp(&preprocessor).kind != pp_eof)
+				assert(++count <= 1 + 2 * preprocess_paste_limit);
+			assert(count == 1 + 2 * preprocess_paste_limit && !diagnostics.errors);
+			assert(!preprocessor.paste_depth && !preprocessor.prescan_depth);
+			preprocess_destroy(&preprocessor);
+			source_destroy(&source);
+		}
+	}
+	free(text);
+}
+
 int main(void)
 {
+	test_token_pasting();
+	test_pasting_limits();
 	test_optional_stringizing();
 	test_optional_stringizing_recovery();
 	test_optional_stringizing_limits();

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11b. The chronological entries below describe what each
+Current milestone: M11c. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -458,3 +458,24 @@ covers wrong-arity macros in named arguments used only by an inactive stringized
 optional body: kcc is lazy like Clang 15; GCC 11.5 diagnoses. No cross-host
 agreement or ISO permission is claimed for that disagreement. Preserve these
 interpretation/conformance audit gaps when implementing token pasting.
+
+## M11c
+
+Token pasting is implemented for object/function replacements, digraph operators,
+raw parameter boundaries, empty argument placemarkers and optional regions.
+Invalid operator placement is diagnosed before replacing a macro definition.
+Invalid concatenations diagnose at the original invocation. Paste order is
+left-to-right (the standard leaves the order unspecified). No GNU comma removal.
+
+Only paste-bearing invocations materialize bounded replacement lists; ordinary
+expansion remains streaming. Paste-range nesting is limited to 32; generated
+spellings share the existing cumulative 1 MiB limit. Generated identifiers,
+keywords, numbers and punctuators have compilation-lifetime spelling ownership.
+The language converter still rejects unsupported numeric/string expressions.
+
+The C23 H4 optional-paste example retains internal placemarkers until outer
+pasting completes. GCC 11.5 disagrees for F(,1); Clang 15 and kcc match N3096
+6.10.4.1. This is tested separately, not counted as host agreement. The inherited
+five whitespace policies and inactive-argument diagnostic policy remain separate
+conformance audit gaps. Includes, conditional/diagnostic directives, predefined
+macros and complete C23 remain unsupported.

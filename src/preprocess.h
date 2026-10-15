@@ -13,6 +13,7 @@
 #define preprocess_auxiliary_limit 65536
 #define preprocess_prescan_limit 64
 #define preprocess_optional_limit 32
+#define preprocess_paste_limit 32
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
 
@@ -72,6 +73,7 @@ struct preprocessor {
 	size_t spelling_bytes;
 	size_t prescan_depth;
 	size_t optional_depth;
+	size_t paste_depth;
 	bool stopped;
 	bool has_lookahead;
 	struct token lookahead;
