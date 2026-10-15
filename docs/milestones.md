@@ -17,7 +17,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | complete |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
-| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a complete; M11b optional stringizing under final validation) |
+| M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a/M11b stringizing complete; M11c token pasting next) |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
@@ -653,3 +653,32 @@ The source checkpoint is pushed before the longer full GCC/Clang normal and
 ASan/UBSan matrix to protect against sandbox resets. That matrix and exact-
 commit CI must be verified separately before marking M11b complete. Token pasting,
 other directives and C string expressions remain outside this implementation.
+
+
+## M11b final verification
+
+The pending full matrix above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/CLI/AST/rejection tests, 564 language
+plus 276 expanded-pp agreement streams, five separate whitespace-policy groups
+and one separate inactive-argument diagnostic policy. QBE/reference execution
+and separate-object integer ABI tests passed with both hosts and sanitizer builds.
+The eight new optional-stringizing discard programs cover LF/CRLF/lone CR.
+Exact 32/33 helper nesting, failed-definition recovery, call-site diagnostics,
+owned generated spellings and error-counter/cursor cleanup passed.
+
+Sanitized fuzzing passed 26326 lexer/preprocessor and 151927 pipeline inputs
+(178253 total), without executing arbitrary generated code. Source commit
+c0928a7 passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38766305589
+This following documentation-only verification commit has its own exact-commit
+CI checked after push. No production change followed the tested source commit.
+Temporary push/API credentials were removed and never committed.
+
+M11b is complete for optional stringizing without token pasting. The five
+whitespace and one inactive-argument diagnostic disagreements remain explicit
+interpretation/conformance audit gaps, not agreement claims. Next M11c needs a
+small, reviewed token-pasting design covering raw operands, re-lex validation,
+placemarkers and optional-region/operator interactions before implementation.
+Includes/conditions, predefined macros, C string expressions and full C23 remain
+unfinished. Preserve the exclusive substitution-only range contract when adding
+operator phases; do not substitute a full ordinary macro rescan for it.

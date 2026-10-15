@@ -5,8 +5,8 @@
 M11b: optional-operand stringizing with bounded substitution-only cursors.
 Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
-Previous M11a final CI passed: https://github.com/0x6432/kcc/actions/runs/38764334798
-M09–M11a are complete for their stated subsets; M11b final validation is pending.
+M11b source CI passed: https://github.com/0x6432/kcc/actions/runs/38766305589
+M09–M11b are complete for their stated subsets; M11c token pasting is next.
 Full preprocessing and full C23 remain incomplete.
 Get the exact latest hash from git log -1; this file avoids a circular reference to its own commit.
 
@@ -450,3 +450,32 @@ The source checkpoint is pushed before the longer full GCC/Clang normal and
 ASan/UBSan matrix to protect against sandbox resets. That matrix and exact-
 commit CI must be verified separately before marking M11b complete. Token pasting,
 other directives and C string expressions remain outside this implementation.
+
+
+## M11b final verification
+
+The pending full matrix above is complete. GCC 11.5 and Clang 15 each passed
+strict normal and ASan/UBSan builds, all unit/CLI/AST/rejection tests, 564 language
+plus 276 expanded-pp agreement streams, five separate whitespace-policy groups
+and one separate inactive-argument diagnostic policy. QBE/reference execution
+and separate-object integer ABI tests passed with both hosts and sanitizer builds.
+The eight new optional-stringizing discard programs cover LF/CRLF/lone CR.
+Exact 32/33 helper nesting, failed-definition recovery, call-site diagnostics,
+owned generated spellings and error-counter/cursor cleanup passed.
+
+Sanitized fuzzing passed 26326 lexer/preprocessor and 151927 pipeline inputs
+(178253 total), without executing arbitrary generated code. Source commit
+c0928a7 passed GitHub CI:
+https://github.com/0x6432/kcc/actions/runs/38766305589
+This following documentation-only verification commit has its own exact-commit
+CI checked after push. No production change followed the tested source commit.
+Temporary push/API credentials were removed and never committed.
+
+M11b is complete for optional stringizing without token pasting. The five
+whitespace and one inactive-argument diagnostic disagreements remain explicit
+interpretation/conformance audit gaps, not agreement claims. Next M11c needs a
+small, reviewed token-pasting design covering raw operands, re-lex validation,
+placemarkers and optional-region/operator interactions before implementation.
+Includes/conditions, predefined macros, C string expressions and full C23 remain
+unfinished. Preserve the exclusive substitution-only range contract when adding
+operator phases; do not substitute a full ordinary macro rescan for it.
