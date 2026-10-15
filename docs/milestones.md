@@ -12,7 +12,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M03 | `int main(void) { return 0; }` through AST, sema and QBE | Valid program emits IL, QBE builds executable, negative syntax/type tests | complete |
 | M04 | Integer/unary/arithmetic expressions; Pratt table | Precedence/associativity/runtime tests, bounded parser fuzzing | complete |
 | M05 | Local int declarations, assignment, expression statements | Redeclaration/name/lvalue tests, read/write execution; shadowing deferred to M06 | complete |
-| M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | in progress |
+| M06 | Blocks, if/else, comparison/logical expressions | Branch and short-circuit side effects, scope checks | complete |
 | M07 | while/do/for/break/continue | Nested-loop execution, invalid control-flow diagnostics | planned |
 | M08 | Integer functions/prototypes/parameters/calls | Recursion, declaration compatibility, ABI comparison | planned |
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | planned |
@@ -154,5 +154,16 @@ Next: M06b: comparisons and if/else, nearest-if else binding and QBE branch/merg
 Comparisons and if/else. A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
 
 Normal GCC, ASan/UBSan and QBE/reference executable regression tests passed.
-Sanitized pipeline fuzzing: 242396 inputs in 13 seconds; 355675 inputs in 13 seconds. Remote push and CI are checked separately.
+Sanitized fuzzing: lexer 242396 inputs in 13 seconds; pipeline 355675 inputs in 13 seconds. Remote push and CI are checked separately.
 Next: M06c: distinct logical AST nodes and branch/phi short-circuit lowering; track actual predecessor labels for nested RHS expressions.
+
+## M06C completion record
+
+Short-circuit logical operators. Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
+
+Normal GCC, ASan/UBSan and QBE/reference executable regression tests passed.
+Sanitized pipeline fuzzing: lexer: 339202 inputs in 21 seconds; pipeline: 622309 inputs in 21 seconds. Remote push and CI are checked separately.
+Next: M07: while/do/for with distinct statement structs, loop scopes and bounded nesting, explicit break/continue targets, and correct QBE back edges. Do not skip ahead to functions.
+
+M06c final verification also passed with Clang as compiler/reference compiler,
+ASan/UBSan executable tests, and 24 deterministic random logical trees.

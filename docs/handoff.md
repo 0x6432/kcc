@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M06B: Comparisons and if/else. Branch: development.
+M06C: Short-circuit logical operators. Branch: development.
 Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost>, configured only for this repository.
 Find the exact current checkpoint with git log -1 --oneline. Each M06 subcheckpoint is committed separately after tests; this file does not embed its own circular hash.
@@ -23,10 +23,10 @@ Find the exact current checkpoint with git log -1 --oneline. Each M06 subcheckpo
 
 ## Current behavior and invariants
 
-A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
+Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
 
 One int main(void), int locals, arithmetic, assignment and supported statements.
-Still unsupported: logical operators, loops, calls and preprocessing.
+Still unsupported: loops, calls and preprocessing.
 Limits: 16 MiB source; expression/statement recursion 128; typed expression
 structural depth 128; 4096 block items and 256 locals per entire function.
 Uninitialized objects are not zero-filled; tests avoid undefined behavior.
@@ -49,9 +49,9 @@ GCC sanitizer SONAME links may be absent: local tests used external links in
 Ubuntu CI does not need this workaround.
 
 Normal, sanitizer, semantic AST and QBE/runtime/reference tests passed.
-Sanitized pipeline fuzzing: 242396 inputs in 13 seconds; 355675 inputs in 13 seconds.
+Sanitized pipeline fuzzing: lexer: 339202 inputs in 21 seconds; pipeline: 622309 inputs in 21 seconds.
 Remote CI is checked after pushing; local passes are not remote-CI results.
 
 ## Next action
 
-M06c: distinct logical AST nodes and branch/phi short-circuit lowering; track actual predecessor labels for nested RHS expressions.
+M07: while/do/for with distinct statement structs, loop scopes and bounded nesting, explicit break/continue targets, and correct QBE back edges. Do not skip ahead to functions.

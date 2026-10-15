@@ -73,6 +73,27 @@ struct ast_binary_expression *ast_new_binary(struct arena *arena,
 	return node;
 }
 
+struct ast_logical_expression *ast_new_logical(struct arena *arena,
+	struct source_location location, enum logical_operator operation,
+	struct ast_expression *left, struct ast_expression *right)
+{
+	struct ast_logical_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_logical_expression) {
+			.expression = {
+				.kind = expression_logical,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.operation = operation,
+			.left = left,
+			.right = right,
+		};
+	return node;
+}
+
 struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 	struct source_location location, struct ast_expression *left,
 	struct ast_expression *right)

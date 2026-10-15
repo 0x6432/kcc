@@ -104,3 +104,10 @@ M06c adds distinct logical-expression nodes rather than eager binary nodes.
 phi values. The emitter records the current block label so a nested RHS supplies
 the actual predecessor to a phi. Skipped RHS operands are still checked by sema,
 but are never evaluated at runtime. ! is an ordinary prefix operation.
+
+M06 implementation notes: scope frames restore parents on success or failure.
+If substatements have their own scope frames. Function-wide block-item counting
+reserves an item before descending into it, so nesting cannot bypass the cap.
+Labels/temporaries have independent monotonic counters. Each logical merge
+starts with its phi; predecessor IDs are captured after operand emission, not
+before nested control flow. No eager binary opcode represents && or ||.

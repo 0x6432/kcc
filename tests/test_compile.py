@@ -80,6 +80,58 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("2 < 3 < 2", 1), ("1 == 2 < 3", 1), ("2 + 1 == 3", 1),
     ]:
         programs.append((f"int main(void) {{ return {expression}; }}", value))
+    programs += [
+        ("int main(void) { int x=0; 0 && (x=3); return x; }", 0),
+        ("int main(void) { int x=0; 1 && (x=3); return x; }", 3),
+        ("int main(void) { int x=0; 1 || (x=3); return x; }", 0),
+        ("int main(void) { int x=0; 0 || (x=3); return x; }", 3),
+        ("int main(void) { int x=0; int y=(x=1) && (x=2); return x*10+y; }", 21),
+        ("int main(void) { int x=0; (x=1) || (x=2); return x; }", 1),
+        ("int main(void) { int x=0; int y=(x=0) || ((x=1) && (x=2)); return x*10+y; }", 21),
+        ("int main(void) { int x=0; if ((x=2) && ((x=3) || (x=4))) return x; return 9; }", 3),
+        ("int main(void) { int x=0; return x && (1/x); }", 0),
+        ("int main(void) { int x=0; return 1 || (1/x); }", 1),
+        ("int main(void) { int x=0; if (x) return 1/x; return 4; }", 4),
+        ("int main(void) { int x=0; return ! (x=3); }", 0),
+        ("int main(void) { int x=0; if (x || (x=2)) { return x; } else return 8; }", 2),
+    ]
+    for expression, value in [
+        ("!0", 1), ("!-3", 0), ("!!7", 1), ("!2 + 3", 3),
+        ("-2 && -3", 1), ("0 || -3", 1), ("0 && 4", 0), ("3 || 0", 1),
+        ("1 || 0 && 0", 1), ("(1 || 0) && 0", 0), ("2 < 3 && 4 >= 4", 1),
+        ("(0 || 1) && (0 || 5)", 1), ("(1 && 2) || (0 && 3)", 1),
+        ("(0 || 1) + (1 && 3)", 2), ("! (0 || 2)", 0),
+        ("0 || 0 || 8", 1), ("1 && 2 && 0", 0),
+    ]:
+        programs.append((f"int main(void) {{ return {expression}; }}", value))
+    # Assignment has lower precedence than ||, &&, and comparisons.
+    programs.append(("int main(void) { int x=0; x=0 || 4 && 3; return x; }", 1))
+    def truth_expression(depth):
+        if depth == 0:
+            value = random_source.randrange(-3, 4)
+            return str(value), value
+        operation = random_source.choice(["&&", "||", "<", ">=", "==", "!=", "!"])
+        left, left_value = truth_expression(depth - 1)
+        if operation == "!":
+            return f"!({left})", int(not left_value)
+        right, right_value = truth_expression(depth - 1)
+        if operation == "&&":
+            value = int(bool(left_value) and bool(right_value))
+        elif operation == "||":
+            value = int(bool(left_value) or bool(right_value))
+        elif operation == "<":
+            value = int(left_value < right_value)
+        elif operation == ">=":
+            value = int(left_value >= right_value)
+        elif operation == "==":
+            value = int(left_value == right_value)
+        else:
+            value = int(left_value != right_value)
+        return f"({left}) {operation} ({right})", value
+
+    for _ in range(24):
+        expression, value = truth_expression(3)
+        programs.append((f"int main(void) {{ return {expression}; }}", value))
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -99,9 +151,10 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
             result = subprocess.run([str(executable)], timeout=5)
             assert result.returncode == value % 256
             reference = directory / "reference"
-            subprocess.run([os.environ.get("HOST_CC", "cc"), "-std=c2x",
-                            str(source), "-o", str(reference)],
-                           check=True, timeout=10)
+            reference_build = subprocess.run(
+                [os.environ.get("HOST_CC", "cc"), "-std=c2x", str(source),
+                 "-o", str(reference)], capture_output=True, text=True, timeout=10)
+            assert reference_build.returncode == 0, reference_build.stderr
             reference_result = subprocess.run([str(reference)], timeout=5)
             assert result.returncode == reference_result.returncode
 
@@ -163,6 +216,17 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return 1 << 2; }",
         "int main(void) {" + "if(1) "*128 + "return 1;}",
     ]
+    invalid += [
+        "int main(void) { return 0 && missing; }",
+        "int main(void) { return 1 || missing; }",
+        "int main(void) { int x=0; !x=2; }",
+        "int main(void) { int x=0; (x && 1)=2; }",
+        "int main(void) { return 1 & 2; }",
+        "int main(void) { return 1 | 2; }",
+        "int main(void) { return 1 && ; }",
+        "int main(void) { return !; }",
+        "int main(void) { return " + "1&&"*128 + "1; }",
+    ]
     for keyword in ("if", "while", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
     for text in invalid:
@@ -193,6 +257,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
                             capture_output=True, text=True, timeout=5)
     assert result.returncode == 0 and result.stdout.count("\tret ") == 2
     assert "\tjmp " not in result.stdout  # both paths terminate; no merge jump
+    source.write_text("int main(void) { return (0 || 1) && (0 || 5); }")
+    result = subprocess.run([str(compiler), str(source)],
+                            capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0 and result.stdout.count(" =w phi ") == 3
+    assert result.stdout.count("\tjnz ") == 3
     source.write_text("int main(void) { return 42; }\n")
     with open("/dev/full", "w") as full:
         result = subprocess.run([str(compiler), str(source)], stdout=full,

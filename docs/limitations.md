@@ -94,12 +94,23 @@ limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
 function-wide block items, 256 function-wide locals. Tests execute defined C
 only; fuzzing never executes source programs.
 
-## M06B (current)
+## M06B
 
 A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
 
 Only int objects, one main(void), existing arithmetic and simple assignment
 are supported. Still unsupported: logical operators, loops, calls and preprocessing. No
+zero-fill/definite-initialization analysis for uninitialized locals. Resource
+limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
+function-wide block items, 256 function-wide locals. Tests execute defined C
+only; fuzzing never executes source programs.
+
+## M06C (current)
+
+Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
+
+Only int objects, one main(void), existing arithmetic and simple assignment
+are supported. Still unsupported: loops, calls and preprocessing. No
 zero-fill/definite-initialization analysis for uninitialized locals. Resource
 limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
 function-wide block items, 256 function-wide locals. Tests execute defined C

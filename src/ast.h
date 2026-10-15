@@ -14,6 +14,7 @@ enum expression_kind {
 	expression_binary,
 	expression_assignment,
 	expression_load,
+	expression_logical,
 };
 
 enum {
@@ -45,6 +46,7 @@ struct ast_name_expression {
 enum unary_operator {
 	unary_plus,
 	unary_minus,
+	unary_not,
 };
 
 struct ast_unary_expression {
@@ -70,6 +72,18 @@ enum binary_operator {
 struct ast_binary_expression {
 	struct ast_expression expression;
 	enum binary_operator operation;
+	struct ast_expression *left;
+	struct ast_expression *right;
+};
+
+enum logical_operator {
+	logical_and,
+	logical_or,
+};
+
+struct ast_logical_expression {
+	struct ast_expression expression;
+	enum logical_operator operation;
 	struct ast_expression *left;
 	struct ast_expression *right;
 };
@@ -170,6 +184,9 @@ struct ast_unary_expression *ast_new_unary(struct arena *arena,
 	struct ast_expression *operand);
 struct ast_binary_expression *ast_new_binary(struct arena *arena,
 	struct source_location location, enum binary_operator operation,
+	struct ast_expression *left, struct ast_expression *right);
+struct ast_logical_expression *ast_new_logical(struct arena *arena,
+	struct source_location location, enum logical_operator operation,
 	struct ast_expression *left, struct ast_expression *right);
 struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 	struct source_location location, struct ast_expression *left,

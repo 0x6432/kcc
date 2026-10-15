@@ -34,6 +34,9 @@ enum token_kind {
 	token_less_equal,
 	token_greater,
 	token_greater_equal,
+	token_bang,
+	token_and_and,
+	token_or_or,
 };
 
 /* Spelling is source->data + location.offset, with explicit length. */

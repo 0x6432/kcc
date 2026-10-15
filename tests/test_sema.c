@@ -106,10 +106,71 @@ static void test_point_of_declaration(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_conditional_scopes_and_logic(void)
+{
+	const char *text = "int main(void) { int x=1; if(x && (x || 0)) "
+		"{ int x=2; return !x; } else return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { stream, 0 };
+	struct lexer lexer;
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *outer;
+	struct ast_local_declaration *inner;
+	struct ast_statement_item *item;
+	struct ast_if_statement *conditional;
+	struct ast_logical_expression *condition;
+	struct ast_compound_statement *body;
+	struct ast_return_statement *return_node;
+	struct ast_unary_expression *not_node;
+	struct ast_load_expression *load;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c",
+		(const unsigned char *)text, strlen(text)));
+	lexer_init(&lexer, &source, &diagnostics);
+	unit = parse_translation_unit(&lexer, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	outer = (struct ast_local_declaration *)unit->function->body->items;
+	item = (struct ast_statement_item *)outer->item.next;
+	assert(item->statement->kind == statement_if);
+	conditional = (struct ast_if_statement *)item->statement;
+	assert(conditional->condition->kind == expression_logical);
+	condition = (struct ast_logical_expression *)conditional->condition;
+	assert(condition->operation == logical_and);
+	assert(condition->right->kind == expression_logical);
+	assert(condition->expression.type == &type_int);
+	load = (struct ast_load_expression *)condition->left;
+	assert(load->expression.kind == expression_load);
+	assert(((struct ast_name_expression *)load->operand)->declaration == outer);
+
+	assert(conditional->then_branch->kind == statement_compound);
+	body = (struct ast_compound_statement *)conditional->then_branch;
+	inner = (struct ast_local_declaration *)body->items;
+	assert(inner != outer && inner->slot != outer->slot);
+	item = (struct ast_statement_item *)inner->item.next;
+	return_node = (struct ast_return_statement *)item->statement;
+	assert(return_node->value->kind == expression_unary);
+	not_node = (struct ast_unary_expression *)return_node->value;
+	assert(not_node->operation == unary_not);
+	load = (struct ast_load_expression *)not_node->operand;
+	assert(((struct ast_name_expression *)load->operand)->declaration == inner);
+	return_node = (struct ast_return_statement *)conditional->else_branch;
+	assert(return_node->statement.kind == statement_return);
+	load = (struct ast_load_expression *)return_node->value;
+	assert(((struct ast_name_expression *)load->operand)->declaration == outer);
+	arena_destroy(&arena);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
 	test_resolved_tree();
 	test_point_of_declaration();
+	test_conditional_scopes_and_logic();
 	puts("Semantic AST tests passed");
 	return 0;
 }

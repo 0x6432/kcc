@@ -63,6 +63,45 @@ static size_t codegen_local_slot(const struct ast_expression *expression)
 	return name->declaration->slot;
 }
 
+static size_t codegen_expression(struct codegen *codegen,
+	const struct ast_expression *expression);
+
+static size_t codegen_logical(struct codegen *codegen,
+	const struct ast_logical_expression *node)
+{
+	size_t left = codegen_expression(codegen, node->left);
+	size_t left_predecessor = codegen->current_label;
+	size_t rhs_label = new_label(codegen);
+	size_t merge_label = new_label(codegen);
+	size_t right;
+	size_t normalized;
+	size_t right_predecessor;
+	size_t result;
+	unsigned skipped_value;
+
+	if (node->operation == logical_and) {
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
+			left, rhs_label, merge_label);
+		skipped_value = 0;
+	} else {
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
+			left, merge_label, rhs_label);
+		skipped_value = 1;
+	}
+	emit_label(codegen, rhs_label);
+	right = codegen_expression(codegen, node->right);
+	normalized = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w cnew %%t%zu, 0\n", normalized, right);
+	/* Nested RHS logic can end in a different block from rhs_label. */
+	right_predecessor = codegen->current_label;
+	emit(codegen, "\tjmp @b%zu\n", merge_label);
+	emit_label(codegen, merge_label);
+	result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w phi @b%zu %u, @b%zu %%t%zu\n",
+		result, left_predecessor, skipped_value, right_predecessor, normalized);
+	return result;
+}
+
 /* Return the temporary containing the value; operands are emitted first. */
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression)
@@ -86,10 +125,17 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t operand = codegen_expression(codegen, node->operand);
 
 		temporary = codegen->next_temporary++;
-		if (node->operation == unary_plus)
+		switch (node->operation) {
+		case unary_plus:
 			emit(codegen, "\t%%t%zu =w copy %%t%zu\n", temporary, operand);
-		else
+			break;
+		case unary_minus:
 			emit(codegen, "\t%%t%zu =w sub 0, %%t%zu\n", temporary, operand);
+			break;
+		case unary_not:
+			emit(codegen, "\t%%t%zu =w ceqw %%t%zu, 0\n", temporary, operand);
+			break;
+		}
 		return temporary;
 	}
 	case expression_binary: {
@@ -103,6 +149,9 @@ static size_t codegen_expression(struct codegen *codegen,
 			binary_instruction(node->operation), left, right);
 		return temporary;
 	}
+	case expression_logical:
+		return codegen_logical(codegen,
+			(const struct ast_logical_expression *)expression);
 	case expression_load: {
 		const struct ast_load_expression *node =
 			(const struct ast_load_expression *)expression;

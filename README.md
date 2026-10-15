@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M06B: comparisons and if/else. A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
+M06C: short-circuit logical operators. Distinct logical-expression AST nodes lower &&/|| through conditional branches and phi values. Unary ! and all comparisons normalize int results to 0/1. The emitter records the current block label so nested RHS phi predecessors remain correct. Sema checks skipped operands too; codegen does not evaluate them at runtime.
 
 Unsupported input is rejected. See `docs/milestones.md` and
 `docs/limitations.md`.
@@ -46,23 +46,28 @@ has its own struct. Parser functions will document their BNF productions.
 cat > build/example.c <<'EOF'
 int main(void)
 {
-	int x = 3;
-	int y = x * 4;
+	int value = 3;
 
-	x = y = 7;
-	return x + y;
+	{
+		int value = 0;
+
+		value = value + 1;
+	}
+	if (value > 1 && value < 4)
+		return 42;
+	return 0;
 }
 EOF
 ./build/kcc build/example.c > build/example.ssa
 tools/qbe-1.2/qbe -t amd64_sysv -o build/example.s build/example.ssa
 cc build/example.s -o build/example
 ./build/example
-# Exit status: 14
+# Exit status: 42
 ```
 
 Supported: decimal int literals, locals, simple assignment, arithmetic,
-nested blocks and shadowing, comparisons and if/else.
-Unsupported: logical operators, loops, calls and preprocessing. This is not a complete C23 compiler.
+nested blocks and shadowing, comparisons and if/else, and !/&&/||.
+Unsupported: loops, calls and preprocessing. This is not a complete C23 compiler.
 
 Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items
 and 256 locals across the function.

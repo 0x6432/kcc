@@ -125,6 +125,21 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_logical: {
+		struct ast_logical_expression *node =
+			(struct ast_logical_expression *)expression;
+		unsigned depth;
+
+		/* Even a constant-skipped RHS must obey C's constraints. */
+		if (!sema_expression(sema, &node->left, true))
+			return false;
+		if (!sema_expression(sema, &node->right, true))
+			return false;
+		depth = node->left->depth > node->right->depth ?
+			node->left->depth : node->right->depth;
+		expression->depth = depth + 1;
+		break;
+	}
 	case expression_assignment: {
 		struct ast_assignment_expression *node =
 			(struct ast_assignment_expression *)expression;

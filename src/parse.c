@@ -60,6 +60,8 @@ struct infix_operator {
  */
 static const struct infix_operator infix_operators[] = {
 	{ token_equal, 1, 1 },
+	{ token_or_or, 2, 3 },
+	{ token_and_and, 3, 4 },
 	{ token_equal_equal, 7, 8 },
 	{ token_not_equal, 7, 8 },
 	{ token_less, 8, 9 },
@@ -117,7 +119,7 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 	return expression;
 }
 
-/* prefix-expression ::= primary-expression | ("+" | "-") prefix-expression */
+/* prefix-expression ::= primary-expression | ("+" | "-" | "!") prefix-expression */
 static struct ast_expression *parse_prefix_expression(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
@@ -125,10 +127,18 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	struct ast_unary_expression *node;
 	enum unary_operator operation;
 
-	if (token.kind != token_plus && token.kind != token_minus)
+	if (token.kind != token_plus && token.kind != token_minus &&
+		token.kind != token_bang)
 		return parse_primary_expression(parser);
 	lexer_next(parser->lexer);
-	operation = token.kind == token_plus ? unary_plus : unary_minus;
+	switch (token.kind) {
+	case token_plus: operation = unary_plus; break;
+	case token_minus: operation = unary_minus; break;
+	case token_bang: operation = unary_not; break;
+	default:
+		assert(0 && "unknown prefix operator");
+		return NULL;
+	}
 	operand = parse_expression(parser, 30);
 	if (!operand)
 		return NULL;
@@ -145,7 +155,7 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	return &node->expression;
 }
 
-static enum binary_operator arithmetic_operator(enum token_kind kind)
+static enum binary_operator binary_operator_for_token(enum token_kind kind)
 {
 	switch (kind) {
 	case token_plus: return binary_add;
@@ -174,9 +184,17 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 
 		if (node)
 			return &node->expression;
+	} else if (token.kind == token_and_and || token.kind == token_or_or) {
+		enum logical_operator operation = token.kind == token_and_and ?
+			logical_and : logical_or;
+		struct ast_logical_expression *node = ast_new_logical(parser->arena,
+			token.location, operation, left, right);
+
+		if (node)
+			return &node->expression;
 	} else {
 		struct ast_binary_expression *node = ast_new_binary(parser->arena,
-			token.location, arithmetic_operator(token.kind), left, right);
+			token.location, binary_operator_for_token(token.kind), left, right);
 
 		if (node)
 			return &node->expression;
@@ -187,7 +205,7 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 
 /* expression ::= prefix-expression { binary-operator prefix-expression }
  * binary-operator ::= "=" | "+" | "-" | "*" | "/" | "%"
- *                   | "==" | "!=" | "<" | "<=" | ">" | ">="
+ *                   | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
  * Pratt parsing groups this flat grammar using the binding-power table.
  * Recursive calls parse RHS operators only at or above the requested power.
  */

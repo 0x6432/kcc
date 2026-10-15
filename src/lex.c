@@ -210,6 +210,11 @@ static struct token read_token(struct lexer *lexer)
 			(byte == '-' && (next == '-' || next == '=' || next == '>')) ||
 			((byte == '*' || byte == '/' || byte == '%') && next == '=');
 
+		if ((byte == '&' || byte == '|') && next == byte) {
+			kind = byte == '&' ? token_and_and : token_or_or;
+			lexer->offset += 2;
+			return make_token(lexer, kind, beginning);
+		}
 		if (next == '=' &&
 			(byte == '=' || byte == '!' || byte == '<' || byte == '>')) {
 			switch (byte) {
@@ -267,6 +272,9 @@ static struct token read_token(struct lexer *lexer)
 		break;
 	case '%':
 		kind = token_percent;
+		break;
+	case '!':
+		kind = token_bang;
 		break;
 	case '<':
 		kind = token_less;
@@ -344,6 +352,9 @@ const char *token_kind_name(enum token_kind kind)
 	case token_less_equal: return "<=";
 	case token_greater: return ">";
 	case token_greater_equal: return ">=";
+	case token_bang: return "!";
+	case token_and_and: return "&&";
+	case token_or_or: return "||";
 	}
 	return "unknown";
 }
