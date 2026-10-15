@@ -62,12 +62,17 @@ static const struct infix_operator infix_operators[] = {
 	{ token_equal, 1, 1 },
 	{ token_or_or, 2, 3 },
 	{ token_and_and, 3, 4 },
+	{ token_pipe, 4, 5 },
+	{ token_caret, 5, 6 },
+	{ token_ampersand, 6, 7 },
 	{ token_equal_equal, 7, 8 },
 	{ token_not_equal, 7, 8 },
 	{ token_less, 8, 9 },
 	{ token_less_equal, 8, 9 },
 	{ token_greater, 8, 9 },
 	{ token_greater_equal, 8, 9 },
+	{ token_shift_left, 9, 10 },
+	{ token_shift_right, 9, 10 },
 	{ token_plus, 10, 11 },
 	{ token_minus, 10, 11 },
 	{ token_star, 20, 21 },
@@ -191,7 +196,7 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 	return expression;
 }
 
-/* prefix-expression ::= postfix-expression | ("+" | "-" | "!") prefix-expression */
+/* prefix-expression ::= postfix-expression | ("+" | "-" | "!" | "~") prefix-expression */
 static struct ast_expression *parse_prefix_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
@@ -200,13 +205,14 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	enum unary_operator operation;
 
 	if (token.kind != token_plus && token.kind != token_minus &&
-		token.kind != token_bang)
+		token.kind != token_bang && token.kind != token_tilde)
 		return parse_postfix_expression(parser);
 	preprocess_next(parser->preprocessor);
 	switch (token.kind) {
 	case token_plus: operation = unary_plus; break;
 	case token_minus: operation = unary_minus; break;
 	case token_bang: operation = unary_not; break;
+	case token_tilde: operation = unary_complement; break;
 	default:
 		assert(0 && "unknown prefix operator");
 		return NULL;
@@ -235,6 +241,11 @@ static enum binary_operator binary_operator_for_token(enum token_kind kind)
 	case token_star: return binary_multiply;
 	case token_slash: return binary_divide;
 	case token_percent: return binary_remainder;
+	case token_ampersand: return binary_bit_and;
+	case token_caret: return binary_bit_xor;
+	case token_pipe: return binary_bit_or;
+	case token_shift_left: return binary_shift_left;
+	case token_shift_right: return binary_shift_right;
 	case token_equal_equal: return binary_equal;
 	case token_not_equal: return binary_not_equal;
 	case token_less: return binary_less;
@@ -278,6 +289,7 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 /* expression ::= prefix-expression { binary-operator prefix-expression }
  * binary-operator ::= "=" | "+" | "-" | "*" | "/" | "%"
  *                   | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
+ *                   | "&" | "^" | "|" | "<<" | ">>"
  * Pratt parsing groups this flat grammar using the binding-power table.
  * Recursive calls parse RHS operators only at or above the requested power.
  */

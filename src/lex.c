@@ -420,6 +420,8 @@ static const struct language_punctuator language_punctuators[] = {
 	{ "<", token_less }, { "<=", token_less_equal },
 	{ ">", token_greater }, { ">=", token_greater_equal },
 	{ "!", token_bang }, { "&&", token_and_and }, { "||", token_or_or },
+	{ "~", token_tilde }, { "&", token_ampersand }, { "^", token_caret },
+	{ "|", token_pipe }, { "<<", token_shift_left }, { ">>", token_shift_right },
 };
 
 static struct token convert_punctuator(struct token token, struct diagnostics *diagnostics)
@@ -509,6 +511,12 @@ const char *token_kind_name(enum token_kind kind)
 	case token_greater: return ">";
 	case token_greater_equal: return ">=";
 	case token_bang: return "!";
+	case token_tilde: return "~";
+	case token_ampersand: return "&";
+	case token_caret: return "^";
+	case token_pipe: return "|";
+	case token_shift_left: return "<<";
+	case token_shift_right: return ">>";
 	case token_and_and: return "&&";
 	case token_or_or: return "||";
 	}

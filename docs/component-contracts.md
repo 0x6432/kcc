@@ -828,3 +828,10 @@ Each failed loader candidate is destroyed before retry, and all successful
 sources retain existing compilation lifetime. Direct angles bypass expansion;
 computed operands remain isolated. Parser/sema/codegen are unchanged. Pipeline
 fuzz search uses only memory-backed missing/fallback directories, never disk.
+
+M12a: language token conversion accepts ~ & ^ | << >> (raw pp scanning already
+recognized them). Parser maps the Pratt table to existing concrete unary/binary
+structs with new operator kinds. Sema loads object operands and validates depth;
+only int exists, so integer promotions are identity. Codegen word and/xor/or/shl/
+sar follows that typed contract. Undefined C shift inputs are not made defined
+by backend masking; the differential suite never executes them.

@@ -66,6 +66,7 @@ enum unary_operator {
 	unary_plus,
 	unary_minus,
 	unary_not,
+	unary_complement,
 };
 
 struct ast_unary_expression {
@@ -80,6 +81,11 @@ enum binary_operator {
 	binary_multiply,
 	binary_divide,
 	binary_remainder,
+	binary_bit_and,
+	binary_bit_xor,
+	binary_bit_or,
+	binary_shift_left,
+	binary_shift_right,
 	binary_equal,
 	binary_not_equal,
 	binary_less,

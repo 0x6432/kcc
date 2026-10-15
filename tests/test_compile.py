@@ -555,7 +555,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { if (1) { int x=1; } return x; }",
         "int main(void) { if (1) { int x=1; } else return x; }",
         "int main(void) { if (1) return 1; else return 2; return missing; }",
-        "int main(void) { return 1 << 2; }",
+        "int main(void) { return 1 <<= 2; }",
         "int main(void) {" + "if(1) "*128 + "return 1;}",
     ]
     invalid += [
@@ -563,8 +563,8 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return 1 || missing; }",
         "int main(void) { int x=0; !x=2; }",
         "int main(void) { int x=0; (x && 1)=2; }",
-        "int main(void) { return 1 & 2; }",
-        "int main(void) { return 1 | 2; }",
+        "int main(void) { return 1 &= 2; }",
+        "int main(void) { return 1 |= 2; }",
         "int main(void) { return 1 && ; }",
         "int main(void) { return !; }",
         "int main(void) { return " + "1&&"*128 + "1; }",

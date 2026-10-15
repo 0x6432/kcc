@@ -50,6 +50,11 @@ static const char *binary_instruction(enum binary_operator operation)
 	case binary_multiply: return "mul";
 	case binary_divide: return "div";
 	case binary_remainder: return "rem";
+	case binary_bit_and: return "and";
+	case binary_bit_xor: return "xor";
+	case binary_bit_or: return "or";
+	case binary_shift_left: return "shl";
+	case binary_shift_right: return "sar";
 	case binary_equal: return "ceqw";
 	case binary_not_equal: return "cnew";
 	case binary_less: return "csltw";
@@ -162,6 +167,9 @@ static size_t codegen_expression(struct codegen *codegen,
 			break;
 		case unary_minus:
 			emit(codegen, "\t%%t%zu =w sub 0, %%t%zu\n", temporary, operand);
+			break;
+		case unary_complement:
+			emit(codegen, "\t%%t%zu =w xor %%t%zu, -1\n", temporary, operand);
 			break;
 		case unary_not:
 			emit(codegen, "\t%%t%zu =w ceqw %%t%zu, 0\n", temporary, operand);

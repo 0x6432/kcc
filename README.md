@@ -6,7 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M11m: direct/computed quoted and basic angle includes load nested headers, share macro bindings,
+M12a: signed-int ~, &, ^, |, << and >> expressions now reach QBE with
+standard Pratt precedence. Direct/computed quoted and basic angle includes load
+nested headers, share macro bindings,
 and retain child source buffers for parsing and diagnostics. File/conditional
 boundaries are explicit; loading and retained bytes have documented bounds.
 
@@ -76,7 +78,7 @@ cc build/example.s -o build/example
 Supported: normalized line endings, backslash-newline splicing, physical source
 locations, null directives (#/%:), object-like, fixed-parameter and variadic function-like
 macros, diagnostic directives (including #warning), macro operators (including __VA_ARGS__/__VA_OPT__ and raw parameter/optional stringizing and token pasting), decimal int literals, int locals, simple assignment, arithmetic,
-comparisons, !/&&/||, scoped blocks, if/else, while/do/for, break/continue,
+comparisons, !/&&/||, ~ and bitwise/shift operators, scoped blocks, if/else, while/do/for, break/continue,
 int function prototypes/definitions/parameters, direct calls and recursion.
 Both (void) and C23 empty () specify zero parameters. Prototype names are
 optional; definition parameter names are required in this subset.
@@ -84,7 +86,8 @@ optional; definition parameter names are required in this subset.
 Unsupported: C string expressions, general header-name encoding/system headers,
 full conditional expressions, predefined/reserved macro names, other types, globals/storage classes, local
 prototypes, function values/pointers, variadic functions, comma/update/compound-assignment
-operators. This is not a complete C23 compiler. Main takes no parameters yet.
+operators. Runtime arithmetic remains signed int; invalid shifts have C
+undefined behavior, not a defined masked-count extension. This is not a complete C23 compiler. Main takes no parameters yet.
 
 Loops use `i = i + 1`; ++ and compound assignments are not supported yet.
 Limits: 16 MiB source, 128 expression/statement nesting and typed expression

@@ -41,6 +41,12 @@ enum token_kind {
 	token_greater,
 	token_greater_equal,
 	token_bang,
+	token_tilde,
+	token_ampersand,
+	token_caret,
+	token_pipe,
+	token_shift_left,
+	token_shift_right,
 	token_and_and,
 	token_or_or,
 };

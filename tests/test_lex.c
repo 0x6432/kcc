@@ -60,7 +60,7 @@ static void test_errors(void)
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@",
-		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<", ">>=",
+		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<=", ">>=",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
@@ -87,6 +87,18 @@ static void test_condition_tokens(void)
 
 	check_tokens("if else < <= > >= == != = ! && || while break continue do for ,", kinds,
 		sizeof(kinds) / sizeof(kinds[0]), 0);
+}
+
+static void test_bitwise_tokens(void)
+{
+	const enum token_kind kinds[] = {
+		token_tilde, token_ampersand, token_caret, token_pipe,
+		token_shift_left, token_shift_right,
+	};
+
+	check_tokens("~ & ^ | << >>", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	check_tokens("#define C(a,b) a##b\n~ & ^ | C(<,<) C(>,>)",
+		kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
 }
 
 static void test_binary_and_values(void)
@@ -136,6 +148,7 @@ static void test_phase_ordering(void)
 
 int main(void)
 {
+	test_bitwise_tokens();
 	test_phase_ordering();
 	test_basic();
 	test_errors();

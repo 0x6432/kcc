@@ -18,7 +18,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | in progress (M11a–M11c stringizing/pasting complete; M11d diagnostics complete; M11e macro-existence complete; M11f initial expressions complete; M11a–M11i complete within scopes; M11j characters complete; M11k direct includes complete; M11l computed/M11m include search implemented) |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | planned |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a signed-int bitwise/shifts implemented; other types planned) |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | planned |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
@@ -806,3 +806,10 @@ M11m source checkpoint: bounded -I/basic angle search passed normal GCC full
 regressions/QBE/reference/ABI, GCC ASan/UBSan units, 39 new pp agreements with
 each host and 117567 sanitizer-fuzz inputs. Full isolated/remote validation is
 pending. M12a signed-int operators are pre-designed; other types remain absent.
+
+M12a source checkpoint: signed-int bitwise/shifts pass full normal GCC
+regressions/QBE/reference/ABI, 102 full-value model/host programs with each host,
+AST/token/constraint tests and 109107 sanitizer-fuzz inputs. Full isolated/remote
+verification remains pending. M11l repair 37857c4 remote CI passed 38812950255;
+local GCC passed, local Clang pending. M11m validation remains independent.
+M12b shared integer spelling decoding is pre-designed.

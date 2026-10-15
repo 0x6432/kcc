@@ -168,6 +168,9 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
+	/* Arithmetic/bitwise/shift operands are all int in M12a. Integer
+	 * promotions are identity; wider-type conversions remain M12b work.
+	 */
 	case expression_binary: {
 		struct ast_binary_expression *node =
 			(struct ast_binary_expression *)expression;

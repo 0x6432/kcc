@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M11m. The chronological entries below describe what each
+Current milestone: M12a. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -634,3 +634,18 @@ remain. The directory list and strings are borrowed until destruction.
 M11l's first sanitizer matrix exposed a GCC format-overflow warning in a test
 fixture builder, not a compiler-source failure. Repair 37857c4 uses explicit
 bounded writes; original 0ffd06c verification is not claimed successful.
+
+## M12a
+
+Runtime expressions now support unary ~ and binary & ^ | << >> with C precedence
+and associativity. Operands/results remain signed 32-bit int; promotions are
+identity, and sema still inserts explicit lvalue loads. QBE uses word bitwise
+instructions, shl and arithmetic sar. Negative right shifts follow the chosen
+arithmetic target policy. Shift counts outside 0..31, negative signed left-shift
+operands and unrepresentable signed left-shift results are not defined by this
+subset. No constant UB checker or runtime shift masking guarantee is claimed.
+
+Other integer types/literal spellings, explicit conversions/casts and compound
+assignments remain later increments. Existing AST depth, symbol/type validation,
+short-circuit effects and ABI contracts are unchanged. Tests compare full 32-bit
+values inside C, not just exit-status low bits, using defined generated inputs.

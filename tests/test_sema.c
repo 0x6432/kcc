@@ -432,8 +432,58 @@ static void test_deferred_preprocessor_error(void)
 }
 
 
+static void test_bitwise_expression_tree(void)
+{
+	const char *text = "int main(void) { int x=42; return ~x & 7 ^ 2 | 1 << 2+1; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *local;
+	struct ast_statement_item *item;
+	struct ast_return_statement *statement;
+	struct ast_binary_expression *outer;
+	struct ast_binary_expression *shift;
+	struct ast_binary_expression *exclusive;
+	struct ast_binary_expression *mask;
+	struct ast_unary_expression *complement;
+	struct ast_load_expression *load;
+
+	assert(source_from_bytes(&source, "bitwise.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics));
+	assert(!diagnostics.errors);
+	local = (struct ast_local_declaration *)first_function(unit)->body->items;
+	item = (struct ast_statement_item *)local->item.next;
+	statement = (struct ast_return_statement *)item->statement;
+	assert(statement->value->kind == expression_binary);
+	outer = (struct ast_binary_expression *)statement->value;
+	assert(outer->operation == binary_bit_or && outer->expression.type == &type_int);
+	assert(outer->left->kind == expression_binary && outer->right->kind == expression_binary);
+	shift = (struct ast_binary_expression *)outer->right;
+	assert(shift->operation == binary_shift_left && shift->right->kind == expression_binary);
+	assert(((struct ast_binary_expression *)shift->right)->operation == binary_add);
+	exclusive = (struct ast_binary_expression *)outer->left;
+	assert(exclusive->operation == binary_bit_xor && exclusive->left->kind == expression_binary);
+	mask = (struct ast_binary_expression *)exclusive->left;
+	assert(mask->operation == binary_bit_and && mask->left->kind == expression_unary);
+	complement = (struct ast_unary_expression *)mask->left;
+	assert(complement->operation == unary_complement && complement->operand->kind == expression_load);
+	load = (struct ast_load_expression *)complement->operand;
+	assert(load->expression.type == &type_int && !load->expression.is_lvalue);
+	assert(((struct ast_name_expression *)load->operand)->declaration == local);
+	assert(outer->expression.depth == 6);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_bitwise_expression_tree();
 	test_deferred_preprocessor_error();
 	test_parameters_and_arguments();
 	test_function_symbols();

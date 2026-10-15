@@ -805,3 +805,24 @@ Sanitized fuzzing passed 25488 lexer and 92079 memory-only pipeline inputs
 (117567 total), 26 seconds each, without executing arbitrary generated programs.
 Full isolated M11m host/sanitizer matrix and exact-source CI are pending.
 M12a signed-int operators are designed in m12-integer-operators.md before coding.
+
+## M12a tested source checkpoint
+
+Runtime signed-int unary ~ and binary & ^ | << >> are implemented across token
+conversion, Pratt parsing, concrete AST operators and QBE lowering. Sema retains
+explicit lvalue loads and int-only depth checks; the word backend uses and/xor/
+or/shl/sar. The parser's BNF and precedence table include the new operators.
+
+GCC full normal regressions/QBE/reference/ABI and 102 full-value operator/model
+programs passed; the 102 also passed Clang host/QBE execution. Comparisons inside
+C check all 32 result bits, not only process status. Cases cover precedence,
+associativity, arithmetic negative right shift, assignments, sequencing, loops,
+calls, token paste, typed AST loads and rejection/depth constraints. Undefined
+shift inputs are never executed. Sanitized fuzzing passed 25260 lexer and 83847
+pipeline inputs (109107 total), 26 seconds each, with no arbitrary C execution.
+Full isolated M12a host/sanitizer matrix and exact-source CI are pending.
+
+M11l repair 37857c4 exact-source CI passed run 38812950255. Its isolated local
+GCC matrix passed; the local Clang matrix remains in progress. M11m full local
+matrix is queued after it and remote CI is still running. M12b shared integer
+spelling decoding is designed in m12-integer-spellings.md before implementation.
