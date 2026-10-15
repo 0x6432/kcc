@@ -59,7 +59,13 @@ struct infix_operator {
  * making a=b=c associate as a=(b=c). Prefix operators bind at 30.
  */
 static const struct infix_operator infix_operators[] = {
-	{ token_equal, 5, 5 },
+	{ token_equal, 1, 1 },
+	{ token_equal_equal, 7, 8 },
+	{ token_not_equal, 7, 8 },
+	{ token_less, 8, 9 },
+	{ token_less_equal, 8, 9 },
+	{ token_greater, 8, 9 },
+	{ token_greater_equal, 8, 9 },
 	{ token_plus, 10, 11 },
 	{ token_minus, 10, 11 },
 	{ token_star, 20, 21 },
@@ -147,6 +153,12 @@ static enum binary_operator arithmetic_operator(enum token_kind kind)
 	case token_star: return binary_multiply;
 	case token_slash: return binary_divide;
 	case token_percent: return binary_remainder;
+	case token_equal_equal: return binary_equal;
+	case token_not_equal: return binary_not_equal;
+	case token_less: return binary_less;
+	case token_less_equal: return binary_less_equal;
+	case token_greater: return binary_greater;
+	case token_greater_equal: return binary_greater_equal;
 	default:
 		assert(0 && "unknown arithmetic token");
 		return binary_add;
@@ -175,6 +187,7 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 
 /* expression ::= prefix-expression { binary-operator prefix-expression }
  * binary-operator ::= "=" | "+" | "-" | "*" | "/" | "%"
+ *                   | "==" | "!=" | "<" | "<=" | ">" | ">="
  * Pratt parsing groups this flat grammar using the binding-power table.
  * Recursive calls parse RHS operators only at or above the requested power.
  */
@@ -282,13 +295,82 @@ static struct ast_statement *parse_empty_statement(struct parser *parser)
 
 static struct ast_compound_statement *parse_compound_statement(struct parser *parser);
 
+static struct ast_statement *parse_statement(struct parser *parser);
+
+static bool begin_nested_statement(struct parser *parser)
+{
+	if (parser->statement_nesting == ast_max_statement_nesting) {
+		diagnostic_error(parser->diagnostics,
+			lexer_peek(parser->lexer).location,
+			"statement nesting exceeds limit (128)");
+		return false;
+	}
+	parser->statement_nesting++;
+	return true;
+}
+
+/* if-statement ::= "if" "(" expression ")" statement [ "else" statement ]
+ * Parsing the then-statement recursively attaches else to the nearest if.
+ */
+static struct ast_if_statement *parse_if_contents(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_expression *condition;
+	struct ast_statement *then_branch;
+	struct ast_statement *else_branch = NULL;
+	struct ast_if_statement *node;
+
+	if (!expect_token(parser, token_if, "expected 'if'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_left_paren, "expected '(' after if", NULL))
+		return NULL;
+	condition = parse_expression(parser, 0);
+	if (!condition)
+		return NULL;
+	if (!expect_token(parser, token_right_paren, "expected ')' after condition", NULL))
+		return NULL;
+	then_branch = parse_statement(parser);
+	if (!then_branch)
+		return NULL;
+	if (lexer_peek(parser->lexer).kind == token_else) {
+		lexer_next(parser->lexer);
+		else_branch = parse_statement(parser);
+		if (!else_branch)
+			return NULL;
+	}
+	node = ast_new_if(parser->arena, keyword.location, condition,
+		then_branch, else_branch);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
+}
+
+/* if-statement ::= "if" "(" expression ")" statement [ "else" statement ] */
+static struct ast_if_statement *parse_if_statement(struct parser *parser)
+{
+	struct ast_if_statement *node;
+
+	if (!begin_nested_statement(parser))
+		return NULL;
+	node = parse_if_contents(parser);
+	parser->statement_nesting--;
+	return node;
+}
+
 /* statement ::= return-statement | expression-statement | empty-statement
- *             | compound-statement
+ *             | compound-statement | if-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = lexer_peek(parser->lexer);
 
+	if (token.kind == token_if) {
+		struct ast_if_statement *node = parse_if_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
 	if (token.kind == token_return) {
 		struct ast_return_statement *node = parse_return_statement(parser);
 
@@ -399,13 +481,8 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 {
 	struct ast_compound_statement *node;
 
-	if (parser->statement_nesting == ast_max_statement_nesting) {
-		diagnostic_error(parser->diagnostics,
-			lexer_peek(parser->lexer).location,
-			"statement nesting exceeds limit (128)");
+	if (!begin_nested_statement(parser))
 		return NULL;
-	}
-	parser->statement_nesting++;
 	node = parse_compound_contents(parser);
 	parser->statement_nesting--;
 	return node;

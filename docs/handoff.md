@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M06A: Nested blocks and shadowing. Branch: development.
+M06B: Comparisons and if/else. Branch: development.
 Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost>, configured only for this repository.
 Find the exact current checkpoint with git log -1 --oneline. Each M06 subcheckpoint is committed separately after tests; this file does not embed its own circular hash.
@@ -23,10 +23,10 @@ Find the exact current checkpoint with git log -1 --oneline. Each M06 subcheckpo
 
 ## Current behavior and invariants
 
-Nested compounds use scoped name bindings separate from the all-local slot list. Lookup walks parent scopes; redeclarations are checked only in the current scope. Combined statement nesting is bounded at 128 and block items are counted across the function.
+A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
 
 One int main(void), int locals, arithmetic, assignment and supported statements.
-Still unsupported: if/else, comparisons, logical operators, loops, calls and preprocessing.
+Still unsupported: logical operators, loops, calls and preprocessing.
 Limits: 16 MiB source; expression/statement recursion 128; typed expression
 structural depth 128; 4096 block items and 256 locals per entire function.
 Uninitialized objects are not zero-filled; tests avoid undefined behavior.
@@ -49,9 +49,9 @@ GCC sanitizer SONAME links may be absent: local tests used external links in
 Ubuntu CI does not need this workaround.
 
 Normal, sanitizer, semantic AST and QBE/runtime/reference tests passed.
-Sanitized pipeline fuzzing: 376059 inputs in 11 seconds.
+Sanitized pipeline fuzzing: 242396 inputs in 13 seconds; 355675 inputs in 13 seconds.
 Remote CI is checked after pushing; local passes are not remote-CI results.
 
 ## Next action
 
-M06b: comparisons and if/else, nearest-if else binding and QBE branch/merge blocks.
+M06c: distinct logical AST nodes and branch/phi short-circuit lowering; track actual predecessor labels for nested RHS expressions.

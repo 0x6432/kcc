@@ -134,6 +134,10 @@ static struct token lex_identifier(struct lexer *lexer)
 		token.kind = token_void;
 	else if (spelling_is(token, "return"))
 		token.kind = token_return;
+	else if (spelling_is(token, "if"))
+		token.kind = token_if;
+	else if (spelling_is(token, "else"))
+		token.kind = token_else;
 	else if (is_unsupported_keyword(token))
 		token.kind = token_unsupported_keyword;
 	return token;
@@ -202,11 +206,30 @@ static struct token read_token(struct lexer *lexer)
 	/* Preserve maximal munch for compound operators outside this subset. */
 	if (lexer->source->length - beginning >= 2) {
 		unsigned char next = lexer->source->data[beginning + 1];
-		bool compound = (byte == '=' && next == '=') ||
-			(byte == '+' && (next == '+' || next == '=')) ||
+		bool compound = (byte == '+' && (next == '+' || next == '=')) ||
 			(byte == '-' && (next == '-' || next == '=' || next == '>')) ||
 			((byte == '*' || byte == '/' || byte == '%') && next == '=');
 
+		if (next == '=' &&
+			(byte == '=' || byte == '!' || byte == '<' || byte == '>')) {
+			switch (byte) {
+			case '=': kind = token_equal_equal; break;
+			case '!': kind = token_not_equal; break;
+			case '<': kind = token_less_equal; break;
+			case '>': kind = token_greater_equal; break;
+			default: kind = token_invalid; break;
+			}
+			lexer->offset += 2;
+			return make_token(lexer, kind, beginning);
+		}
+		if ((byte == '<' || byte == '>') && next == byte) {
+			lexer->offset += 2;
+			if (lexer->offset < lexer->source->length &&
+				lexer->source->data[lexer->offset] == '=')
+				lexer->offset++;
+			return invalid_token(lexer, beginning,
+				"shift operator is not supported");
+		}
 		if (compound) {
 			lexer->offset += 2;
 			return invalid_token(lexer, beginning,
@@ -244,6 +267,12 @@ static struct token read_token(struct lexer *lexer)
 		break;
 	case '%':
 		kind = token_percent;
+		break;
+	case '<':
+		kind = token_less;
+		break;
+	case '>':
+		kind = token_greater;
 		break;
 	case '=':
 		kind = token_equal;
@@ -296,6 +325,8 @@ const char *token_kind_name(enum token_kind kind)
 	case token_int: return "int";
 	case token_void: return "void";
 	case token_return: return "return";
+	case token_if: return "if";
+	case token_else: return "else";
 	case token_left_paren: return "(";
 	case token_right_paren: return ")";
 	case token_left_brace: return "{";
@@ -307,6 +338,12 @@ const char *token_kind_name(enum token_kind kind)
 	case token_slash: return "/";
 	case token_percent: return "%";
 	case token_equal: return "=";
+	case token_equal_equal: return "==";
+	case token_not_equal: return "!=";
+	case token_less: return "<";
+	case token_less_equal: return "<=";
+	case token_greater: return ">";
+	case token_greater_equal: return ">=";
 	}
 	return "unknown";
 }

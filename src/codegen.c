@@ -7,6 +7,8 @@
 struct codegen {
 	FILE *stream;
 	size_t next_temporary;
+	size_t next_label;
+	size_t current_label;
 	bool output_ok;
 };
 
@@ -20,6 +22,17 @@ static void emit(struct codegen *codegen, const char *format, ...)
 	va_end(arguments);
 }
 
+static size_t new_label(struct codegen *codegen)
+{
+	return codegen->next_label++;
+}
+
+static void emit_label(struct codegen *codegen, size_t label)
+{
+	emit(codegen, "@b%zu\n", label);
+	codegen->current_label = label;
+}
+
 static const char *binary_instruction(enum binary_operator operation)
 {
 	switch (operation) {
@@ -28,6 +41,12 @@ static const char *binary_instruction(enum binary_operator operation)
 	case binary_multiply: return "mul";
 	case binary_divide: return "div";
 	case binary_remainder: return "rem";
+	case binary_equal: return "ceqw";
+	case binary_not_equal: return "cnew";
+	case binary_less: return "csltw";
+	case binary_less_equal: return "cslew";
+	case binary_greater: return "csgtw";
+	case binary_greater_equal: return "csgew";
 	}
 	assert(0 && "unknown binary operator");
 	return NULL;
@@ -113,6 +132,36 @@ static size_t codegen_expression(struct codegen *codegen,
 static bool codegen_block_items(struct codegen *codegen,
 	const struct ast_block_item *item);
 
+static bool codegen_statement(struct codegen *codegen,
+	const struct ast_statement *statement);
+
+static bool codegen_if(struct codegen *codegen, const struct ast_if_statement *node)
+{
+	size_t condition = codegen_expression(codegen, node->condition);
+	size_t then_label = new_label(codegen);
+	size_t merge_label = new_label(codegen);
+	size_t else_label = node->else_branch ? new_label(codegen) : merge_label;
+	bool then_terminated;
+	bool else_terminated = false;
+
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
+		condition, then_label, else_label);
+	emit_label(codegen, then_label);
+	then_terminated = codegen_statement(codegen, node->then_branch);
+	if (!then_terminated)
+		emit(codegen, "\tjmp @b%zu\n", merge_label);
+	if (node->else_branch) {
+		emit_label(codegen, else_label);
+		else_terminated = codegen_statement(codegen, node->else_branch);
+		if (!else_terminated)
+			emit(codegen, "\tjmp @b%zu\n", merge_label);
+	}
+	if (then_terminated && else_terminated)
+		return true;
+	emit_label(codegen, merge_label);
+	return false;
+}
+
 /* True means the current block has terminated, not an I/O success flag. */
 static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
@@ -135,6 +184,8 @@ static bool codegen_statement(struct codegen *codegen,
 	}
 	case statement_empty:
 		return false;
+	case statement_if:
+		return codegen_if(codegen, (const struct ast_if_statement *)statement);
 	case statement_compound: {
 		const struct ast_compound_statement *node =
 			(const struct ast_compound_statement *)statement;
@@ -178,15 +229,20 @@ static bool codegen_block_items(struct codegen *codegen,
 
 bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
 {
-	struct codegen codegen = { .stream = stream, .output_ok = true };
+	struct codegen codegen = {
+		.stream = stream,
+		.next_label = 1,
+		.output_ok = true,
+	};
 	const struct ast_function *function = unit->function;
 	const struct ast_local_declaration *local = function->locals;
 	struct token name = function->name;
 
 	assert(function->return_type == &type_int);
-	emit(&codegen, "export function w $%.*s() {\n@start\n",
+	emit(&codegen, "export function w $%.*s() {\n",
 		(int)name.length,
 		(const char *)name.location.source->data + name.location.offset);
+	emit_label(&codegen, 0);
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
 		assert(local->type == &type_int);

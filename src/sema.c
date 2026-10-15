@@ -205,6 +205,34 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 
 static bool sema_compound(struct sema *sema, struct ast_compound_statement *node);
 
+static bool sema_statement(struct sema *sema, struct ast_statement *statement);
+
+static bool sema_substatement(struct sema *sema, struct ast_statement *statement)
+{
+	struct scope scope = { .parent = sema->scope };
+	bool success;
+
+	sema->scope = &scope;
+	success = sema_statement(sema, statement);
+	sema->scope = scope.parent;
+	return success;
+}
+
+static bool sema_if(struct sema *sema, struct ast_if_statement *node)
+{
+	struct scope scope = { .parent = sema->scope };
+	bool success;
+
+	sema->scope = &scope;
+	success = sema_expression(sema, &node->condition, true);
+	if (success)
+		success = sema_substatement(sema, node->then_branch);
+	if (success && node->else_branch)
+		success = sema_substatement(sema, node->else_branch);
+	sema->scope = scope.parent;
+	return success;
+}
+
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
 	switch (statement->kind) {
@@ -222,6 +250,8 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	}
 	case statement_empty:
 		return true;
+	case statement_if:
+		return sema_if(sema, (struct ast_if_statement *)statement);
 	case statement_compound:
 		return sema_compound(sema, (struct ast_compound_statement *)statement);
 	}

@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M06A: nested blocks and shadowing. Nested compounds use scoped name bindings separate from the all-local slot list. Lookup walks parent scopes; redeclarations are checked only in the current scope. Combined statement nesting is bounded at 128 and block items are counted across the function.
+M06B: comparisons and if/else. A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
 
 Unsupported input is rejected. See `docs/milestones.md` and
 `docs/limitations.md`.
@@ -61,8 +61,8 @@ cc build/example.s -o build/example
 ```
 
 Supported: decimal int literals, locals, simple assignment, arithmetic,
-nested blocks and shadowing.
-Unsupported: if/else, comparisons, logical operators, loops, calls and preprocessing. This is not a complete C23 compiler.
+nested blocks and shadowing, comparisons and if/else.
+Unsupported: logical operators, loops, calls and preprocessing. This is not a complete C23 compiler.
 
 Limits: 16 MiB source, 128 expression/statement nesting, 4096 block items
 and 256 locals across the function.

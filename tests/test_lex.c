@@ -56,7 +56,7 @@ static void test_errors(void)
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "00", "0x10", "12u", "3.5", "@", "#",
-		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "==",
+		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<", ">>=",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
@@ -66,10 +66,21 @@ static void test_errors(void)
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };
 
-		check_tokens("if", keyword, 1, 0);
+		check_tokens("while", keyword, 1, 0);
 		check_tokens("constexpr", keyword, 1, 0);
 		check_tokens("=", equal, 1, 0);
 	}
+}
+
+static void test_condition_tokens(void)
+{
+	const enum token_kind kinds[] = {
+		token_if, token_else, token_less, token_less_equal, token_greater,
+		token_greater_equal, token_equal_equal, token_not_equal, token_equal,
+	};
+
+	check_tokens("if else < <= > >= == != =", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
 }
 
 static void test_binary_and_values(void)
@@ -102,6 +113,7 @@ int main(void)
 	test_basic();
 	test_errors();
 	test_binary_and_values();
+	test_condition_tokens();
 	puts("Lexer tests passed");
 	return 0;
 }

@@ -148,6 +148,22 @@ struct ast_empty_statement *ast_new_empty_statement(struct arena *arena,
 	return node;
 }
 
+struct ast_if_statement *ast_new_if(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_statement *then_branch, struct ast_statement *else_branch)
+{
+	struct ast_if_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_if_statement) {
+			.statement = { statement_if, location },
+			.condition = condition,
+			.then_branch = then_branch,
+			.else_branch = else_branch,
+		};
+	return node;
+}
+
 struct ast_local_declaration *ast_new_local(struct arena *arena,
 	struct source_location location, struct token name,
 	struct ast_expression *initializer)

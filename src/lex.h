@@ -15,6 +15,8 @@ enum token_kind {
 	token_int,
 	token_void,
 	token_return,
+	token_if,
+	token_else,
 	token_left_paren,
 	token_right_paren,
 	token_left_brace,
@@ -26,6 +28,12 @@ enum token_kind {
 	token_slash,
 	token_percent,
 	token_equal,
+	token_equal_equal,
+	token_not_equal,
+	token_less,
+	token_less_equal,
+	token_greater,
+	token_greater_equal,
 };
 
 /* Spelling is source->data + location.offset, with explicit length. */

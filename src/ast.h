@@ -59,6 +59,12 @@ enum binary_operator {
 	binary_multiply,
 	binary_divide,
 	binary_remainder,
+	binary_equal,
+	binary_not_equal,
+	binary_less,
+	binary_less_equal,
+	binary_greater,
+	binary_greater_equal,
 };
 
 struct ast_binary_expression {
@@ -85,6 +91,7 @@ enum statement_kind {
 	statement_expression,
 	statement_empty,
 	statement_compound,
+	statement_if,
 };
 
 struct ast_statement {
@@ -104,6 +111,13 @@ struct ast_expression_statement {
 
 struct ast_empty_statement {
 	struct ast_statement statement;
+};
+
+struct ast_if_statement {
+	struct ast_statement statement;
+	struct ast_expression *condition;
+	struct ast_statement *then_branch;
+	struct ast_statement *else_branch;
 };
 
 enum block_item_kind {
@@ -168,6 +182,9 @@ struct ast_expression_statement *ast_new_expression_statement(struct arena *aren
 	struct source_location location, struct ast_expression *value);
 struct ast_empty_statement *ast_new_empty_statement(struct arena *arena,
 	struct source_location location);
+struct ast_if_statement *ast_new_if(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_statement *then_branch, struct ast_statement *else_branch);
 struct ast_local_declaration *ast_new_local(struct arena *arena,
 	struct source_location location, struct token name,
 	struct ast_expression *initializer);

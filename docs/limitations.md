@@ -83,12 +83,23 @@ unreachable source too, while codegen stops after the first return. Reaching
 main's closing brace returns zero. These policies are explicit, not missing
 semantic checks hidden in codegen.
 
-## M06A (current)
+## M06A
 
 Nested compounds use scoped name bindings separate from the all-local slot list. Lookup walks parent scopes; redeclarations are checked only in the current scope. Combined statement nesting is bounded at 128 and block items are counted across the function.
 
 Only int objects, one main(void), existing arithmetic and simple assignment
 are supported. Still unsupported: if/else, comparisons, logical operators, loops, calls and preprocessing. No
+zero-fill/definite-initialization analysis for uninitialized locals. Resource
+limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
+function-wide block items, 256 function-wide locals. Tests execute defined C
+only; fuzzing never executes source programs.
+
+## M06B (current)
+
+A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
+
+Only int objects, one main(void), existing arithmetic and simple assignment
+are supported. Still unsupported: logical operators, loops, calls and preprocessing. No
 zero-fill/definite-initialization analysis for uninitialized locals. Resource
 limits: 16 MiB source, 128 expression and statement nesting/depth, 4096
 function-wide block items, 256 function-wide locals. Tests execute defined C

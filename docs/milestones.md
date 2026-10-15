@@ -148,3 +148,11 @@ Nested blocks and shadowing. Nested compounds use scoped name bindings separate 
 Normal GCC, ASan/UBSan and QBE/reference executable regression tests passed.
 Sanitized pipeline fuzzing: 376059 inputs in 11 seconds. Remote push and CI are checked separately.
 Next: M06b: comparisons and if/else, nearest-if else binding and QBE branch/merge blocks.
+
+## M06B completion record
+
+Comparisons and if/else. A distinct if-statement AST node, nearest-if else binding, signed int comparisons, selection/substatement scopes and QBE branch/merge handling are implemented. Both branches are checked semantically. Termination propagates through nested blocks and conditionals; both-return paths have no dead merge block.
+
+Normal GCC, ASan/UBSan and QBE/reference executable regression tests passed.
+Sanitized pipeline fuzzing: 242396 inputs in 13 seconds; 355675 inputs in 13 seconds. Remote push and CI are checked separately.
+Next: M06c: distinct logical AST nodes and branch/phi short-circuit lowering; track actual predecessor labels for nested RHS expressions.

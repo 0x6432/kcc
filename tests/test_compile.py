@@ -55,6 +55,31 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int main(void) { {} }", 0),
         ("int main(void) {" + "{"*127 + "}"*127 + "}", 0),
     ]
+    programs += [
+        ("int main(void) { if (1) return 7; else return 9; }", 7),
+        ("int main(void) { if (0) return 7; else return 9; }", 9),
+        ("int main(void) { if (-4) return 8; return 3; }", 8),
+        ("int main(void) { if (0) return 8; return 3; }", 3),
+        ("int main(void) { int x=0; if (1) x=2; else x=3; return x; }", 2),
+        ("int main(void) { int x=0; if (0) x=2; else x=3; return x; }", 3),
+        ("int main(void) { if (1) if (0) return 1; else return 2; return 3; }", 2),
+        ("int main(void) { if (0) if (0) return 1; else return 2; return 3; }", 3),
+        ("int main(void) { if (0) return 1; else if (1) return 2; else return 3; }", 2),
+        ("int main(void) { if (0) ; else ; }", 0),
+        ("int main(void) { int x=1; if (1) { int x=2; } else { int x=3; } return x; }", 1),
+        ("int main(void) { int x=1; if (x=0) return 1; return x; }", 0),
+        ("int main(void) { int x=0; if (x=5) return x; else return 3; }", 5),
+        ("int main(void) { if (1) { if (0) return 1; else return 2; } else return 3; }", 2),
+        ("int main(void) { if (1) { return 2; } else { return 3; } return 9; }", 2),
+        ("int main(void) {" + "if(1) "*127 + "return 1;}", 1),
+    ]
+    for expression, value in [
+        ("2 < 3", 1), ("2 > 3", 0), ("2 <= 2", 1), ("2 >= 3", 0),
+        ("2 == 2", 1), ("2 != 2", 0), ("-7 < 0", 1), ("-1 > 1", 0),
+        ("2147483647 > -1", 1), ("-2147483647 - 1 < 0", 1),
+        ("2 < 3 < 2", 1), ("1 == 2 < 3", 1), ("2 + 1 == 3", 1),
+    ]:
+        programs.append((f"int main(void) {{ return {expression}; }}", value))
     for text, value in programs:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)],
@@ -105,7 +130,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { int x=0; +x=2; return x; }",
         "int main(void) { int x=0; (x=1)=2; return x; }",
         "int main(void) { int x=0; x+=1; return x; }",
-        "int main(void) { int x=0; x==1; return x; }",
+
         "int main(void) { int x, y; return 0; }",
         "int main(void) { int x=; return 0; }",
         "int main(void) { int x=1 x=2; return x; }",
@@ -123,6 +148,20 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) {" + "{"*128 + "}"*128 + "}",
         "int main(void) {" + "{;"*2049 + "}"*2049 + "}",
         "int main(void) {" + "{;};"*1366 + "}",
+    ]
+    invalid += [
+        "int main(void) { if () return 1; }",
+        "int main(void) { if 1 return 1; }",
+        "int main(void) { if (1) }",
+        "int main(void) { else return 1; }",
+        "int main(void) { if (1) return 1; else }",
+        "int main(void) { if (1) int x; }",
+        "int main(void) { if (0) return missing; return 0; }",
+        "int main(void) { if (1) { int x=1; } return x; }",
+        "int main(void) { if (1) { int x=1; } else return x; }",
+        "int main(void) { if (1) return 1; else return 2; return missing; }",
+        "int main(void) { return 1 << 2; }",
+        "int main(void) {" + "if(1) "*128 + "return 1;}",
     ]
     for keyword in ("if", "while", "bool", "true", "nullptr", "static", "struct"):
         invalid.append(f"int main(void) {{ int {keyword}; return 0; }}")
@@ -149,6 +188,11 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
                                 capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and message in result.stderr, result.stderr
         assert not result.stdout
+    source.write_text("int main(void) { if (1) return 2; else return 3; return 9; }")
+    result = subprocess.run([str(compiler), str(source)],
+                            capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0 and result.stdout.count("\tret ") == 2
+    assert "\tjmp " not in result.stdout  # both paths terminate; no merge jump
     source.write_text("int main(void) { return 42; }\n")
     with open("/dev/full", "w") as full:
         result = subprocess.run([str(compiler), str(source)], stdout=full,
