@@ -331,8 +331,19 @@ static void test_assertion_keywords(void)
 	assert(strcmp(token_kind_name(token_legacy_static_assert), "_Static_assert") == 0);
 }
 
+static void test_nullptr_keyword(void)
+{
+	const enum token_kind kinds[] = { token_nullptr, token_nullptr, token_identifier, token_integer, token_nullptr };
+
+	check_tokens("#define N nullptr\nnullptr N nullptr_t\n#define nullptr 42\nnullptr\n#undef nullptr\nnullptr",
+		kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_nullptr), "nullptr") == 0);
+}
+
+
 int main(void)
 {
+	test_nullptr_keyword();
 	test_assertion_keywords();
 	test_layout_keywords();
 	test_conditional_punctuation();

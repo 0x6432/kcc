@@ -452,6 +452,22 @@ static struct ast_expression *parse_integer_expression(struct parser *parser)
 	return &node->expression;
 }
 
+/* nullptr-constant ::= "nullptr" */
+static struct ast_expression *parse_nullptr_expression(struct parser *parser)
+{
+	struct token token;
+	struct ast_nullptr_expression *node;
+
+	if (!expect_token(parser, token_nullptr, "expected nullptr", &token))
+		return NULL;
+	node = ast_new_nullptr(parser->arena, token.location);
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	return &node->expression;
+}
+
 /* boolean-constant ::= "true" | "false" */
 static struct ast_expression *parse_boolean_expression(struct parser *parser)
 {
@@ -612,13 +628,15 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 	return NULL;
 }
 
-/* primary-atom ::= integer-expression | boolean-constant | character-expression | string-expression | identifier
+/* primary-atom ::= integer-expression | boolean-constant | nullptr-constant | character-expression | string-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.
  */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
 
+	if (token.kind == token_nullptr)
+		return parse_nullptr_expression(parser);
 	if (token.kind == token_true || token.kind == token_false)
 		return parse_boolean_expression(parser);
 	if (token.kind == token_string)

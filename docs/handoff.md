@@ -2,15 +2,15 @@
 
 ## Current checkpoint
 
-M13m traditional null pointer constants implemented: checked integer-ICE zero,
-explicit void * zero and C23 false convert to implemented pointer types; equality
-and conditional rules preserve exact pointer types. Existing concrete conversion
-ASTs/QBE lowering are reused without treating arbitrary zero values as constants.
-M13l1 fixed ICE array bounds/prototype name scopes and M18b1/b2 integer constant
-evaluation/static assertions are also implemented. Full local normal/QBE/fuzz and
-focused both-host sanitizer checks pass; see final checkpoint entries below for
-exact counts, CI-oracle exceptions and remote/matrix status. Continue with the
-prewritten M23a2 nullptr design after committing/pushing this tested source.
+M23a2 distinct nullptr constant implemented. New post-pp token, concrete AST
+leaf and immutable complete scalar type; neither integer nor pointer. Explicit
+conversions/equality/conditional rules preserve original operands and exact
+pointer types. Size/alignment 8, all-zero target representation. nullptr_t is
+not a keyword: type naming/headers remain later work. Targeted both-host units,
+QBE runtime/26 cross-object ABI arrangements and ASan/UBSan pass. Full local regression/
+QBE/fuzz also passed; exact counts follow at the end. This checkpoint is ready
+for commit/push and isolated/remote validation. Continue M19c1 prefix updates
+following m19-prefix-updates.md. Do not execute generated fuzz C.
 
 ### Earlier foundation (chronological)
 
@@ -1952,3 +1952,21 @@ constraint coverage, then the entire regression/QBE/fuzz chain was rerun.
 No partial early run was called a full pass. Full isolated and remote exact-source
 checks for this checkpoint are pending. Next: M23a2 nullptr constant with its own
 scalar type, designed before implementation in m23-nullptr-constant.md.
+
+## M23a2 work and next increment
+
+See m23-nullptr-constant.md and the M23a2 ledger entry for implementation and
+fixture decisions. Runtime/type correctness is tested on original nullptr source,
+not a macro alias. Both local native hosts predate the keyword; modern CI must
+run the original-source native differential branch. Keep remote CI and isolated
+matrix results separate from targeted validation. M13l1 remote run 38877765103
+passed all jobs; M13m run 38879492736 still running when last checked.
+Next prewritten design: m19-prefix-updates.md. Keep postfix updates separate until
+M19c2; integer bool updates require truth conversion rather than modulo-two
+narrowing. Preserve once-only operand addresses and immutable qualified types.
+
+M23a2 final local validation: full normal regression and QBE suites passed. Both-host
+ASan/UBSan type/lexer/sema units and final targeted runtime/ABI passed. Bounded
+sanitized fuzz ran 22,463 lexer and 54,705 pipeline inputs in
+26/26 seconds with no reported failures. No generated C was executed.
+Remote exact-source and full isolated matrix checks remain separate/pending.

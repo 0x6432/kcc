@@ -14,7 +14,7 @@ of complete ISO conformance.
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
-| C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); C23 keyword/type additions absent | M10-M11, M23a-M23h, M24a-M24g |
+| C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); bool/true/false, alignof/static_assert and distinct nullptr constant/type implemented; type naming/header support incomplete | M10-M11, M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |
 | Self-hosting | absent | M26 |
 
@@ -363,3 +363,12 @@ null constant forms. This LP64 target uses all-zero 64-bit null representations.
 Both-host originals/strict rejection, QBE runtime/ABI and typed limits are tested;
 one exact GCC 11 _Bool-zero oracle gap is labelled. C23 nullptr/nullptr_t, general
 integer/pointer casts, headers and other constant-expression consumers remain.
+
+### M23a2 nullptr constant and unnamed type
+
+C23 6.2.5, 6.3.1.2, 6.3.2.3/.4, 6.5.9/.15 and 7.21.2 subset: a distinct complete
+scalar nullptr type, keyword expression, pointer/bool conversions, equality,
+conditional/null control and sizeof behavior. LP64 size/alignment 8 and all-zero
+void-pointer null representation are explicit target choices. Source nullptr_t
+names/headers and conversions to that named type are not exposed yet. Tests run
+original source via QBE; legacy host keyword absence is not native agreement.

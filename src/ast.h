@@ -11,6 +11,7 @@ struct function_symbol;
 enum expression_kind {
 	expression_integer,
 	expression_boolean,
+	expression_nullptr,
 	expression_character,
 	expression_string,
 	expression_address,
@@ -82,6 +83,10 @@ struct ast_alignof_expression {
 	struct ast_expression expression;
 	struct ast_type_syntax *type_syntax;
 	uint64_t alignment;
+};
+
+struct ast_nullptr_expression {
+	struct ast_expression expression;
 };
 
 struct ast_boolean_expression {
@@ -530,6 +535,7 @@ struct ast_sizeof_type_expression *ast_new_sizeof_type(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax);
 struct ast_alignof_expression *ast_new_alignof(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax);
+struct ast_nullptr_expression *ast_new_nullptr(struct arena *arena, struct source_location location);
 struct ast_boolean_expression *ast_new_boolean(struct arena *arena, struct token token);
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);

@@ -24,6 +24,7 @@ enum token_kind {
 	token_c23_bool,
 	token_true,
 	token_false,
+	token_nullptr,
 	token_void,
 	token_const,
 	token_sizeof,

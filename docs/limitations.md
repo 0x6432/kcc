@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13m. Read the latest entries together with README.md and
+Current milestone: M23a2. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1413,3 +1413,17 @@ constraint coverage, then the entire regression/QBE/fuzz chain was rerun.
 No partial early run was called a full pass. Full isolated and remote exact-source
 checks for this checkpoint are pending. Next: M23a2 nullptr constant with its own
 scalar type, designed before implementation in m23-nullptr-constant.md.
+
+## M23a2 boundary
+
+nullptr expressions now work with a distinct complete scalar type. Source
+nullptr_t is still an ordinary identifier, not a builtin spelling; typedef,
+typeof, inference and required header exposure remain future increments.
+Current target size/alignment is 8 with all-zero void-pointer null representation.
+Conversions to non-bool integers, arithmetic and relational operations are
+constraints, not missing cast implementations. nullptr/zero conditional arms
+are invalid C23; nullptr equality with zero is valid. Evaluated nullptr forms
+are not ICEs; sizeof(nullptr) is. Local legacy hosts lack the keyword, so their
+native comparison count is zero; QBE runtime and separate-pointer ABI validation
+are still run on every original positive program. This does not validate a
+source-spellable nullptr_t parameter/return ABI yet. Next: prefix updates.

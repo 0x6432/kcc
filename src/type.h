@@ -20,6 +20,7 @@ enum type_kind {
 	type_kind_long_long,
 	type_kind_ulong_long,
 	type_kind_bool,
+	type_kind_nullptr,
 	type_kind_pointer,
 	type_kind_array,
 	type_kind_function,
@@ -57,6 +58,7 @@ struct function_type {
 	size_t parameter_count;
 };
 
+extern const struct type type_nullptr;
 extern const struct type type_void;
 extern const struct type type_bool;
 extern const struct type type_char;

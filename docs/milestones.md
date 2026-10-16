@@ -29,9 +29,9 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
-| M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false implemented; other changes planned) |
+| M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false and M23a2 nullptr constant implemented; other changes planned) |
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
-| M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | planned |
+| M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | planned |
 | M23e | auto inference | Valid initializers and forbidden declarations | planned |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
@@ -1461,3 +1461,42 @@ constraint coverage, then the entire regression/QBE/fuzz chain was rerun.
 No partial early run was called a full pass. Full isolated and remote exact-source
 checks for this checkpoint are pending. Next: M23a2 nullptr constant with its own
 scalar type, designed before implementation in m23-nullptr-constant.md.
+
+## M23a2 distinct nullptr constant
+
+Implemented the prewritten m23-nullptr-constant.md design with a concrete leaf
+AST, post-pp keyword and distinct complete scalar type. Sema separates constants
+from arbitrary nullptr_t values, inserts explicit pointer/bool conversions and
+normalizes equality without changing original typed operands. Pointer/nullptr
+conditional arms preserve the exact pointer type; two nullptr_t arms retain that
+type. nullptr versus integer zero is invalid in conditional arms even though
+equality permits it. Arithmetic/relational/non-bool integer conversions reject it.
+QBE emits a 64-bit zero leaf; sizeof is an opaque unsigned-long ICE of value 8.
+No nullptr_t keyword, typedef, header or declaration inference was invented.
+
+Both local hosts pass 35 original programs through QBE, 26 compile-only
+constraints, three raw-pp programs, 26 both-direction stack/callback pointer ABI
+arrangements and exact typed depths. Native GCC 11/Clang 15 lack nullptr: probes
+report this explicitly and never macro-rewrite original source as type evidence.
+Native helpers alone use separately written traditional zero forms. Type, lexer
+and sema units preserve qualifications, operand identities, depth and local slots.
+Both-host ASan/UBSan targeted units/runtime/ABI passed. Full regression/fuzz and
+remote results are recorded below only when complete.
+
+Test construction corrections: a reserved-name diagnostic is "expected local
+name"; right-nested parenthesized comma fixtures hit parser nesting rather than
+typed depth, so flat left-associated commas isolate the conversion boundary.
+Traditional native ABI helpers require (void *)0, not a non-ICE (0,0) argument.
+None of these fixture corrections changed compiler semantics or native evidence.
+
+Next: M19c1 prefix updates, designed before implementation in
+m19-prefix-updates.md; M19c2 postfix follows separately. Full C23 remains incomplete.
+
+Exact-source prior remote CI: M13l1 6ce8f52 run 38877765103 passed GCC, Clang,
+normal/QBE/ASan/UBSan and fuzz jobs. M13m e06a497 run 38879492736 is still running.
+
+M23a2 final local validation: full normal regression and QBE suites passed. Both-host
+ASan/UBSan type/lexer/sema units and final targeted runtime/ABI passed. Bounded
+sanitized fuzz ran 22,463 lexer and 54,705 pipeline inputs in
+26/26 seconds with no reported failures. No generated C was executed.
+Remote exact-source and full isolated matrix checks remain separate/pending.

@@ -6,10 +6,15 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23a2: C23 `nullptr` has its own complete scalar type, neither integer nor
+pointer. It converts to pointers and bool, supports equality, scalar control,
+comma and valid conditional forms, and has target size/alignment 8. `nullptr_t`
+is not a builtin keyword; source naming and header exposure remain later work.
+
 M13m: traditional integer-ICE-zero and `(void *)` null constants now convert to
 implemented object/function pointers in initialization, assignment, calls,
 returns, equality and conditional expressions. Nonconstant zero is not a null
-constant. C23 `nullptr`, nonzero integer/pointer casts and VLAs remain later work.
+constant. Nonzero integer/pointer casts and VLAs remain later work.
 
 M13l1: fixed array bounds use checked integer constant expressions, including
 sizeof/alignof and short-circuit arithmetic. Prototype parameter names resolve
@@ -19,12 +24,12 @@ constraints and adjusted-array ABI behavior remain enforced; VLAs are rejected.
 M18b2: static_assert/_Static_assert declarations consume checked integer constant
 expressions at file/block scope and in for initializers. Optional ordinary-string
 messages preserve all diagnostic bytes safely. Successful assertions emit no
-runtime code or message data; VLA/enums/constexpr/null constants remain later work.
+runtime code or message data; VLA/enums/constexpr remain later work.
 
 M18b1: a pure, checked integer constant evaluator preserves target bits/types and
 locations, distinguishes nonconstant forms from invalid arithmetic, and handles
 short-circuit forms without evaluating skipped arithmetic. Tests/fuzz query this
-stage; M18b2 now consumes it for assertions, while null constants remain later work.
+stage; assertions, fixed bounds and traditional null constants now consume it.
 
 M18a: fixed sizeof expressions/types and alignof/_Alignof type queries use
 target layout and unsigned-long results. Operands remain semantically checked

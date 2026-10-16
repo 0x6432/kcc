@@ -384,21 +384,23 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 	}
 	if (type_compatible(source, target) || implicit_pointer_conversion(source, target) ||
 		(type_is_integer(source) && type_is_integer(target)) ||
-		(source->kind == type_kind_pointer && target->kind == type_kind_bool))
+		((source->kind == type_kind_pointer || source->kind == type_kind_nullptr) && target->kind == type_kind_bool))
 		return true;
 	diagnostic_error(sema->diagnostics, location,
 		"unsupported pointer conversion (incompatible pointers or integer/pointer conversion)");
 	return false;
 }
 
-/* C23 6.3.2.3: a zero integer constant expression, or that expression
- * explicitly cast to unqualified void *. A zero-valued object is not enough.
+/* C23 6.3.2.3: nullptr, a zero integer constant expression, or that
+ * integer expression explicitly cast to unqualified void *. A zero-valued object is not enough.
  * Query only checked trees; failure is not evidence of a null constant.
  */
 static bool is_null_pointer_constant(const struct ast_expression *expression)
 {
 	struct constant_result result;
 
+	if (expression->kind == expression_nullptr)
+		return true;
 	if (expression->kind == expression_cast && expression->type->kind == type_kind_pointer) {
 		const struct type *referent = ((const struct pointer_type *)expression->type)->referent;
 
@@ -412,13 +414,21 @@ static bool is_null_pointer_constant(const struct ast_expression *expression)
 	return result.status == constant_value && result.bits == 0;
 }
 
+/* A nullptr_t value need not itself be a constant (for example, a comma
+ * result). The conversion/equality rules admit either kind of source.
+ */
+static bool is_null_pointer_source(const struct ast_expression *expression)
+{
+	return expression->type->kind == type_kind_nullptr || is_null_pointer_constant(expression);
+}
+
 /* Explicit casts do not grant assignment compatibility or adapt function ABIs. */
 static bool check_cast(struct sema *sema, const struct ast_expression *operand,
 	const struct type *target, struct source_location location)
 {
 	const struct type *source = operand->type;
 
-	if (target->kind == type_kind_pointer && is_null_pointer_constant(operand))
+	if (target->kind == type_kind_pointer && is_null_pointer_source(operand))
 		return true;
 	if (source->kind == type_kind_pointer && target->kind == type_kind_pointer) {
 		const struct type *source_referent = ((const struct pointer_type *)source)->referent;
@@ -436,7 +446,7 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 {
 	struct ast_conversion_expression *conversion;
 
-	if (!(target->kind == type_kind_pointer && is_null_pointer_constant(*slot)) &&
+	if (!(target->kind == type_kind_pointer && is_null_pointer_source(*slot)) &&
 		!check_conversion(sema, (*slot)->type, target, (*slot)->location))
 		return false;
 	if (type_compatible((*slot)->type, target))
@@ -493,12 +503,27 @@ static bool convert_comparison_pointers(struct sema *sema, struct ast_binary_exp
 	const struct type *common;
 	bool equality = node->operation == binary_equal || node->operation == binary_not_equal;
 
+	/* nullptr_t/null-constant equality lowers to explicit void * conversions.
+	 * Original nullptr_t and integer operands remain inside their own nodes.
+	 */
+	if (equality && ((left->kind == type_kind_nullptr && is_null_pointer_source(node->right)) ||
+		(right->kind == type_kind_nullptr && is_null_pointer_source(node->left)))) {
+		struct pointer_type *pointer = type_new_pointer(sema->arena, &type_void);
+
+		if (!pointer) {
+			diagnostic_error(sema->diagnostics, node->expression.location,
+				"out of memory creating nullptr comparison type");
+			return false;
+		}
+		return convert_expression(sema, &node->left, &pointer->type) &&
+			convert_expression(sema, &node->right, &pointer->type);
+	}
 	/* Equality accepts a null constant in either position, including void *
 	 * null constants opposite function pointers. Relational operators do not.
 	 */
-	if (equality && left->kind == type_kind_pointer && is_null_pointer_constant(node->right))
+	if (equality && left->kind == type_kind_pointer && is_null_pointer_source(node->right))
 		return convert_expression(sema, &node->right, left);
-	if (equality && right->kind == type_kind_pointer && is_null_pointer_constant(node->left))
+	if (equality && right->kind == type_kind_pointer && is_null_pointer_source(node->left))
 		return convert_expression(sema, &node->left, right);
 	if (left->kind != type_kind_pointer || right->kind != type_kind_pointer ||
 		type_compatible(left, right))
@@ -751,6 +776,9 @@ static bool sema_expression(struct sema *sema,
 		sema->string_tail = &node->next_string;
 		break;
 	}
+	case expression_nullptr:
+		result_type = &type_nullptr;
+		break;
 	case expression_boolean:
 		result_type = &type_bool;
 		break;
@@ -962,11 +990,13 @@ static bool sema_expression(struct sema *sema,
 		b = node->else_value->type;
 		if (type_is_integer(a) && type_is_integer(b)) {
 			result_type = type_usual_arithmetic(a, b);
+		} else if (a->kind == type_kind_nullptr && b->kind == type_kind_nullptr) {
+			result_type = &type_nullptr;
 		} else if (a->kind == type_kind_void && b->kind == type_kind_void) {
 			result_type = &type_void;
-		} else if (a->kind == type_kind_pointer && is_null_pointer_constant(node->else_value)) {
+		} else if (a->kind == type_kind_pointer && is_null_pointer_source(node->else_value)) {
 			result_type = a;
-		} else if (b->kind == type_kind_pointer && is_null_pointer_constant(node->then_value)) {
+		} else if (b->kind == type_kind_pointer && is_null_pointer_source(node->then_value)) {
 			result_type = b;
 		} else if (a->kind == type_kind_pointer && b->kind == type_kind_pointer &&
 			(type_unqualified_compatible(((const struct pointer_type *)a)->referent,

@@ -1331,3 +1331,19 @@ arms preserve arithmetic processing first and choose the other pointer type
 before generic object/void common-type rules. QBE's existing extension/copy
 path implements the documented all-zero 64-bit target null representation;
 there is no new ABI wrapper, pointer bit reinterpretation or optimizer.
+
+## M23a2 nullptr leaf and value contract
+
+Raw pp nullptr remains an identifier; post-expansion conversion yields its own
+keyword. A depth-one ast_nullptr_expression resolves to shared immutable
+type_nullptr (scalar/object/complete, not integer/pointer). Type helpers handle
+this leaf explicitly in qualification, identity, composites and width/layout.
+Sema's null-constant predicate recognizes the literal; a separate wrapper also
+admits any nullptr_t value for permitted conversion/equality/conditional rules.
+Original typed operands survive inside explicit conversion/cast nodes. Equality
+between nullptr_t and a null constant lowers both to one void * type; pointer
+pairs preserve the opposite pointer's exact type. Conditional nullptr_t/zero is
+not accepted. Codegen emits l-width zero and uses existing copy/truth/phi paths.
+Consteval is unchanged: nullptr-derived evaluated forms are not integer ICEs;
+sizeof(nullptr) is an opaque integer leaf. No additional runtime slot or static
+object is allocated. Future type naming must not confuse this type with void *.

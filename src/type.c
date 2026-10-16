@@ -2,6 +2,7 @@
 
 #include <assert.h>
 
+const struct type type_nullptr = { .kind = type_kind_nullptr };
 const struct type type_void = { .kind = type_kind_void };
 const struct type type_bool = { .kind = type_kind_bool };
 const struct type type_char = { .kind = type_kind_char };
@@ -51,7 +52,7 @@ bool type_is_integer(const struct type *type)
 
 bool type_is_scalar(const struct type *type)
 {
-	return type_is_integer(type) || type->kind == type_kind_pointer;
+	return type_is_integer(type) || type->kind == type_kind_pointer || type->kind == type_kind_nullptr;
 }
 
 bool type_is_object(const struct type *type)
@@ -69,7 +70,7 @@ bool type_is_complete_object(const struct type *type)
 
 unsigned type_value_width(const struct type *type)
 {
-	if (type->kind == type_kind_pointer)
+	if (type->kind == type_kind_pointer || type->kind == type_kind_nullptr)
 		return 64;
 	return type_integer_width(type);
 }
@@ -288,7 +289,7 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 		copy->type.qualifiers = qualifiers;
 		return &copy->type;
 	}
-	assert(type_is_integer(type) || type->kind == type_kind_void);
+	assert(type_is_integer(type) || type->kind == type_kind_void || type->kind == type_kind_nullptr);
 	leaf = arena_alloc(arena, sizeof(*leaf));
 	if (leaf)
 		*leaf = (struct type) { .kind = type->kind, .qualifiers = qualifiers };
@@ -318,7 +319,7 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	if (left->kind != right->kind ||
 		(!ignore_root_qualifiers && left->qualifiers != right->qualifiers))
 		return false;
-	if (type_is_integer(left) || left->kind == type_kind_void)
+	if (type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return true;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;
@@ -363,7 +364,7 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right)
 {
 	assert(type_compatible(left, right));
-	if (left == right || type_is_integer(left) || left->kind == type_kind_void)
+	if (left == right || type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return left;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;

@@ -401,6 +401,10 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =w copy %jd\n", temporary, (intmax_t)node->value);
 		return temporary;
 	}
+	case expression_nullptr:
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l copy 0\n", temporary);
+		return temporary;
 	case expression_boolean: {
 		const struct ast_boolean_expression *node = (const struct ast_boolean_expression *)expression;
 

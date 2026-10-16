@@ -93,6 +93,17 @@ struct ast_alignof_expression *ast_new_alignof(struct arena *arena,
 	return node;
 }
 
+struct ast_nullptr_expression *ast_new_nullptr(struct arena *arena, struct source_location location)
+{
+	struct ast_nullptr_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_nullptr_expression) {
+			.expression = { .kind = expression_nullptr, .location = location, .depth = 1 },
+		};
+	return node;
+}
+
 struct ast_boolean_expression *ast_new_boolean(struct arena *arena, struct token token)
 {
 	struct ast_boolean_expression *node = arena_alloc(arena, sizeof(*node));

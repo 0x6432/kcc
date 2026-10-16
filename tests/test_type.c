@@ -199,10 +199,35 @@ static void test_bounded_layers(struct arena *arena)
 	assert(!pointer->qualifiers && !array->qualifiers);
 }
 
+static void test_nullptr_type(struct arena *arena)
+{
+	const struct type *qualified = type_qualified(arena, &type_nullptr, type_qualifier_const);
+	struct pointer_type *pointer = type_new_pointer(arena, &type_nullptr);
+	struct array_type *array = type_new_array(arena, &type_nullptr, 2);
+	struct function_type *function = type_new_function(arena, &type_nullptr, NULL, 0);
+
+	assert(type_is_scalar(&type_nullptr) && type_is_complete_object(&type_nullptr));
+	assert(type_is_object(&type_nullptr) && !type_is_integer(&type_nullptr));
+	assert(type_nullptr.kind != type_kind_pointer && !type_nullptr.qualifiers);
+	assert(type_value_width(&type_nullptr) == 64 && type_object_size(&type_nullptr) == 8);
+	assert(type_object_alignment(&type_nullptr) == 8);
+	assert(qualified && !type_compatible(qualified, &type_nullptr));
+	assert(type_unqualified_compatible(qualified, &type_nullptr));
+	assert(type_compatible(type_unqualified(arena, qualified), &type_nullptr));
+	assert(type_composite(arena, &type_nullptr, type_unqualified(arena, qualified)) == &type_nullptr);
+	assert(!type_compatible(&type_nullptr, &type_ulong) && !type_compatible(&type_nullptr, &type_void));
+	assert(pointer && pointer->referent == &type_nullptr && !type_compatible(&pointer->type, &type_nullptr));
+	assert(array && type_object_size(&array->type) == 16 && type_object_alignment(&array->type) == 8);
+	assert(function && function->return_type == &type_nullptr);
+	assert(!type_nullptr.qualifiers && qualified->qualifiers == type_qualifier_const);
+}
+
+
 int main(void)
 {
 	struct arena arena = {0};
 
+	test_nullptr_type(&arena);
 	test_leaf_qualification(&arena);
 	test_pointer_levels(&arena);
 	test_array_qualification(&arena);
