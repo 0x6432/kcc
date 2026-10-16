@@ -795,6 +795,67 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 	return &node->expression;
 }
 
+/* sizeof-expression ::= "sizeof" unary-expression | "sizeof" "(" type-name ")"
+ * An already-consumed '(' is classified with one on-demand token, without rewind.
+ */
+static struct ast_expression *parse_sizeof_expression(struct parser *parser)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct ast_expression *operand;
+	struct ast_sizeof_expression *node;
+
+	if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
+		preprocess_next(parser->preprocessor);
+		if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
+			struct token beginning;
+			struct ast_type_syntax *type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+			struct ast_sizeof_type_expression *type_node;
+
+			if (!type_syntax || !expect_token(parser, token_right_paren, "expected ')' after sizeof type", NULL))
+				return NULL;
+			type_node = ast_new_sizeof_type(parser->arena, keyword.location, type_syntax);
+			if (!type_node)
+				allocation_error(parser, keyword.location);
+			return type_node ? &type_node->expression : NULL;
+		}
+		operand = parse_expression(parser, 0);
+		if (!operand || !expect_token(parser, token_right_paren, "expected ')' after sizeof operand", NULL))
+			return NULL;
+		operand = parse_postfix_suffix(parser, operand);
+	} else {
+		operand = parse_expression(parser, 30);
+	}
+	if (!operand)
+		return NULL;
+	if (operand->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, keyword.location, "expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node = ast_new_sizeof(parser->arena, keyword.location, operand);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node ? &node->expression : NULL;
+}
+
+/* alignof-expression ::= ("alignof" | "_Alignof") "(" type-name ")" */
+static struct ast_expression *parse_alignof_expression(struct parser *parser)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct token beginning;
+	struct ast_type_syntax *type_syntax;
+	struct ast_alignof_expression *node;
+
+	if (!expect_token(parser, token_left_paren, "expected '(' after alignof", NULL))
+		return NULL;
+	type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+	if (!type_syntax || !expect_token(parser, token_right_paren, "expected ')' after alignof type", NULL))
+		return NULL;
+	node = ast_new_alignof(parser->arena, keyword.location, type_syntax);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node ? &node->expression : NULL;
+}
+
 /* pointer-unary-expression ::= ("&" | "*") cast-expression */
 static struct ast_expression *parse_pointer_unary_expression(struct parser *parser)
 {
@@ -826,7 +887,7 @@ static struct ast_expression *parse_pointer_unary_expression(struct parser *pars
 }
 
 /* prefix-expression ::= postfix-expression | parenthesized-or-cast
- *                     | pointer-unary-expression
+ *                     | pointer-unary-expression | sizeof-expression | alignof-expression
  *                     | ("+" | "-" | "!" | "~") cast-expression
  * cast-expression ::= prefix-expression (casts are selected after an opening paren)
  */
@@ -837,6 +898,10 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	struct ast_unary_expression *node;
 	enum unary_operator operation;
 
+	if (token.kind == token_sizeof)
+		return parse_sizeof_expression(parser);
+	if (token.kind == token_alignof || token.kind == token_legacy_alignof)
+		return parse_alignof_expression(parser);
 	if (token.kind == token_left_paren)
 		return parse_parenthesized_or_cast(parser);
 	if (token.kind == token_ampersand || token.kind == token_star)

@@ -318,3 +318,10 @@ arms implement C23 conditional constraints/type rules and selected evaluation.
 Result is not an lvalue. Null pointer constant, nullptr_t, floating and aggregate
 cases await their own type/evaluation milestones. Two exact legacy Clang 15 C23
 array-qualification diagnostic gaps are tracked, not counted as native passes.
+
+### M18a fixed size/alignment queries
+
+sizeof expression/type and alignof/_Alignof type queries support complete fixed
+object types with LP64 unsigned-long results and genuinely unevaluated operands.
+No void/function size extensions, VLAs, bit-fields, standard headers or general
+constant requirements are claimed. Literal array bounds remain a separate gap.

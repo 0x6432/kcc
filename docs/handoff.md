@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M19b implementation: conditional scalar/void values and immutable pointer composites;
+M18a implementation: fixed sizeof/alignof with checked unevaluated operands;
+prior M19b conditional scalar/void values and immutable pointer composites;
 prior M23a1 C23 bool/true/false typed constants and raw macro separation;
 prior M14j2 const syntax/enforcement, immutable qualified types,
 value/signature normalization and qualified pointer conversions; prior M19a sequenced comma values/discards with separate argument and
@@ -29,13 +30,14 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 Latest confirmed exact-source CI: M19a 95a99d7 run 38861248497, M14i
 1ed1cc8 run 38860337750 and M14h 274d966 run 38859812046 passed.
 M14j1 6e7ff50 run 38861821792 passed. M14j2 b26ff3b run 38863255999
-and M23a1 fe26eb4 run 38864340577 were still running;
-M19b remote/full isolated checks remain pending. M14g full GCC/Clang normal and
+also passed. M23a1 fe26eb4 run 38864340577 and M19b 0c0ef33 run 38865164586
+were still running; M18a remote/full isolated checks remain pending. M14g full GCC/Clang normal and
 ASan/UBSan matrix passed; queued newer snapshots need actual log confirmation.
 Logs/snapshots live in /data/tools and /data/validation-* outside the repo.
 
-Next: M18a fixed sizeof/alignof, designed in m18-sizeof-alignment.md;
-then remaining qualifier/typedef, constant evaluation and keyword work.
+Next: M18b1 integer constant-evaluation foundation, designed in
+m18-integer-constant-evaluation.md; then source-level requirements, null constants
+and generalized constant bounds. Qualifier/typedef work remains separate.
 Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1731,3 +1733,32 @@ No VLA/constant evaluator, null constant or full M18/M19 conformance is implied.
 
 M19b bounded sanitized fuzz: 23,373 lexer and 68,010 pipeline inputs in
 26 seconds each without reported failures; generated C was never executed.
+
+## M18a tested source checkpoint
+
+Separate concrete sizeof-expression, sizeof-type and alignof ASTs preserve typed
+operands/syntax. Parser disambiguates type versus expression with one on-demand
+token and retains postfix binding inside sizeof operands. Sema suppresses only
+root load/decay, checks complete object layout and emits unsigned-long constants.
+Codegen never evaluates operands, including calls, writes and invalid-at-runtime
+addresses. Unknown arrays/functions/void remain constraints, not GNU size extensions.
+
+Full normal GCC regression and QBE suites passed. Both-host targeted tests cover
+33 original full-value programs, 19 constraints, exact unevaluated structural
+depths, all primitive/pointer/array/const layouts, adjusted parameters, embedded
+NUL/concatenated strings, bool conditional promotion, unevaluated uninitialized
+reads/calls/stores/out-of-range addresses and no unresolved-symbol references.
+24 unsigned-long ABI arrangements and native-null unevaluated pointer operands
+pass. GCC 11/Clang 15 alignof spelling checks use explicitly labelled _Alignof
+compatibility macros; original kcc programs are unchanged. Both GCC/Clang
+ASan/UBSan semantic units passed. Sanitized bounded fuzz totals follow; no
+fuzz-generated C was executed. Exact-source remote/full isolated checks pending.
+
+Next: M18b1 pure integer constant-evaluation foundation, designed in
+m18-integer-constant-evaluation.md before implementation. Source-level constant
+requirements, generalized array bounds and null conversions are later consumers.
+
+M18a bounded sanitized fuzz: 23,465 lexer and 66,857 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+Exact-source M14j2 b26ff3b CI run 38863255999 passed. M23a1 fe26eb4 run
+38864340577 and M19b 0c0ef33 run 38865164586 were still running.

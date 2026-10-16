@@ -710,6 +710,49 @@ static bool sema_expression(struct sema *sema,
 		}
 		break;
 	}
+	case expression_sizeof: {
+		struct ast_sizeof_expression *node = (struct ast_sizeof_expression *)expression;
+
+		/* No immediate load/array/function decay; constraints still apply inside. */
+		if (!sema_expression(sema, &node->operand, false))
+			return false;
+		if (!type_is_complete_object(node->operand->type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "sizeof requires a complete object type");
+			return false;
+		}
+		node->size = type_object_size(node->operand->type);
+		result_type = &type_ulong;
+		expression->depth = node->operand->depth + 1;
+		break;
+	}
+	case expression_sizeof_type: {
+		struct ast_sizeof_type_expression *node = (struct ast_sizeof_type_expression *)expression;
+		const struct type *type = resolve_type_syntax(sema, node->type_syntax);
+
+		if (!type)
+			return false;
+		if (!type_is_complete_object(type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "sizeof requires a complete object type");
+			return false;
+		}
+		node->size = type_object_size(type);
+		result_type = &type_ulong;
+		break;
+	}
+	case expression_alignof: {
+		struct ast_alignof_expression *node = (struct ast_alignof_expression *)expression;
+		const struct type *type = resolve_type_syntax(sema, node->type_syntax);
+
+		if (!type)
+			return false;
+		if (!type_is_complete_object(type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "alignof requires a complete object type");
+			return false;
+		}
+		node->alignment = type_object_alignment(type);
+		result_type = &type_ulong;
+		break;
+	}
 	case expression_cast: {
 		struct ast_cast_expression *node = (struct ast_cast_expression *)expression;
 

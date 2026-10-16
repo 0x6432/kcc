@@ -42,6 +42,57 @@ struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
 	return node;
 }
 
+struct ast_sizeof_expression *ast_new_sizeof(struct arena *arena,
+	struct source_location location, struct ast_expression *operand)
+{
+	struct ast_sizeof_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_sizeof_expression) {
+			.expression = {
+				.kind = expression_sizeof,
+				.location = location,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
+		};
+	return node;
+}
+
+struct ast_sizeof_type_expression *ast_new_sizeof_type(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax)
+{
+	struct ast_sizeof_type_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_sizeof_type_expression) {
+			.expression = {
+				.kind = expression_sizeof_type,
+				.location = location,
+				.depth = 1,
+			},
+			.type_syntax = type_syntax,
+		};
+	return node;
+}
+
+struct ast_alignof_expression *ast_new_alignof(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax)
+{
+	struct ast_alignof_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_alignof_expression) {
+			.expression = {
+				.kind = expression_alignof,
+				.location = location,
+				.depth = 1,
+			},
+			.type_syntax = type_syntax,
+		};
+	return node;
+}
+
 struct ast_boolean_expression *ast_new_boolean(struct arena *arena, struct token token)
 {
 	struct ast_boolean_expression *node = arena_alloc(arena, sizeof(*node));

@@ -353,6 +353,15 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 static void codegen_discard_expression(struct codegen *codegen,
 	const struct ast_expression *expression);
 
+/* Target size_t values are unsigned long, independent of the compiler host. */
+static size_t codegen_layout_constant(struct codegen *codegen, uint64_t value)
+{
+	size_t result = codegen->next_temporary++;
+
+	emit(codegen, "\t%%t%zu =l copy %ju\n", result, (uintmax_t)value);
+	return result;
+}
+
 /* Return the temporary containing the value; operands are emitted first. */
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression)
@@ -361,6 +370,12 @@ static size_t codegen_expression(struct codegen *codegen,
 
 	assert(type_is_scalar(expression->type));
 	switch (expression->kind) {
+	case expression_sizeof:
+		return codegen_layout_constant(codegen, ((const struct ast_sizeof_expression *)expression)->size);
+	case expression_sizeof_type:
+		return codegen_layout_constant(codegen, ((const struct ast_sizeof_type_expression *)expression)->size);
+	case expression_alignof:
+		return codegen_layout_constant(codegen, ((const struct ast_alignof_expression *)expression)->alignment);
 	case expression_comma: {
 		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
 

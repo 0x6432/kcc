@@ -24,7 +24,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
-| M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | planned |
+| M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof implemented; other work planned) |
 | M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma and M19b conditional expressions implemented; rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
@@ -1254,3 +1254,32 @@ No VLA/constant evaluator, null constant or full M18/M19 conformance is implied.
 
 M19b bounded sanitized fuzz: 23,373 lexer and 68,010 pipeline inputs in
 26 seconds each without reported failures; generated C was never executed.
+
+## M18a tested source checkpoint
+
+Separate concrete sizeof-expression, sizeof-type and alignof ASTs preserve typed
+operands/syntax. Parser disambiguates type versus expression with one on-demand
+token and retains postfix binding inside sizeof operands. Sema suppresses only
+root load/decay, checks complete object layout and emits unsigned-long constants.
+Codegen never evaluates operands, including calls, writes and invalid-at-runtime
+addresses. Unknown arrays/functions/void remain constraints, not GNU size extensions.
+
+Full normal GCC regression and QBE suites passed. Both-host targeted tests cover
+33 original full-value programs, 19 constraints, exact unevaluated structural
+depths, all primitive/pointer/array/const layouts, adjusted parameters, embedded
+NUL/concatenated strings, bool conditional promotion, unevaluated uninitialized
+reads/calls/stores/out-of-range addresses and no unresolved-symbol references.
+24 unsigned-long ABI arrangements and native-null unevaluated pointer operands
+pass. GCC 11/Clang 15 alignof spelling checks use explicitly labelled _Alignof
+compatibility macros; original kcc programs are unchanged. Both GCC/Clang
+ASan/UBSan semantic units passed. Sanitized bounded fuzz totals follow; no
+fuzz-generated C was executed. Exact-source remote/full isolated checks pending.
+
+Next: M18b1 pure integer constant-evaluation foundation, designed in
+m18-integer-constant-evaluation.md before implementation. Source-level constant
+requirements, generalized array bounds and null conversions are later consumers.
+
+M18a bounded sanitized fuzz: 23,465 lexer and 66,857 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+Exact-source M14j2 b26ff3b CI run 38863255999 passed. M23a1 fe26eb4 run
+38864340577 and M19b 0c0ef33 run 38865164586 were still running.

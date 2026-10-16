@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M19b. Read the latest entries together with README.md and
+Current milestone: M18a. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1214,3 +1214,24 @@ unchanged originals, and no fake native host agreements are counted.
 
 M19b bounded sanitized fuzz: 23,373 lexer and 68,010 pipeline inputs in
 26 seconds each without reported failures; generated C was never executed.
+
+## M18a fixed sizeof and alignment
+
+sizeof accepts unary operands and parenthesized implemented type names; alignof
+and _Alignof accept type names only. Complete fixed object types use the existing
+LP64 layout and unsigned-long result type. Function, void and unknown-bound array
+operands reject; pointer types remain complete regardless of their referents.
+Expression operands are checked without immediate load/decay and never emitted.
+Nested constraints/conversions still apply; strings may remain harmless unused
+private data. Adjusted parameter locals have pointer size, not declared array size.
+
+No VLA, bit-field, expression-alignof extension, size_t/header exposure, static
+assertion or general constant evaluator is implemented. Array bounds still require
+positive literal tokens, including when sizeof could mathematically be constant.
+Legacy GCC 11 and Clang 15 lack the alignof spelling; labelled _Alignof macro
+oracles validate its runtime/layout behavior without claiming native keyword support.
+
+M18a bounded sanitized fuzz: 23,465 lexer and 66,857 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+Exact-source M14j2 b26ff3b CI run 38863255999 passed. M23a1 fe26eb4 run
+38864340577 and M19b 0c0ef33 run 38865164586 were still running.

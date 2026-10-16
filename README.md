@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M18a: fixed sizeof expressions/types and alignof/_Alignof type queries use
+target layout and unsigned-long results. Operands remain semantically checked
+but generate no evaluation, root load or array/function decay. No VLA or general
+constant-evaluation support is implied.
+
 M19b: conditional expressions use right-associative Pratt parsing, explicit
 arithmetic/pointer common types and selected QBE branches with correct nested
 phi predecessors. Void conditionals have effects without dummy values.

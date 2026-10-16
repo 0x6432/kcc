@@ -31,6 +31,9 @@ enum expression_kind {
 	expression_logical,
 	expression_comma,
 	expression_conditional,
+	expression_sizeof,
+	expression_sizeof_type,
+	expression_alignof,
 	expression_call,
 };
 
@@ -61,6 +64,24 @@ struct ast_expression {
 	const struct type *type;
 	unsigned depth;
 	bool is_lvalue;
+};
+
+struct ast_sizeof_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
+	uint64_t size;
+};
+
+struct ast_sizeof_type_expression {
+	struct ast_expression expression;
+	struct ast_type_syntax *type_syntax;
+	uint64_t size;
+};
+
+struct ast_alignof_expression {
+	struct ast_expression expression;
+	struct ast_type_syntax *type_syntax;
+	uint64_t alignment;
 };
 
 struct ast_boolean_expression {
@@ -479,6 +500,12 @@ struct ast_parameter *ast_new_parameter(struct arena *arena,
 	struct source_location location, struct token name, bool has_name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,
 	struct source_location location, struct token name);
+struct ast_sizeof_expression *ast_new_sizeof(struct arena *arena,
+	struct source_location location, struct ast_expression *operand);
+struct ast_sizeof_type_expression *ast_new_sizeof_type(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax);
+struct ast_alignof_expression *ast_new_alignof(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax);
 struct ast_boolean_expression *ast_new_boolean(struct arena *arena, struct token token);
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);

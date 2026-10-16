@@ -2341,8 +2341,91 @@ static void test_conditional_integer_types(void)
 }
 
 
+static void test_sizeof_alignment_tree(void)
+{
+	const char *text = "unsigned long f(int a[3],int g(void)) { int b[2][3]; "
+		"sizeof b; sizeof b[0]; sizeof a; sizeof g; sizeof true; "
+		"sizeof(true?false:true); sizeof(int (*)[3]); alignof(const int[2][3]); "
+		"return sizeof(b[0][1]=42); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *b;
+	struct ast_statement_item *item;
+	struct ast_sizeof_expression *size;
+	struct ast_sizeof_type_expression *type_size;
+	struct ast_alignof_expression *alignment;
+	const struct array_type *array;
+	const struct pointer_type *pointer;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "layout.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	function = first_function(unit);
+	b = (struct ast_local_declaration *)function->body->items;
+	item = (struct ast_statement_item *)b->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(size->expression.kind == expression_sizeof && size->expression.type == &type_ulong);
+	assert(size->expression.depth == 2 && !size->expression.is_lvalue && size->size == 24);
+	assert(size->operand->kind == expression_name && size->operand->is_lvalue);
+	assert(size->operand->type == b->type && size->operand->type->kind == type_kind_array);
+	item = (struct ast_statement_item *)item->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(size->expression.kind == expression_sizeof && size->size == 12);
+	assert(size->operand->kind == expression_indirection && size->operand->is_lvalue);
+	array = (const struct array_type *)size->operand->type;
+	assert(array->type.kind == type_kind_array && array->count == 3);
+	item = (struct ast_statement_item *)item->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(size->size == 8 && size->operand->kind == expression_name && size->operand->is_lvalue);
+	assert(size->operand->type == function->declaration->parameters->type);
+	assert(size->operand->type->kind == type_kind_pointer);
+	item = (struct ast_statement_item *)item->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(size->size == 8 && size->operand->kind == expression_name);
+	pointer = (const struct pointer_type *)size->operand->type;
+	assert(pointer->type.kind == type_kind_pointer && pointer->referent->kind == type_kind_function);
+	item = (struct ast_statement_item *)item->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(size->size == 1 && size->operand->kind == expression_boolean && size->expression.depth == 2);
+	item = (struct ast_statement_item *)item->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(size->size == 4 && size->operand->kind == expression_conditional && size->expression.depth == 4);
+	assert(size->operand->type == &type_int);
+	item = (struct ast_statement_item *)item->item.next;
+	type_size = (struct ast_sizeof_type_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(type_size->expression.kind == expression_sizeof_type && type_size->expression.type == &type_ulong);
+	assert(type_size->size == 8 && type_size->expression.depth == 1 && !type_size->expression.is_lvalue);
+	pointer = (const struct pointer_type *)type_size->type_syntax->type;
+	assert(pointer->type.kind == type_kind_pointer && pointer->referent->kind == type_kind_array);
+	item = (struct ast_statement_item *)item->item.next;
+	alignment = (struct ast_alignof_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(alignment->expression.kind == expression_alignof && alignment->expression.type == &type_ulong);
+	assert(alignment->alignment == 4 && alignment->expression.depth == 1 && !alignment->expression.is_lvalue);
+	array = (const struct array_type *)alignment->type_syntax->type;
+	assert(array->type.kind == type_kind_array && array->type.qualifiers == type_qualifier_const && array->count == 2);
+	assert(array->element->kind == type_kind_array && array->element->qualifiers == type_qualifier_const);
+	item = (struct ast_statement_item *)item->item.next;
+	size = (struct ast_sizeof_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(size->expression.kind == expression_sizeof && size->expression.type == &type_ulong && size->size == 4);
+	assert(size->operand->kind == expression_assignment && !size->operand->is_lvalue);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+
 int main(void)
 {
+	test_sizeof_alignment_tree();
 	test_conditional_expression_tree();
 	test_conditional_integer_types();
 	test_boolean_constant_tree();

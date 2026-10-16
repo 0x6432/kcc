@@ -307,8 +307,22 @@ static void test_conditional_punctuation(void)
 }
 
 
+static void test_layout_keywords(void)
+{
+	const enum token_kind kinds[] = { token_sizeof, token_alignof,
+		token_legacy_alignof, token_sizeof, token_identifier };
+
+	check_tokens("#define SIZE sizeof\nsizeof alignof _Alignof SIZE sizeofish", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_sizeof), "sizeof") == 0);
+	assert(strcmp(token_kind_name(token_alignof), "alignof") == 0);
+	assert(strcmp(token_kind_name(token_legacy_alignof), "_Alignof") == 0);
+}
+
+
 int main(void)
 {
+	test_layout_keywords();
 	test_conditional_punctuation();
 	test_boolean_keywords();
 	test_const_tokens();

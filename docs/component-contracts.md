@@ -1268,3 +1268,13 @@ composite immediate referents with qualifier union after callers validate allowe
 categories; no fabricated binary node or deeper pointer covariance. Compatible
 comparison snapshots stay unchanged. Scalar QBE uses actual end labels for each
 phi arm; void discard branches evaluate exactly one arm without a dummy result.
+
+## M18a unevaluated layout queries
+
+Separate AST structs preserve expression operands versus type syntax. sizeof's
+immediate expression is semantically visited with value_required=false, suppressing
+only root lvalue/function/array conversion. Children retain normal constraints.
+Check complete objects before target layout APIs; result is type_ulong and checked
+depth includes the retained typed operand. Codegen emits only precomputed layout
+constants. It must never traverse operands or manufacture runtime loads/calls.
+alignof spelling is converted after pp expansion, not treated as a predefined macro.
