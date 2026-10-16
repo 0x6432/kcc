@@ -165,3 +165,14 @@ object, typed first-fragment provenance and exact fragment/decoded/storage budge
 pass. The prior now-valid adjacency rejection became an unsupported ordinary+
 wide-prefixed sequence; mixed/prefixed encoding constraints remain tested. This
 is ordinary byte concatenation, not general C23 encoded string support.
+
+### M13j literal-bound array parameters
+
+27 both-host/QBE full-value programs, both linkage directions with eight mixed
+pointer arguments and borrowed rows, and typed declared/effective cache units
+cover named/unnamed prototypes, outer-count compatibility, inner-row mismatch,
+rebinding and address-of-pointer storage. Exact dimension/type/local budgets
+remain checked. Full regression initially caught an old now-valid int p[2]
+parameter rejection; it now rejects unsupported int p[static 2], preserving a
+real constraint check rather than weakening compiler acceptance. Other omitted-
+bound rejection fixtures remain until the next increment.

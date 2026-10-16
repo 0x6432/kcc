@@ -1343,8 +1343,55 @@ static void test_concatenated_string_tree(void)
 	source_destroy(&source);
 }
 
+static void test_array_parameter_adjustment(void)
+{
+	const char *text = "int f(int [7][3]); int f(int a[2][3]) { return a[1][2]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_function *function;
+	struct ast_parameter *parameter;
+	const struct array_type *declared;
+	const struct array_type *row;
+	const struct pointer_type *effective;
+
+	assert(source_from_bytes(&source, "array-parameter.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	assert(prototype->external.kind == external_function_declaration);
+	assert(!prototype->parameters->has_name && !prototype->parameters->type);
+	function = (struct ast_function *)prototype->external.next;
+	parameter = function->declaration->parameters;
+	assert(parameter->has_name && parameter->type_syntax->kind == type_syntax_array && !parameter->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	declared = (const struct array_type *)parameter->type_syntax->type;
+	assert(declared->type.kind == type_kind_array && declared->count == 2);
+	row = (const struct array_type *)declared->element;
+	assert(row->type.kind == type_kind_array && row->count == 3 && row->element == &type_int);
+	assert(parameter->type->kind == type_kind_pointer);
+	effective = (const struct pointer_type *)parameter->type;
+	assert(effective->referent == &row->type);
+	assert(parameter->local->type_syntax == parameter->type_syntax);
+	assert(parameter->local->type == parameter->type && parameter->local->type != &declared->type);
+	assert(type_object_size(parameter->local->type) == 8 && type_object_size(&declared->type) == 24);
+	assert(type_compatible(parameter->type, prototype->parameters->type));
+	assert(((const struct array_type *)prototype->parameters->type_syntax->type)->count == 7);
+	assert(function->declaration->symbol == prototype->symbol);
+	assert(type_compatible(prototype->symbol->type->parameters->type, parameter->type));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_array_parameter_adjustment();
 	test_concatenated_string_tree();
 	test_string_expression_tree();
 	test_multidimensional_array_tree();

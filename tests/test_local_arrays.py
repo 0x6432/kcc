@@ -161,7 +161,7 @@ int main(void) {{ {name} a[3]; a[0]=1; a[1]=2; a[2]=3;
         ('int main(void) { int a[2]; int *p=&a; return 0; }', 'pointer conversion'),
         ('int main(void) { int a[2]; int b[3]; return &a==&b; }', 'compatible pointer'),
         ('int main(void) { int a[2]; return +a; }', 'integer operand'),
-        ('int f(int a[2]) { return 0; }', ''),
+        ('int f(int a[]) { return 0; }', 'integer literal'),
     ]
     for text, message in rejected:
         source.write_text(text)

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13i. The chronological entries below describe what each
+Current milestone: M13j. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -970,3 +970,17 @@ budgets remain. Additionally, at most 4096 fragments per sequence and 16384 per 
 bound temporary records, including empty fragments. Limits are checked before
 decoded allocation and apply across functions. Only a bounded sequence is buffered,
 not the translation unit; included/macro spelling views retain normal lifetimes.
+
+## M13j
+
+Positive literal-bound array parameter declarators adjust their outermost array
+to a pointer to its element type, including unnamed prototypes and matrix rows.
+The declared syntax/cache remains an array; signatures and parameter spills use
+a separate effective pointer type. Different outer counts are compatible after
+adjustment; inner row counts must still match. Inside the function the parameter
+is a modifiable pointer object, not an allocated array or a minimum-size promise.
+
+Omitted bounds, static/qualified/VLA/general expression bounds and parenthesized
+declarators remain unsupported. The declared type still has a 1 MiB resource cap,
+while actual pointer-sized spills alone contribute to local object storage. No
+backend special case or bound-based access check has been introduced.

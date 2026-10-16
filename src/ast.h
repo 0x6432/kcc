@@ -366,6 +366,7 @@ struct ast_external_declaration {
 
 struct ast_parameter {
 	struct ast_type_syntax *type_syntax;
+	const struct type *type;
 	struct source_location location;
 	struct token name;
 	bool has_name;

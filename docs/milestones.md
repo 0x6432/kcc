@@ -995,3 +995,9 @@ M13i source checkpoint: adjacent ordinary strings passed full normal GCC suites,
 escape boundaries, typed object and exact resource checks plus bounded sanitized
 fuzz. Full isolated/remote verification remains pending. M13j literal-bound
 array parameter adjustment is pre-designed with separate declared/effective types.
+
+M13j source checkpoint: literal-bound array parameter adjustment passed full
+normal GCC suites, 27 both-host/QBE full-value programs, both eight-argument/row
+ABI directions, declared/effective cache and resource units, and bounded sanitized
+fuzz. Full isolated/remote verification remains pending. M13k omitted outer
+parameter bounds is designed with explicit incomplete declared-type metadata.

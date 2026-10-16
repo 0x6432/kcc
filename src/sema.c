@@ -149,7 +149,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		if (!count || count > ast_max_local_storage / type_object_size(element)) {
 			diagnostic_error(sema->diagnostics, array->bound.location,
-				"array bound must be positive and fit local object storage limit (1 MiB)");
+				"array bound must be positive and fit array type storage limit (1 MiB)");
 			return NULL;
 		}
 		type = type_new_array(sema->arena, element, count);
@@ -162,6 +162,26 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	}
 	}
 	return syntax->type;
+}
+
+/* Parameter adjustment changes the effective object/signature type, not the
+ * declared array syntax cache. Inner array bounds remain in the referent.
+ */
+static const struct type *adjust_parameter_type(struct sema *sema,
+	const struct type *declared, struct source_location location)
+{
+	const struct array_type *array;
+	struct pointer_type *pointer;
+
+	if (declared->kind != type_kind_array)
+		return declared;
+	array = (const struct array_type *)declared;
+	pointer = type_new_pointer(sema->arena, array->element);
+	if (!pointer) {
+		diagnostic_error(sema->diagnostics, location, "out of memory adjusting array parameter");
+		return NULL;
+	}
+	return &pointer->type;
 }
 
 static bool check_conversion(struct sema *sema, const struct type *source,
@@ -604,7 +624,8 @@ static bool sema_expression(struct sema *sema,
 	return true;
 }
 
-static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
+static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *effective_type)
 {
 	struct binding *binding;
 
@@ -628,10 +649,11 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 	*binding = (struct binding) { local, sema->scope->bindings };
 	sema->scope->bindings = binding;
 
-	/* C's point of declaration is before the initializer is analyzed. */
-	local->type = resolve_type_syntax(sema, local->type_syntax);
-	if (!local->type)
-		return false;
+	/* Binding precedes initializer analysis; parameter spills use the adjusted
+	 * type while retaining their declared syntax as source provenance.
+	 */
+	assert(type_is_complete_object(effective_type));
+	local->type = effective_type;
 	if (type_object_size(local->type) > ast_max_local_storage - sema->local_storage) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"function exceeds local object storage limit (1 MiB)");
@@ -649,6 +671,15 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 		return sema_expression(sema, &local->initializer, true) &&
 			convert_expression(sema, &local->initializer, local->type);
 	return true;
+}
+
+static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
+{
+	const struct type *type = resolve_type_syntax(sema, local->type_syntax);
+
+	if (!type)
+		return false;
+	return bind_local(sema, local, type);
 }
 
 static bool sema_compound(struct sema *sema, struct ast_compound_statement *node);
@@ -871,7 +902,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 			goto done;
 		}
 		parameter->local->type_syntax = parameter->type_syntax;
-		if (!sema_local(sema, parameter->local))
+		if (!bind_local(sema, parameter->local, parameter->type))
 			goto done;
 	}
 	/* Parameters and outermost body declarations inhabit the same scope. */
@@ -914,7 +945,10 @@ static bool sema_function_declaration(struct sema *sema,
 
 		if (!type)
 			return false;
-		parameters[parameter_count++] = type;
+		parameter->type = adjust_parameter_type(sema, type, parameter->location);
+		if (!parameter->type)
+			return false;
+		parameters[parameter_count++] = parameter->type;
 	}
 	assert(parameter_count == declaration->parameter_count && parameter_count <= ast_max_parameters);
 	type = type_new_function(sema->arena, return_type,

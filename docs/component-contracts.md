@@ -1064,3 +1064,15 @@ token; the first fragment supplies expression provenance. Sema/static-list/codeg
 and scalar array decay remain unchanged. Fragment counts are TU-wide and distinct
 from resulting object counts. Borrowed include/macro spelling views remain alive
 through final decoding, including after include EOF has restored the parent.
+
+## M13j declared versus effective parameters
+
+Parameter syntax retains its resolved declared type. A separate parameter.type
+records one-level array-to-pointer adjustment; function signature compatibility
+and call conversion use this effective type. Inner row shape survives, outer
+count does not. Binding accepts an explicit effective type rather than resolving
+the synthesized parameter local back into its declared array. Parameter storage,
+address-of and assignment therefore see an ordinary pointer spill. Nonparameter
+locals still resolve syntax before the common binding path; normal local name
+visibility and initialization order remain unchanged. Codegen consumes the same
+scalar spill and call contracts without an array-parameter special path.

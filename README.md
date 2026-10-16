@@ -6,7 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13i: adjacent ordinary string fragments concatenate decoded bytes into one
+M13j: literal-bound array parameters retain their declared shape but adjust once
+to effective element pointers for signatures, calls and local parameter storage.
+Adjacent ordinary string fragments concatenate decoded bytes into one
 static array with one trailing NUL, explicit decay and private QBE byte data. Fixed multidimensional
 local arrays preserve shape, row strides and one-level decay. Bounds are positive integer literal tokens;
 array initializers and general constant-expression bounds remain later work.

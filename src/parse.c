@@ -1076,11 +1076,11 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* local-array-suffixes ::= { "[" integer-token "]" }
+/* array-suffixes ::= { "[" integer-token "]" }
  * Bounds are intentionally literal tokens, not general constant expressions.
  * Source-order suffixes wrap right-to-left: a[2][3] has two rows of three.
  */
-static struct ast_type_syntax *parse_local_array_suffixes(struct parser *parser,
+static struct ast_type_syntax *parse_array_suffixes(struct parser *parser,
 	struct ast_type_syntax *element)
 {
 	struct array_dimension {
@@ -1119,7 +1119,7 @@ static struct ast_type_syntax *parse_local_array_suffixes(struct parser *parser,
 	return element;
 }
 
-/* local-declaration ::= type-name identifier [ local-array-suffixes ]
+/* local-declaration ::= type-name identifier [ array-suffixes ]
  *                       [ "=" expression ] ";"
  * Array initializers are diagnosed by sema (braced lists are not parsed yet).
  */
@@ -1137,7 +1137,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
-		type_syntax = parse_local_array_suffixes(parser, type_syntax);
+		type_syntax = parse_array_suffixes(parser, type_syntax);
 		if (!type_syntax)
 			return NULL;
 	}
@@ -1229,7 +1229,7 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 }
 
 /* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
- * parameter-declaration ::= type-name [ identifier ]
+ * parameter-declaration ::= type-name [ identifier ] [ array-suffixes ]
  * C23's empty list specifies zero parameters, just like (void).
  */
 static bool parse_parameters(struct parser *parser,
@@ -1262,6 +1262,11 @@ static bool parse_parameters(struct parser *parser,
 		if (preprocess_peek(parser->preprocessor).kind == token_identifier) {
 			name = preprocess_next(parser->preprocessor);
 			has_name = true;
+		}
+		if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
+			type_syntax = parse_array_suffixes(parser, type_syntax);
+			if (!type_syntax)
+				return false;
 		}
 		parameter = ast_new_parameter(parser->arena, beginning.location, name, has_name);
 		if (!parameter) {

@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M13i implementation: adjacent ordinary static byte strings, fixed multidimensional arrays
+M13j implementation: literal-bound array parameter adjustment,
+adjacent ordinary static byte strings, fixed multidimensional arrays
 and explicit decay/target layout, pointer
 subscripts, scaled offsets, signed-long differences and compatible
 comparisons, plus concrete address/indirection ASTs and general object lvalue
@@ -14,16 +15,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13g e472687, run 38828318658, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f also passed their exact-source CI.
-M13i full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13h 6b209a6, run 38829878613, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f/g also passed their exact-source CI.
+M13j full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13j array parameter adjustment, designed in m13-array-parameters.md.
+Next: M13k omitted outer array parameter bounds, designed in
+m13-incomplete-parameter-bounds.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1359,3 +1361,24 @@ Full isolated/remote checks remain pending. M13j array-parameter adjustment is
 pre-designed; incomplete/qualified/general bounds and full declarators are later.
 M13b 6f5e5ab completed both isolated compiler normal/sanitizer legs, with prior
 exact-source CI 38824691700. M13h CI remains pending independently.
+
+## M13j tested source checkpoint
+
+Literal-bound parameter arrays retain their declared syntax/cache but signatures
+and synthesized parameter locals use a separately adjusted element pointer.
+Outer counts do not affect signature compatibility; inner row shapes do. Ordinary
+scalar binding and codegen handle pointer spills, mutation, address-of and calls.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 27 new full-value programs
+and both-direction eight-argument/row ABI checks passed with GCC and Clang; typed
+units check declared/effective separation and pointer-sized storage accounting.
+The initial full suite caught an old now-valid int p[2] negative fixture; it now
+uses unsupported int p[static 2], retaining constraint coverage. Compiler behavior
+was not weakened, and the full suite was restarted and passed. Sanitized bounded
+fuzz passed 25039 lexer + 76541 pipeline inputs (101580 total), 26/26 seconds.
+No uninitialized/out-of-bounds or arbitrary generated C program executes.
+Full isolated/remote verification remains pending. M13k omitted outer bounds is
+pre-designed; static/qualified/VLA/general bounds and full declarators remain later.
+
+M13h 6b209a6 passed exact-source CI 38829878613. M13i 5699450 CI
+38830826668 remains in progress; isolated matrices remain separate.
