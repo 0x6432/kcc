@@ -243,6 +243,7 @@ struct ast_pointer_type_syntax {
 struct ast_array_type_syntax {
 	struct ast_type_syntax syntax;
 	struct ast_type_syntax *element;
+	bool has_bound;
 	struct token bound;
 };
 
@@ -401,7 +402,7 @@ struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
 struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *referent);
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
-	struct source_location location, struct ast_type_syntax *element, struct token bound);
+	struct source_location location, struct ast_type_syntax *element, bool has_bound, struct token bound);
 struct ast_array_decay_expression *ast_new_array_decay(struct arena *arena,
 	struct ast_expression *operand, const struct type *pointer_type);
 struct ast_call_expression *ast_new_call(struct arena *arena,

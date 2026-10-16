@@ -36,7 +36,7 @@ struct pointer_type {
 struct array_type {
 	struct type type;
 	const struct type *element;
-	uint64_t count;
+	uint64_t count; /* Zero means unknown bound, never a zero-length array. */
 };
 
 struct function_parameter_type {
@@ -71,6 +71,7 @@ unsigned type_value_width(const struct type *type);
 /* Target layout for implemented complete object types, not host sizeof. */
 uint64_t type_object_size(const struct type *type);
 unsigned type_object_alignment(const struct type *type);
+struct array_type *type_new_incomplete_array(struct arena *arena, const struct type *element);
 struct array_type *type_new_array(struct arena *arena, const struct type *element,
 	uint64_t count);
 struct pointer_type *type_new_pointer(struct arena *arena, const struct type *referent);

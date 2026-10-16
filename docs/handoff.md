@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M13j implementation: literal-bound array parameter adjustment,
+M13k implementation: omitted outer array parameter bounds and effective adjustment,
 adjacent ordinary static byte strings, fixed multidimensional arrays
 and explicit decay/target layout, pointer
 subscripts, scaled offsets, signed-long differences and compatible
@@ -17,15 +17,15 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 
 Latest confirmed exact-source CI: M13h 6b209a6, run 38829878613, passed GCC/Clang
 normal/sanitizer and fuzz jobs; M13e/f/g also passed their exact-source CI.
-M13j full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+M13k full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13k omitted outer array parameter bounds, designed in
-m13-incomplete-parameter-bounds.md.
+Next: M14a parenthesized object declarators, designed in
+m14-object-declarators.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1382,3 +1382,22 @@ pre-designed; static/qualified/VLA/general bounds and full declarators remain la
 
 M13h 6b209a6 passed exact-source CI 38829878613. M13i 5699450 CI
 38830826668 remains in progress; isolated matrices remain separate.
+
+## M13k tested source checkpoint
+
+Array syntax now distinguishes omitted bounds explicitly, and a separate
+incomplete-array constructor preserves unknown cardinality in declared parameter
+metadata. Complete object layout remains forbidden for unknown arrays; ordinary
+one-level adjustment produces complete element pointers and existing spills.
+
+Full normal GCC regression/QBE/reference/ABI passed. 27 new full-value programs
+and both-direction stack/row ABI passed with GCC and Clang. Units verify declared
+incomplete cache versus effective pointer, compatibility and complete-object
+predicates. Zero/inner/local omissions and exact dimension/storage constraints
+pass. Earlier now-valid [] parameter negatives now reject omitted inner bounds,
+without removing local [] or static-form coverage. Sanitized bounded fuzz passed
+25234 lexer + 70339 pipeline inputs (95573 total), 26/26 seconds. No arbitrary
+fuzz C or invalid/uninitialized curated accesses execute. Full isolated/remote
+verification remains pending. M14a single-pass object declarators are pre-designed.
+M13c dfd9742 completed its isolated GCC/Clang normal + ASan/UBSan matrix; prior
+exact-source CI 38825345451 passed. Later snapshots queue independently.

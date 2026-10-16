@@ -1389,8 +1389,63 @@ static void test_array_parameter_adjustment(void)
 	source_destroy(&source);
 }
 
+static void test_incomplete_array_parameter(void)
+{
+	const char *text = "int f(int [7][3]); int f(int a[][3]) { return a[1][2]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_function *function;
+	struct ast_parameter *parameter;
+	struct ast_array_type_syntax *syntax;
+	const struct array_type *declared;
+	const struct array_type *row;
+	struct array_type *unknown;
+	struct array_type *complete;
+	struct array_type *different;
+
+	assert(source_from_bytes(&source, "incomplete-parameter.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	function = (struct ast_function *)prototype->external.next;
+	parameter = function->declaration->parameters;
+	syntax = (struct ast_array_type_syntax *)parameter->type_syntax;
+	assert(syntax->syntax.kind == type_syntax_array && !syntax->has_bound && !syntax->syntax.type);
+	assert(((struct ast_array_type_syntax *)syntax->element)->has_bound);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	declared = (const struct array_type *)syntax->syntax.type;
+	assert(declared->type.kind == type_kind_array && !declared->count);
+	assert(!type_is_complete_object(&declared->type) && !type_is_scalar(&declared->type));
+	row = (const struct array_type *)declared->element;
+	assert(row->type.kind == type_kind_array && row->count == 3 && row->element == &type_int);
+	assert(type_is_complete_object(&row->type) && type_object_size(&row->type) == 12);
+	assert(parameter->type->kind == type_kind_pointer && parameter->local->type == parameter->type);
+	assert(((const struct pointer_type *)parameter->type)->referent == &row->type);
+	assert(type_object_size(parameter->local->type) == 8);
+	assert(parameter->local->type_syntax == parameter->type_syntax);
+	assert(type_compatible(parameter->type, prototype->parameters->type));
+	unknown = type_new_incomplete_array(&arena, &type_int);
+	complete = type_new_array(&arena, &type_int, 3);
+	different = type_new_array(&arena, &type_uint, 3);
+	assert(unknown && complete && different);
+	assert(!unknown->count && !type_is_complete_object(&unknown->type));
+	assert(type_compatible(&unknown->type, &complete->type));
+	assert(type_compatible(&complete->type, &unknown->type));
+	assert(!type_compatible(&unknown->type, &different->type));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_incomplete_array_parameter();
 	test_array_parameter_adjustment();
 	test_concatenated_string_tree();
 	test_string_expression_tree();

@@ -1076,3 +1076,14 @@ address-of and assignment therefore see an ordinary pointer spill. Nonparameter
 locals still resolve syntax before the common binding path; normal local name
 visibility and initialization order remain unchanged. Codegen consumes the same
 scalar spill and call contracts without an array-parameter special path.
+
+## M13k unknown parameter cardinality
+
+AST array syntax explicitly distinguishes has_bound from a present zero token.
+A separate incomplete-array constructor records count zero as unknown, requiring
+a complete element. Complete-array construction retains its positive-count and
+overflow invariants. Complete-object queries exclude unknown arrays; size and
+alignment retain their complete-type preconditions. Declared syntax caches the
+incomplete type, then parameter adjustment removes exactly its outer array.
+Unknown/known array compatibility checks elements recursively; no fake storage
+or pointer referent completeness relaxation is introduced.

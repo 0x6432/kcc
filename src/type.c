@@ -55,7 +55,9 @@ bool type_is_scalar(const struct type *type)
 
 bool type_is_complete_object(const struct type *type)
 {
-	return type_is_scalar(type) || type->kind == type_kind_array;
+	if (type->kind == type_kind_array)
+		return ((const struct array_type *)type)->count != 0;
+	return type_is_scalar(type);
 }
 
 unsigned type_value_width(const struct type *type)
@@ -82,6 +84,21 @@ unsigned type_object_alignment(const struct type *type)
 	if (type->kind == type_kind_array)
 		return type_object_alignment(((const struct array_type *)type)->element);
 	return type_value_width(type) / 8;
+}
+
+struct array_type *type_new_incomplete_array(struct arena *arena, const struct type *element)
+{
+	struct array_type *array;
+
+	assert(type_is_complete_object(element));
+	array = arena_alloc(arena, sizeof(*array));
+	if (array)
+		*array = (struct array_type) {
+			.type = { type_kind_array },
+			.element = element,
+			.count = 0,
+		};
+	return array;
 }
 
 struct array_type *type_new_array(struct arena *arena, const struct type *element,
@@ -254,7 +271,8 @@ bool type_compatible(const struct type *left, const struct type *right)
 		const struct array_type *a = (const struct array_type *)left;
 		const struct array_type *b = (const struct array_type *)right;
 
-		return a->count == b->count && type_compatible(a->element, b->element);
+		return (!a->count || !b->count || a->count == b->count) &&
+			type_compatible(a->element, b->element);
 	}
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;

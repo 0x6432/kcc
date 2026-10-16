@@ -1076,16 +1076,18 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* array-suffixes ::= { "[" integer-token "]" }
- * Bounds are intentionally literal tokens, not general constant expressions.
- * Source-order suffixes wrap right-to-left: a[2][3] has two rows of three.
+/* local-array-suffixes ::= { "[" integer-token "]" }
+ * parameter-array-suffixes ::= "[" [ integer-token ] "]" local-array-suffixes
+ * Only a parameter's outer bound may be omitted. Source-order suffixes wrap
+ * right-to-left; bounds are not general integer constant expressions yet.
  */
 static struct ast_type_syntax *parse_array_suffixes(struct parser *parser,
-	struct ast_type_syntax *element)
+	struct ast_type_syntax *element, bool parameter_context)
 {
 	struct array_dimension {
 		struct token opening;
 		struct token bound;
+		bool has_bound;
 	};
 	struct array_dimension dimensions[ast_max_array_dimensions];
 	size_t count = 0;
@@ -1096,10 +1098,21 @@ static struct ast_type_syntax *parse_array_suffixes(struct parser *parser,
 				"array declarator exceeds dimension limit (64)");
 			return NULL;
 		}
-		dimensions[count].opening = preprocess_next(parser->preprocessor);
-		if (!expect_token(parser, token_integer, "array bound must be an integer literal",
-			&dimensions[count].bound))
+		dimensions[count] = (struct array_dimension) {
+			.opening = preprocess_next(parser->preprocessor),
+			.has_bound = true,
+		};
+		if (parameter_context && preprocess_peek(parser->preprocessor).kind == token_right_bracket) {
+			if (count) {
+				diagnostic_error(parser->diagnostics, dimensions[count].opening.location,
+					"only the outer parameter array bound may be omitted");
+				return NULL;
+			}
+			dimensions[count].has_bound = false;
+		} else if (!expect_token(parser, token_integer, "array bound must be an integer literal",
+			&dimensions[count].bound)) {
 			return NULL;
+		}
 		if (!expect_token(parser, token_right_bracket, "expected ']' after array bound", NULL))
 			return NULL;
 		count++;
@@ -1109,7 +1122,7 @@ static struct ast_type_syntax *parse_array_suffixes(struct parser *parser,
 		struct array_dimension *dimension = &dimensions[--count];
 
 		array = ast_new_array_type_syntax(parser->arena, dimension->opening.location,
-			element, dimension->bound);
+			element, dimension->has_bound, dimension->bound);
 		if (!array) {
 			allocation_error(parser, dimension->opening.location);
 			return NULL;
@@ -1119,7 +1132,7 @@ static struct ast_type_syntax *parse_array_suffixes(struct parser *parser,
 	return element;
 }
 
-/* local-declaration ::= type-name identifier [ array-suffixes ]
+/* local-declaration ::= type-name identifier [ local-array-suffixes ]
  *                       [ "=" expression ] ";"
  * Array initializers are diagnosed by sema (braced lists are not parsed yet).
  */
@@ -1137,7 +1150,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
-		type_syntax = parse_array_suffixes(parser, type_syntax);
+		type_syntax = parse_array_suffixes(parser, type_syntax, false);
 		if (!type_syntax)
 			return NULL;
 	}
@@ -1229,7 +1242,7 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 }
 
 /* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
- * parameter-declaration ::= type-name [ identifier ] [ array-suffixes ]
+ * parameter-declaration ::= type-name [ identifier ] [ parameter-array-suffixes ]
  * C23's empty list specifies zero parameters, just like (void).
  */
 static bool parse_parameters(struct parser *parser,
@@ -1264,7 +1277,7 @@ static bool parse_parameters(struct parser *parser,
 			has_name = true;
 		}
 		if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
-			type_syntax = parse_array_suffixes(parser, type_syntax);
+			type_syntax = parse_array_suffixes(parser, type_syntax, true);
 			if (!type_syntax)
 				return false;
 		}

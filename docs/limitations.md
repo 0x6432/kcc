@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13j. The chronological entries below describe what each
+Current milestone: M13k. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -984,3 +984,15 @@ Omitted bounds, static/qualified/VLA/general expression bounds and parenthesized
 declarators remain unsupported. The declared type still has a 1 MiB resource cap,
 while actual pointer-sized spills alone contribute to local object storage. No
 backend special case or bound-based access check has been introduced.
+
+## M13k
+
+Only the outermost parameter array bound may be absent, as int a[] or a[][3].
+The declared array has unknown cardinality and is incomplete; it never receives
+a fabricated positive bound or object size zero. One-level adjustment yields
+an ordinary pointer to the complete element/row type, so parameter storage and
+ABI remain pointer-sized. Explicit zero remains invalid. Inner/local omitted
+bounds, pointers to incomplete arrays, general expression/VLA/static/qualified
+bounds and full parenthesized declarators remain unsupported. Array compatibility
+accepts unknown/known counts only when their element types are compatible; this
+is not support for allocating incomplete objects.

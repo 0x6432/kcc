@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-i pointers/arrays/subscripts and adjacent ordinary byte strings implemented; later verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -1001,3 +1001,11 @@ normal GCC suites, 27 both-host/QBE full-value programs, both eight-argument/row
 ABI directions, declared/effective cache and resource units, and bounded sanitized
 fuzz. Full isolated/remote verification remains pending. M13k omitted outer
 parameter bounds is designed with explicit incomplete declared-type metadata.
+
+M13k source checkpoint: omitted outer parameter bounds passed full normal GCC
+suites, 27 both-host/QBE programs, both stack/row ABI directions, incomplete
+declared versus effective pointer units, exact budgets and bounded sanitized
+fuzz. Full isolated/remote checks remain pending. M14a parenthesized object
+declarators are designed; this does not mark remaining M13 null/void/general
+bound support complete. M13c dfd9742 completed its isolated GCC/Clang normal +
+ASan/UBSan matrix, with prior exact-source CI 38825345451.

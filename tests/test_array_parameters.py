@@ -112,7 +112,7 @@ with tempfile.TemporaryDirectory(prefix='kcc array parameters ') as directory:
         ('int f(int [2][3]); int f(int [2][4]);', 'incompatible function'),
         ('int f(int **); int f(int [2][3]);', 'incompatible function'),
         ('int f(char [2]); int f(signed char [2]);', 'incompatible function'),
-        ('int f(int a[]) { return 0; }', 'integer literal'),
+        ('int f(int a[2][]) { return 0; }', 'outer parameter array bound'),
         ('int f(int a[0]) { return 0; }', 'array bound'),
         ('int f(int a[static 3]) { return 0; }', 'integer literal'),
         ('int f(int a[2][3]) { return a[0][0]; } int main(void) { int b[2][4]; return f(b); }', 'pointer conversion'),

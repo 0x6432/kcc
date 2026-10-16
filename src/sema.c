@@ -147,12 +147,20 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!element)
 			return NULL;
-		if (!count || count > ast_max_local_storage / type_object_size(element)) {
-			diagnostic_error(sema->diagnostics, array->bound.location,
-				"array bound must be positive and fit array type storage limit (1 MiB)");
+		if (!type_is_complete_object(element)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "array element type must be complete");
 			return NULL;
 		}
-		type = type_new_array(sema->arena, element, count);
+		if (!array->has_bound) {
+			type = type_new_incomplete_array(sema->arena, element);
+		} else {
+			if (!count || count > ast_max_local_storage / type_object_size(element)) {
+				diagnostic_error(sema->diagnostics, array->bound.location,
+					"array bound must be positive and fit array type storage limit (1 MiB)");
+				return NULL;
+			}
+			type = type_new_array(sema->arena, element, count);
+		}
 		if (!type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating array type");
 			return NULL;
