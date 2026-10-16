@@ -6,11 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14L2C: Inner typedefs may now hide outer aliases, with same-type checks limited to the
-current scope. Independent inner aliases resolve their written types before
-publication, then restore outer meanings on exit. Object/function hiding is still
-outside this checkpoint; alias-expanded budgets remain 4096 nodes / 128 levels.
-Read docs/m14-typedef-shadowing.md and the latest coverage/limitations records.
+M14L2D: Block and loop typedefs may hide file-scope functions, including the containing
+function. Visible typedefs reject expression uses rather than falling through to
+a hidden function; captured function pointers and restored calls keep the original
+symbol. Alias/object hiding remains unsupported at this checkpoint.
+Read docs/m14-typedef-function-shadowing.md and the latest coverage/limitations records.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite

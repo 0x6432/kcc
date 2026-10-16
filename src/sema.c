@@ -819,7 +819,8 @@ static bool sema_expression(struct sema *sema,
 		if (node->callee->kind == expression_name) {
 			struct ast_name_expression *name = (struct ast_name_expression *)node->callee;
 
-			if (!find_local(sema, name->name) && !find_function(sema, name->name)) {
+			if (!find_typedef(sema, name->name) && !find_local(sema, name->name) &&
+				!find_function(sema, name->name)) {
 				diagnostic_error(sema->diagnostics, name->expression.location, "call to undeclared function");
 				return false;
 			}
@@ -960,6 +961,11 @@ static bool sema_expression(struct sema *sema,
 		struct ast_name_expression *node =
 			(struct ast_name_expression *)expression;
 
+		/* A visible typedef hides any outer function; it is never a value. */
+		if (find_typedef(sema, node->name)) {
+			diagnostic_error(sema->diagnostics, expression->location, "typedef name is not an expression");
+			return false;
+		}
 		node->declaration = find_local(sema, node->name);
 		if (node->declaration) {
 			result_type = node->declaration->type;
@@ -2154,9 +2160,8 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 
 	if (!type)
 		return false;
-	if (find_function(sema, declaration->name)) {
+	if (!sema->scope && find_function(sema, declaration->name)) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
-			sema->scope ? "block typedef shadowing a function is not supported yet" :
 			"typedef name conflicts with prior ordinary declaration");
 		return false;
 	}

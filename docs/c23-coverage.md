@@ -744,3 +744,39 @@ bindings, scope restoration and no alias storage.
 Frozen manifest /data/tools/m14l2c-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l2d block typedefs hiding file-scope functions
+
+Block and loop typedef bindings may hide a file-scope function, including their
+own containing function. Sema keeps the original function symbol unchanged and
+rejects visible typedef names in expressions before trying local/function lookup.
+Bare calls bypass the undeclared-function shortcut for visible typedefs, giving
+the same not-an-expression diagnostic. This closes the otherwise incorrect path
+that could call or take the address of a hidden outer function.
+
+Type-name uses refer to the alias. Captured function pointers remain valid and
+scope exit restores subsequent calls/designators to the original function.
+File-scope function/typedef collisions and same-scope differing aliases remain
+constraints. Typedef/object hiding is still explicitly unsupported in both
+directions: the typedef-first value-name guard relies on this invariant, and must
+not be broadened to object shadowing without scope-aware namespace lookup.
+
+No new type, AST form, parser classification, local slot or backend operation is
+introduced. Existing expanded-type and declaration/item budgets remain. Storage
+specifier permutations, prototype scopes, block function declarations, VM and
+aggregate types are not implemented here. Read m14-typedef-function-shadowing.md.
+
+
+M14L2D validation: complete normal/QBE regressions, complete normal
+regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
+GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
+suites passed. Bounded sanitized fuzz executed 3,408 lexer /
+8,153 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 35 standard + 4 C23 originals, 11 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 41+4
+originals; GCC 14 agrees on all 45 / 4 constraints; other hosts report exact grammar
+gaps separately. AST tests preserve captured/restored function-symbol identity and
+verify no alias locals.
+Frozen manifest /data/tools/m14l2d-source.sha256 matched before and after
+integration. Normal test helpers were built serially before parallel validation.
+Remote GitHub CI is tracked separately; local passes do not prove remote success.

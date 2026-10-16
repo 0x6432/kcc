@@ -2,24 +2,24 @@
 
 ## Current checkpoint
 
-M14L2C is implemented and locally validated. Read m14-typedef-shadowing.md.
-Only changed source/tests/Makefile were copied from /data/next-m14l2c; both
+M14L2D is implemented and locally validated. Read m14-typedef-function-shadowing.md.
+Only changed source/tests/Makefile were copied from /data/next-m14l2d; both
 frozen manifest checks matched. Never replace current docs with stale snapshot
 docs. Preserve both old stashes. All implementation/test generators were already
-applied; do not rerun them. This checkpoint follows 3c79ce0.
+applied; do not rerun them. This checkpoint follows 543815c.
 
 
-M14L2C validation: complete normal/QBE regressions, complete normal
+M14L2D validation: complete normal/QBE regressions, complete normal
 regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
 GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
-suites passed. Bounded sanitized fuzz executed 3,927 lexer /
-6,164 pipeline inputs in 26/26 seconds. No invalid or generated C
-was executed. Four-host focused checks: 46 standard + 4 C23 originals, 6 native constraint rejections, and 24 both-direction
-mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 39+4
-originals; GCC 14 agrees on all 43 / 4 constraints; other hosts report exact grammar
-gaps separately. AST tests verify canonical same-scope repeats, independent nested
-bindings, scope restoration and no alias storage.
-Frozen manifest /data/tools/m14l2c-source.sha256 matched before and after
+suites passed. Bounded sanitized fuzz executed 3,408 lexer /
+8,153 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 35 standard + 4 C23 originals, 11 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 41+4
+originals; GCC 14 agrees on all 45 / 4 constraints; other hosts report exact grammar
+gaps separately. AST tests preserve captured/restored function-symbol identity and
+verify no alias locals.
+Frozen manifest /data/tools/m14l2d-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
 
@@ -34,7 +34,10 @@ active handles and logs; validate completely and integrate in predecessor order.
 M14l3a is ordinary objects hiding aliases with parser masks and semantic scope
 barriers; read m14-object-typedef-shadowing.md. Its first new AST unit incorrectly
 used a function-first helper on an alias-first translation unit; that TEST traversal
-was corrected during focused validation, not counted as a compiler regression.
+was corrected during focused validation. Its return expectation was also corrected
+to the existing implicit conversion node, not a load or written cast. An intermediate
+incorrect expectation build was stopped, not counted as a pass. These were test
+assumptions, not compiler regressions; final AST and four-host checks passed.
 The initial relative-path design write failed; the drafted design was persisted
 before landing. Parameter/prototype alias hiding remains a separate increment.
 

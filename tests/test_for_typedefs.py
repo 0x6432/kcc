@@ -35,6 +35,10 @@ programs += [
     'typedef long T; int main(void) { for(typedef int T;;) { for(typedef char T;;) { T x=42; if(sizeof(T)!=1 || x!=42) return 1; break; } if(sizeof(T)!=4) return 1; break; } return sizeof(T)==8?42:1; }',
     'typedef int T; int main(void) { T x=42; for(typedef T *T,*P;;) { P p=&x; if(*p!=42) return 1; break; } return sizeof(T)==4?x:1; }',
 ]
+programs += [
+    'int f(void) { return 42; } int main(void) { int done=0; for(typedef int f;!done;done=(f)1) { f x=42; if(x!=42) return 1; } return f(); }',
+    'int f(void) { return 42; } int main(void) { int (*p)(void)=f; for(typedef int f(void);;) { f *q=p; if(q()!=42) return 1; break; } return f(); }',
+]
 c23_programs = [
     'int main(void) { for(typedef typeof(nullptr) N,N,*P;;) { N n=0; P p=&n; return *p==nullptr?42:1; } }',
     'int main(void) { for(typedef typeof_unqual(const int) T;;) { T x=40; x+=2; return x; } }',
@@ -48,7 +52,6 @@ constraints = [
     ('int main(void) { for(typedef int T=1;;) return 0; }','typedef declarations cannot have initializers'),
 ]
 subset_errors = [
-    ('int f(void); int main(void) { for(typedef int f;;) return 42; }','block typedef shadowing a function'),
     ('int main(void) { int T=42; for(typedef int T;;) return 42; }','block typedef shadowing an object'),
     ('int main(void) { for(typedef int T;;) { int T=42; } }','shadowing a typedef'),
 ]

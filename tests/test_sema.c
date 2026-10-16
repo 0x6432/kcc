@@ -3880,8 +3880,72 @@ static void test_typedef_shadowing_tree(void)
 	fclose(stream);
 }
 
+static void test_typedef_function_shadowing_tree(void)
+{
+	const char *text = "int f(int x) { return x; } int main(void) { int (*before)(int)=f; "
+		"{ typedef long f; f x=2; if(sizeof(f)!=8 || x!=2) return 1; } "
+		"int (*after)(int)=f; return before(after(42)); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *callee;
+	struct ast_function *function;
+	struct ast_local_declaration *before;
+	struct ast_local_declaration *after;
+	struct ast_block_item *item;
+	struct ast_compound_statement *block;
+	struct ast_typedef_declaration *alias;
+	struct ast_function_decay_expression *decay;
+	struct ast_function_designator_expression *designator;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	callee = first_function(unit);
+	function = (struct ast_function *)callee->external.next;
+	assert(function->external.kind == external_function_definition && !function->external.next);
+	item = function->body->items;
+	assert(item->kind == block_item_declaration);
+	before = (struct ast_local_declaration *)item;
+	item = item->next;
+	assert(item->kind == block_item_statement);
+	block = (struct ast_compound_statement *)((struct ast_statement_item *)item)->statement;
+	assert(block->statement.kind == statement_compound);
+	assert(block->items->kind == block_item_typedef_declaration);
+	alias = ((struct ast_block_typedef_declaration *)block->items)->declaration;
+	assert(item->next->kind == block_item_declaration);
+	after = (struct ast_local_declaration *)item->next;
+	assert(!alias->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0 && alias->type == &type_long);
+	assert(before->initializer->kind == expression_function_decay);
+	decay = (struct ast_function_decay_expression *)before->initializer;
+	assert(decay->operand->kind == expression_function_designator);
+	designator = (struct ast_function_designator_expression *)decay->operand;
+	assert(designator->function == callee->declaration->symbol);
+	assert(after->initializer->kind == expression_function_decay);
+	decay = (struct ast_function_decay_expression *)after->initializer;
+	assert(decay->operand->kind == expression_function_designator);
+	designator = (struct ast_function_designator_expression *)decay->operand;
+	assert(designator->function == callee->declaration->symbol);
+	assert(((struct ast_local_declaration *)block->items->next)->type == alias->type);
+	assert(function->locals == after && after->next_local->type == alias->type);
+	assert(after->next_local->next_local == before && !before->next_local && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_function_shadowing_tree();
 	test_typedef_shadowing_tree();
 	test_for_typedef_tree();
 	test_block_typedef_tree();

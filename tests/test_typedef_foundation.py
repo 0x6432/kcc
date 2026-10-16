@@ -71,7 +71,7 @@ constraints = [
     ('typedef int A[]; int main(void) { A a; return 42; }','complete'),
     ('typedef void A[2];','array element type must be complete'),
     ('typedef int F(void); typedef F A[2];','array element type must be complete'),
-    ('typedef int T; int main(void) { return T; }','undeclared'),
+    ('typedef int T; int main(void) { return T; }','typedef name is not an expression'),
     ('typedef int T; int main(void) { return missing; }','undeclared'),
 ]
 subset_errors = [
