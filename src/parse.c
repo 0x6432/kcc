@@ -2264,7 +2264,7 @@ static struct ast_external_declaration *parse_external_type_declaration(struct p
 }
 
 /* typedef-declaration ::= "typedef" declaration-specifiers declarator ";"
- * One unshadowed file-scope name; scope begins after its complete declarator.
+ * One unshadowed file-scope name; same-type redeclarations are checked by sema.
  */
 static struct ast_external_declaration *parse_typedef_declaration(struct parser *parser)
 {
@@ -2282,10 +2282,7 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 	type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_typedef);
 	if (!type_syntax)
 		return NULL;
-	if (is_typedef_name(parser, name)) {
-		diagnostic_error(parser->diagnostics, name.location, "typedef redeclarations are not supported yet");
-		return NULL;
-	}
+
 	if (!expect_token(parser, token_semicolon, "typedef declarations require a single name and ';'", NULL))
 		return NULL;
 	declaration = ast_new_typedef_declaration(parser->arena, keyword.location, type_syntax, name);
@@ -2294,8 +2291,16 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 		return NULL;
 	}
 	external = ast_new_external_typedef_declaration(parser->arena, declaration);
+	if (!external) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	/* Redeclarations do not need a second syntax-only name binding. */
+	if (is_typedef_name(parser, name))
+		return &external->external;
+
 	binding = arena_alloc(parser->arena, sizeof(*binding));
-	if (!external || !binding) {
+	if (!binding) {
 		allocation_error(parser, keyword.location);
 		return NULL;
 	}

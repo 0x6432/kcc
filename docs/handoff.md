@@ -2,6 +2,38 @@
 
 ## Current checkpoint
 
+M14l1b is implemented and locally validated; read m14-typedef-redeclarations.md.
+Its implementation/test scripts were already applied. Source/tests/Makefile were
+transferred from /data/next-m14l1b only after the frozen manifest matched. Do not
+copy stale snapshot documentation into the primary tree. Preserve both old stashes.
+
+M14l1b validation: complete normal and QBE regression, complete normal regression
+with original-source native GCC 14.1.0 and Clang 18.1.8, both GCC 11 / Clang 15
+targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control/compound suites, and
+bounded sanitized fuzz passed. Fuzz executed 4,549 lexer / 10,557 pipeline inputs
+in 26/26 seconds; no generated or invalid curated C ran. Focused suite: 39 standard
++ 4 C23 original programs, 13 strict native constraint rejections, 24 mixed-stack
+primitive ABI arrangements per host, canonical redeclaration/written-cache AST
+identity, exact external/function/block/alias-expanded shape and depth limits.
+Legacy GCC/Clang agree on 39 standard originals; modern GCC/Clang agree on all
+43 originals without source rewriting. Remote CI remains separate from local
+validation. Frozen source/test manifest: /data/tools/m14l1b-source.sha256.
+
+Next M14l1c comma file-scope typedef lists is implemented ONLY in /data/next-m14l1c.
+Read m14-typedef-declaration-lists.md. Its scripts are already applied; do NOT
+rerun them. Four-host focused native/QBE/ABI tests and AST units passed; full normal,
+QBE, modern native, targeted sanitizer and fuzz runs are in progress, logs under
+/data/tools/m14l1c-*. Verify /data/tools/m14l1c-source.sha256 before/after later
+integration. A mistaken prerequisite target build/test_arena was corrected to
+actual Makefile helpers before full validation; this was not a compiler failure.
+
+M14l2 block aliases is implemented separately in /data/next-m14l2. Read the design
+m14-block-typedef-foundation.md before continuing. Implementation and initial test
+scripts have been applied; focused tests are running, structural tests and full
+validation are still pending. No M14l2 source belongs in the main tree yet.
+
+## Earlier checkpoint (historical)
+
 M14l1 is implemented and validated. Read m14-file-typedef-foundation.md, including
 the shape-safety refinement. All three implementation/test/shape scripts under
 /data/tools were already applied; do NOT rerun them. The test generator initially

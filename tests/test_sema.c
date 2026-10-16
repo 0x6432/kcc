@@ -3550,8 +3550,68 @@ static void test_typedef_tree(void)
 	fclose(stream);
 }
 
+static void test_typedef_redeclaration_tree(void)
+{
+	const char *text = "typedef int A[2]; typedef int A[2]; typedef A A; "
+		"typedef int F(const int); typedef int F(int); int main(void) { A a; a[1]=42; return a[1]; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *external;
+	struct ast_typedef_declaration *first;
+	struct ast_typedef_declaration *second;
+	struct ast_typedef_declaration *self;
+	struct ast_typedef_declaration *function;
+	struct ast_typedef_declaration *repeated_function;
+	struct ast_function *main_function;
+	struct array_type *unknown;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	external = unit->declarations;
+	first = ((struct ast_external_typedef_declaration *)external)->declaration;
+	external = external->next;
+	second = ((struct ast_external_typedef_declaration *)external)->declaration;
+	external = external->next;
+	self = ((struct ast_external_typedef_declaration *)external)->declaration;
+	external = external->next;
+	function = ((struct ast_external_typedef_declaration *)external)->declaration;
+	external = external->next;
+	repeated_function = ((struct ast_external_typedef_declaration *)external)->declaration;
+	main_function = (struct ast_function *)external->next;
+	assert(first->type == second->type && first->type == self->type);
+	assert(first->type == first->type_syntax->type);
+	assert(second->type_syntax->type != first->type_syntax->type);
+	assert(type_same(first->type_syntax->type, second->type_syntax->type));
+	assert(self->type_syntax->type == first->type);
+	assert(function->type == repeated_function->type);
+	assert(function->type_syntax->type != repeated_function->type_syntax->type);
+	assert(type_same(function->type_syntax->type, repeated_function->type_syntax->type));
+	assert(main_function->locals && !main_function->locals->next_local);
+	assert(main_function->locals->type == first->type && !unit->strings);
+	unknown = type_new_incomplete_array(&arena, &type_int);
+	assert(unknown);
+	assert(type_compatible(&unknown->type, first->type));
+	assert(!type_same(&unknown->type, first->type));
+	assert(!type_same(first->type, &unknown->type));
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_redeclaration_tree();
 	test_typedef_tree();
 	test_queried_function_declaration_tree();
 	test_nullptr_assignment_conversion_tree();

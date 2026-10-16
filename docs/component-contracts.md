@@ -1571,3 +1571,24 @@ These bounded valid-C subsets protect existing recursive type operations; they
 are not incompatibility diagnostics. The existing 512 external declarations,
 256 function symbols and 4096 block items remain independently enforced. Alias
 names do not emit storage, data, functions, QBE aliases or runtime query effects.
+
+## M14l1b same-type file-scope typedef redeclarations
+
+Already-visible aliases may be redeclared for the same non-VM type. The type
+stage exposes type_same separately from compatibility: array counts must match,
+including unknown versus known bounds, recursively through pointers and normalized
+function signatures. Existing compatibility and immutable composite construction
+are unchanged. Typedef equality never strengthens an unknown-bound array.
+
+The parser reuses its syntax-only name binding. Sema checks the expanded alias
+shape before comparison, annotates a valid redeclaration with the first canonical
+immutable alias type, and leaves each separately written syntax cache intact.
+A different type is a genuine constraint; function/typedef ordinary-namespace
+collisions remain errors. No additional alias binding, storage, QBE alias,
+parameter or emitted function is introduced by a same-type redeclaration.
+
+Block typedefs, shadowing, comma typedef lists, VM/aggregate types and bare
+alias-derived definitions remain deferred at this checkpoint. The existing 512
+external items, 256 function symbols, 4096 block items and 4096-node/128-level
+expanded alias limits are unchanged. Each repeated declaration still consumes an
+external item; canonical type reuse does not bypass resource accounting.

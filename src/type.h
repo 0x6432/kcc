@@ -100,6 +100,7 @@ const struct type *type_qualified(struct arena *arena, const struct type *type,
 	unsigned qualifiers);
 const struct type *type_unqualified(struct arena *arena, const struct type *type);
 bool type_compatible(const struct type *left, const struct type *right);
+bool type_same(const struct type *left, const struct type *right);
 /* Ignore only root qualifiers (including equivalent array element qualifiers).
  * Below a pointer, qualification must still match exactly. */
 bool type_unqualified_compatible(const struct type *left, const struct type *right);

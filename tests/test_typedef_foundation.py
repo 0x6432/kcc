@@ -75,8 +75,6 @@ constraints = [
     ('typedef int T; int main(void) { return missing; }','undeclared'),
 ]
 subset_errors = [
-    ('typedef int T; typedef int T;','typedef redeclarations'),
-    ('typedef int T; typedef long T;','typedef redeclarations'),
     ('typedef int T,U;','single name'),
     ('typedef int T=42;','single name'),
     ('int main(void) { typedef int T; return 42; }','block-scope typedef'),

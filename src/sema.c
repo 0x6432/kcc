@@ -2129,17 +2129,29 @@ static struct typedef_type_shape *measure_typedef_type(struct sema *sema,
 static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_declaration *declaration)
 {
 	struct typedef_binding *binding;
+	struct ast_typedef_declaration *previous;
 	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
 
 	if (!type)
 		return false;
-	if (find_function(sema, declaration->name) || find_typedef(sema, declaration->name)) {
+	if (find_function(sema, declaration->name)) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"typedef name conflicts with prior ordinary declaration");
 		return false;
 	}
 	if (!measure_typedef_type(sema, type, 0, declaration->location))
 		return false;
+
+	previous = find_typedef(sema, declaration->name);
+	if (previous) {
+		if (!type_same(previous->type, type)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"typedef redeclaration has different type");
+			return false;
+		}
+		declaration->type = previous->type;
+		return true;
+	}
 
 	binding = arena_alloc(sema->arena, sizeof(*binding));
 	if (!binding) {

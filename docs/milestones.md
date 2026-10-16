@@ -2053,3 +2053,36 @@ unchanged source and pedantic errors remain. Public CI is not a local-pass claim
 The full normal run and GCC targeted void suite preceded the independent native-
 warning classifier correction; final focused void checks and complete QBE/modern
 Clang runs include that correction. No compiler source changed during validation.
+
+## M14l1b same-type file-scope typedef redeclarations
+
+Already-visible aliases may be redeclared for the same non-VM type. The type
+stage exposes type_same separately from compatibility: array counts must match,
+including unknown versus known bounds, recursively through pointers and normalized
+function signatures. Existing compatibility and immutable composite construction
+are unchanged. Typedef equality never strengthens an unknown-bound array.
+
+The parser reuses its syntax-only name binding. Sema checks the expanded alias
+shape before comparison, annotates a valid redeclaration with the first canonical
+immutable alias type, and leaves each separately written syntax cache intact.
+A different type is a genuine constraint; function/typedef ordinary-namespace
+collisions remain errors. No additional alias binding, storage, QBE alias,
+parameter or emitted function is introduced by a same-type redeclaration.
+
+Block typedefs, shadowing, comma typedef lists, VM/aggregate types and bare
+alias-derived definitions remain deferred at this checkpoint. The existing 512
+external items, 256 function symbols, 4096 block items and 4096-node/128-level
+expanded alias limits are unchanged. Each repeated declaration still consumes an
+external item; canonical type reuse does not bypass resource accounting.
+
+M14l1b validation: complete normal and QBE regression, complete normal regression
+with original-source native GCC 14.1.0 and Clang 18.1.8, both GCC 11 / Clang 15
+targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control/compound suites, and
+bounded sanitized fuzz passed. Fuzz executed 4,549 lexer / 10,557 pipeline inputs
+in 26/26 seconds; no generated or invalid curated C ran. Focused suite: 39 standard
++ 4 C23 original programs, 13 strict native constraint rejections, 24 mixed-stack
+primitive ABI arrangements per host, canonical redeclaration/written-cache AST
+identity, exact external/function/block/alias-expanded shape and depth limits.
+Legacy GCC/Clang agree on 39 standard originals; modern GCC/Clang agree on all
+43 originals without source rewriting. Remote CI remains separate from local
+validation. Frozen source/test manifest: /data/tools/m14l1b-source.sha256.

@@ -309,13 +309,16 @@ const struct type *type_unqualified(struct arena *arena, const struct type *type
 
 /* Array elements repeat their array's qualifier, not a new pointer level. */
 static bool compatible_types(const struct type *left, const struct type *right,
-	bool ignore_root_qualifiers)
+	bool ignore_root_qualifiers, bool require_same_type)
 {
 	const struct function_type *left_function;
 	const struct function_type *right_function;
 	const struct function_parameter_type *left_parameter;
 	const struct function_parameter_type *right_parameter;
 
+	/* Shared immutable types denote the same type without another traversal. */
+	if (left == right)
+		return true;
 	if (left->kind != right->kind ||
 		(!ignore_root_qualifiers && left->qualifiers != right->qualifiers))
 		return false;
@@ -325,24 +328,25 @@ static bool compatible_types(const struct type *left, const struct type *right,
 		const struct pointer_type *a = (const struct pointer_type *)left;
 		const struct pointer_type *b = (const struct pointer_type *)right;
 
-		return type_compatible(a->referent, b->referent);
+		return compatible_types(a->referent, b->referent, false, require_same_type);
 	}
 	if (left->kind == type_kind_array) {
 		const struct array_type *a = (const struct array_type *)left;
 		const struct array_type *b = (const struct array_type *)right;
 
-		return (!a->count || !b->count || a->count == b->count) &&
-			compatible_types(a->element, b->element, ignore_root_qualifiers);
+		return (require_same_type ? a->count == b->count :
+			(!a->count || !b->count || a->count == b->count)) &&
+			compatible_types(a->element, b->element, ignore_root_qualifiers, require_same_type);
 	}
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;
-	if (!type_compatible(left_function->return_type, right_function->return_type) ||
+	if (!compatible_types(left_function->return_type, right_function->return_type, false, require_same_type) ||
 		left_function->parameter_count != right_function->parameter_count)
 		return false;
 	left_parameter = left_function->parameters;
 	right_parameter = right_function->parameters;
 	while (left_parameter && right_parameter) {
-		if (!type_compatible(left_parameter->type, right_parameter->type))
+		if (!compatible_types(left_parameter->type, right_parameter->type, false, require_same_type))
 			return false;
 		left_parameter = left_parameter->next;
 		right_parameter = right_parameter->next;
@@ -352,12 +356,18 @@ static bool compatible_types(const struct type *left, const struct type *right,
 
 bool type_compatible(const struct type *left, const struct type *right)
 {
-	return compatible_types(left, right, false);
+	return compatible_types(left, right, false, false);
 }
 
 bool type_unqualified_compatible(const struct type *left, const struct type *right)
 {
-	return compatible_types(left, right, true);
+	return compatible_types(left, right, true, false);
+}
+
+/* Unlike compatibility, unknown array bounds are not wildcard typedef identities. */
+bool type_same(const struct type *left, const struct type *right)
+{
+	return compatible_types(left, right, false, true);
 }
 
 const struct type *type_composite(struct arena *arena, const struct type *left,
