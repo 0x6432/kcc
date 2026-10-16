@@ -3609,8 +3609,70 @@ static void test_typedef_redeclaration_tree(void)
 	fclose(stream);
 }
 
+static void test_typedef_declaration_list_tree(void)
+{
+	const char *text = "typedef int T,*P,A[2],F(T),T; F f; "
+		"int f(int x) { return x; } int main(void) { A a; a[1]=42; return f(a[1]); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *external;
+	struct ast_typedef_declaration *aliases[5];
+	struct ast_external_type_declaration *prototype;
+	struct ast_function *definition;
+	struct ast_function *main_function;
+	struct ast_type_syntax *base;
+	size_t i;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	external = unit->declarations;
+	for (i = 0; i < 5; i++) {
+		assert(external && external->kind == external_typedef_declaration);
+		aliases[i] = ((struct ast_external_typedef_declaration *)external)->declaration;
+		assert(!aliases[i]->type && !aliases[i]->type_syntax->type);
+		external = external->next;
+	}
+	base = aliases[0]->type_syntax;
+	assert(aliases[4]->type_syntax == base);
+	assert(aliases[1]->type_syntax->kind == type_syntax_pointer);
+	assert(((struct ast_pointer_type_syntax *)aliases[1]->type_syntax)->referent == base);
+	assert(aliases[2]->type_syntax->kind == type_syntax_array);
+	assert(((struct ast_array_type_syntax *)aliases[2]->type_syntax)->element == base);
+	assert(aliases[3]->type_syntax->kind == type_syntax_function);
+	assert(((struct ast_function_type_syntax *)aliases[3]->type_syntax)->return_syntax == base);
+	prototype = (struct ast_external_type_declaration *)external;
+	assert(prototype->external.kind == external_type_declaration);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	assert(aliases[0]->type == &type_int && aliases[4]->type == &type_int);
+	assert(((const struct pointer_type *)aliases[1]->type)->referent == &type_int);
+	assert(((const struct array_type *)aliases[2]->type)->element == &type_int);
+	assert(prototype->type == aliases[3]->type);
+	definition = (struct ast_function *)prototype->external.next;
+	assert(definition->external.kind == external_function_definition);
+	assert(definition->declaration->symbol == prototype->symbol);
+	main_function = (struct ast_function *)definition->external.next;
+	assert(main_function->external.kind == external_function_definition);
+	assert(!main_function->external.next);
+	assert(main_function->locals && !main_function->locals->next_local);
+	assert(main_function->locals->type == aliases[2]->type && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_declaration_list_tree();
 	test_typedef_redeclaration_tree();
 	test_typedef_tree();
 	test_queried_function_declaration_tree();

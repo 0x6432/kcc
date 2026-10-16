@@ -10,8 +10,8 @@ Parser compound entry saves the syntax-only alias-list head and restores it on
 both success and failure. This makes block aliases visible only from their complete
 declarator through the end of that block, including nested blocks, type queries,
 casts, declarations, labels and nested statement bodies. Function body aliases
-must not escape to the next external declaration. For-initializer typedefs remain
-invalid C rather than newly accepted storage classes.
+must not escape to the next external declaration. For-initializer typedefs remain an explicit subset gap in this increment;
+C23 permits them, unlike the old C17 object/storage-class constraint.
 
 Sema independently scopes alias bindings. Save/restore the alias-list head around
 both sema_compound and the separately checked outer function body. Tag alias
@@ -37,3 +37,13 @@ and immutable type identity with no alias locals or strings. Use original strict
 native GCC/Clang programs, defined QBE runs and both-direction ABI comparisons;
 never execute invalid or fuzz-generated C. Full normal/QBE, both-host targeted
 sanitizers and bounded fuzz are required before landing.
+
+## Draft/reference correction before freezing
+
+The first focused modern-GCC run accepted the curated for-typedef fixture that
+this design initially misclassified as invalid C. N3096 6.8.5 constraints and
+6.8.5.3, and N3220 6.8.6.4, no longer impose C17's for-declaration object/storage
+restriction. GCC 14 accepts the original source; GCC 11, Clang 15 and Clang 18
+reject it. Remove it from strict native constraint counts; keep kcc's rejection
+explicitly labelled unsupported for this increment. No valid/fuzz-generated C
+from that constraint fixture was executed. Loop-scoped aliases are M14l2b.

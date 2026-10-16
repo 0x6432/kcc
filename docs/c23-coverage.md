@@ -614,3 +614,22 @@ alias-derived definitions remain deferred at this checkpoint. The existing 512
 external items, 256 function symbols, 4096 block items and 4096-node/128-level
 expanded alias limits are unchanged. Each repeated declaration still consumes an
 external item; canonical type reuse does not bypass resource accounting.
+
+## M14l1c file-scope typedef declaration lists
+
+A file-scope typedef declaration may contain comma-separated declarators. One
+written specifier base is shared by distinct derived syntax chains; each alias
+retains a concrete typedef declaration and external wrapper in source order. The
+parser publishes each syntax-only name after its complete declarator, so later
+names in the same group can use it in bounds, parameters, casts and type queries.
+Sema still resolves the external chain independently; no new backend path exists.
+
+Each concrete alias, including a repeated name, consumes one external item. The
+parser checks the remaining 512-item budget before constructing another declarator,
+not merely once per group. Mixed ordinary function/static-assert/typedef groups
+therefore cannot bypass the bound. Existing function-symbol, block-item and alias
+expanded shape limits are unchanged. Typedef initializers receive an explicit
+constraint diagnostic. Alias-only translation units emit no function or data.
+
+Block scope, alias shadowing, storage-specifier permutations, VM/aggregate types
+and bare alias-derived function definitions remain deferred at this checkpoint.

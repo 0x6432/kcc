@@ -2,35 +2,57 @@
 
 ## Current checkpoint
 
-M14l1b is implemented and locally validated; read m14-typedef-redeclarations.md.
-Its implementation/test scripts were already applied. Source/tests/Makefile were
-transferred from /data/next-m14l1b only after the frozen manifest matched. Do not
-copy stale snapshot documentation into the primary tree. Preserve both old stashes.
+M14l1c is implemented and locally validated; read m14-typedef-declaration-lists.md.
+The implementation/test scripts were already applied. Do not rerun them. Source,
+tests and Makefile were transferred from /data/next-m14l1c only after frozen hashes
+matched; stale snapshot documentation was not copied. Preserve both old stashes.
 
-M14l1b validation: complete normal and QBE regression, complete normal regression
-with original-source native GCC 14.1.0 and Clang 18.1.8, both GCC 11 / Clang 15
-targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control/compound suites, and
-bounded sanitized fuzz passed. Fuzz executed 4,549 lexer / 10,557 pipeline inputs
-in 26/26 seconds; no generated or invalid curated C ran. Focused suite: 39 standard
-+ 4 C23 original programs, 13 strict native constraint rejections, 24 mixed-stack
-primitive ABI arrangements per host, canonical redeclaration/written-cache AST
-identity, exact external/function/block/alias-expanded shape and depth limits.
-Legacy GCC/Clang agree on 39 standard originals; modern GCC/Clang agree on all
-43 originals without source rewriting. Remote CI remains separate from local
-validation. Frozen source/test manifest: /data/tools/m14l1b-source.sha256.
+M14l1c validation: complete normal/QBE regression, complete normal regressions
+with original-source GCC 14.1.0 and Clang 18.1.8 native oracles, both GCC 11 /
+Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/local-list/assertion
+suites and bounded sanitized fuzz passed. Fuzz executed 4,538 lexer / 15,795
+pipeline inputs in 26/26 seconds; no generated or invalid curated C ran. Focused
+suite: 36 standard + 4 C23 original programs, 10 strict native constraints, 24
+mixed-stack primitive ABI arrangements per host, shared written-base/distinct
+derived syntax AST identity, per-declarator visibility, alias-only IL and exact
+512/513 unique/repeated/mixed external-item boundaries. Legacy GCC/Clang agree
+on 36 originals; modern GCC/Clang agree on all 40 without source rewriting.
+Frozen source/test manifest: /data/tools/m14l1c-source.sha256. Both pre- and
+post-integration checks matched. Remote CI status is separate from local passes.
 
-Next M14l1c comma file-scope typedef lists is implemented ONLY in /data/next-m14l1c.
-Read m14-typedef-declaration-lists.md. Its scripts are already applied; do NOT
-rerun them. Four-host focused native/QBE/ABI tests and AST units passed; full normal,
-QBE, modern native, targeted sanitizer and fuzz runs are in progress, logs under
-/data/tools/m14l1c-*. Verify /data/tools/m14l1c-source.sha256 before/after later
-integration. A mistaken prerequisite target build/test_arena was corrected to
-actual Makefile helpers before full validation; this was not a compiler failure.
+Earlier M14l1b is committed/pushed as dc8967a. Complete normal/QBE, both modern
+native normal runs, both-host targeted sanitizers and fuzz passed: 4,549 lexer /
+10,557 pipeline inputs, 26/26 seconds. Public CI 38926596328 is pending. The
+foundation 721e9fd run 38925107379 has GCC and fuzz success; Clang was still running
+when last checked. Independent warning-only test fix 9bf0a40 run 38924629880 also
+has GCC and fuzz success, with Clang pending. Never report an all-CI pass yet.
 
-M14l2 block aliases is implemented separately in /data/next-m14l2. Read the design
-m14-block-typedef-foundation.md before continuing. Implementation and initial test
-scripts have been applied; focused tests are running, structural tests and full
-validation are still pending. No M14l2 source belongs in the main tree yet.
+M14l2 block typedef foundation is implemented and FROZEN ONLY in /data/next-m14l2.
+Read m14-block-typedef-foundation.md including the draft/reference correction.
+Four-host focused tests passed: 36 standard + 4 C23 originals, 6 native constraints,
+24 ABI arrangements per host, AST scope/wrapper/type identity with no alias locals.
+Full normal/QBE/modern native/targeted sanitizer/fuzz runs are active, separate
+/data/tools/m14l2-*. Verify /data/tools/m14l2-source.sha256 before/after integration.
+One AST test initially assumed locals append, but the existing list prepends;
+only that assertion was corrected before freezing. No compiler bug was masked.
+
+M14l2b C23 for-initializer typedefs is implemented and FROZEN ONLY in
+/data/next-m14l2b. Read m14-for-typedefs.md. Four-host focused tests passed: 34
+base-type + 4 query originals, all 38 strict native agreements / 4 constraints
+with GCC 14, exact missing-for-typedef grammar probes (not agreements) on GCC 11 /
+Clang 15 / Clang 18, and 24 actual kcc/native ABI arrangements per host. AST tests
+check aliases in loop scope and independent post-loop same-spelled alias, no
+extra locals. A boundary test initially counted a bare return body as a block
+item; it is not one. Correct exact limit is 4095 aliases + containing for item.
+Full validation is active in /data/tools/m14l2b-*; frozen manifest is
+/data/tools/m14l2b-source.sha256. Do not copy either later tree into primary before
+its predecessor is committed and its own exact validation completes. All scripts
+are already applied. Transfer only changed source/tests/Makefile, never stale docs.
+
+C23 correction: for typedef declarations are valid, not constraints. N3096
+6.8.5/6.8.5.3 and N3220 6.8.6.4 removed C17's object/storage restriction. The
+M14l2 design/test assumption was corrected before freezing. GCC 14's acceptance
+is normative agreement; the other exact probe rejections are feature gaps.
 
 ## Earlier checkpoint (historical)
 

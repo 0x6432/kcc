@@ -2086,3 +2086,35 @@ identity, exact external/function/block/alias-expanded shape and depth limits.
 Legacy GCC/Clang agree on 39 standard originals; modern GCC/Clang agree on all
 43 originals without source rewriting. Remote CI remains separate from local
 validation. Frozen source/test manifest: /data/tools/m14l1b-source.sha256.
+
+## M14l1c file-scope typedef declaration lists
+
+A file-scope typedef declaration may contain comma-separated declarators. One
+written specifier base is shared by distinct derived syntax chains; each alias
+retains a concrete typedef declaration and external wrapper in source order. The
+parser publishes each syntax-only name after its complete declarator, so later
+names in the same group can use it in bounds, parameters, casts and type queries.
+Sema still resolves the external chain independently; no new backend path exists.
+
+Each concrete alias, including a repeated name, consumes one external item. The
+parser checks the remaining 512-item budget before constructing another declarator,
+not merely once per group. Mixed ordinary function/static-assert/typedef groups
+therefore cannot bypass the bound. Existing function-symbol, block-item and alias
+expanded shape limits are unchanged. Typedef initializers receive an explicit
+constraint diagnostic. Alias-only translation units emit no function or data.
+
+Block scope, alias shadowing, storage-specifier permutations, VM/aggregate types
+and bare alias-derived function definitions remain deferred at this checkpoint.
+
+M14l1c validation: complete normal/QBE regression, complete normal regressions
+with original-source GCC 14.1.0 and Clang 18.1.8 native oracles, both GCC 11 /
+Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/local-list/assertion
+suites and bounded sanitized fuzz passed. Fuzz executed 4,538 lexer / 15,795
+pipeline inputs in 26/26 seconds; no generated or invalid curated C ran. Focused
+suite: 36 standard + 4 C23 original programs, 10 strict native constraints, 24
+mixed-stack primitive ABI arrangements per host, shared written-base/distinct
+derived syntax AST identity, per-declarator visibility, alias-only IL and exact
+512/513 unique/repeated/mixed external-item boundaries. Legacy GCC/Clang agree
+on 36 originals; modern GCC/Clang agree on all 40 without source rewriting.
+Frozen source/test manifest: /data/tools/m14l1c-source.sha256. Both pre- and
+post-integration checks matched. Remote CI status is separate from local passes.

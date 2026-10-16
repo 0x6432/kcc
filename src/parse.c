@@ -2263,28 +2263,14 @@ static struct ast_external_declaration *parse_external_type_declaration(struct p
 	return declaration ? &declaration->external : NULL;
 }
 
-/* typedef-declaration ::= "typedef" declaration-specifiers declarator ";"
- * One unshadowed file-scope name; same-type redeclarations are checked by sema.
- */
-static struct ast_external_declaration *parse_typedef_declaration(struct parser *parser)
+/* Each declarator publishes one syntax-only name after its complete type. */
+static struct ast_external_declaration *new_typedef_declaration(struct parser *parser,
+	struct token keyword, struct ast_type_syntax *type_syntax, struct token name)
 {
-	struct token keyword = preprocess_next(parser->preprocessor);
-	struct token beginning;
-	struct token name;
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
-	struct ast_type_syntax *type_syntax;
 	struct ast_typedef_declaration *declaration;
 	struct ast_external_typedef_declaration *external;
 	struct parser_typedef_name *binding;
 
-	if (!base)
-		return NULL;
-	type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_typedef);
-	if (!type_syntax)
-		return NULL;
-
-	if (!expect_token(parser, token_semicolon, "typedef declarations require a single name and ';'", NULL))
-		return NULL;
 	declaration = ast_new_typedef_declaration(parser->arena, keyword.location, type_syntax, name);
 	if (!declaration) {
 		allocation_error(parser, keyword.location);
@@ -2298,7 +2284,6 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 	/* Redeclarations do not need a second syntax-only name binding. */
 	if (is_typedef_name(parser, name))
 		return &external->external;
-
 	binding = arena_alloc(parser->arena, sizeof(*binding));
 	if (!binding) {
 		allocation_error(parser, keyword.location);
@@ -2309,10 +2294,59 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 	return &external->external;
 }
 
+/* typedef-declaration ::= "typedef" declaration-specifiers declarator { "," declarator } ";"
+ * Every name is visible to later declarators, not its own unfinished declarator.
+ */
+static struct ast_external_declaration *parse_typedef_declaration(struct parser *parser,
+	size_t remaining_declarations)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct token beginning;
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
+	struct ast_external_declaration *declarations = NULL;
+	struct ast_external_declaration **tail = &declarations;
+	size_t count = 0;
+
+	if (!base)
+		return NULL;
+	for (;;) {
+		struct token name;
+		struct ast_type_syntax *type_syntax;
+		struct ast_external_declaration *declaration;
+
+		if (count == remaining_declarations) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"translation unit exceeds declaration limit (512)");
+			return NULL;
+		}
+		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_typedef);
+		if (!type_syntax)
+			return NULL;
+		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
+		if (!declaration)
+			return NULL;
+		*tail = declaration;
+		tail = &declaration->next;
+		count++;
+		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"typedef declarations cannot have initializers");
+			return NULL;
+		}
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
+	}
+	if (!expect_token(parser, token_semicolon, "expected ',' or ';' after typedef declarator", NULL))
+		return NULL;
+	return declarations;
+}
+
 /* external-declaration ::= typedef-declaration | static-assert-declaration |
  *     declaration-specifiers declarator (";" | compound-statement)
  */
-static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
+static struct ast_external_declaration *parse_external_declaration(struct parser *parser,
+	size_t remaining_declarations)
 {
 	struct ast_type_syntax *type_syntax;
 	struct token beginning;
@@ -2322,7 +2356,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	struct ast_function *function;
 
 	if (preprocess_peek(parser->preprocessor).kind == token_typedef)
-		return parse_typedef_declaration(parser);
+		return parse_typedef_declaration(parser, remaining_declarations);
 
 	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		struct ast_static_assertion *assertion = parse_static_assertion(parser);
@@ -2388,12 +2422,16 @@ struct ast_translation_unit *parse_translation_unit(struct preprocessor *preproc
 				"translation unit exceeds declaration limit (512)");
 			return NULL;
 		}
-		declaration = parse_external_declaration(&parser);
+		declaration = parse_external_declaration(&parser, ast_max_external_declarations - count);
 		if (!declaration)
 			return NULL;
-		*tail = declaration;
-		tail = &declaration->next;
-		count++;
+		/* A typedef group contributes one external item per concrete alias. */
+		while (declaration) {
+			*tail = declaration;
+			tail = &declaration->next;
+			count++;
+			declaration = declaration->next;
+		}
 	} while (preprocess_peek(preprocessor).kind != token_eof);
 	/* EOF can carry a deferred preprocessor diagnostic without a C token. */
 	if (diagnostics->errors)

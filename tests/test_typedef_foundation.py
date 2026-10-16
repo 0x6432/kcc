@@ -75,8 +75,7 @@ constraints = [
     ('typedef int T; int main(void) { return missing; }','undeclared'),
 ]
 subset_errors = [
-    ('typedef int T,U;','single name'),
-    ('typedef int T=42;','single name'),
+    ('typedef int T=42;','cannot have initializers'),
     ('int main(void) { typedef int T; return 42; }','block-scope typedef'),
     ('int main(void) { for(typedef int T;;) return 42; }','block-scope typedef'),
     ('typedef int T; int main(void) { int T=42; return T; }','shadowing a typedef'),
