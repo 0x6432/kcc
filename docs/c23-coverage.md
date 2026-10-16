@@ -780,3 +780,39 @@ verify no alias locals.
 Frozen manifest /data/tools/m14l2d-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l2e typedefs hiding outer automatic objects and parameters
+
+A block or for typedef may hide an automatic object or parameter from an outer
+scope. Sema rejects only same-scope object/parameter collisions, resolves written
+types before alias publication, and otherwise prepends the scoped alias binding.
+The outermost function body still shares parameter scope; nested blocks do not.
+
+The visible-typedef expression guard prevents calls, addresses, loads and
+unevaluated value uses from falling through to the hidden outer object. Captured
+addresses and earlier AST names retain their exact object declarations and slots;
+restoring scope reveals subsequent object uses again. No object is removed from
+the function-local storage list and no alias slot is created. Type queries in a
+typedef's own specifiers may inspect the still-visible outer object.
+
+Objects or parameters hiding visible typedefs in the opposite direction remain
+explicitly unsupported. The typedef-first value-name guard relies on that parser
+restriction; scope-aware unified ordinary-name lookup is required before removing
+it. File globals, block function declarations, storage-class permutations, VM,
+aggregate types and prototype-scope changes remain unsupported. Type-shape/item
+budgets are unchanged. Read m14-typedef-object-shadowing.md.
+
+
+M14L2E validation: complete normal/QBE regressions, complete normal
+regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
+GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
+suites passed. Bounded sanitized fuzz executed 6,665 lexer /
+36,413 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 33 standard + 4 C23 originals, 8 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 43+4
+originals; GCC 14 agrees on all 47 / 4 constraints; other hosts report exact grammar
+gaps separately. AST tests preserve captured parameter addresses, restored object
+identity and original object slots; aliases allocate no local storage.
+Frozen manifest /data/tools/m14l2e-source.sha256 matched before and after
+integration. Normal test helpers were built serially before parallel validation.
+Remote GitHub CI is tracked separately; local passes do not prove remote success.

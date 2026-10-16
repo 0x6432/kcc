@@ -3943,8 +3943,72 @@ static void test_typedef_function_shadowing_tree(void)
 	fclose(stream);
 }
 
+static void test_typedef_object_shadowing_tree(void)
+{
+	const char *text = "int f(int T) { int *p=&T; { typedef long T; T x=2; *p+=x; } "
+		"return T; } int main(void) { return f(40); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *parameter;
+	struct ast_local_declaration *pointer;
+	struct ast_local_declaration *inner;
+	struct ast_block_item *item;
+	struct ast_compound_statement *block;
+	struct ast_typedef_declaration *alias;
+	struct ast_address_expression *address;
+	struct ast_return_statement *returned;
+	struct ast_load_expression *load;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	function = first_function(unit);
+	item = function->body->items;
+	assert(item->kind == block_item_declaration);
+	pointer = (struct ast_local_declaration *)item;
+	item = item->next;
+	assert(item->kind == block_item_statement);
+	block = (struct ast_compound_statement *)((struct ast_statement_item *)item)->statement;
+	assert(block->statement.kind == statement_compound);
+	assert(block->items->kind == block_item_typedef_declaration);
+	alias = ((struct ast_block_typedef_declaration *)block->items)->declaration;
+	assert(block->items->next->kind == block_item_declaration);
+	inner = (struct ast_local_declaration *)block->items->next;
+	assert(item->next->kind == block_item_statement);
+	returned = (struct ast_return_statement *)((struct ast_statement_item *)item->next)->statement;
+	assert(returned->statement.kind == statement_return && !alias->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0 && alias->type == &type_long);
+	parameter = function->declaration->parameters->local;
+	assert(parameter && parameter->type == &type_int && parameter->slot == 0);
+	assert(pointer->initializer->kind == expression_address);
+	address = (struct ast_address_expression *)pointer->initializer;
+	assert(address->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)address->operand)->declaration == parameter);
+	assert(returned->value->kind == expression_load);
+	load = (struct ast_load_expression *)returned->value;
+	assert(load->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)load->operand)->declaration == parameter);
+	assert(inner->type == alias->type && inner->slot == 2 && pointer->slot == 1);
+	assert(function->locals == inner && inner->next_local == pointer);
+	assert(pointer->next_local == parameter && !parameter->next_local && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_object_shadowing_tree();
 	test_typedef_function_shadowing_tree();
 	test_typedef_shadowing_tree();
 	test_for_typedef_tree();

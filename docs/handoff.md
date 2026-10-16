@@ -2,24 +2,24 @@
 
 ## Current checkpoint
 
-M14L2D is implemented and locally validated. Read m14-typedef-function-shadowing.md.
-Only changed source/tests/Makefile were copied from /data/next-m14l2d; both
+M14L2E is implemented and locally validated. Read m14-typedef-object-shadowing.md.
+Only changed source/tests/Makefile were copied from /data/next-m14l2e; both
 frozen manifest checks matched. Never replace current docs with stale snapshot
 docs. Preserve both old stashes. All implementation/test generators were already
-applied; do not rerun them. This checkpoint follows 543815c.
+applied; do not rerun them. This checkpoint follows 2a65a40.
 
 
-M14L2D validation: complete normal/QBE regressions, complete normal
+M14L2E validation: complete normal/QBE regressions, complete normal
 regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
 GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
-suites passed. Bounded sanitized fuzz executed 3,408 lexer /
-8,153 pipeline inputs in 26/26 seconds. No invalid or generated C
-was executed. Four-host focused checks: 35 standard + 4 C23 originals, 11 native constraint rejections, and 24 both-direction
-mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 41+4
-originals; GCC 14 agrees on all 45 / 4 constraints; other hosts report exact grammar
-gaps separately. AST tests preserve captured/restored function-symbol identity and
-verify no alias locals.
-Frozen manifest /data/tools/m14l2d-source.sha256 matched before and after
+suites passed. Bounded sanitized fuzz executed 6,665 lexer /
+36,413 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 33 standard + 4 C23 originals, 8 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 43+4
+originals; GCC 14 agrees on all 47 / 4 constraints; other hosts report exact grammar
+gaps separately. AST tests preserve captured parameter addresses, restored object
+identity and original object slots; aliases allocate no local storage.
+Frozen manifest /data/tools/m14l2e-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
 

@@ -6,11 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14L2D: Block and loop typedefs may hide file-scope functions, including the containing
-function. Visible typedefs reject expression uses rather than falling through to
-a hidden function; captured function pointers and restored calls keep the original
-symbol. Alias/object hiding remains unsupported at this checkpoint.
-Read docs/m14-typedef-function-shadowing.md and the latest coverage/limitations records.
+M14L2E: Block and loop aliases may hide outer automatic objects and parameters. Same-scope
+object/alias collisions remain constraints, including parameters in the outermost
+function body. Hidden object value uses reject; captured addresses stay live and
+scope exit restores the object. Objects hiding aliases remain unsupported here.
+Read docs/m14-typedef-object-shadowing.md and the latest coverage/limitations records.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite

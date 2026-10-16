@@ -39,6 +39,10 @@ programs += [
     'int f(void) { return 42; } int main(void) { int done=0; for(typedef int f;!done;done=(f)1) { f x=42; if(x!=42) return 1; } return f(); }',
     'int f(void) { return 42; } int main(void) { int (*p)(void)=f; for(typedef int f(void);;) { f *q=p; if(q()!=42) return 1; break; } return f(); }',
 ]
+programs += [
+    'int main(void) { int T=40; int *p=&T; for(typedef int T;*p<42;*p+=(T)1) { T x=1; if(x!=1) return 1; } return T; }',
+    'int f(int T) { int *p=&T; for(typedef long T;*p<42;*p+=(T)1) { T x=2; if(sizeof(T)!=8 || x!=2) return 1; } return T; } int main(void) { return f(40); }',
+]
 c23_programs = [
     'int main(void) { for(typedef typeof(nullptr) N,N,*P;;) { N n=0; P p=&n; return *p==nullptr?42:1; } }',
     'int main(void) { for(typedef typeof_unqual(const int) T;;) { T x=40; x+=2; return x; } }',
@@ -52,7 +56,6 @@ constraints = [
     ('int main(void) { for(typedef int T=1;;) return 0; }','typedef declarations cannot have initializers'),
 ]
 subset_errors = [
-    ('int main(void) { int T=42; for(typedef int T;;) return 42; }','block typedef shadowing an object'),
     ('int main(void) { for(typedef int T;;) { int T=42; } }','shadowing a typedef'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc for typedefs ') as directory:

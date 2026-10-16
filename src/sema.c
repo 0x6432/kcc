@@ -2165,11 +2165,9 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 			"typedef name conflicts with prior ordinary declaration");
 		return false;
 	}
-	if (sema->scope && find_local(sema, declaration->name)) {
+	if (sema->scope && find_in_scope(sema->scope, declaration->name)) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
-			find_in_scope(sema->scope, declaration->name) ?
-			"typedef name conflicts with prior ordinary declaration" :
-			"block typedef shadowing an object is not supported yet");
+			"typedef name conflicts with prior ordinary declaration");
 		return false;
 	}
 	if (!measure_typedef_type(sema, type, 0, declaration->location))
