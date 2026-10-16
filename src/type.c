@@ -53,6 +53,11 @@ bool type_is_scalar(const struct type *type)
 	return type_is_integer(type) || type->kind == type_kind_pointer;
 }
 
+bool type_is_object(const struct type *type)
+{
+	return type_is_scalar(type) || type->kind == type_kind_array;
+}
+
 bool type_is_complete_object(const struct type *type)
 {
 	if (type->kind == type_kind_array)
@@ -122,7 +127,7 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 {
 	struct pointer_type *pointer = arena_alloc(arena, sizeof(*pointer));
 
-	assert(type_is_complete_object(referent));
+	assert(type_is_object(referent));
 	if (pointer)
 		*pointer = (struct pointer_type) {
 			.type = { type_kind_pointer },
@@ -288,4 +293,75 @@ bool type_compatible(const struct type *left, const struct type *right)
 		right_parameter = right_parameter->next;
 	}
 	return !left_parameter && !right_parameter;
+}
+
+const struct type *type_composite(struct arena *arena, const struct type *left,
+	const struct type *right)
+{
+	assert(type_compatible(left, right));
+	if (left == right || type_is_integer(left))
+		return left;
+	if (left->kind == type_kind_pointer) {
+		const struct pointer_type *a = (const struct pointer_type *)left;
+		const struct pointer_type *b = (const struct pointer_type *)right;
+		const struct type *referent = type_composite(arena, a->referent, b->referent);
+		struct pointer_type *pointer;
+
+		if (!referent)
+			return NULL;
+		if (referent == a->referent)
+			return left;
+		pointer = type_new_pointer(arena, referent);
+		return pointer ? &pointer->type : NULL;
+	}
+	if (left->kind == type_kind_array) {
+		const struct array_type *a = (const struct array_type *)left;
+		const struct array_type *b = (const struct array_type *)right;
+		const struct type *element = type_composite(arena, a->element, b->element);
+		uint64_t count = a->count ? a->count : b->count;
+		struct array_type *array;
+
+		if (!element)
+			return NULL;
+		if (count == a->count && element == a->element)
+			return left;
+		array = count ? type_new_array(arena, element, count) : type_new_incomplete_array(arena, element);
+		return array ? &array->type : NULL;
+	}
+	if (left->kind == type_kind_function) {
+		const struct function_type *a = (const struct function_type *)left;
+		const struct function_type *b = (const struct function_type *)right;
+		const struct type *return_type = type_composite(arena, a->return_type, b->return_type);
+		const struct function_parameter_type *a_parameter = a->parameters;
+		const struct function_parameter_type *b_parameter = b->parameters;
+		struct function_type *function;
+		struct function_parameter_type **tail;
+
+		if (!return_type)
+			return NULL;
+		function = type_new_function(arena, return_type, NULL, 0);
+		if (!function)
+			return NULL;
+		function->parameter_count = a->parameter_count;
+		tail = &function->parameters;
+		while (a_parameter && b_parameter) {
+			const struct type *type = type_composite(arena, a_parameter->type, b_parameter->type);
+			struct function_parameter_type *parameter;
+
+			if (!type)
+				return NULL;
+			parameter = arena_alloc(arena, sizeof(*parameter));
+			if (!parameter)
+				return NULL;
+			*parameter = (struct function_parameter_type) { .type = type };
+			*tail = parameter;
+			tail = &parameter->next;
+			a_parameter = a_parameter->next;
+			b_parameter = b_parameter->next;
+		}
+		assert(!a_parameter && !b_parameter);
+		return &function->type;
+	}
+	assert(0 && "unknown composite type");
+	return NULL;
 }

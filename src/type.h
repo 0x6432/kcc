@@ -65,6 +65,7 @@ extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
 bool type_is_scalar(const struct type *type);
+bool type_is_object(const struct type *type);
 bool type_is_complete_object(const struct type *type);
 /* QBE scalar value width is separate from target object storage size. */
 unsigned type_value_width(const struct type *type);
@@ -84,5 +85,8 @@ const struct type *type_integer_literal(uint64_t value, unsigned base,
 struct function_type *type_new_function(struct arena *arena, const struct type *return_type,
 	const struct type *const *parameters, size_t parameter_count);
 bool type_compatible(const struct type *left, const struct type *right);
+/* Merge compatible declarations without changing either input type graph. */
+const struct type *type_composite(struct arena *arena, const struct type *left,
+	const struct type *right);
 
 #endif

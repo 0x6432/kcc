@@ -1103,3 +1103,19 @@ Sema checks scalar cast targets before the scalar conversion helper, and checks
 pointer referent completeness before its current constructor. Address/decay/
 stride/layout and QBE paths operate on the resulting graph without special
 parenthesized-expression or pointer-to-row backend nodes.
+
+## M14b incomplete object referents and composite visibility
+
+Object and complete-object predicates are distinct. Pointer construction accepts
+object referents, including unknown arrays; array elements and stored local
+objects must be complete. Unknown array indirection/address/decay uses existing
+lvalue paths without a size query. Offset/subscript lowering checks its referent
+completeness before stride calculation; difference lowering checks both sides.
+Complete local-address and scalar conversion helpers keep their preconditions.
+
+Recursive type_composite accepts compatible integer/pointer/array/function graphs
+and returns an arena-owned merged type without rewriting syntax caches. Known
+array counts survive later unknown declarations. Function symbols update their
+visible signature after a compatible redeclaration, while definition parameters
+retain independently resolved effective types. Prior call arguments remain typed
+as analyzed; compatible pointer signature merging does not change their ABI.

@@ -202,12 +202,12 @@ struct object_declarator {
 	unsigned nesting;
 };
 
-/* object-array-suffix ::= "[" integer-token "]"
- * Only the final type's outermost parameter array may omit its literal bound.
- * Append in source order: a[2][3] is array-2 -> array-3 -> base.
+/* object-array-suffix ::= "[" [ integer-token ] "]"
+ * Sema rejects incomplete elements/objects before layout, while a pointer to
+ * an unknown-bound array is complete. Append dimensions in source order.
  */
 static bool parse_object_array_suffixes(struct parser *parser,
-	struct object_declarator *declarator, enum object_declarator_context context)
+	struct object_declarator *declarator)
 {
 	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
 		struct token opening = preprocess_next(parser->preprocessor);
@@ -220,20 +220,8 @@ static bool parse_object_array_suffixes(struct parser *parser,
 				"array declarator exceeds dimension limit (64)");
 			return false;
 		}
-		if (!has_bound) {
-			if (context != object_declarator_parameter) {
-				diagnostic_error(parser->diagnostics, opening.location,
-					"array bound must be an integer literal");
-				return false;
-			}
-			if (declarator->syntax) {
-				diagnostic_error(parser->diagnostics, opening.location,
-					"only the outer parameter array bound may be omitted");
-				return false;
-			}
-		} else if (!expect_token(parser, token_integer, "array bound must be an integer literal", &bound)) {
+		if (has_bound && !expect_token(parser, token_integer, "array bound must be an integer literal", &bound))
 			return false;
-		}
 		if (!expect_token(parser, token_right_bracket, "expected ']' after array bound", NULL))
 			return false;
 		array = ast_new_array_type_syntax(parser->arena, opening.location, NULL, has_bound, bound);
@@ -307,7 +295,7 @@ static bool parse_object_declarator(struct parser *parser,
 		diagnostic_error(parser->diagnostics, token.location, "expected local name");
 		return false;
 	}
-	if (!parse_object_array_suffixes(parser, declarator, context))
+	if (!parse_object_array_suffixes(parser, declarator))
 		return false;
 	if (prefix) {
 		*declarator->base_slot = prefix;

@@ -200,3 +200,16 @@ A new invalid array-cast fixture exposed a scalar-helper precondition; explicit
 target constraint checking now rejects it before that helper. The entire suite
 and sanitizer fuzz were then run on the corrected source. Function declarators,
 qualifiers, typedef names and incomplete object pointers remain future work.
+
+### M14b incomplete object pointers and composites
+
+19 both-host/QBE full-value programs cover all primitive/pointer leaves, unknown
+array lvalue decay, compatible casts, arrays of unknown-row pointers and defined
+comparisons. Both host directions cover all leaves and eight mixed pointer
+arguments; a host-provided null verifies &* cancellation without invalid access.
+Typed units distinguish original unknown caches from known visible composites.
+Three-way unknown/known/conflicting redeclarations, nested pointer shapes and
+both mixed-completeness subtraction orders are checked. Zero-offset/subscript
+constraints and incomplete local/element diagnostics precede layout queries.
+Former now-valid unknown-pointer negatives became incomplete nested-array cases;
+local/inner omissions remain invalid with semantic completeness diagnostics.

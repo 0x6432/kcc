@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14a implementation: single-pass parenthesized object/abstract declarators,
+M14b implementation: incomplete array referent pointers and composite declarations,
+single-pass parenthesized object/abstract declarators,
 omitted outer array parameter bounds and effective adjustment,
 adjacent ordinary static byte strings, fixed multidimensional arrays
 and explicit decay/target layout, pointer
@@ -16,17 +17,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13i 5699450, run 38830826668, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f/g/h also passed their exact-source CI.
-M14a full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13j d0fc412, run 38831621684, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f/g/h/i also passed their exact-source CI.
+M14b full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14b incomplete array object pointers and composite declarations, designed
-in m14-incomplete-object-pointers.md.
+Next: M14c comma-separated local declarations and for-header lists, designed
+in m14-local-declaration-lists.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1424,3 +1425,25 @@ M14b incomplete object pointers/composite declarations are pre-designed; a
 GCC/Clang pedantic probe confirmed unknown-array dereference and comparison
 constraints, not yet compiler support. M13i 5699450 passed exact-source CI
 38830826668. Later runs and isolated snapshots remain independent/pending.
+
+## M14b tested source checkpoint
+
+Unknown arrays are object but not complete object types. Their pointers are
+complete scalar objects, with ordinary lvalue indirection/address/element decay.
+No unknown object receives a fake size or stride; pointer offsets/subscripts
+and both difference operands require complete referents before layout.
+Compatible redeclarations form immutable recursive composite graphs retaining
+known counts; definition parameter caches/locals keep their own declared shape.
+
+Full normal GCC regression/QBE/reference/ABI passed. 19 new full-value programs,
+all-primitive row and eight-mixed-pointer ABI in both directions passed with GCC
+and Clang. Host-provided null cancellation remains non-dereferencing. Units
+inspect unknown cache versus visible known composite and object/complete/layout
+contracts. Three-way nested declaration conflicts, both subtraction orders and
+zero-offset/subscript constraints pass. Earlier unknown-pointer negatives now
+reject invalid nested incomplete arrays; local/inner omissions still reject,
+with semantic completeness diagnostics. Sanitized bounded fuzz passed 24686
+lexer + 72222 pipeline inputs (96908 total), 26/26 seconds. No arbitrary fuzz C
+or undefined curated access executes. Full isolated/remote checks remain pending.
+M14c grouped local/for-header declarations are pre-designed. M13j d0fc412 passed
+exact-source CI 38831621684; later runs and isolated snapshots remain separate.

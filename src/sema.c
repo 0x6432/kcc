@@ -131,9 +131,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!referent)
 			return NULL;
-		if (!type_is_complete_object(referent)) {
-			diagnostic_error(sema->diagnostics, syntax->location,
-				"pointer to incomplete object type is not supported yet");
+		if (!type_is_object(referent)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "pointer referent must be an object type");
 			return NULL;
 		}
 		type = type_new_pointer(sema->arena, referent);
@@ -268,6 +267,10 @@ static struct ast_pointer_offset_expression *lower_pointer_offset(struct sema *s
 	if (!convert_expression(sema, &index, type_integer_promotion(index->type)))
 		return NULL;
 	pointer = (const struct pointer_type *)base->type;
+	if (!type_is_complete_object(pointer->referent)) {
+		diagnostic_error(sema->diagnostics, location, "pointer arithmetic requires a complete object referent");
+		return NULL;
+	}
 	offset = ast_new_pointer_offset(sema->arena, location,
 		base, index, type_object_size(pointer->referent), subtract);
 	if (!offset) {
@@ -298,6 +301,12 @@ static bool lower_pointer_arithmetic(struct sema *sema,
 		if (!type_compatible(left->type, right->type)) {
 			diagnostic_error(sema->diagnostics, binary->expression.location,
 				"pointer subtraction requires compatible pointer operands");
+			return false;
+		}
+		if (!type_is_complete_object(pointer->referent) ||
+			!type_is_complete_object(((const struct pointer_type *)right->type)->referent)) {
+			diagnostic_error(sema->diagnostics, binary->expression.location,
+				"pointer subtraction requires complete object referents");
 			return false;
 		}
 		difference = ast_new_pointer_difference(sema->arena, binary->expression.location,
@@ -698,6 +707,10 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 
 	if (!type)
 		return false;
+	if (!type_is_complete_object(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
+		return false;
+	}
 	return bind_local(sema, local, type);
 }
 
@@ -1007,6 +1020,19 @@ static bool sema_function_declaration(struct sema *sema,
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"redefinition of function");
 		return false;
+	}
+	/* Compatibility alone is not transitive for unknown array bounds. Retain
+	 * known bounds in the visible composite without rewriting syntax caches.
+	 */
+	if (symbol->type != type) {
+		const struct type *composite = type_composite(sema->arena, &symbol->type->type, &type->type);
+
+		if (!composite) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"out of memory creating composite function type");
+			return false;
+		}
+		symbol->type = (const struct function_type *)composite;
 	}
 	declaration->symbol = symbol;
 	if (!definition)

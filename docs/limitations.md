@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14a. Read the latest entries together with README.md and
+Current milestone: M14b. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1012,3 +1012,20 @@ are not yet exposed; only outer parameter array bounds may be omitted. Bounds
 remain positive integer tokens. Total pointer/array layers are each bounded to
 64 across grouping, plus a separate 64-group nesting limit; typed expression
 depth and local object storage limits remain unchanged.
+
+## M14b
+
+Pointers may refer to unknown-bound arrays, including arrays of such pointers.
+Unknown arrays are object types but remain incomplete: no local unknown array
+object or incomplete array element can be allocated. Dereference yields an array
+lvalue supporting address-of and element decay, so (*p)[i] is usable with known
+element size. p[i], p+0, p-0 and pointer subtraction require complete referents;
+zero offsets do not bypass that constraint. Compatible comparison/truth/casts
+use pointer representation without requesting unknown layout.
+
+Compatible function redeclarations form recursive composite types, retaining
+known bounds through pointer/array/parameter layers. Later unknown declarations
+do not erase them; definition locals retain their own declared parameter shape.
+Void/function pointers, full function/external declarators, qualifiers, typedefs,
+general bounds and initializer lists remain unsupported. Existing local [] and
+inner incomplete array cases now reject in sema before layout, not only parsing.

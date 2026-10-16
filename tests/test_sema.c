@@ -1513,8 +1513,74 @@ static void test_parenthesized_object_declarators(void)
 	source_destroy(&source);
 }
 
+static void test_incomplete_object_pointer_composite(void)
+{
+	const char *text = "int f(int (*)[]); int f(int (*)[3]); "
+		"int f(int (*p)[]) { int (*q)[]=p; return (*q)[2]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *first;
+	struct ast_function_declaration *second;
+	struct ast_function *function;
+	struct ast_parameter *parameter;
+	const struct pointer_type *declared;
+	const struct pointer_type *visible;
+	const struct array_type *unknown;
+	const struct array_type *known;
+	const struct type *composite;
+	struct array_type *left_array;
+	struct array_type *right_array;
+	const struct array_type *merged;
+
+	assert(source_from_bytes(&source, "incomplete-pointer.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	first = (struct ast_function_declaration *)unit->declarations;
+	second = (struct ast_function_declaration *)first->external.next;
+	function = (struct ast_function *)second->external.next;
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	parameter = function->declaration->parameters;
+	declared = (const struct pointer_type *)parameter->type;
+	assert(declared->type.kind == type_kind_pointer && declared->referent->kind == type_kind_array);
+	unknown = (const struct array_type *)declared->referent;
+	assert(!unknown->count && unknown->element == &type_int);
+	assert(type_is_object(&unknown->type) && !type_is_complete_object(&unknown->type));
+	assert(type_is_complete_object(&declared->type) && type_object_size(&declared->type) == 8);
+	assert(parameter->type == parameter->type_syntax->type && parameter->local->type == parameter->type);
+	visible = (const struct pointer_type *)first->symbol->type->parameters->type;
+	known = (const struct array_type *)visible->referent;
+	assert(known->type.kind == type_kind_array && known->count == 3 && known->element == &type_int);
+	assert(known != unknown && !unknown->count && type_object_size(&known->type) == 12);
+	assert(first->symbol == second->symbol && first->symbol == function->declaration->symbol);
+	assert(!type_is_object(&first->symbol->type->type));
+	assert(((const struct array_type *)((const struct pointer_type *)first->parameters->type)->referent)->count == 0);
+	assert(((const struct array_type *)((const struct pointer_type *)second->parameters->type)->referent)->count == 3);
+	composite = type_composite(&arena, &declared->type, &visible->type);
+	assert(composite && composite->kind == type_kind_pointer);
+	assert(((const struct array_type *)((const struct pointer_type *)composite)->referent)->count == 3);
+	assert(type_composite(&arena, &visible->type, &declared->type) == &visible->type);
+	left_array = type_new_array(&arena, &declared->type, 2);
+	right_array = type_new_array(&arena, &visible->type, 2);
+	assert(left_array && right_array && type_compatible(&left_array->type, &right_array->type));
+	composite = type_composite(&arena, &left_array->type, &right_array->type);
+	assert(composite && composite->kind == type_kind_array);
+	merged = (const struct array_type *)composite;
+	assert(merged->count == 2 && type_object_size(composite) == 16);
+	visible = (const struct pointer_type *)merged->element;
+	assert(((const struct array_type *)visible->referent)->count == 3 && !unknown->count);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_incomplete_object_pointer_composite();
 	test_parenthesized_object_declarators();
 	test_incomplete_array_parameter();
 	test_array_parameter_adjustment();

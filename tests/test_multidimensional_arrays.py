@@ -124,7 +124,7 @@ int main(void) {{ {name} a[2][3];
 
     rejected = [
         ('int main(void) { int a[2][0]; return 0; }', 'array bound'),
-        ('int main(void) { int a[2][]; return 0; }', 'integer literal'),
+        ('int main(void) { int a[2][]; return 0; }', 'array element type must be complete'),
         ('int main(void) { int a[2][1+2]; return 0; }', "expected ']'"),
         ('int main(void) { int a[2][3]; int b[3][2]; return &a==&b; }', 'compatible pointer'),
         ('int main(void) { int a[2][3]; int b[3][2]; return a-b; }', 'compatible pointer'),

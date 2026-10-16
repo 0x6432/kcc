@@ -153,15 +153,15 @@ int main(void) {{ {name} a[3]; a[0]=1; a[1]=2; a[2]=3;
         ('int main(void) { int a[-1]; return 0; }', 'integer literal'),
         ('int main(void) { int n=3; int a[n]; return 0; }', 'integer literal'),
         ('int main(void) { int a[1+2]; return 0; }', "expected ']'"),
-        ('int main(void) { int a[]; return 0; }', 'integer literal'),
-        ('int main(void) { int a[2][]; return 0; }', 'integer literal'),
+        ('int main(void) { int a[]; return 0; }', 'local object type must be complete'),
+        ('int main(void) { int a[2][]; return 0; }', 'array element type must be complete'),
         ('int main(void) { int a[2]=1; return 0; }', 'array initializers'),
         ('int main(void) { int a[2]; int b[2]; a=b; return 0; }', 'modifiable lvalue'),
         ('int main(void) { int a[2]; *(&a)=a; return 0; }', 'modifiable lvalue'),
         ('int main(void) { int a[2]; int *p=&a; return 0; }', 'pointer conversion'),
         ('int main(void) { int a[2]; int b[3]; return &a==&b; }', 'compatible pointer'),
         ('int main(void) { int a[2]; return +a; }', 'integer operand'),
-        ('int f(int a[2][]) { return 0; }', 'outer parameter array bound'),
+        ('int f(int a[2][]) { return 0; }', 'array element type must be complete'),
     ]
     for text, message in rejected:
         source.write_text(text)

@@ -108,9 +108,9 @@ with tempfile.TemporaryDirectory(prefix='kcc incomplete parameter bounds ') as d
             assert 'dimension limit' in result.stderr, result.stderr
 
     rejected = [
-        ('int f(int a[][]) { return 0; }', 'outer parameter array bound'),
-        ('int f(int a[2][]) { return 0; }', 'outer parameter array bound'),
-        ('int main(void) { int a[]; return 0; }', 'integer literal'),
+        ('int f(int a[][]) { return 0; }', 'array element type must be complete'),
+        ('int f(int a[2][]) { return 0; }', 'array element type must be complete'),
+        ('int main(void) { int a[]; return 0; }', 'local object type must be complete'),
         ('int f(int a[0]) { return 0; }', 'array bound'),
         ('int f(int a[][0]) { return 0; }', 'array bound'),
         ('int f(int a[static 2]) { return 0; }', 'integer literal'),
