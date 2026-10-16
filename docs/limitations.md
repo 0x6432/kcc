@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14k1. Read the latest entries together with README.md and
+Current milestone: M23d2 null-conversion correction. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1557,9 +1557,11 @@ Existing string registration may retain static data for an unevaluated literal.
 
 Query expressions now name the existing nullptr type, including objects, pointers,
 parameters and results. N3096 6.3.2.4 / 6.5.4 explicit casts to that type accept
-only null pointer constants or nullptr values. Assignment-like conversion still
-requires nullptr source type, so integer zero initialization/assignment/argument/
-return is rejected as required by 6.5.16.1. No implicit-zero rule was broadened.
+only null pointer constants or nullptr values. The later M23d2 null-conversion
+correction also admits checked null constants in initialization/assignment/
+argument/return, as required by the normative 6.5.16.1 constraint. Its contradictory
+footnote 127 was stale; N3220 retains the normative rule and removes that footnote.
+Nonconstant integer/pointer zero values and non-ICE zero forms remain rejected.
 
 Typedef ambiguity, atomic/bit-field/variably modified operands, required VM
 evaluation, GNU aliases, alias-derived bare function declarations and sole

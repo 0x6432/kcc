@@ -482,8 +482,8 @@ static bool check_cast(struct sema *sema, const struct ast_expression *operand,
 {
 	const struct type *source = operand->type;
 
-	/* Naming nullptr_t via typeof also makes its explicit cast rule reachable.
-	 * Assignment-like conversion still requires a nullptr_t source, not integer zero.
+	/* Both explicit and assignment-like conversions admit checked null constants.
+	 * Nonconstant integer/pointer zero values remain ineligible.
 	 */
 	if (target->kind == type_kind_nullptr) {
 		if (is_null_pointer_source(operand))
@@ -510,7 +510,11 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 {
 	struct ast_conversion_expression *conversion;
 
-	if (!(target->kind == type_kind_pointer && is_null_pointer_source(*slot)) &&
+	/* C23's normative assignment constraint admits a null pointer constant
+	 * for nullptr_t as well as pointer targets. Keep the source-form check.
+	 */
+	if (!((target->kind == type_kind_pointer || target->kind == type_kind_nullptr) &&
+		is_null_pointer_source(*slot)) &&
 		!check_conversion(sema, (*slot)->type, target, (*slot)->location))
 		return false;
 	if (type_compatible((*slot)->type, target))

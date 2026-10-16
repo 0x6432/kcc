@@ -2,13 +2,36 @@
 
 ## Current checkpoint
 
+The M23d2 null-conversion correctness fix passed complete normal/QBE regression,
+both-host targeted ASan/UBSan and bounded sanitized fuzz: 10,946 lexer / 45,467
+pipeline inputs in 26/26 seconds. No generated C or invalid curated program ran.
+Clang 18.1.8 passed all 25 original null-conversion programs, 20 strict native
+constraints and four actual C23 cross-object nullptr ABI arrangements, also with
+a sanitized kcc. Expression queries passed 69 originals: 65 native agreements,
+one exact array-unqualification gap and three exact explicit-nullptr-cast gaps,
+plus 17 strict constraints. These gaps are not native agreements. The normative
+assignment constraint, not stale N3096 footnote 127, admits integer/void-pointer
+null pointer constants to nullptr_t. See m23-nullptr-assignment-conversions.md.
+The implementation scripts were already applied; do not reapply them.
+
+M14k2 is implemented ONLY in /data/next-m14k2, independently frozen and validated.
+Full normal/QBE regression, both-host targeted sanitizers and sanitized fuzz
+passed (17,747 lexer / 76,739 pipeline, 26/26 seconds). Its complete Clang 18
+native-oracle regression remains running separately; inspect actual status.
+Transfer its changed source/tests only after committing this nullfix; verify
+/data/tools/m14k2-source.sha256 before/after transfer. Do not copy stale docs.
+Its focused 34 original programs / 12 constraints agree with Clang 18 and all
+three hosts pass 24 mixed-stack ABI arrangements. Preserve both older stashes.
+Read m14-query-function-declarations.md; scripts are already applied there.
+Compact Clang 18.1.8 is /data/tools/clang18/bin/clang-18 (~247 MiB).
+
 M14k1 sole query-derived void parameter normalization passed full normal/QBE
 regression, both-host targeted ASan/UBSan and bounded sanitized fuzz (20,758 lexer /
 61,639 pipeline inputs, 26/26 seconds). Focused: 38 original programs, 12 constraints,
 24 zero-argument primitive-result ABI arrangements per host, syntax/subset/128/129
 real-parameter boundaries and no marker ABI slot. GCC 11/Clang 15 provide three
-ordinary baseline native agreements each; actual query syntax awaits modern-host
-checks. No generated C or invalid curated source ran. Written ast_parameter nodes retain query
+ordinary baseline native agreements each; a subsequent Clang 18.1.8 exact-source run passed all 38 native programs and
+12 strict native constraint rejections, plus QBE and all 24 ABI arrangements. No generated C or invalid curated source ran. Written ast_parameter nodes retain query
 syntax/type/is_void_marker, but semantic signature and QBE ABI counts omit the
 marker. Main checks the semantic signature count; header/spill traversals skip
 markers before width or index calculation. Literal void/empty lists and real

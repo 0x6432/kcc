@@ -3376,8 +3376,72 @@ static void test_void_parameter_query_tree(void)
 	source_destroy(&source);
 }
 
+static void test_nullptr_assignment_conversion_tree(void)
+{
+	const char *text = "typeof(nullptr) f(typeof(nullptr) n) { return 0; } int main(void) { typeof(nullptr) n=0; n=(void *)0; return f(0)==n?42:1; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_function *main_function;
+	struct ast_return_statement *return_statement;
+	struct ast_local_declaration *local;
+	struct ast_statement_item *item;
+	struct ast_assignment_expression *assignment;
+	struct ast_conditional_expression *conditional;
+	struct ast_binary_expression *comparison;
+	struct ast_call_expression *call;
+	struct ast_conversion_expression *conversion;
+	struct ast_expression *original;
+
+	assert(source_from_bytes(&source, "nullptr-conversion.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	main_function = (struct ast_function *)function->external.next;
+	local = (struct ast_local_declaration *)main_function->body->items;
+	original = local->initializer;
+	assert(original->kind == expression_integer && original->depth == 1);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(function->return_type == &type_nullptr);
+	item = (struct ast_statement_item *)function->body->items;
+	return_statement = (struct ast_return_statement *)item->statement;
+	conversion = (struct ast_conversion_expression *)return_statement->value;
+	assert(conversion->expression.kind == expression_conversion && conversion->expression.type == &type_nullptr);
+	assert(conversion->operand->kind == expression_integer && conversion->operand->type == &type_int);
+	conversion = (struct ast_conversion_expression *)local->initializer;
+	assert(conversion->expression.kind == expression_conversion && conversion->expression.type == &type_nullptr);
+	assert(conversion->operand == original && original->type == &type_int && conversion->expression.depth == 2);
+	assert(local->type == &type_nullptr && local->slot == 0 && !local->next_local);
+	item = (struct ast_statement_item *)local->item.next;
+	assignment = (struct ast_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	conversion = (struct ast_conversion_expression *)assignment->right;
+	assert(assignment->expression.type == &type_nullptr && assignment->left->is_lvalue);
+	assert(conversion->expression.kind == expression_conversion && conversion->expression.type == &type_nullptr);
+	assert(conversion->operand->kind == expression_cast && conversion->operand->type->kind == type_kind_pointer);
+	item = (struct ast_statement_item *)item->item.next;
+	conditional = (struct ast_conditional_expression *)((struct ast_return_statement *)item->statement)->value;
+	comparison = (struct ast_binary_expression *)conditional->condition;
+	conversion = (struct ast_conversion_expression *)comparison->left;
+	assert(conversion->expression.kind == expression_conversion && conversion->operand->kind == expression_call);
+	call = (struct ast_call_expression *)conversion->operand;
+	assert(call->expression.type == &type_nullptr && call->argument_count == 1);
+	conversion = (struct ast_conversion_expression *)call->arguments->value;
+	assert(conversion->expression.kind == expression_conversion && conversion->expression.type == &type_nullptr);
+	assert(conversion->operand->kind == expression_integer && conversion->operand->type == &type_int);
+	assert(main_function->locals == local && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_nullptr_assignment_conversion_tree();
 	test_void_parameter_query_tree();
 	test_typeof_expression_tree();
 	test_typeof_type_tree();

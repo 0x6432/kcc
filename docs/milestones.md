@@ -1946,3 +1946,27 @@ compiler bug and Clang explicit-cast oracle gaps. See the next prewritten
 m23-nullptr-assignment-conversions.md; do not claim this checkpoint's remote CI
 or an isolated full matrix passed. Query-derived function declarations are the
 next separately designed feature, after the correctness fix.
+
+
+## M23d2 null pointer constant assignment correction
+
+Normative N3096 6.5.16.1 (retained in N3220 6.5.17.2) permits a null pointer
+constant RHS when the destination has nullptr_t. The old implementation and four
+constraint fixtures incorrectly followed contradictory footnote 127. Apply the
+existing expression-sensitive null-pointer-source check to nullptr destinations,
+retaining explicit typed conversion nodes and rejecting nonconstant zero objects,
+nonzero integers and pointer objects. No backend change or new resource limit.
+Preserve explicit-cast programs; classify only three exact Clang 18 cast sources
+and exact single diagnostics as implementation gaps, never native agreements.
+
+Complete normal/QBE regression passed. GCC 11 / Clang 15 targeted ASan/UBSan
+lexer/sema and query/nullptr/control/compound suites passed. Modern Clang 18:
+25/25 original null-conversion agreements, 20/20 strict constraints and four
+actual C23 cross-object nullptr ABI arrangements, repeated with sanitized kcc.
+Expression queries: 69 originals, 65 native agreements, one exact array gap,
+three exact cast gaps and 17 strict native constraints. Void queries: 38 original
+native agreements, 12 constraints and 24 primitive ABI arrangements. Legacy
+hosts without the actual C23 keywords are not counted as native agreements.
+Bounded sanitized fuzz passed 10,946 lexer / 45,467 pipeline inputs in 26/26
+seconds. No generated C or invalid curated source executed. Public CI for this
+correction remains pending; the preceding 6893ce3 failure is not erased.

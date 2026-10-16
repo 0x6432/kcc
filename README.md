@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23d2 null-conversion correction: initialization, assignment, arguments and returns
+accept checked null pointer constants for query-named nullptr types. Nonconstant
+zero objects remain invalid. Explicit null casts remain accepted; exact native
+Clang cast gaps are labelled separately, never counted as agreements.
+
 M14k1: a sole unnamed query-derived void parameter now denotes a zero-argument
 function, including main, callbacks and compatible prototypes/definitions. Its
 written syntax is preserved without creating a runtime parameter or spill slot.

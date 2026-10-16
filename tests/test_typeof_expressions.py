@@ -61,6 +61,7 @@ programs += [
     'int main(void) { typeof(nullptr) n=(typeof(nullptr))(2-2); return n==nullptr?42:1; }',
     'int main(void) { typeof(nullptr) n=(typeof(nullptr))(void *)0; return n==nullptr?42:1; }',
 ]
+programs += ['int main(void) { typeof(nullptr) n=0; return n==nullptr?42:1; }', 'int main(void) { typeof(nullptr) n=nullptr; n=0; return n==nullptr?42:1; }', 'typeof(nullptr) f(void) { return 0; } int main(void) { return f()==nullptr?42:1; }', 'int f(typeof(nullptr) n) { return n==nullptr?42:1; } int main(void) { return f(0); }']
 constraints = [
     ('int f(void) { const int x=0; typeof(x) y=0; y=1; return 0; }','modifiable'),
     ('int f(void) { const int a[2]; typeof(a) b; b[0]=1; return 0; }','modifiable'),
@@ -71,10 +72,10 @@ constraints = [
     ('int f(int); int g(void) { typeof(f()) x; return 0; }','argument count'),
     ('int f(void) { typeof(*1) x; return 0; }','pointer'),
     ('int f(void) { typeof((void)0) x; return 0; }','complete'),
-    ('int f(void) { typeof(nullptr) n=0; return 0; }','conversion'),
-    ('int f(void) { typeof(nullptr) n=nullptr; n=0; return 0; }','conversion'),
-    ('typeof(nullptr) f(void) { return 0; }','conversion'),
-    ('int f(typeof(nullptr)); int g(void) { return f(0); }','conversion'),
+    ('int f(void) { int x=0; typeof(nullptr) n=x; return 0; }','conversion'),
+    ('int f(void) { int x=0; typeof(nullptr) n=nullptr; n=x; return 0; }','conversion'),
+    ('typeof(nullptr) f(void) { int x=0; return x; }','conversion'),
+    ('int f(typeof(nullptr)); int g(void) { int x=0; return f(x); }','conversion'),
     ('int f(void) { int x=0; typeof(nullptr) n=(typeof(nullptr))x; return 0; }','cast to nullptr type'),
     ('int f(void) { int *p=0; typeof(nullptr) n=(typeof(nullptr))p; return 0; }','cast to nullptr type'),
     ('int f(void) { typeof(nullptr) n=(typeof(nullptr))1; return 0; }','cast to nullptr type'),
@@ -102,6 +103,24 @@ for diagnostic in ["error: assignment of read-only location ‘b[1]’\n",
     assert not native_array_qualification_gap('int unrelated;', diagnostic)
     assert not native_array_qualification_gap(array_gap_source, diagnostic+'error: unexpected failure\n')
 assert not native_array_qualification_gap(array_gap_source, 'error: unsupported operand\n')
+
+def native_nullptr_cast_gap(text, diagnostics):
+    expected = {
+        'int main(void) { typeof(nullptr) n=(typeof(nullptr))0; return n==nullptr?42:1; }': "cannot cast an object of type 'int' to 'nullptr_t'",
+        'int main(void) { typeof(nullptr) n=(typeof(nullptr))(2-2); return n==nullptr?42:1; }': "cannot cast an object of type 'int' to 'nullptr_t'",
+        'int main(void) { typeof(nullptr) n=(typeof(nullptr))(void *)0; return n==nullptr?42:1; }': "cannot cast an object of type 'void *' to 'nullptr_t'",
+    }
+    errors = re.findall(r'error: ([^\n]+)',diagnostics.replace('‘', "'").replace('’', "'"))
+    return text in expected and errors == [expected[text]]
+
+# Exact local Clang 18 diagnostics; future accepting hosts count as agreements.
+for operand,kind in [('0','int'),('(2-2)','int'),('(void *)0','void *')]:
+    text = f'int main(void) {{ typeof(nullptr) n=(typeof(nullptr)){operand}; return n==nullptr?42:1; }}'
+    diagnostic = f"error: cannot cast an object of type '{kind}' to 'nullptr_t'\n"
+    assert native_nullptr_cast_gap(text, diagnostic)
+    assert not native_nullptr_cast_gap('int unrelated;', diagnostic)
+    assert not native_nullptr_cast_gap(text, diagnostic+'error: unexpected failure\n')
+    assert not native_nullptr_cast_gap(text, 'error: unsupported operand\n')
 
 with tempfile.TemporaryDirectory(prefix='kcc typeof expressions ') as directory:
     directory = Path(directory)
@@ -136,6 +155,7 @@ with tempfile.TemporaryDirectory(prefix='kcc typeof expressions ') as directory:
     native_supported = all(support)
     native_programs = 0
     native_array_gaps = 0
+    native_cast_gaps = 0
     native_constraints = 0
     for text in programs:
         compile_source(text)
@@ -145,9 +165,12 @@ with tempfile.TemporaryDirectory(prefix='kcc typeof expressions ') as directory:
             native.write_text(text+'\n')
             result = subprocess.run([host,'-std=c2x','-pedantic-errors',str(native),'-o',str(executable)], capture_output=True, text=True, timeout=10)
             if result.returncode:
-                # C23 array qualification: exact observed host gap, not agreement.
-                assert native_array_qualification_gap(text, result.stderr), (text,result.stderr)
-                native_array_gaps += 1
+                # Distinct, exact observed gaps, never broad native failures.
+                if native_array_qualification_gap(text, result.stderr):
+                    native_array_gaps += 1
+                else:
+                    assert native_nullptr_cast_gap(text, result.stderr), (text,result.stderr)
+                    native_cast_gaps += 1
             else:
                 assert subprocess.run([str(executable)], timeout=5).returncode == 42
                 native_programs += 1
@@ -192,6 +215,6 @@ with tempfile.TemporaryDirectory(prefix='kcc typeof expressions ') as directory:
                 result = subprocess.run([host,'-std=c2x','-pedantic-errors','-c',str(native),'-o',str(obj)], capture_output=True, text=True, timeout=10)
                 assert result.returncode == 0, (host_text,result.stderr)
                 link_run([assembly,obj])
-print(f'Typeof expressions passed: {len(programs)} original programs, {native_programs} strict native agreements / {native_array_gaps} exact native array-qualification gaps, {len(constraints)} kcc constraints / {native_constraints} strict native rejections; syntax/subset/mixed 64-query limits and operand non-evaluation; {host}'
+print(f'Typeof expressions passed: {len(programs)} original programs, {native_programs} strict native agreements / {native_array_gaps} exact native array-qualification gaps / {native_cast_gaps} exact native nullptr-cast gaps, {len(constraints)} kcc constraints / {native_constraints} strict native rejections; syntax/subset/mixed 64-query limits and operand non-evaluation; {host}'
       + ('; native original C23 keyword support' if native_supported else '; exact legacy keyword absence (no GNU alias oracle)')
       + ('; QBE/runtime and 24 mixed-stack primitive-result ABI arrangements passed' if qbe else ''))
