@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14f implementation: explicit function designators/decay, callback values and
+M14g implementation: real void types/functions, bare returns and effect-only
+casts/discards; prior explicit function designators/decay, callback values and
 indirect fixed calls; concrete concrete fixed-function declarator syntax/array-pointer returns,
 C23 unnamed definitions with positional ABI and no fake spills,
 grouped local/for-header declarators,
@@ -30,9 +31,9 @@ external flock. Logs/snapshots are in /data/tools and /data/validation-* outside
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14g void types/functions and discarded expressions, designed in
-m14-void-functions.md.
-Null constants, void/functions/full declarators,
+Next: M14h object/void pointer conversions and mixed equality, designed in
+m14-object-void-conversions.md.
+Null constants, object/void conversions and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
@@ -1532,3 +1533,23 @@ negative now expects the more precise not-a-function-pointer diagnostic.
 Full isolated matrices and exact-source remote CI remain pending for this
 checkpoint. Next M14g void types/functions/discards is designed in
 m14-void-functions.md. Function pointer design is m14-function-pointer-values.md.
+
+## M14g tested source checkpoint
+
+Full GCC normal regression and QBE suites passed. Targeted GCC and Clang checks
+cover 16 full-value programs, 28 primitive/pointer callback ABI combinations in
+both linkage directions, mixed register/stack ABI, result-free QBE IL, host-null
+&* cancellation, nonnull void-indirection effects, exact expression depth and
+52 invalid constraints. Semantic units inspect void syntax/cache/category, no
+void spills/loads, optional return AST values and indirect void calls.
+
+Bounded sanitized fuzz completed 24,479 lexer and 70,044 pipeline inputs in
+26 seconds per harness without reported failures; generated C was not executed.
+The obsolete void-pointer-prototype rejection was replaced with an invalid named
+void parameter. Test-only fixes use normalized bool expectations and the exact
+64-bit mixed-argument sum. Full isolated and exact-source remote checks for this
+checkpoint remain pending; do not infer them from older commits.
+
+M13e's independent GCC/Clang normal + ASan/UBSan matrix passed. Later matrices
+remain separately queued/running. M14h object/void conversions and mixed equality
+are designed before implementation in m14-object-void-conversions.md.

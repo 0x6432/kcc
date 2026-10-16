@@ -1169,3 +1169,19 @@ callees evaluate exactly once before arguments. Address-of suppresses decay;
 declared syntax separate from effective types. QBE indirect targets and narrow
 return canonicalization share the fixed-call ABI. Function referents never
 reach object layout or pointer offset helpers.
+
+## M14g real void and effect-only emission
+
+Concrete void syntax resolves to the singleton type_void; object classification
+does not imply completeness or scalar representation. Fixed signatures accept
+void returns, never void stored parameters. Return AST values may be NULL; sema
+checks this against the function return category. Shared conversion checks and
+all condition/unary/binary/logical contexts diagnose void instead of asserting.
+Indirection of void * is not an lvalue, but address-of's unary-* exception allows
+&* cancellation. No void load, slot, size or QBE value type is manufactured.
+
+The factored call emitter accepts an optional output pointer: scalar calls retain
+canonical ABI results, void calls produce none. Discard emission routes void
+calls, casts and indirections through effect-only paths. Ordinary expression
+statements and for-header initializer/step use this path. Function signatures,
+explicit returns and void fallthrough omit the QBE result type/value.

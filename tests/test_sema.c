@@ -1818,8 +1818,73 @@ static void test_function_pointer_expression_tree(void)
 	source_destroy(&source);
 }
 
+static void test_void_type_and_effect_tree(void)
+{
+	const char *text = "void f(void) { return; } void g(void (*p)(void),void *q) { p(); (void)f(); &*q; *q; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *f;
+	struct ast_function *g;
+	struct ast_statement_item *item;
+	struct ast_expression *expression;
+	struct ast_parameter *parameter;
+	struct ast_address_expression *address;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && sema_translation_unit(unit, &arena, &diagnostics));
+	f = first_function(unit);
+	g = (struct ast_function *)f->external.next;
+	assert(f->return_type == &type_void && !f->declaration->parameters);
+	assert(f->declaration->return_syntax->kind == type_syntax_void);
+	assert(f->declaration->return_syntax->type == &type_void);
+	assert(!f->locals);
+	item = (struct ast_statement_item *)f->body->items;
+	assert(item->statement->kind == statement_return);
+	assert(!((struct ast_return_statement *)item->statement)->value);
+	assert(type_is_object(&type_void) && !type_is_complete_object(&type_void));
+	assert(!type_is_scalar(&type_void) && !type_is_integer(&type_void));
+	assert(type_compatible(&type_void, &type_void) && !type_compatible(&type_void, &type_int));
+	assert(type_composite(&arena, &type_void, &type_void) == &type_void);
+	parameter = g->declaration->parameters;
+	assert(g->return_type == &type_void && g->locals && g->locals->next_local && !g->locals->next_local->next_local);
+	assert(parameter->type->kind == type_kind_pointer);
+	assert(((const struct function_type *)((const struct pointer_type *)parameter->type)->referent)->return_type == &type_void);
+	parameter = parameter->next;
+	assert(((const struct pointer_type *)parameter->type)->referent == &type_void);
+	assert(type_object_size(parameter->type) == 8);
+	item = (struct ast_statement_item *)g->body->items;
+	expression = ((struct ast_expression_statement *)item->statement)->value;
+	assert(expression->kind == expression_call && expression->type == &type_void && !expression->is_lvalue);
+	assert(!((struct ast_call_expression *)expression)->function);
+	item = (struct ast_statement_item *)item->item.next;
+	expression = ((struct ast_expression_statement *)item->statement)->value;
+	assert(expression->kind == expression_cast && expression->type == &type_void);
+	assert(((struct ast_cast_expression *)expression)->operand->kind == expression_call);
+	item = (struct ast_statement_item *)item->item.next;
+	address = (struct ast_address_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(address->expression.kind == expression_address && address->operand->kind == expression_indirection);
+	assert(address->operand->type == &type_void && !address->operand->is_lvalue);
+	item = (struct ast_statement_item *)item->item.next;
+	expression = ((struct ast_expression_statement *)item->statement)->value;
+	assert(expression->kind == expression_indirection && expression->type == &type_void && !expression->is_lvalue);
+	assert(!item->item.next && !diagnostics.errors);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_void_type_and_effect_tree();
 	test_function_pointer_expression_tree();
 	test_function_declarator_syntax_tree();
 	test_unnamed_definition_parameter_tree();

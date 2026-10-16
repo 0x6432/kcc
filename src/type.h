@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 enum type_kind {
+	type_kind_void,
 	type_kind_char,
 	type_kind_schar,
 	type_kind_uchar,
@@ -51,6 +52,7 @@ struct function_type {
 	size_t parameter_count;
 };
 
+extern const struct type type_void;
 extern const struct type type_bool;
 extern const struct type type_char;
 extern const struct type type_schar;

@@ -169,7 +169,8 @@ static size_t codegen_pointer_index(struct codegen *codegen,
 /* Object lvalues produce addresses; value-context loads are separate nodes. */
 static size_t codegen_address(struct codegen *codegen, const struct ast_expression *expression)
 {
-	assert(expression->is_lvalue || expression->type->kind == type_kind_function);
+	assert(expression->is_lvalue || expression->type->kind == type_kind_function ||
+		expression->kind == expression_indirection);
 	switch (expression->kind) {
 	case expression_function_designator: {
 		const struct ast_function_designator_expression *function =
@@ -277,6 +278,49 @@ static size_t codegen_logical(struct codegen *codegen,
 	return result;
 }
 
+/* A NULL output emits a void call; no result temporary is manufactured. */
+static void emit_call(struct codegen *codegen, const struct ast_call_expression *node,
+	size_t *value)
+{
+	size_t arguments[ast_max_arguments];
+	size_t target = 0;
+	size_t count = 0;
+
+	/* A direct target is a pure named designator. Computed targets evaluate
+	 * once before the arguments, one of C's permitted evaluation orders.
+	 */
+	if (!node->function)
+		target = codegen_expression(codegen, node->callee);
+	/* Finish each argument's IL, including branches, before the call line. */
+	for (const struct ast_argument *argument = node->arguments; argument;
+		argument = argument->next)
+		arguments[count++] = codegen_expression(codegen, argument->value);
+	assert(count == node->argument_count && count <= ast_max_arguments);
+	assert((node->expression.type->kind == type_kind_void) == (value == NULL));
+	if (value) {
+		*value = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%s call ", *value, qbe_abi_type(node->expression.type));
+	} else {
+		emit(codegen, "\tcall ");
+	}
+	if (node->function) {
+		struct token name = node->function->name;
+
+		emit(codegen, "$%.*s(", (int)name.length,
+			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+	} else {
+		emit(codegen, "%%t%zu(", target);
+	}
+	count = 0;
+	for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
+		emit(codegen, "%s%s %%t%zu", count ? ", " : "", qbe_abi_type(argument->value->type), arguments[count]);
+		count++;
+	}
+	emit(codegen, ")\n");
+	if (value)
+		*value = codegen_canonicalize(codegen, *value, node->expression.type);
+}
+
 /* Return the temporary containing the value; operands are emitted first. */
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression)
@@ -286,40 +330,10 @@ static size_t codegen_expression(struct codegen *codegen,
 	assert(type_is_scalar(expression->type));
 	switch (expression->kind) {
 	case expression_call: {
-		const struct ast_call_expression *node =
-			(const struct ast_call_expression *)expression;
-		size_t arguments[ast_max_arguments];
-		size_t target = 0;
-		size_t count = 0;
-		size_t result;
+		size_t value;
 
-		/* A direct target is a pure named designator. Computed targets evaluate
-		 * once before the arguments, one of C's permitted evaluation orders.
-		 */
-		if (!node->function)
-			target = codegen_expression(codegen, node->callee);
-		/* Finish each argument's IL, including branches, before the call line. */
-		for (const struct ast_argument *argument = node->arguments; argument;
-			argument = argument->next)
-			arguments[count++] = codegen_expression(codegen, argument->value);
-		assert(count == node->argument_count && count <= ast_max_arguments);
-		result = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =%s call ", result, qbe_abi_type(expression->type));
-		if (node->function) {
-			struct token name = node->function->name;
-
-			emit(codegen, "$%.*s(", (int)name.length,
-				(const char *)name.spelling_location.source->data + name.spelling_location.offset);
-		} else {
-			emit(codegen, "%%t%zu(", target);
-		}
-		count = 0;
-		for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
-			emit(codegen, "%s%s %%t%zu", count ? ", " : "", qbe_abi_type(argument->value->type), arguments[count]);
-			count++;
-		}
-		emit(codegen, ")\n");
-		return codegen_canonicalize(codegen, result, expression->type);
+		emit_call(codegen, (const struct ast_call_expression *)expression, &value);
+		return value;
 	}
 	case expression_address: {
 		const struct ast_address_expression *node = (const struct ast_address_expression *)expression;
@@ -468,6 +482,35 @@ static size_t codegen_expression(struct codegen *codegen,
 	return 0;
 }
 
+/* Discarded void expressions have effects, not a scalar result or void load. */
+static void codegen_discard_expression(struct codegen *codegen,
+	const struct ast_expression *expression)
+{
+	if (expression->type->kind != type_kind_void) {
+		codegen_expression(codegen, expression);
+		return;
+	}
+	switch (expression->kind) {
+	case expression_call:
+		emit_call(codegen, (const struct ast_call_expression *)expression, NULL);
+		return;
+	case expression_cast: {
+		const struct ast_cast_expression *node = (const struct ast_cast_expression *)expression;
+
+		codegen_discard_expression(codegen, node->operand);
+		return;
+	}
+	case expression_indirection: {
+		const struct ast_indirection_expression *node = (const struct ast_indirection_expression *)expression;
+
+		codegen_expression(codegen, node->operand);
+		return;
+	}
+	default:
+		assert(0 && "unsupported discarded void expression");
+	}
+}
+
 static bool codegen_block_items(struct codegen *codegen,
 	const struct ast_block_item *item);
 
@@ -586,7 +629,7 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 	if (node->initializer_declarations)
 		codegen_block_items(codegen, node->initializer_declarations);
 	if (node->initializer_expression)
-		codegen_expression(codegen, node->initializer_expression);
+		codegen_discard_expression(codegen, node->initializer_expression);
 	emit(codegen, "\tjmp @b%zu\n", condition_label);
 	emit_label(codegen, condition_label);
 	if (node->condition) {
@@ -605,7 +648,7 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 		emit(codegen, "\tjmp @b%zu\n", step_label);
 	emit_label(codegen, step_label);
 	if (node->step)
-		codegen_expression(codegen, node->step);
+		codegen_discard_expression(codegen, node->step);
 	emit(codegen, "\tjmp @b%zu\n", condition_label);
 	emit_label(codegen, exit_label);
 	return false;
@@ -619,16 +662,20 @@ static bool codegen_statement(struct codegen *codegen,
 	case statement_return: {
 		const struct ast_return_statement *node =
 			(const struct ast_return_statement *)statement;
-		size_t value = codegen_expression(codegen, node->value);
+		if (node->value) {
+			size_t value = codegen_expression(codegen, node->value);
 
-		emit(codegen, "\tret %%t%zu\n", value);
+			emit(codegen, "\tret %%t%zu\n", value);
+		} else {
+			emit(codegen, "\tret\n");
+		}
 		return true;
 	}
 	case statement_expression: {
 		const struct ast_expression_statement *node =
 			(const struct ast_expression_statement *)statement;
 
-		codegen_expression(codegen, node->value);
+		codegen_discard_expression(codegen, node->value);
 		return false;
 	}
 	case statement_empty:
@@ -705,10 +752,12 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	struct token name = function->declaration->name;
 	size_t parameter_index = 0;
 
-	assert(type_is_scalar(function->return_type));
+	assert(type_is_scalar(function->return_type) || function->return_type->kind == type_kind_void);
 
-	emit(&codegen, "export function %s $%.*s(", qbe_abi_type(function->return_type),
-		(int)name.length,
+	emit(&codegen, "export function ");
+	if (function->return_type->kind != type_kind_void)
+		emit(&codegen, "%s ", qbe_abi_type(function->return_type));
+	emit(&codegen, "$%.*s(", (int)name.length,
 		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
@@ -736,8 +785,12 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 				qbe_store_size(parameter->type), parameter_index, parameter->local->slot);
 		parameter_index++;
 	}
-	if (!codegen_block_items(&codegen, function->body->items))
-		emit(&codegen, "\tret 0\n");
+	if (!codegen_block_items(&codegen, function->body->items)) {
+		if (function->return_type->kind == type_kind_void)
+			emit(&codegen, "\tret\n");
+		else
+			emit(&codegen, "\tret 0\n");
+	}
 	emit(&codegen, "}\n");
 	if (fflush(stream) != 0)
 		codegen.output_ok = false;

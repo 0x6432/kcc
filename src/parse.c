@@ -41,6 +41,11 @@ static bool begins_integer_type(enum token_kind kind)
 		kind == token_long || kind == token_char || kind == token_short || kind == token_bool;
 }
 
+static bool begins_declaration_specifier(enum token_kind kind)
+{
+	return kind == token_void || begins_integer_type(kind);
+}
+
 /* integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
  *                | permutation of ['signed' | 'unsigned'] 'short' ['int']
@@ -139,13 +144,26 @@ static bool parse_integer_type(struct parser *parser, enum integer_specifier *sp
 	return true;
 }
 
-/* declaration-specifiers ::= integer-type */
+/* declaration-specifiers ::= integer-type | "void" */
 static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser,
 	struct token *beginning)
 {
 	enum integer_specifier specifier;
 	struct ast_integer_type_syntax *base;
 
+	if (preprocess_peek(parser->preprocessor).kind == token_void) {
+		struct ast_void_type_syntax *node;
+
+		*beginning = preprocess_next(parser->preprocessor);
+		if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
+			diagnostic_error(parser->diagnostics, beginning->location, "void cannot combine with other type specifiers");
+			return NULL;
+		}
+		node = ast_new_void_type_syntax(parser->arena, beginning->location);
+		if (!node)
+			allocation_error(parser, beginning->location);
+		return node ? &node->syntax : NULL;
+	}
 	if (!parse_integer_type(parser, &specifier, beginning))
 		return NULL;
 	base = ast_new_integer_type_syntax(parser->arena, beginning->location, specifier);
@@ -279,7 +297,7 @@ static bool parse_declarator_contents(struct parser *parser,
 
 		preprocess_next(parser->preprocessor);
 		next = preprocess_peek(parser->preprocessor);
-		if (begins_integer_type(next.kind) || next.kind == token_void || next.kind == token_right_paren) {
+		if (begins_declaration_specifier(next.kind) || next.kind == token_right_paren) {
 			if (!parse_function_suffix(parser, declarator, token))
 				return false;
 		} else {
@@ -689,7 +707,7 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 	struct ast_type_syntax *type_syntax;
 	struct token beginning;
 
-	if (!begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+	if (!begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
 		operand = parse_expression(parser, 0);
 		if (!operand || !expect_token(parser, token_right_paren, "expected ')'", NULL))
 			return NULL;
@@ -897,18 +915,20 @@ failure:
 	return NULL;
 }
 
-/* return-statement ::= "return" expression ";" */
+/* return-statement ::= "return" [ expression ] ";" */
 static struct ast_return_statement *parse_return_statement(struct parser *parser)
 {
 	struct token keyword;
-	struct ast_expression *value;
+	struct ast_expression *value = NULL;
 	struct ast_return_statement *node;
 
 	if (!expect_token(parser, token_return, "expected 'return'", &keyword))
 		return NULL;
-	value = parse_expression(parser, 0);
-	if (!value)
-		return NULL;
+	if (preprocess_peek(parser->preprocessor).kind != token_semicolon) {
+		value = parse_expression(parser, 0);
+		if (!value)
+			return NULL;
+	}
 	if (!expect_token(parser, token_semicolon, "expected ';' after return", NULL))
 		return NULL;
 	node = ast_new_return(parser->arena, keyword.location, value);
@@ -1117,7 +1137,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
-	if (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+	if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
 		initializer_declarations = parse_local_declaration(parser);
 		if (!initializer_declarations)
 			return NULL;
@@ -1331,7 +1351,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 	struct ast_statement *statement;
 	struct ast_statement_item *node;
 
-	if (begins_integer_type(preprocess_peek(parser->preprocessor).kind))
+	if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind))
 		return parse_local_declaration(parser);
 	statement = parse_statement(parser);
 	if (!statement)
@@ -1364,7 +1384,7 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			return NULL;
 		}
 		/* Declaration groups charge each concrete declaration themselves. */
-		if (!begins_integer_type(token.kind) && !count_block_item(parser, token.location))
+		if (!begins_declaration_specifier(token.kind) && !count_block_item(parser, token.location))
 			return NULL;
 		item = parse_block_item(parser);
 		if (!item)
@@ -1401,10 +1421,6 @@ static bool parse_parameters(struct parser *parser,
 {
 	struct ast_parameter **tail = &function->parameters;
 
-	if (preprocess_peek(parser->preprocessor).kind == token_void) {
-		preprocess_next(parser->preprocessor);
-		return true;
-	}
 	if (preprocess_peek(parser->preprocessor).kind == token_right_paren)
 		return true;
 	for (;;) {
@@ -1423,6 +1439,10 @@ static bool parse_parameters(struct parser *parser,
 		type_syntax = parse_type_name(parser, &beginning, &name, &has_name, declarator_parameter);
 		if (!type_syntax)
 			return false;
+		/* Only a sole unnamed, underived void is the empty-list marker. */
+		if (!function->parameter_count && !has_name && type_syntax->kind == type_syntax_void &&
+			preprocess_peek(parser->preprocessor).kind == token_right_paren)
+			return true;
 		parameter = ast_new_parameter(parser->arena, beginning.location, name, has_name);
 		if (!parameter) {
 			allocation_error(parser, beginning.location);

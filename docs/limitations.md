@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14f. Read the latest entries together with README.md and
+Current milestone: M14g. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1084,3 +1084,15 @@ object/function pointer conversions, integer null constants or incompatible
 function casts are added. Void, variadics, qualifiers, typedefs, block function
 declarations and file objects remain unsupported. Typed expression depth stays
 128; explicit callee decay participates rather than raising the bound.
+
+## M14g
+
+Void is a real incomplete object type, never a scalar or zero-sized object.
+Functions/callbacks may return void; sole unnamed void means zero parameters.
+Void locals/parameters/array elements remain constraints. Void calls, casts and
+indirections may be discarded; scalar contexts reject their nonexistent values.
+A void return accepts no expression, even another void expression. Void fallthrough
+emits bare ret; prior nonvoid fallthrough behavior is unchanged. &* cancellation
+accepts void pointers without loading them. Compatible void-pointer values are
+supported, but object/void conversions and mixed equality are next M14h. Null
+constants, variadics, qualifiers, typedefs and remaining C23 stay unfinished.

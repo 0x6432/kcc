@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-e object/function declarators, lists, incomplete pointers/composites and unnamed definitions; function/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-g declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1059,3 +1059,23 @@ negative now expects the more precise not-a-function-pointer diagnostic.
 Full isolated matrices and exact-source remote CI remain pending for this
 checkpoint. Next M14g void types/functions/discards is designed in
 m14-void-functions.md. Function pointer design is m14-function-pointer-values.md.
+
+## M14g tested source checkpoint
+
+Full GCC normal regression and QBE suites passed. Targeted GCC and Clang checks
+cover 16 full-value programs, 28 primitive/pointer callback ABI combinations in
+both linkage directions, mixed register/stack ABI, result-free QBE IL, host-null
+&* cancellation, nonnull void-indirection effects, exact expression depth and
+52 invalid constraints. Semantic units inspect void syntax/cache/category, no
+void spills/loads, optional return AST values and indirect void calls.
+
+Bounded sanitized fuzz completed 24,479 lexer and 70,044 pipeline inputs in
+26 seconds per harness without reported failures; generated C was not executed.
+The obsolete void-pointer-prototype rejection was replaced with an invalid named
+void parameter. Test-only fixes use normalized bool expectations and the exact
+64-bit mixed-argument sum. Full isolated and exact-source remote checks for this
+checkpoint remain pending; do not infer them from older commits.
+
+M13e's independent GCC/Clang normal + ASan/UBSan matrix passed. Later matrices
+remain separately queued/running. M14h object/void conversions and mixed equality
+are designed before implementation in m14-object-void-conversions.md.

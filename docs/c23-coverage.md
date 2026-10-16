@@ -257,3 +257,10 @@ Concrete designators/decay, compatible function pointers, function-parameter
 adjustment, callbacks/factories and direct/indirect fixed calls are implemented.
 No object/function conversions, function pointer arithmetic/ordering, variadics
 or null integer constants are implied. Void remains next.
+
+### M14g void types/functions
+
+Void syntax/types, fixed void callbacks, bare returns, void casts and discarded
+expressions are implemented with no scalar representation. Conditions/conversions
+reject void values. Object/void pointer conversions and mixed equality are next;
+this does not imply full declarator, qualifier or C23 conformance.

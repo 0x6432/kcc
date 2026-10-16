@@ -140,6 +140,9 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_void:
+		syntax->type = &type_void;
+		break;
 	case type_syntax_integer: {
 		struct ast_integer_type_syntax *integer = (struct ast_integer_type_syntax *)syntax;
 
@@ -174,8 +177,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!return_type || !sema_parameter_names(sema, function->parameters))
 			return NULL;
-		if (!type_is_scalar(return_type)) {
-			diagnostic_error(sema->diagnostics, syntax->location, "function return type must be an implemented scalar type");
+		if (!type_is_scalar(return_type) && return_type->kind != type_kind_void) {
+			diagnostic_error(sema->diagnostics, syntax->location, "function return type must be void or an implemented scalar type");
 			return NULL;
 		}
 		for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
@@ -183,6 +186,10 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 			if (!declared)
 				return NULL;
+			if (declared->kind == type_kind_void) {
+				diagnostic_error(sema->diagnostics, parameter->location, "parameter cannot have void type");
+				return NULL;
+			}
 			parameter->type = adjust_parameter_type(sema, declared, parameter->location);
 			if (!parameter->type)
 				return NULL;
@@ -257,7 +264,10 @@ static const struct type *adjust_parameter_type(struct sema *sema,
 static bool check_conversion(struct sema *sema, const struct type *source,
 	const struct type *target, struct source_location location)
 {
-	assert(type_is_scalar(source) && type_is_scalar(target));
+	if (!type_is_scalar(source) || !type_is_scalar(target)) {
+		diagnostic_error(sema->diagnostics, location, "conversion requires a scalar value and target");
+		return false;
+	}
 	if (type_compatible(source, target) || (type_is_integer(source) && type_is_integer(target)) ||
 		(source->kind == type_kind_pointer && target->kind == type_kind_bool))
 		return true;
@@ -454,7 +464,8 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, false))
 			return false;
-		if (!node->operand->is_lvalue && node->operand->type->kind != type_kind_function) {
+		if (!node->operand->is_lvalue && node->operand->type->kind != type_kind_function &&
+			node->operand->kind != expression_indirection) {
 			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
 			return false;
 		}
@@ -505,7 +516,7 @@ static bool sema_expression(struct sema *sema,
 		}
 		pointer = (const struct pointer_type *)node->operand->type;
 		result_type = pointer->referent;
-		expression->is_lvalue = result_type->kind != type_kind_function;
+		expression->is_lvalue = result_type->kind != type_kind_function && result_type->kind != type_kind_void;
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
@@ -574,6 +585,10 @@ static bool sema_expression(struct sema *sema,
 		result_type = resolve_type_syntax(sema, node->type_syntax);
 		if (!result_type)
 			return false;
+		if (result_type->kind == type_kind_void) {
+			expression->depth = node->operand->depth + 1;
+			break;
+		}
 		if (!type_is_scalar(result_type)) {
 			diagnostic_error(sema->diagnostics, expression->location, "cast target must be a scalar type");
 			return false;
@@ -589,6 +604,10 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, true))
 			return false;
+		if (!type_is_scalar(node->operand->type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "unary operator requires a scalar operand");
+			return false;
+		}
 		if (node->operation != unary_not) {
 			if (!type_is_integer(node->operand->type)) {
 				diagnostic_error(sema->diagnostics, expression->location, "unary arithmetic requires an integer operand");
@@ -613,6 +632,10 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!sema_expression(sema, &node->right, true))
 			return false;
+		if (!type_is_scalar(node->left->type) || !type_is_scalar(node->right->type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "binary operator requires scalar operands");
+			return false;
+		}
 		if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
 			if (node->operation == binary_add || node->operation == binary_subtract)
 				return lower_pointer_arithmetic(sema, expression_slot, node);
@@ -663,6 +686,10 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!sema_expression(sema, &node->right, true))
 			return false;
+		if (!type_is_scalar(node->left->type) || !type_is_scalar(node->right->type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "logical operator requires scalar operands");
+			return false;
+		}
 		depth = node->left->depth > node->right->depth ?
 			node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
@@ -749,6 +776,17 @@ static bool sema_expression(struct sema *sema,
 		if (!check_expression_depth(sema, &load->expression))
 			return false;
 		*expression_slot = &load->expression;
+	}
+	return true;
+}
+
+static bool sema_condition(struct sema *sema, struct ast_expression **slot)
+{
+	if (!sema_expression(sema, slot, true))
+		return false;
+	if (!type_is_scalar((*slot)->type)) {
+		diagnostic_error(sema->diagnostics, (*slot)->location, "condition requires a scalar value");
+		return false;
 	}
 	return true;
 }
@@ -841,7 +879,7 @@ static bool sema_if(struct sema *sema, struct ast_if_statement *node)
 	bool success;
 
 	sema->scope = &scope;
-	success = sema_expression(sema, &node->condition, true);
+	success = sema_condition(sema, &node->condition);
 	if (success)
 		success = sema_substatement(sema, node->then_branch);
 	if (success && node->else_branch)
@@ -868,7 +906,7 @@ static bool sema_while(struct sema *sema, struct ast_while_statement *node)
 	bool success;
 
 	sema->scope = &scope;
-	success = sema_expression(sema, &node->condition, true);
+	success = sema_condition(sema, &node->condition);
 	if (success)
 		success = sema_loop_body(sema, &node->statement, node->body);
 	sema->scope = scope.parent;
@@ -883,7 +921,7 @@ static bool sema_do(struct sema *sema, struct ast_do_statement *node)
 	sema->scope = &scope;
 	success = sema_loop_body(sema, &node->statement, node->body);
 	if (success)
-		success = sema_expression(sema, &node->condition, true);
+		success = sema_condition(sema, &node->condition);
 	sema->scope = scope.parent;
 	return success;
 }
@@ -901,7 +939,7 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 	if (success && node->initializer_expression)
 		success = sema_expression(sema, &node->initializer_expression, true);
 	if (success && node->condition)
-		success = sema_expression(sema, &node->condition, true);
+		success = sema_condition(sema, &node->condition);
 	if (success && node->step)
 		success = sema_expression(sema, &node->step, true);
 	if (success)
@@ -917,6 +955,17 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 		struct ast_return_statement *node =
 			(struct ast_return_statement *)statement;
 
+		if (sema->function->return_type->kind == type_kind_void) {
+			if (node->value) {
+				diagnostic_error(sema->diagnostics, statement->location, "void function return cannot have an expression");
+				return false;
+			}
+			return true;
+		}
+		if (!node->value) {
+			diagnostic_error(sema->diagnostics, statement->location, "nonvoid function return requires an expression");
+			return false;
+		}
 		return sema_expression(sema, &node->value, true) &&
 			convert_expression(sema, &node->value, sema->function->return_type);
 	}

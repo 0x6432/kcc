@@ -2,6 +2,7 @@
 
 #include <assert.h>
 
+const struct type type_void = { type_kind_void };
 const struct type type_bool = { type_kind_bool };
 const struct type type_char = { type_kind_char };
 const struct type type_schar = { type_kind_schar };
@@ -55,7 +56,8 @@ bool type_is_scalar(const struct type *type)
 
 bool type_is_object(const struct type *type)
 {
-	return type_is_scalar(type) || type->kind == type_kind_array;
+	return type_is_scalar(type) || type->kind == type_kind_array ||
+		type->kind == type_kind_void;
 }
 
 bool type_is_complete_object(const struct type *type)
@@ -264,7 +266,7 @@ bool type_compatible(const struct type *left, const struct type *right)
 
 	if (left->kind != right->kind)
 		return false;
-	if (type_is_integer(left))
+	if (type_is_integer(left) || left->kind == type_kind_void)
 		return true;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;
@@ -299,7 +301,7 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right)
 {
 	assert(type_compatible(left, right));
-	if (left == right || type_is_integer(left))
+	if (left == right || type_is_integer(left) || left->kind == type_kind_void)
 		return left;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;
