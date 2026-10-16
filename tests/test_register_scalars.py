@@ -69,8 +69,6 @@ c23_constraints = [
     ('int main(void) { register int x=0; typeof_unqual(&x) p; return 0; }', 'cannot take the address'),
 ]
 subset_errors = [
-    ('int main(void) { register int a[2]; return sizeof(a); }', 'register array objects are not supported yet'),
-    ('typedef int A[2]; int main(void) { A register a; return sizeof(a); }', 'register array objects are not supported yet'),
     ('int f(register int x) { return x; }', 'register storage is not supported in this context'),
     ('int f(register int);', 'register storage is not supported in this context'),
     ('int f(register int a[2]);', 'register storage is not supported in this context'),

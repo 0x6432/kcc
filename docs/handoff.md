@@ -2,6 +2,34 @@
 
 ## Current checkpoint
 
+M15b1 non-decaying fixed register arrays is implemented and locally validated.
+Read m15-register-arrays.md and the latest ledger/contracts/coverage/limits.
+Complete fixed register arrays use ordinary local slots and support direct
+sizeof/typeof queries without decay. Ordinary type copies retain no storage
+flag and may decay/index normally. Direct & is still a constraint; decay of the
+register array is explicitly refused, even inside an outer unevaluated query.
+Never execute register-array decay probes. Register parameters, VM types,
+incomplete objects and array initializers remain unsupported. No parser/AST/type
+or QBE interface change; scoped identities, shared bases and budgets remain.
+
+Full normal GCC 11/GCC 14/Clang 18, full QBE with both modern hosts, four-host
+focused/ABI and both-host ASan/UBSan lexer/sema plus 18 suites passed. Bounded
+compile-only fuzz: 7,057 lexer / 30,806 pipeline inputs, 26 seconds
+each. Frozen primary/isolated manifests matched; helpers built serially before
+parallel validation. No invalid/generated C executed. Read the ledger for exact
+counts, explicit subset/refusal categories and pre-freeze fixture corrections.
+Logs /data/tools/m15b1-*, isolated sanitizer trees /data/validation-m15b1/.
+
+M15a1 CI run 38972442575 is still pending; no remote pass is claimed.
+New M15b1 exact-commit CI is pending until checked after push. Do not infer remote
+success from local validation. User authorizes continued development; historical
+STOP REQUEST is superseded. No stashes were discarded; preserve historical
+named stashes if restored. No old snapshot generators rerun or subagents used.
+Current /data/tools implementation scripts were applied once; do not rerun them.
+Next increment needs its own pre-implementation design. Verify reset tool paths.
+
+## Earlier M15a1 checkpoint (historical)
+
 M15a1 scalar block/for register objects is implemented and locally validated.
 Read m15-register-scalars.md and the latest ledger/contracts/coverage/limits.
 Register is declaration storage, not a type qualifier/hardware-register promise.

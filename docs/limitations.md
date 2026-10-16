@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15A1 scalar block/for register objects. Read the latest entries together with README.md and
+Current milestone: M15B1 non-decaying fixed register arrays. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1968,3 +1968,23 @@ header-free keyword-macro original is recorded separately, not a native agreemen
 or kcc bug. No standard header is included/expanded by that fixture. Other errors,
 additional diagnostics, different sources and signals are not classified away.
 Read the M15a1 ledger for actual frozen local results and remote CI status.
+
+## M15b1 fixed register arrays without decay
+
+Complete fixed block/for register arrays are now supported for direct sizeof and
+typeof/typeof_unqual queries. Aliases, const elements, multidimensional arrays,
+comma lists and ordinary typeof copies preserve existing type and scope rules.
+Arrays use normal local slots and the unchanged 256-local/1 MiB storage budgets.
+Incomplete objects, VLA/VM types, array initializers and register parameters remain
+unsupported. This is not full C23.
+
+Unary & of the direct register array is a native language constraint. A value use
+that would insert array-to-pointer conversion is instead explicitly refused as
+unsupported; evaluated conversion of a register array has undefined behavior,
+not a required native constraint diagnostic. Refusal also covers nested decay
+inside sizeof(a[0]) or typeof(a+0), conservatively without introducing evaluation
+context state. These sources are compile-only and not claimed as native
+constraint agreements or executed. Direct sizeof(a)/typeof(a) need no decay.
+Storage class never travels through a type query: ordinary copies may decay and
+be indexed/addressed normally. Ordinary array referents through register pointers
+remain unaffected. Read the ledger for frozen validation and remote CI status.

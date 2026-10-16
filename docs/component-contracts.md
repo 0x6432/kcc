@@ -1883,3 +1883,17 @@ objects. Register arrays/functions are rejected before binding. Storage is not
 part of any semantic type; typeof copies no class. QBE/ABI APIs are unchanged,
 register objects use normal slots, and aliases allocate none. Existing lexical,
 parser-scope, local/item/type/depth/storage budgets and immutable caches remain.
+
+## M15b1 non-decaying register arrays
+
+Remove only sema_local's blanket register-array rejection; complete objects and
+existing initialization/local/storage limits still govern binding. No parser,
+AST or type graph interface changes. In sema_expression's array value-conversion
+branch, resolve the direct name identity and reject is_register before allocating
+a pointer/decay node. Direct sizeof/typeof operands request no value conversion.
+The query retains the immutable array type; ordinary copies have no register
+flag and decay through the unchanged path. The same provenance test for unary &
+continues to reject explicit address-taking. Inner decay in otherwise unevaluated
+queries remains explicitly unsupported rather than adding context-sensitive
+exception machinery. QBE still allocates ordinary array slots; no backend or ABI
+change, no alias storage, and all existing resource/scope invariants remain.

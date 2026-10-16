@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar block/for register objects; parameters, arrays, other storage classes/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects and M15b1 non-decaying fixed register arrays; parameters, other storage classes/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -2523,3 +2523,46 @@ negative-tested before freezing. The source was not rewritten. No intermediate
 failure is counted as a pass. M14l4 CI run 38958469583 completed/success in all
 three jobs. New M15a1 exact-commit CI remains pending until checked after push;
 local validation is not remote evidence. Not full C23.
+
+## M15b1 non-decaying fixed register arrays
+
+Design recorded before implementation in m15-register-arrays.md after pushed
+1c65282. Complete fixed register arrays now bind through ordinary local storage.
+The single existing array value-conversion boundary rejects direct register-name
+decay before pointer/AST allocation. Direct sizeof/typeof retain immutable array
+types, and ordinary copies get no register flag. Explicit & remains a constraint;
+register pointers to ordinary arrays remain unaffected. No lexer/parser/AST/type
+or QBE/ABI interface change. Parameters, VM types, incomplete objects and array
+initializers remain outside this increment. Inner decay inside unevaluated
+queries is conservatively unsupported, without a new evaluation-context model.
+
+Frozen validation passed: full make test with GCC 11.5/GCC 14.2.1/Clang 18.1.8;
+full make test-codegen with QBE 1.2 and both modern native hosts; GCC 11 and
+Clang 15 ASan/UBSan lexer/sema plus 18 focused suites (array suite also Clang 18).
+Helpers built serially before independent parallel runs. Primary and isolated
+source/test/Makefile manifests match before/after. Compile-only bounded sanitized
+fuzz passed 7,057 lexer / 30,806 pipeline inputs in 26 seconds each.
+No invalid curated or fuzz-generated C executed. Logs/manifests /data/tools/m15b1-*,
+isolated trees /data/validation-m15b1/{gcc,clang}.
+
+Focused array originals: 37 standard + 6 C23; all accepted/executed via kcc/QBE.
+Modern hosts strictly agree on all 43, legacy hosts on 37 (exact missing-C23
+keyword probes omit six comparisons, never counted as agreements). Five native
+constraints on modern hosts, four on legacy hosts. Eight register-array-decay
+sources and six unsupported forms are compile-only rejected, not executed or
+counted as native constraints. Twenty-four both-direction mixed-stack primitive
+ABI arrangements per host pass. The scalar suite was rerun on four hosts and now
+retains its three parameter subset refusals; the two old array refusals became
+new positive coverage, not silent deletions. Exact 256/257 local, 4096/4097 item,
+1 MiB/overflow storage and 128/129 expanded-typedef depth boundaries pass. AST
+checks prove captured array identity in typeof, immutable type sharing, ordinary
+copy decay and exactly three real local slots.
+
+Pre-freeze test fixes: corrected a new AST struct spelling; moved the depth
+boundary to the actual existing expanded-typedef check rather than claiming a
+new all-local expanded-depth policy; renamed the ABI scratch array to avoid
+conflicting with parameter a. Invalid positives were rejected before execution;
+no compiler behavior was weakened and no intermediate failure counted as a pass.
+M15a1 CI run 38972442575 is still pending; no remote pass is claimed.
+New M15b1 exact-commit CI is pending until checked after push; local passes are
+not remote evidence. Not full C23.

@@ -1362,9 +1362,17 @@ static bool sema_expression(struct sema *sema,
 		*expression_slot = &decay->expression;
 	} else if (value_required && expression->type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)expression->type;
-		struct pointer_type *pointer = type_new_pointer(sema->arena, array->element);
+		struct pointer_type *pointer;
 		struct ast_array_decay_expression *decay;
 
+		/* Direct sizeof/typeof operands never enter value conversion. */
+		if (expression->kind == expression_name &&
+			((struct ast_name_expression *)expression)->declaration->is_register) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"register array-to-pointer conversion is not supported");
+			return false;
+		}
+		pointer = type_new_pointer(sema->arena, array->element);
 		if (!pointer) {
 			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating decay type");
 			return false;
@@ -1470,11 +1478,6 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 
 	if (!type)
 		return false;
-	if (local->is_register && type->kind == type_kind_array) {
-		diagnostic_error(sema->diagnostics, local->name.location,
-			"register array objects are not supported yet");
-		return false;
-	}
 	if (local->is_register && type->kind == type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"register storage requires an object type");

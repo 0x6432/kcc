@@ -6,12 +6,20 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15B1: Complete fixed `register` arrays may be declared and used in direct
+`sizeof`/`typeof` queries without decay. They use ordinary bounded local storage;
+`typeof` copies are ordinary arrays unless separately declared register. Taking
+the register array's address remains a constraint; array-to-pointer conversion
+is explicitly refused, even in queries requiring an inner decay. Register
+parameters, VM types and array initializers remain unsupported. Read
+docs/m15-register-arrays.md and the latest ledger/contracts/limitations.
+
 M15A1: Scalar block/for objects may use `register` in any declaration-specifier
 position. The hint uses ordinary QBE local slots; taking the declared object's
 address is rejected, even in unevaluated queries. Pointee addresses through
 register pointers remain valid. Storage class is not a type qualifier and does
-not propagate through `typeof`. Register arrays and parameters remain explicit
-subset limits. Read docs/m15-register-scalars.md and the latest ledger/contracts.
+not propagate through `typeof`. Register parameters remain an explicit subset
+limit; arrays are extended by M15b1. Read docs/m15-register-scalars.md and the latest ledger/contracts.
 Other storage classes, globals and full C23 remain unsupported.
 
 M14L4: The typedef storage class may appear anywhere among declaration

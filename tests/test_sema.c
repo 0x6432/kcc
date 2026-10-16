@@ -4294,8 +4294,57 @@ static void test_register_scalar_tree(void)
 	fclose(stream);
 }
 
+static void test_register_array_tree(void)
+{
+	const char *text = "int f(void) { register int a[2]; typeof(a) b; "
+		"int *p=b; return sizeof(a); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *b;
+	struct ast_local_declaration *p;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_array_decay_expression *decay;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = (struct ast_function *)unit->declarations;
+	a = (struct ast_local_declaration *)function->body->items;
+	b = (struct ast_local_declaration *)a->item.next;
+	p = (struct ast_local_declaration *)b->item.next;
+	assert(a->is_register && !b->is_register && !p->is_register);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(a->type->kind == type_kind_array && a->type == b->type);
+	assert(type_object_size(a->type) == 8);
+	assert(a->slot == 0 && b->slot == 1 && p->slot == 2);
+	assert(function->locals == p && p->next_local == b && b->next_local == a);
+	assert(!a->next_local);
+	query = (struct ast_typeof_expression_syntax *)b->type_syntax;
+	assert(query->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)query->operand)->declaration == a);
+	assert(query->operand->type == a->type);
+	assert(p->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)p->initializer;
+	assert(decay->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)decay->operand)->declaration == b);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_register_array_tree();
 	test_register_scalar_tree();
 	test_typedef_specifier_placement_tree();
 	test_parameter_typedef_shadowing_tree();
