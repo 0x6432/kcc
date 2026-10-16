@@ -117,6 +117,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static assertions ') as directory:
 
     native_count = 0
     numeric_message_gap = False
+    keyword_macro_warning = False
     for text in programs + [for_program, pp_program]:
         result = compile_source(text)
         if qbe:
@@ -136,6 +137,17 @@ with tempfile.TemporaryDirectory(prefix='kcc static assertions ') as directory:
         native.write_text((prefix if text != pp_program else '') + text + '\n')
         result = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-fsigned-char', str(native), '-o', str(executable)],
                                 capture_output=True, text=True, timeout=10)
+        # Macro replacement uses preprocessing identifiers, including later
+        # language keywords. New Clang's pedantic keyword-macro policy is not
+        # a C constraint. Retry the identical source with only that warning
+        # disabled, and only after verifying its exact one-error diagnostic.
+        if result.returncode != 0 and text == pp_program:
+            assert 'keyword is hidden by macro definition [-Werror,-Wkeyword-macro]' in result.stderr, result.stderr
+            assert result.stderr.count('error:') == 1 and '1 error generated.' in result.stderr, result.stderr
+            result = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-Wno-keyword-macro',
+                                     '-fsigned-char', str(native), '-o', str(executable)],
+                                    capture_output=True, text=True, timeout=10)
+            keyword_macro_warning = True
         # C23 6.4.5/6.7.11 permit numeric escapes in these messages.
         # Some newer Clang releases apply the C++ unevaluated-string rule
         # to C too. Keep the original kcc/QBE test and recognize only this
@@ -205,6 +217,7 @@ print(f'Static assertions passed: {len(programs)+2} original programs, {native_c
       f'{len(constraints)} constraints, {len(strict_rejections)} strict native ICE rejections, diagnostic bytes/provenance, '
       f'exact syntax/typed/item/external/string limits; {host}; '
       + ('numeric-message Clang oracle gap; ' if numeric_message_gap else '')
+      + ('exact keyword-macro warning disabled on unchanged source; ' if keyword_macro_warning else '')
       + ('native keyword' if native_keyword else 'labelled static_assert/_Static_assert oracle')
       + ('; native for-declaration' if native_for_assertion else '; exact legacy for-declaration parser gap')
       + ('; QBE/runtime and erasure passed' if qbe else ''))

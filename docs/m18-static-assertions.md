@@ -65,3 +65,10 @@ for the original numeric-message program, report an oracle gap, and do not count
 it as a native agreement. The original source is still compiled/run with QBE;
 other host failures remain failures. Do not rewrite the message or constrain C23
 to satisfy a host compiler's C++ rule.
+
+Follow-up: run 38877229675 passed the numeric-message check, then exposed a
+second newer-Clang oracle policy: -pedantic-errors promotes -Wkeyword-macro on
+the original pp defined/define/undef program. C preprocessing identifiers include
+later keywords. After verifying only that exact single-error diagnostic, retry
+the identical source with only -Wno-keyword-macro; still require native execution
+and report the warning control. Never globally disable warnings or rewrite C.
