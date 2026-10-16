@@ -55,3 +55,13 @@ Grammar audit: N3096 6.7 includes static-assert-declaration in declaration, and
 accepts this form; Clang 15 rejects it. Follow the draft, not the legacy Clang
 parser, and explicitly label that exact host-oracle gap. This corrects the initial
 planning assumption before the for-initializer implementation/tests.
+
+CI oracle audit: exact-source cade2cd failed Clang CI run 38868636910 because
+its host rejected the message's numeric \0 escape as an "unevaluated string
+literal" escape. N3096 6.4.5 permits these escapes and 6.7.11 does not impose the
+C++ unevaluated-string restriction. Keep kcc's decoded message behavior and all
+256 diagnostic-byte checks. Recognize only that exact one-error host diagnostic
+for the original numeric-message program, report an oracle gap, and do not count
+it as a native agreement. The original source is still compiled/run with QBE;
+other host failures remain failures. Do not rewrite the message or constrain C23
+to satisfy a host compiler's C++ rule.
