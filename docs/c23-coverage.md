@@ -325,3 +325,11 @@ sizeof expression/type and alignof/_Alignof type queries support complete fixed
 object types with LP64 unsigned-long results and genuinely unevaluated operands.
 No void/function size extensions, VLAs, bit-fields, standard headers or general
 constant requirements are claimed. Literal array bounds remain a separate gap.
+
+### M18b1 integer constant-evaluation foundation
+
+Pure typed AST query for the current integer subset: checked portable arithmetic,
+conversions, comparisons, short-circuit conditions, unevaluated comma and fixed
+layout leaves. GCC/Clang strict native form/value oracles and both-host sanitizer
+runs pass. This stage is queried by tests/fuzz only, not yet a source-level
+constant requirement, optimizer, null conversion or full C23 ICE implementation.

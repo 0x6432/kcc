@@ -1278,3 +1278,12 @@ Check complete objects before target layout APIs; result is type_ulong and check
 depth includes the retained typed operand. Codegen emits only precomputed layout
 constants. It must never traverse operands or manufacture runtime loads/calls.
 alignof spelling is converted after pp expansion, not treated as a predefined macro.
+
+## M18b1 pure constant query
+
+consteval.c accepts only already checked, depth-bounded typed ASTs. Success has
+canonical low target-width bits, root type/location and no message. Failures
+preserve the located offending node and a static reason, separating not_constant
+from invalid arithmetic. Consumers own diagnostics and constant requirements.
+Queries allocate nothing and do not mutate ASTs or emit QBE. Skipped operands
+retain ICE form constraints without arithmetic; sizeof/alignof do not descend.

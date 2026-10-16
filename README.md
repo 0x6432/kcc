@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M18b1: a pure, checked integer constant evaluator preserves target bits/types and
+locations, distinguishes nonconstant forms from invalid arithmetic, and handles
+short-circuit forms without evaluating skipped arithmetic. Tests/fuzz query this
+stage; static assertions, array bounds and null constants are not consumers yet.
+
 M18a: fixed sizeof expressions/types and alignof/_Alignof type queries use
 target layout and unsigned-long results. Operands remain semantically checked
 but generate no evaluation, root load or array/function decay. No VLA or general

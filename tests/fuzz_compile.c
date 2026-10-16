@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "consteval.h"
 #include "parse.h"
 #include "sema.h"
 #include "type.h"
@@ -46,6 +47,46 @@ static void check_string_objects(const struct ast_translation_unit *unit)
 	}
 }
 
+/* Query checked top-level expression/initializer/return roots. No result is
+ * required to be constant, and query failure never changes compile acceptance.
+ */
+static void check_constant_queries(const struct ast_translation_unit *unit)
+{
+	for (const struct ast_external_declaration *external = unit->declarations; external; external = external->next) {
+		const struct ast_function *function;
+
+		if (external->kind != external_function_definition)
+			continue;
+		function = (const struct ast_function *)external;
+		for (const struct ast_block_item *item = function->body->items; item; item = item->next) {
+			const struct ast_expression *expression = NULL;
+			struct constant_result result;
+
+			if (item->kind == block_item_declaration) {
+				expression = ((const struct ast_local_declaration *)item)->initializer;
+			} else {
+				const struct ast_statement *statement = ((const struct ast_statement_item *)item)->statement;
+
+				if (statement->kind == statement_expression)
+					expression = ((const struct ast_expression_statement *)statement)->value;
+				else if (statement->kind == statement_return)
+					expression = ((const struct ast_return_statement *)statement)->value;
+			}
+			if (!expression)
+				continue;
+			result = evaluate_integer_constant(expression);
+			if (result.status == constant_value) {
+				unsigned width = type_integer_width(result.type);
+
+				assert(result.type == expression->type && type_is_integer(result.type));
+				assert(width == 64 || result.bits < (UINT64_C(1) << width));
+			} else {
+				assert(result.message && result.location.source);
+			}
+		}
+	}
+}
+
 /* Fuzz compiler stages, never execute generated programs. */
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 {
@@ -79,6 +120,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 	if (unit && sema_translation_unit(unit, &arena, &diagnostics)) {
 		assert(diagnostics.errors == 0);
 		check_string_objects(unit);
+		check_constant_queries(unit);
 		assert(codegen_translation_unit(stream, unit));
 	}
 	arena_destroy(&arena);

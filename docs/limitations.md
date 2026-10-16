@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M18a. Read the latest entries together with README.md and
+Current milestone: M18b1. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1235,3 +1235,30 @@ M18a bounded sanitized fuzz: 23,465 lexer and 66,857 pipeline inputs in
 26 seconds each without reported failures; generated C was never executed.
 Exact-source M14j2 b26ff3b CI run 38863255999 passed. M23a1 fe26eb4 run
 38864340577 and M19b 0c0ef33 run 38865164586 were still running.
+
+## M18b1 tested source checkpoint
+
+Added a pure consteval.c stage over checked bounded integer ASTs. Results preserve
+canonical target bits/type/location or distinguish nonconstant forms from invalid
+arithmetic. Portable checked operations never depend on signed host overflow,
+negative signed shifts or large unsigned-to-signed casts. Short-circuit arms are
+form-checked without arithmetic, and comma is allowed only when unevaluated.
+sizeof/alignof are opaque typed leaves; queries do not emit diagnostics, mutate
+ASTs, allocate or change runtime compilation acceptance.
+
+Full normal GCC regression and QBE suites passed. Both GCC/Clang native oracles
+agree on 958 curated strict ICE forms/values, with six C23 boolean queries,
+34 nonexecuted invalid-arithmetic cases, 19 nonconstant forms and eight strict
+native form rejections. Both-host ASan/UBSan evaluator oracles passed the same
+checks. One exploratory predefined-macro test correctly exposed that __STDC__
+is not yet provided; it was not disguised as a supported feature. Fuzz now queries
+checked expression/initializer/return roots without executing generated C.
+Bounded fuzz totals follow. Full isolated/remote exact-source checks are pending.
+
+This is a shared foundation, not new declaration acceptance. Static assertions,
+enums/constexpr, constant array bounds and null pointer constants are not yet
+consumers. Next: M18b2 static assertions, designed in m18-static-assertions.md.
+
+M18b1 bounded sanitized fuzz: 23,575 lexer and 64,254 pipeline inputs in
+26 seconds each, without reported failures. Generated C was never executed.
+Exact-source M23a1 fe26eb4 CI run 38864340577 passed; M19b/M18a were still running.

@@ -9,7 +9,7 @@ QBE = qbe
 
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
 PREPROCESS_SOURCES = $(LEX_SOURCES) src/preprocess.c src/arena.c
-COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/ast.c src/type.c src/parse.c src/sema.c src/codegen.c
+COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/ast.c src/type.c src/parse.c src/sema.c src/consteval.c src/codegen.c
 HEADERS = $(wildcard src/*.h)
 
 .PHONY: all test test-codegen clean fuzz-lex fuzz-compile
@@ -53,7 +53,7 @@ fuzz-compile: build/fuzz_compile
 	cp tests/corpus/compile/* build/corpus-compile/
 	./build/fuzz_compile build/corpus-compile -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
 
-test-codegen: build/kcc build/pp_oracle
+test-codegen: build/kcc build/pp_oracle build/consteval_oracle
 	QBE="$(QBE)" python3 tests/test_compile.py
 	QBE="$(QBE)" python3 tests/test_abi.py
 	QBE="$(QBE)" python3 tests/test_diagnostics.py
@@ -105,6 +105,10 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_boolean_keywords.py
 	QBE="$(QBE)" python3 tests/test_conditional_expressions.py
 	QBE="$(QBE)" python3 tests/test_sizeof_alignment.py
+	python3 tests/test_consteval.py
+
+build/consteval_oracle: tests/consteval_oracle.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/consteval_oracle.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
 build/test_type: tests/test_type.c src/type.c src/arena.c src/type.h src/arena.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_type.c src/type.c src/arena.c $(LDFLAGS) $(LDLIBS) -o $@
@@ -115,7 +119,7 @@ build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pp_oracle.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
-test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema
+test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
@@ -175,6 +179,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_boolean_keywords.py
 	python3 tests/test_conditional_expressions.py
 	python3 tests/test_sizeof_alignment.py
+	python3 tests/test_consteval.py
 
 clean:
 	rm -rf build
