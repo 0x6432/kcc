@@ -414,8 +414,18 @@ static void test_switch_keyword(void)
 	assert(strcmp(token_kind_name(token_switch), "switch") == 0);
 }
 
+static void test_case_keywords(void)
+{
+	const enum token_kind kinds[] = { token_case, token_integer, token_colon, token_default, token_colon };
+
+	check_tokens("#define ARM case\n#define FALLBACK default\nARM 1: FALLBACK:", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_case), "case") == 0);
+	assert(strcmp(token_kind_name(token_default), "default") == 0);
+}
+
 int main(void)
 {
+	test_case_keywords();
 	test_switch_keyword();
 	test_goto_keyword();
 	test_integer_compound_tokens();

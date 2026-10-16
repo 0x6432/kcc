@@ -2,21 +2,24 @@
 
 ## Current checkpoint
 
-M19f1 switch foundation complete: full normal/QBE passed, both-host targeted
-ASan/UBSan lexer/sema and runtime/ABI passed. Bounded sanitized fuzz ran 14,107
-lexer and 49,285 pipeline inputs in 26 seconds each without reported failures. Restored stale sandbox from cade2cd to remote 867dd5c after stashing
-its uncommitted array-bound snapshot (preserved separately from the old stash).
-The restored M19e2 full normal/QBE baseline passed. Confirmed all jobs passed for
-remote M19e2 run 38887882846, M19e1 38886473048 and M19d2 38885424621.
+M19f2 case/default complete: full normal/QBE and both-host targeted ASan/UBSan
+passed. Bounded sanitized fuzz ran 14,777 lexer / 52,498 pipeline inputs
+in 26/26 seconds without reported failure. M19f1 cff28ab foundation is committed/pushed with full normal/QBE, both-host
+targeted ASan/UBSan and bounded fuzz passed. Its isolated matrix is running;
+remote results remain separate. See m19-switch-cases.md for the prior design.
 
-Current design: m19-switch-foundation.md. Only case-free switches are implemented
-in this increment. Next M19f2 adds case/default collection, ICE conversion/duplicate
-checking and dispatch; do not claim case support yet. Focused tests have 36 strict
-native originals, 12 native constraint rejections, nesting boundaries and 24
-both-direction ABI arrangements per host. No generated fuzz C is executed.
-Scripts /data/tools/implement-m19f1.py and m19f1-unit.c are already applied.
-M19f1 full isolated and remote exact-source checks are separately pending.
-Working policy resumed by user: continue across tested small milestones.
+Case/default have distinct label/block/secondary nodes. Case ICEs are explicitly
+converted to promoted switch control type; canonical bits detect duplicates.
+Labels bind the nearest switch across loops, nested switches are independent.
+Backend reserves switch targets after the unchanged named-label range and emits
+a readable equality chain, preserving ordinary fallthrough and phi predecessors.
+Limits are 1024 labels/switch and 4096/function including defaults. No VLA, GNU
+range, attribute or jump-table claim. Never execute arbitrary fuzz-generated C.
+Scripts implement-m19f1.py and implement-m19f2.py are already applied; do not
+reapply. Preserve both old stashes. User has resumed continuous milestone work. Next small increment: C23
+typeof/typeof_unqual type-name operands, designed separately before coding;
+expression operands and alias-derived function declarations remain later work.
+M19f2 remote/full isolated checks are separately pending, not claimed passed.
 
 ### Earlier foundation (chronological)
 

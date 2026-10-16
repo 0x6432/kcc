@@ -3117,8 +3117,79 @@ static void test_switch_foundation_tree(void)
 }
 
 
+static void test_switch_case_tree(void)
+{
+	const char *text = "int f(unsigned x) { switch(x) { case -1: { switch(x) { case -1: break; default: break; } } case 0: break; default: break; } end: return 0; } int g(void) { switch(1) { case 1: return 0; } return 0; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_switch_statement *outer;
+	struct ast_switch_statement *inner;
+	struct ast_compound_statement *body;
+	struct ast_compound_statement *nested;
+	struct ast_case_label *negative;
+	struct ast_case_label *zero;
+	struct ast_default_label *fallback;
+	struct ast_expression *original;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	outer = (struct ast_switch_statement *)item->statement;
+	assert(outer->statement.kind == statement_switch);
+	body = (struct ast_compound_statement *)outer->body;
+	negative = ((struct ast_block_case *)body->items)->label;
+	assert(body->items->kind == block_item_case && !negative->owner);
+	original = negative->value;
+	assert(original->kind == expression_unary);
+	assert(negative->location.offset == (size_t)(strstr(text, "case -1") - text));
+	item = (struct ast_statement_item *)body->items->next;
+	nested = (struct ast_compound_statement *)item->statement;
+	assert(nested->statement.kind == statement_compound);
+	inner = (struct ast_switch_statement *)((struct ast_statement_item *)nested->items)->statement;
+	assert(inner->statement.kind == statement_switch);
+	zero = ((struct ast_block_case *)item->item.next)->label;
+	fallback = ((struct ast_block_default *)item->item.next->next->next)->label;
+	assert(!fallback->owner);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(outer->control->type == &type_uint);
+	assert(outer->label_count == 3 && inner->label_count == 2);
+	assert(function->switch_label_count == 5 && function->label_count == 1);
+	assert(negative->owner == outer && zero->owner == outer && fallback->owner == outer);
+	assert(negative->index == 0 && zero->index == 3 && fallback->index == 4);
+	assert(negative->bits == UINT32_MAX && zero->bits == 0);
+	assert(negative->value->kind == expression_conversion && negative->value->type == &type_uint);
+	assert(((struct ast_conversion_expression *)negative->value)->operand == original);
+	assert(original->type == &type_int);
+	assert(outer->cases == zero && zero->next == negative && !negative->next);
+	assert(outer->default_label == fallback);
+	assert(inner->cases->owner == inner && inner->cases->bits == UINT32_MAX);
+	assert(inner->cases->index == 1 && inner->default_label->index == 2);
+	function = (struct ast_function *)function->external.next;
+	outer = (struct ast_switch_statement *)((struct ast_statement_item *)function->body->items)->statement;
+	assert(function->switch_label_count == 1 && !function->label_count && outer->cases->index == 0);
+	assert(!unit->strings);
+
+	fclose(stream);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_switch_case_tree();
 	test_switch_foundation_tree();
 	test_goto_tree();
 	test_named_label_tree();

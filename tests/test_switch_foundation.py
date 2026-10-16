@@ -55,9 +55,7 @@ constraints = [
 syntax_errors = ['int f(void) { switch 1; }', 'int f(void) { switch() {} }',
                  'int f(void) { switch(1 {} }', 'int f(void) { switch(1) }',
                  'int f(void) { switch(1) int x; }']
-unsupported = ['int f(void) { switch(1) { case 1: return 0; } return 0; }',
-               'int f(void) { switch(1) { default: return 0; } }',
-               'int f(void) { switch(nullptr) {} return 0; }']
+unsupported = ['int f(void) { switch(nullptr) {} return 0; }']
 with tempfile.TemporaryDirectory(prefix='kcc switch ') as directory:
     directory = Path(directory)
     source, native, il, assembly, obj, executable = [directory/n for n in ('k.c','h.c','p.ssa','p.s','h.o','p')]
@@ -110,5 +108,5 @@ with tempfile.TemporaryDirectory(prefix='kcc switch ') as directory:
                 result = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-c', str(native), '-o', str(obj)], capture_output=True, text=True, timeout=10)
                 assert result.returncode == 0, (host_text, result.stderr)
                 link_run([assembly, obj])
-print(f'Switch foundation passed: {len(programs)} strict native original programs, {len(constraints)} native constraint rejections; syntax/nesting and case/default subset rejection; {host}'
+print(f'Switch foundation passed: {len(programs)} strict native original programs, {len(constraints)} native constraint rejections; syntax/nesting and nullptr constraint; {host}'
       + ('; QBE/runtime and 24 mixed-stack primitive-result ABI arrangements passed' if qbe else ''))

@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels and M19e2 direct goto implemented; switch rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels and M19e2 direct goto implemented; M19f1/f2 integer switch/case/default implemented; attributes/VLA interactions remain) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1736,3 +1736,40 @@ runtime/ABI suites passed. Sanitized bounded fuzz ran 14,107 lexer and 49,285
 pipeline inputs in 26 seconds each without reported failures; generated C was
 never executed. Remote exact-source and isolated full matrices remain separate.
 Next: M19f2, designed before implementation in m19-switch-cases.md.
+
+## M19f2 case/default labels and dispatch
+
+Separate concrete case/default labels have block-item and secondary-statement
+wrappers. C23 block labels can precede declarations or end a block; secondary
+labels require a child statement. Case conditional expressions stop at the outer
+colon with Pratt floor 2. Sema assigns the nearest switch across nested loops,
+checks integer ICEs after explicit conversion to promoted control type, detects
+duplicate converted bits and rejects multiple defaults. Nested switches have
+independent collections. Cases never emit runtime operand evaluation.
+
+Named goto indices/counts remain unchanged; function switch-label indices reserve
+a separate QBE target range after named targets. Bounds: 1024 labels per switch
+and 4096 per function, each including default. Linear equality dispatch evaluates
+control once; ordered label emission gives fallthrough without false edges after
+terminators. Current block IDs still track phi predecessors. Attributes, GNU case
+ranges, VLA jump constraints and jump-table optimization remain unsupported.
+
+The initial generated parser patch matched a forward declaration instead of the
+block-item definition, putting block wrappers into parse_statement. Strict build
+detected incompatible pointer returns; moved that exact block before testing the
+new compiler. No partial build was treated as validation. Native tests also
+exposed exact Clang 15 case/default end-label diagnostics and host folding of
+overflowing ICE arithmetic. Three invalid-arithmetic cases remain mandatory
+compile-only kcc rejections, not strict native-rejection claims. The remaining
+19 native constraint rejections stay strict. No compiler acceptance was relaxed.
+
+M19f2 final local validation: complete normal and QBE regression passed. Both
+GCC/Clang ASan/UBSan lexer/sema and switch-case/foundation/goto/named-label/
+integer-compound runtime/ABI suites passed. Focused coverage: 75 strict original
+native programs, 19 strict native constraint rejections, three compile-only
+checked-arithmetic ICE failures, and 24 both-direction mixed-stack ABI arrangements
+per host. All three original C23 declaration/end-label programs run via kcc/QBE;
+GCC agrees, Clang 15 has three exact labelled grammar gaps, not agreements.
+1024/1025 switch and 4096/4097 function-label boundaries pass through QBE when
+valid, never execute. No generated fuzz C was executed.
+Sanitized bounded fuzz: 14,777 lexer and 52,498 pipeline inputs in 26/26 seconds, no reported failure.

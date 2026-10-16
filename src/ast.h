@@ -45,6 +45,8 @@ enum {
 	ast_max_expression_depth = 128,
 	ast_max_statement_nesting = 128,
 	ast_max_labels = 512,
+	ast_max_switch_labels = 1024,
+	ast_max_function_switch_labels = 4096,
 	ast_max_gotos = 4096,
 	ast_max_block_items = 4096,
 	ast_max_locals = 256,
@@ -380,6 +382,8 @@ enum statement_kind {
 	statement_empty,
 	statement_compound,
 	statement_if,
+	statement_case,
+	statement_default,
 	statement_switch,
 	statement_while,
 	statement_do,
@@ -432,10 +436,40 @@ struct ast_if_statement {
 	struct ast_statement *else_branch;
 };
 
+struct ast_case_label {
+	struct source_location location;
+	struct ast_expression *value;
+	uint64_t bits;
+	size_t index;
+	struct ast_switch_statement *owner;
+	struct ast_case_label *next;
+};
+
+struct ast_default_label {
+	struct source_location location;
+	size_t index;
+	struct ast_switch_statement *owner;
+};
+
+struct ast_case_statement {
+	struct ast_statement statement;
+	struct ast_case_label *label;
+	struct ast_statement *body;
+};
+
+struct ast_default_statement {
+	struct ast_statement statement;
+	struct ast_default_label *label;
+	struct ast_statement *body;
+};
+
 struct ast_switch_statement {
 	struct ast_statement statement;
 	struct ast_expression *control;
 	struct ast_statement *body;
+	struct ast_case_label *cases;
+	struct ast_default_label *default_label;
+	size_t label_count;
 };
 
 struct ast_while_statement {
@@ -476,6 +510,8 @@ struct ast_static_assertion {
 };
 
 enum block_item_kind {
+	block_item_case,
+	block_item_default,
 	block_item_label,
 	block_item_declaration,
 	block_item_statement,
@@ -489,6 +525,16 @@ struct ast_block_item {
 };
 
 /* C23 block labels stand alone, also before declarations or at block end. */
+struct ast_block_case {
+	struct ast_block_item item;
+	struct ast_case_label *label;
+};
+
+struct ast_block_default {
+	struct ast_block_item item;
+	struct ast_default_label *label;
+};
+
 struct ast_block_label {
 	struct ast_block_item item;
 	struct ast_label *label;
@@ -563,6 +609,7 @@ struct ast_function {
 	struct ast_compound_statement *body;
 	struct ast_local_declaration *locals;
 	size_t label_count;
+	size_t switch_label_count;
 };
 
 struct ast_translation_unit {
@@ -676,6 +723,16 @@ struct ast_empty_statement *ast_new_empty_statement(struct arena *arena,
 struct ast_if_statement *ast_new_if(struct arena *arena,
 	struct source_location location, struct ast_expression *condition,
 	struct ast_statement *then_branch, struct ast_statement *else_branch);
+struct ast_case_label *ast_new_case_label(struct arena *arena,
+	struct source_location location, struct ast_expression *value);
+struct ast_block_case *ast_new_block_case(struct arena *arena, struct ast_case_label *label);
+struct ast_case_statement *ast_new_case_statement(struct arena *arena,
+	struct ast_case_label *label, struct ast_statement *body);
+struct ast_default_label *ast_new_default_label(struct arena *arena,
+	struct source_location location);
+struct ast_block_default *ast_new_block_default(struct arena *arena, struct ast_default_label *label);
+struct ast_default_statement *ast_new_default_statement(struct arena *arena,
+	struct ast_default_label *label, struct ast_statement *body);
 struct ast_switch_statement *ast_new_switch(struct arena *arena,
 	struct source_location location, struct ast_expression *control,
 	struct ast_statement *body);

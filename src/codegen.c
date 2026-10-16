@@ -18,6 +18,7 @@ struct codegen {
 	size_t next_temporary;
 	size_t next_label;
 	size_t current_label;
+	size_t named_label_count;
 	bool output_ok;
 };
 
@@ -758,10 +759,22 @@ static bool codegen_switch(struct codegen *codegen,
 	size_t body_label = new_label(codegen);
 	size_t exit_label = new_label(codegen);
 	bool body_terminated;
+	size_t control = codegen_expression(codegen, node->control);
 
-	/* With no case/default, normal entry evaluates control and skips the body. */
-	codegen_discard_expression(codegen, node->control);
-	emit(codegen, "\tjmp @b%zu\n", exit_label);
+	for (const struct ast_case_label *label = node->cases; label; label = label->next) {
+		size_t comparison = codegen->next_temporary++;
+		size_t next_test = new_label(codegen);
+		size_t target = codegen->named_label_count + label->index + 1;
+
+		emit(codegen, "\t%%t%zu =w ceq%c %%t%zu, %llu\n", comparison,
+			qbe_type(node->control->type), control, (unsigned long long)label->bits);
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", comparison, target, next_test);
+		emit_label(codegen, next_test);
+	}
+	if (node->default_label)
+		emit(codegen, "\tjmp @b%zu\n", codegen->named_label_count + node->default_label->index + 1);
+	else
+		emit(codegen, "\tjmp @b%zu\n", exit_label);
 	/* Keep named targets reachable by goto, with switch break/loop continue. */
 	emit_label(codegen, body_label);
 	body_terminated = codegen_control_body(codegen, &node->statement,
@@ -876,6 +889,16 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 	return false;
 }
 
+/* Switch targets follow all named goto targets in the reserved range. */
+static void codegen_switch_label(struct codegen *codegen, size_t index, bool terminated)
+{
+	size_t target = codegen->named_label_count + index + 1;
+
+	if (!terminated)
+		emit(codegen, "\tjmp @b%zu\n", target);
+	emit_label(codegen, target);
+}
+
 /* Named targets occupy 1..function->label_count, before generated CFG labels. */
 static void codegen_named_label(struct codegen *codegen, const struct ast_label *label,
 	bool terminated)
@@ -892,6 +915,18 @@ static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
 {
 	switch (statement->kind) {
+	case statement_case: {
+		const struct ast_case_statement *node = (const struct ast_case_statement *)statement;
+
+		codegen_switch_label(codegen, node->label->index, false);
+		return codegen_statement(codegen, node->body);
+	}
+	case statement_default: {
+		const struct ast_default_statement *node = (const struct ast_default_statement *)statement;
+
+		codegen_switch_label(codegen, node->label->index, false);
+		return codegen_statement(codegen, node->body);
+	}
 	case statement_goto: {
 		const struct ast_goto_statement *node = (const struct ast_goto_statement *)statement;
 
@@ -971,6 +1006,14 @@ static bool codegen_block_items(struct codegen *codegen,
 
 	while (item) {
 		switch (item->kind) {
+		case block_item_case:
+			codegen_switch_label(codegen, ((const struct ast_block_case *)item)->label->index, terminated);
+			terminated = false;
+			break;
+		case block_item_default:
+			codegen_switch_label(codegen, ((const struct ast_block_default *)item)->label->index, terminated);
+			terminated = false;
+			break;
 		case block_item_label:
 			codegen_named_label(codegen, ((const struct ast_block_label *)item)->label, terminated);
 			terminated = false;
@@ -1009,7 +1052,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 {
 	struct codegen codegen = {
 		.stream = stream,
-		.next_label = function->label_count + 1,
+		.next_label = function->label_count + function->switch_label_count + 1,
+		.named_label_count = function->label_count,
 		.output_ok = true,
 	};
 	const struct ast_local_declaration *local = function->locals;

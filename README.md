@@ -6,9 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19f2: switch supports case/default labels, converted integer constant values,
+duplicate checking and fallthrough. Linear QBE dispatch evaluates control once;
+nested branch/loop targets and C23 standalone labels are supported. Attributes,
+GNU case ranges and variably modified types remain unsupported.
+
 M19f1: switch foundation supports integer control and case-free bodies. Break
 selects the nearest loop/switch; continue skips switches to its enclosing loop.
-Goto into a switch body is supported. Case/default dispatch is the next increment.
+Goto into a switch body is supported. Case/default dispatch is implemented in M19f2.
 
 M19e2: direct `goto` resolves function-local labels after the complete body is
 checked. Forward/backward jumps and targets inside nested control flow retain

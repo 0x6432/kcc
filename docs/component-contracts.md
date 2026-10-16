@@ -1431,3 +1431,20 @@ identity and backend target lookup follows it. Scope and context parents restore
 on failure. Case/default dispatch, attributes and VLA jump-scope constraints
 remain unsupported and are not implied by this foundation. Existing loops and
 function/ABI contracts are unchanged; no new runtime storage is introduced.
+
+## M19f2 case/default labels and dispatch
+
+Separate concrete case/default labels have block-item and secondary-statement
+wrappers. C23 block labels can precede declarations or end a block; secondary
+labels require a child statement. Case conditional expressions stop at the outer
+colon with Pratt floor 2. Sema assigns the nearest switch across nested loops,
+checks integer ICEs after explicit conversion to promoted control type, detects
+duplicate converted bits and rejects multiple defaults. Nested switches have
+independent collections. Cases never emit runtime operand evaluation.
+
+Named goto indices/counts remain unchanged; function switch-label indices reserve
+a separate QBE target range after named targets. Bounds: 1024 labels per switch
+and 4096 per function, each including default. Linear equality dispatch evaluates
+control once; ordered label emission gives fallthrough without false edges after
+terminators. Current block IDs still track phi predecessors. Attributes, GNU case
+ranges, VLA jump constraints and jump-table optimization remain unsupported.

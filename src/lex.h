@@ -35,6 +35,8 @@ enum token_kind {
 	token_return,
 	token_if,
 	token_else,
+	token_case,
+	token_default,
 	token_switch,
 	token_while,
 	token_do,

@@ -38,6 +38,7 @@ struct sema {
 	struct control_context *control;
 	struct label_binding *labels;
 	size_t label_count;
+	size_t switch_label_count;
 	struct goto_reference *gotos;
 	size_t goto_count;
 	size_t local_count;
@@ -1523,9 +1524,101 @@ static bool resolve_gotos(struct sema *sema)
 	return true;
 }
 
+/* A loop does not hide its enclosing switch from case/default labels. */
+static struct ast_switch_statement *enclosing_switch(struct sema *sema)
+{
+	struct control_context *context = sema->control;
+
+	while (context && context->statement->kind != statement_switch)
+		context = context->parent;
+	return context ? (struct ast_switch_statement *)context->statement : NULL;
+}
+
+static bool reserve_switch_label(struct sema *sema, struct ast_switch_statement *owner,
+	struct source_location location, size_t *index)
+{
+	if (owner->label_count == ast_max_switch_labels) {
+		diagnostic_error(sema->diagnostics, location, "switch exceeds label limit (1024)");
+		return false;
+	}
+	if (sema->switch_label_count == ast_max_function_switch_labels) {
+		diagnostic_error(sema->diagnostics, location, "function exceeds switch-label limit (4096)");
+		return false;
+	}
+	*index = sema->switch_label_count++;
+	owner->label_count++;
+	return true;
+}
+
+static bool sema_case_label(struct sema *sema, struct ast_case_label *label)
+{
+	struct ast_switch_statement *owner = enclosing_switch(sema);
+	struct constant_result result;
+
+	if (!owner) {
+		diagnostic_error(sema->diagnostics, label->location, "case requires an enclosing switch");
+		return false;
+	}
+	if (!sema_expression(sema, &label->value, true))
+		return false;
+	if (!type_is_integer(label->value->type)) {
+		diagnostic_error(sema->diagnostics, label->value->location, "case requires an integer constant expression");
+		return false;
+	}
+	if (!convert_expression(sema, &label->value, owner->control->type))
+		return false;
+	result = evaluate_integer_constant(label->value);
+	if (result.status != constant_value) {
+		diagnostic_error(sema->diagnostics, result.location, result.message);
+		return false;
+	}
+	for (struct ast_case_label *previous = owner->cases; previous; previous = previous->next)
+		if (previous->bits == result.bits) {
+			diagnostic_error(sema->diagnostics, label->location, "duplicate case value after conversion");
+			return false;
+		}
+	if (!reserve_switch_label(sema, owner, label->location, &label->index))
+		return false;
+	label->owner = owner;
+	label->bits = result.bits;
+	/* Dispatch order is immaterial; source-order target indices stay stable. */
+	label->next = owner->cases;
+	owner->cases = label;
+	return true;
+}
+
+static bool sema_default_label(struct sema *sema, struct ast_default_label *label)
+{
+	struct ast_switch_statement *owner = enclosing_switch(sema);
+
+	if (!owner) {
+		diagnostic_error(sema->diagnostics, label->location, "default requires an enclosing switch");
+		return false;
+	}
+	if (owner->default_label) {
+		diagnostic_error(sema->diagnostics, label->location, "duplicate default label in switch");
+		return false;
+	}
+	if (!reserve_switch_label(sema, owner, label->location, &label->index))
+		return false;
+	label->owner = owner;
+	owner->default_label = label;
+	return true;
+}
+
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
 	switch (statement->kind) {
+	case statement_case: {
+		struct ast_case_statement *node = (struct ast_case_statement *)statement;
+
+		return sema_case_label(sema, node->label) && sema_statement(sema, node->body);
+	}
+	case statement_default: {
+		struct ast_default_statement *node = (struct ast_default_statement *)statement;
+
+		return sema_default_label(sema, node->label) && sema_statement(sema, node->body);
+	}
 	case statement_goto:
 		return sema_goto(sema, (struct ast_goto_statement *)statement);
 	case statement_labeled: {
@@ -1667,6 +1760,14 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 {
 	while (item) {
 		switch (item->kind) {
+		case block_item_case:
+			if (!sema_case_label(sema, ((struct ast_block_case *)item)->label))
+				return false;
+			break;
+		case block_item_default:
+			if (!sema_default_label(sema, ((struct ast_block_default *)item)->label))
+				return false;
+			break;
 		case block_item_label:
 			if (!sema_label(sema, ((struct ast_block_label *)item)->label))
 				return false;
@@ -1712,6 +1813,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	sema->function = definition;
 	sema->labels = NULL;
 	sema->label_count = 0;
+	sema->switch_label_count = 0;
 	sema->gotos = NULL;
 	sema->goto_count = 0;
 	sema->local_count = 0;
@@ -1735,13 +1837,16 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	}
 	/* Parameters and outermost body declarations inhabit the same scope. */
 	success = sema_block_items(sema, definition->body->items) && resolve_gotos(sema);
-	if (success)
+	if (success) {
 		definition->label_count = sema->label_count;
+		definition->switch_label_count = sema->switch_label_count;
+	}
 done:
 	sema->scope = NULL;
 	sema->function = NULL;
 	sema->labels = NULL;
 	sema->label_count = 0;
+	sema->switch_label_count = 0;
 	sema->gotos = NULL;
 	sema->goto_count = 0;
 	return success;

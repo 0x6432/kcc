@@ -625,6 +625,83 @@ struct ast_if_statement *ast_new_if(struct arena *arena,
 	return node;
 }
 
+struct ast_case_label *ast_new_case_label(struct arena *arena,
+	struct source_location location, struct ast_expression *value)
+{
+	struct ast_case_label *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_case_label) {
+			.location = location,
+			.value = value,
+		};
+	return node;
+}
+
+struct ast_block_case *ast_new_block_case(struct arena *arena, struct ast_case_label *label)
+{
+	struct ast_block_case *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_block_case) {
+			.item = { .kind = block_item_case, .location = label->location },
+			.label = label,
+		};
+	return node;
+}
+
+struct ast_case_statement *ast_new_case_statement(struct arena *arena,
+	struct ast_case_label *label, struct ast_statement *body)
+{
+	struct ast_case_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_case_statement) {
+			.statement = { statement_case, label->location },
+			.label = label,
+			.body = body,
+		};
+	return node;
+}
+
+struct ast_default_label *ast_new_default_label(struct arena *arena,
+	struct source_location location)
+{
+	struct ast_default_label *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_default_label) {
+			.location = location,
+		};
+	return node;
+}
+
+struct ast_block_default *ast_new_block_default(struct arena *arena, struct ast_default_label *label)
+{
+	struct ast_block_default *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_block_default) {
+			.item = { .kind = block_item_default, .location = label->location },
+			.label = label,
+		};
+	return node;
+}
+
+struct ast_default_statement *ast_new_default_statement(struct arena *arena,
+	struct ast_default_label *label, struct ast_statement *body)
+{
+	struct ast_default_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_default_statement) {
+			.statement = { statement_default, label->location },
+			.label = label,
+			.body = body,
+		};
+	return node;
+}
+
 struct ast_switch_statement *ast_new_switch(struct arena *arena,
 	struct source_location location, struct ast_expression *control,
 	struct ast_statement *body)

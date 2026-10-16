@@ -1313,6 +1313,80 @@ static bool begin_nested_statement(struct parser *parser)
 	return true;
 }
 
+/* case-label ::= "case" conditional-expression ":" */
+static struct ast_case_label *parse_case_label(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_expression *value;
+	struct ast_case_label *label;
+
+	if (!expect_token(parser, token_case, "expected 'case'", &keyword))
+		return NULL;
+	value = parse_expression(parser, 2);
+	if (!value)
+		return NULL;
+	if (!expect_token(parser, token_colon, "expected ':' after case label", NULL))
+		return NULL;
+	label = ast_new_case_label(parser->arena, keyword.location, value);
+	if (!label)
+		allocation_error(parser, keyword.location);
+	return label;
+}
+
+/* labeled-statement ::= case-label statement; not a standalone block label. */
+static struct ast_statement *parse_case_statement(struct parser *parser)
+{
+	struct ast_case_label *label = parse_case_label(parser);
+	struct ast_statement *body;
+	struct ast_case_statement *node;
+
+	if (!label || !begin_nested_statement(parser))
+		return NULL;
+	body = parse_statement(parser);
+	parser->statement_nesting--;
+	if (!body)
+		return NULL;
+	node = ast_new_case_statement(parser->arena, label, body);
+	if (!node)
+		allocation_error(parser, label->location);
+	return node ? &node->statement : NULL;
+}
+
+/* default-label ::= "default" ":" */
+static struct ast_default_label *parse_default_label(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_default_label *label;
+
+	if (!expect_token(parser, token_default, "expected 'default'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_colon, "expected ':' after default label", NULL))
+		return NULL;
+	label = ast_new_default_label(parser->arena, keyword.location);
+	if (!label)
+		allocation_error(parser, keyword.location);
+	return label;
+}
+
+/* labeled-statement ::= default-label statement; not a standalone block label. */
+static struct ast_statement *parse_default_statement(struct parser *parser)
+{
+	struct ast_default_label *label = parse_default_label(parser);
+	struct ast_statement *body;
+	struct ast_default_statement *node;
+
+	if (!label || !begin_nested_statement(parser))
+		return NULL;
+	body = parse_statement(parser);
+	parser->statement_nesting--;
+	if (!body)
+		return NULL;
+	node = ast_new_default_statement(parser->arena, label, body);
+	if (!node)
+		allocation_error(parser, label->location);
+	return node ? &node->statement : NULL;
+}
+
 /* label-tail ::= ":"; the identifier was consumed exactly once. */
 static struct ast_label *parse_label_tail(struct parser *parser, struct token name)
 {
@@ -1653,6 +1727,7 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
  *             | compound-statement | if-statement | while-statement
  *             | break-statement | continue-statement | do-statement
  *             | for-statement | labeled-statement | goto-statement | switch-statement
+ * labeled-statement ::= identifier ":" statement | case-label statement | default-label statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
@@ -1685,6 +1760,10 @@ static struct ast_statement *parse_statement(struct parser *parser)
 			return NULL;
 		return &node->statement;
 	}
+	if (token.kind == token_case)
+		return parse_case_statement(parser);
+	if (token.kind == token_default)
+		return parse_default_statement(parser);
 	if (token.kind == token_switch) {
 		struct ast_switch_statement *node = parse_switch_statement(parser);
 
@@ -1836,12 +1915,36 @@ static struct ast_static_assertion *parse_static_assertion(struct parser *parser
 	return node;
 }
 
-/* block-item ::= local-declaration | static-assert-declaration | unlabeled-statement | identifier ":" */
+/* block-item ::= local-declaration | static-assert-declaration | unlabeled-statement | label
+ * label ::= identifier ":" | case-label | default-label */
 static struct ast_block_item *parse_block_item(struct parser *parser)
 {
 	struct ast_statement *statement;
 	struct ast_statement_item *node;
 	struct token token = preprocess_peek(parser->preprocessor);
+
+	if (token.kind == token_case) {
+		struct ast_case_label *label = parse_case_label(parser);
+		struct ast_block_case *block;
+
+		if (!label)
+			return NULL;
+		block = ast_new_block_case(parser->arena, label);
+		if (!block)
+			allocation_error(parser, token.location);
+		return block ? &block->item : NULL;
+	}
+	if (token.kind == token_default) {
+		struct ast_default_label *label = parse_default_label(parser);
+		struct ast_block_default *block;
+
+		if (!label)
+			return NULL;
+		block = ast_new_block_default(parser->arena, label);
+		if (!block)
+			allocation_error(parser, token.location);
+		return block ? &block->item : NULL;
+	}
 
 	if (token.kind == token_identifier) {
 		preprocess_next(parser->preprocessor);
