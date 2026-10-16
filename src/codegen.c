@@ -527,6 +527,25 @@ static size_t codegen_expression(struct codegen *codegen,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
 		return temporary;
 	}
+	case expression_prefix_update: {
+		const struct ast_prefix_update_expression *node = (const struct ast_prefix_update_expression *)expression;
+		size_t address = codegen_address(codegen, node->operand);
+		size_t previous = codegen->next_temporary++;
+		size_t value = codegen->next_temporary++;
+		uint64_t step = node->element_size ? node->element_size : 1;
+
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(node->calculation_type),
+			qbe_load_instruction(node->operand->type), address);
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(node->calculation_type),
+			node->operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
+		/* _Bool conversion tests the promoted value, never its low bit. */
+		if (expression->type->kind == type_kind_bool)
+			value = codegen_truth_value(codegen, value, node->calculation_type);
+		else
+			value = codegen_canonicalize(codegen, value, expression->type);
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->operand->type), value, address);
+		return value;
+	}
 	case expression_assignment: {
 		const struct ast_assignment_expression *node =
 			(const struct ast_assignment_expression *)expression;

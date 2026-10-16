@@ -659,6 +659,7 @@ static const struct language_punctuator language_punctuators[] = {
 	{ "<%", token_left_brace }, { "%>", token_right_brace },
 	{ ";", token_semicolon }, { ",", token_comma },
 	{ "?", token_question }, { ":", token_colon },
+	{ "++", token_increment }, { "--", token_decrement },
 	{ "+", token_plus }, { "-", token_minus }, { "*", token_star },
 	{ "/", token_slash }, { "%", token_percent }, { "=", token_equal },
 	{ "==", token_equal_equal }, { "!=", token_not_equal },
@@ -763,6 +764,8 @@ const char *token_kind_name(enum token_kind kind)
 	case token_comma: return ",";
 	case token_question: return "?";
 	case token_colon: return ":";
+	case token_increment: return "++";
+	case token_decrement: return "--";
 	case token_plus: return "+";
 	case token_minus: return "-";
 	case token_star: return "*";

@@ -907,7 +907,29 @@ static struct ast_expression *parse_pointer_unary_expression(struct parser *pars
 	return expression;
 }
 
-/* prefix-expression ::= postfix-expression | parenthesized-or-cast
+/* prefix-update-expression ::= ("++" | "--") unary-expression */
+static struct ast_expression *parse_prefix_update_expression(struct parser *parser)
+{
+	struct token token = preprocess_next(parser->preprocessor);
+	struct ast_expression *operand = parse_expression(parser, 30);
+	struct ast_prefix_update_expression *node;
+	enum update_operator operation;
+
+	if (!operand)
+		return NULL;
+	if (operand->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, token.location,
+			"expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	operation = token.kind == token_increment ? update_increment : update_decrement;
+	node = ast_new_prefix_update(parser->arena, token.location, operation, operand);
+	if (!node)
+		allocation_error(parser, token.location);
+	return node ? &node->expression : NULL;
+}
+
+/* prefix-expression ::= postfix-expression | parenthesized-or-cast | prefix-update-expression
  *                     | pointer-unary-expression | sizeof-expression | alignof-expression
  *                     | ("+" | "-" | "!" | "~") cast-expression
  * cast-expression ::= prefix-expression (casts are selected after an opening paren)
@@ -919,6 +941,8 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 	struct ast_unary_expression *node;
 	enum unary_operator operation;
 
+	if (token.kind == token_increment || token.kind == token_decrement)
+		return parse_prefix_update_expression(parser);
 	if (token.kind == token_sizeof)
 		return parse_sizeof_expression(parser);
 	if (token.kind == token_alignof || token.kind == token_legacy_alignof)

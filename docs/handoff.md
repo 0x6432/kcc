@@ -2,15 +2,13 @@
 
 ## Current checkpoint
 
-M23a2 distinct nullptr constant implemented. New post-pp token, concrete AST
-leaf and immutable complete scalar type; neither integer nor pointer. Explicit
-conversions/equality/conditional rules preserve original operands and exact
-pointer types. Size/alignment 8, all-zero target representation. nullptr_t is
-not a keyword: type naming/headers remain later work. Targeted both-host units,
-QBE runtime/26 cross-object ABI arrangements and ASan/UBSan pass. Full local regression/
-QBE/fuzz also passed; exact counts follow at the end. This checkpoint is ready
-for commit/push and isolated/remote validation. Continue M19c1 prefix updates
-following m19-prefix-updates.md. Do not execute generated fuzz C.
+M19c1 prefix updates implemented with one retained lvalue, explicit calculation
+type and pointer stride; QBE performs exactly one address/load/store. Narrow and
+bool back-conversion preserves stored result types. Local targeted both-host
+native/QBE/ABI, full normal/QBE/fuzz and both-host sanitizer checks passed; exact
+counts and remote/isolated status follow below. This M19c1 checkpoint is ready
+for commit/push. Then implement the already written M19c2 postfix design in
+m19-postfix-updates.md. Never execute generated fuzz C.
 
 ### Earlier foundation (chronological)
 
@@ -1984,3 +1982,15 @@ All other native constraints must still reject; all 26 kcc rejections remain
 mandatory. Do not change nullptr into arithmetic zero or relax general null
 constant classification to match host folding. Extra host forms are never
 counted as strict constraint agreements. Legacy hosts never run this branch.
+
+M19c1 final local validation: complete normal regression and QBE suites passed.
+Both-host ASan/UBSan lexer/sema units and targeted runtime/24 ABI arrangements
+passed. Sanitized bounded fuzz ran 22,752 lexer and 58,812
+pipeline inputs in 26/26 seconds with no reported failure.
+No generated fuzz C or constraint-invalid/undefined curated source was executed.
+CI now keeps both compiler matrix jobs running after either fails, so host
+oracle/implementation failures do not hide the other compiler's evidence.
+Prior M13l1 isolated GCC/Clang normal+ASan/UBSan full matrices passed. M13m
+e06a497 remote run 38879492736 also passed every job. The nullptr oracle fix
+f3df148 run 38881463571 is still running; GCC passed normal tests and reached QBE.
+M19c1 isolated/remote checks are queued/pending, not claimed passed.

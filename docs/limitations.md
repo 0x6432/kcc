@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M23a2. Read the latest entries together with README.md and
+Current milestone: M19c1. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1427,3 +1427,14 @@ are not ICEs; sizeof(nullptr) is. Local legacy hosts lack the keyword, so their
 native comparison count is zero; QBE runtime and separate-pointer ABI validation
 are still run on every original positive program. This does not validate a
 source-spellable nullptr_t parameter/return ABI yet. Next: prefix updates.
+
+## M19c1 prefix update boundary
+
+Prefix ++/-- support current integer and complete-object pointer lvalues.
+Postfix updates and compound assignments are not in this increment. No atomic
+or floating update behavior is claimed. Updating a pointer to void/function/
+incomplete array is invalid; const referents do not forbid updating a mutable
+pointer object. Runtime signed overflow/null or out-of-array pointer arithmetic
+remains undefined C behavior, not a runtime bounds-checking feature. Bool updates
+use promoted arithmetic followed by truth conversion. VLA bounds containing an
+update are valid C23 syntax but remain our explicit runtime-bound subset limit.

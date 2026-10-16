@@ -2743,8 +2743,57 @@ static void test_nullptr_tree(void)
 }
 
 
+static void test_prefix_update_tree(void)
+{
+	const char *text = "int f(_Bool b,unsigned char c,const int *p) { ++b; --c; ++p; return 42; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_prefix_update_expression *update;
+	struct ast_expression *parsed_operand;
+
+	assert(source_from_bytes(&source, "prefix-update.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	update = (struct ast_prefix_update_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->expression.kind == expression_prefix_update && update->expression.depth == 2);
+	parsed_operand = update->operand;
+	assert(parsed_operand->kind == expression_name && parsed_operand->depth == 1);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(update->operand == parsed_operand && update->operand->is_lvalue);
+	assert(update->operand->type == &type_bool && update->expression.type == &type_bool);
+	assert(!update->expression.is_lvalue && update->expression.depth == 2);
+	assert(update->operation == update_increment && update->calculation_type == &type_int && !update->element_size);
+	assert(update->expression.location.offset == (size_t)(strstr(text, "++b") - text));
+	item = (struct ast_statement_item *)item->item.next;
+	update = (struct ast_prefix_update_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->expression.kind == expression_prefix_update && update->expression.type == &type_uchar);
+	assert(update->operand->is_lvalue && update->operand->kind == expression_name);
+	assert(update->operation == update_decrement && update->calculation_type == &type_int && !update->element_size);
+	item = (struct ast_statement_item *)item->item.next;
+	update = (struct ast_prefix_update_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->expression.kind == expression_prefix_update && !update->expression.is_lvalue);
+	assert(update->calculation_type == update->expression.type && update->element_size == 4);
+	assert(update->operand->kind == expression_name && update->operand->is_lvalue);
+	assert(((const struct pointer_type *)update->expression.type)->referent->qualifiers == type_qualifier_const);
+	assert(!update->expression.type->qualifiers && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_prefix_update_tree();
 	test_nullptr_tree();
 	test_null_boolean_tree();
 	test_null_constant_tree();

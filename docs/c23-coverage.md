@@ -372,3 +372,10 @@ conditional/null control and sizeof behavior. LP64 size/alignment 8 and all-zero
 void-pointer null representation are explicit target choices. Source nullptr_t
 names/headers and conversions to that named type are not exposed yet. Tests run
 original source via QBE; legacy host keyword absence is not native agreement.
+
+### M19c1 prefix ++/--
+
+N3096 6.5.3.1 subset: integer and complete-object pointer modifiable lvalues,
+result type/no-lvalue behavior, promoted/back-converted narrow and boolean values
+and once-only operand addressing. Prefix updates are not constant expressions.
+Postfix, compound assignment, floating and atomic cases remain separate work.

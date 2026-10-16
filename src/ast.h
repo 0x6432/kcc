@@ -20,6 +20,7 @@ enum expression_kind {
 	expression_name,
 	expression_function_designator,
 	expression_function_decay,
+	expression_prefix_update,
 	expression_unary,
 	expression_binary,
 	expression_pointer_offset,
@@ -159,6 +160,19 @@ struct ast_call_expression {
 	size_t argument_count;
 	struct function_symbol *function; /* Non-NULL only for a pure direct target. */
 	const struct function_type *signature;
+};
+
+enum update_operator {
+	update_increment,
+	update_decrement,
+};
+
+struct ast_prefix_update_expression {
+	struct ast_expression expression;
+	enum update_operator operation;
+	struct ast_expression *operand;
+	const struct type *calculation_type;
+	uint64_t element_size; /* Zero for integers; checked stride for pointers. */
 };
 
 enum unary_operator {
@@ -551,6 +565,8 @@ struct ast_subscript_expression *ast_new_subscript(struct arena *arena,
 	struct source_location location, struct ast_expression *left,
 	struct ast_expression *right);
 struct ast_name_expression *ast_new_name(struct arena *arena, struct token name);
+struct ast_prefix_update_expression *ast_new_prefix_update(struct arena *arena,
+	struct source_location location, enum update_operator operation, struct ast_expression *operand);
 struct ast_unary_expression *ast_new_unary(struct arena *arena,
 	struct source_location location, enum unary_operator operation,
 	struct ast_expression *operand);

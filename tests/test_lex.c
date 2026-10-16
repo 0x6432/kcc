@@ -107,7 +107,7 @@ static void test_errors(void)
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "0xg", "0b2", "12.5", "3.5", "@",
-		"18446744073709551616", "++", "--", "->", "+=", "*=", "/=", "%=", "<<=", ">>=",
+		"18446744073709551616", "->", "+=", "*=", "/=", "%=", "<<=", ">>=",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
@@ -341,8 +341,25 @@ static void test_nullptr_keyword(void)
 }
 
 
+static void test_update_tokens(void)
+{
+	const enum token_kind kinds[] = {
+		token_increment, token_increment, token_identifier,
+		token_plus, token_plus, token_identifier,
+		token_decrement, token_identifier, token_minus, token_minus, token_identifier,
+		token_increment, token_identifier,
+	};
+
+	check_tokens("++++x + +x --x - -x\n#define JOIN(a,b) a##b\nJOIN(+,+)x", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_increment), "++") == 0);
+	assert(strcmp(token_kind_name(token_decrement), "--") == 0);
+}
+
+
 int main(void)
 {
+	test_update_tokens();
 	test_nullptr_keyword();
 	test_assertion_keywords();
 	test_layout_keywords();

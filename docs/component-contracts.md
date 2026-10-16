@@ -1347,3 +1347,16 @@ not accepted. Codegen emits l-width zero and uses existing copy/truth/phi paths.
 Consteval is unchanged: nullptr-derived evaluated forms are not integer ICEs;
 sizeof(nullptr) is an opaque integer leaf. No additional runtime slot or static
 object is allocated. Future type naming must not confuse this type with void *.
+
+## M19c1 prefix update evaluation contract
+
+The parser constructs one concrete prefix node at prefix binding power, with
+operand depth plus one. Sema retains its operand as a modifiable lvalue (without
+load/decay), records integer promotion or unqualified pointer calculation type,
+and obtains stride only after a complete-object referent check. The expression
+result has the stored unqualified type and is not an lvalue. QBE obtains one
+address and performs one load/store; narrow values canonicalize after arithmetic
+and bool compares the promoted result to zero. There is no assignment expansion
+or duplicated call/subscript address subtree. Consteval sees a nonconstant form;
+sizeof still validates the operand but never executes it. Runtime signed overflow
+and invalid pointer range remain C undefined behavior, never curated execution.

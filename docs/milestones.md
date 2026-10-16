@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma and M19b conditional expressions implemented; rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional expressions and M19c1 prefix updates implemented; postfix/control-flow rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1514,3 +1514,37 @@ All other native constraints must still reject; all 26 kcc rejections remain
 mandatory. Do not change nullptr into arithmetic zero or relax general null
 constant classification to match host folding. Extra host forms are never
 counted as strict constraint agreements. Legacy hosts never run this branch.
+
+## M19c1 prefix update expressions
+
+Concrete prefix update ASTs retain one lvalue subtree plus operation, promoted
+calculation type and pointer stride. Sema suppresses the operand root load,
+requires modifiable integer/complete-object pointer lvalues, preserves referent
+const and rejects const objects, arrays, functions and nullptr_t. Result types
+are unqualified stored types, not promoted arithmetic types; results are not
+lvalues. QBE computes the address once, loads, updates, converts back and stores
+once. Boolean conversion tests the whole promoted result (not its low bit).
+sizeof checks constraints but emits no update; consteval rejects update forms.
+
+Both hosts pass 36 strict native original programs through QBE, 15 strict native
+constraint rejections, the nullptr constraint and explicit VLA subset limit,
+exact depth and 24 both-direction mixed-stack/narrow-result ABI arrangements.
+Units retain operand identity, root lvalue, source location, qualifiers, stride,
+calculation/result types and depth. Longest-match ++/-- token tests distinguish
+spaced unary operators and token-pasting without changing raw preprocessing.
+The first test run misclassified a legal VLA bound as a native constraint; it is
+now separately labelled as kcc's runtime-bound implementation limit. No compiler
+rule changed to force native rejection. Full regression/fuzz results follow.
+Next: M19c2 postfix updates, predesigned in m19-postfix-updates.md.
+
+M19c1 final local validation: complete normal regression and QBE suites passed.
+Both-host ASan/UBSan lexer/sema units and targeted runtime/24 ABI arrangements
+passed. Sanitized bounded fuzz ran 22,752 lexer and 58,812
+pipeline inputs in 26/26 seconds with no reported failure.
+No generated fuzz C or constraint-invalid/undefined curated source was executed.
+CI now keeps both compiler matrix jobs running after either fails, so host
+oracle/implementation failures do not hide the other compiler's evidence.
+Prior M13l1 isolated GCC/Clang normal+ASan/UBSan full matrices passed. M13m
+e06a497 remote run 38879492736 also passed every job. The nullptr oracle fix
+f3df148 run 38881463571 is still running; GCC passed normal tests and reached QBE.
+M19c1 isolated/remote checks are queued/pending, not claimed passed.

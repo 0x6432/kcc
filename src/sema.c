@@ -891,6 +891,39 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
+	case expression_prefix_update: {
+		struct ast_prefix_update_expression *node = (struct ast_prefix_update_expression *)expression;
+		const struct type *operand_type;
+
+		/* Keep one lvalue subtree; the backend obtains its address just once. */
+		if (!sema_expression(sema, &node->operand, false))
+			return false;
+		operand_type = node->operand->type;
+		if (!node->operand->is_lvalue || (operand_type->qualifiers & type_qualifier_const) ||
+			(!type_is_integer(operand_type) && operand_type->kind != type_kind_pointer)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"prefix update requires a modifiable integer or pointer lvalue");
+			return false;
+		}
+		result_type = unqualified_type(sema, operand_type, expression->location);
+		if (!result_type)
+			return false;
+		if (operand_type->kind == type_kind_pointer) {
+			const struct type *referent = ((const struct pointer_type *)operand_type)->referent;
+
+			if (!type_is_complete_object(referent)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"pointer update requires a complete object referent");
+				return false;
+			}
+			node->calculation_type = result_type;
+			node->element_size = type_object_size(referent);
+		} else {
+			node->calculation_type = type_integer_promotion(result_type);
+		}
+		expression->depth = node->operand->depth + 1;
+		break;
+	}
 	case expression_unary: {
 		struct ast_unary_expression *node =
 			(struct ast_unary_expression *)expression;

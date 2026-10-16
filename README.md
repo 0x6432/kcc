@@ -6,6 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19c1: prefix `++`/`--` update integer and complete-object pointer lvalues.
+Operand addresses are evaluated once; narrow/bool conversion and pointer strides
+are explicit. Postfix updates and compound assignment remain later increments.
+
 M23a2: C23 `nullptr` has its own complete scalar type, neither integer nor
 pointer. It converts to pointers and bool, supports equality, scalar control,
 comma and valid conditional forms, and has target size/alignment 8. `nullptr_t`
