@@ -1945,8 +1945,60 @@ static void test_object_void_conversion_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_explicit_pointer_cast_tree(void)
+{
+	const char *text = "unsigned char *bytes(int *p) { return (unsigned char *)p; } "
+		"int (*restore(int (*p)(int)))(int) { return (int (*)(int))(void (*)(void))p; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *bytes;
+	struct ast_function *restore;
+	struct ast_statement_item *item;
+	struct ast_cast_expression *cast;
+	struct ast_cast_expression *inner;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && sema_translation_unit(unit, &arena, &diagnostics));
+	bytes = first_function(unit);
+	restore = (struct ast_function *)bytes->external.next;
+	item = (struct ast_statement_item *)bytes->body->items;
+	cast = (struct ast_cast_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(cast->expression.kind == expression_cast && cast->operand->kind == expression_load);
+	assert(cast->expression.type == cast->type_syntax->type && cast->expression.depth == 3);
+	assert(type_compatible(cast->expression.type, bytes->return_type));
+	assert(!type_compatible(cast->expression.type, cast->operand->type));
+	assert(((const struct pointer_type *)cast->expression.type)->referent == &type_uchar);
+	assert(((const struct pointer_type *)cast->operand->type)->referent == &type_int);
+	item = (struct ast_statement_item *)restore->body->items;
+	cast = (struct ast_cast_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(cast->expression.kind == expression_cast && cast->expression.depth == 4);
+	inner = (struct ast_cast_expression *)cast->operand;
+	assert(inner->expression.kind == expression_cast && inner->expression.depth == 3);
+	assert(inner->operand->kind == expression_load && inner->operand->depth == 2);
+	assert(type_compatible(cast->expression.type, restore->return_type));
+	assert(type_compatible(cast->expression.type, inner->operand->type));
+	assert(!type_compatible(cast->expression.type, inner->expression.type));
+	assert(inner->expression.type == inner->type_syntax->type && cast->expression.type == cast->type_syntax->type);
+	assert(((const struct pointer_type *)inner->expression.type)->referent->kind == type_kind_function);
+	assert(((const struct pointer_type *)cast->expression.type)->referent->kind == type_kind_function);
+	assert(!diagnostics.errors);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_explicit_pointer_cast_tree();
 	test_object_void_conversion_tree();
 	test_void_type_and_effect_tree();
 	test_function_pointer_expression_tree();

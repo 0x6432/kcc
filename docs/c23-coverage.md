@@ -271,3 +271,10 @@ Assignment-like and explicit object/void pointer conversion and mixed equality
 are implemented with explicit typed conversions. This is not recursive pointer
 compatibility; function bridges, integer null constants and other incompatible
 pointer casts remain unsupported.
+
+### M14i explicit pointer casts
+
+Object/object and function/function explicit pointer casts are supported,
+separately from implicit conversion. Runtime alignment, effective type and
+compatible indirect target requirements remain C program obligations. No
+object/function bridges or integer/pointer conversions are implied.

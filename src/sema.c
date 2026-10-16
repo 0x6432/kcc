@@ -292,6 +292,21 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 	return false;
 }
 
+/* Explicit casts do not grant assignment compatibility or adapt function ABIs. */
+static bool check_cast(struct sema *sema, const struct type *source,
+	const struct type *target, struct source_location location)
+{
+	if (source->kind == type_kind_pointer && target->kind == type_kind_pointer) {
+		const struct type *source_referent = ((const struct pointer_type *)source)->referent;
+		const struct type *target_referent = ((const struct pointer_type *)target)->referent;
+
+		if ((type_is_object(source_referent) && type_is_object(target_referent)) ||
+			(source_referent->kind == type_kind_function && target_referent->kind == type_kind_function))
+			return true;
+	}
+	return check_conversion(sema, source, target, location);
+}
+
 static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 	const struct type *target)
 {
@@ -609,7 +624,7 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "cast target must be a scalar type");
 			return false;
 		}
-		if (!check_conversion(sema, node->operand->type, result_type, expression->location))
+		if (!check_cast(sema, node->operand->type, result_type, expression->location))
 			return false;
 		expression->depth = node->operand->depth + 1;
 		break;

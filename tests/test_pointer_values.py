@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer values ') as directory:
         ('int *f(int *p) { int *q=0; return p; }','pointer conversion'),
         ('int *f(int *p) { return (int *)0; }','pointer conversion'),
         ('int f(int *p) { return (int)p; }','pointer conversion'),
-        ('char *f(int *p) { return (char *)p; }','pointer conversion'),
+        ('char *f(int *p) { return p; }','pointer conversion'),
         ('int *f(int *p) { p=1; return p; }','pointer conversion'),
         ('int f(int *p) { return +p; }','requires an integer'),
         ('int f(int *p) { return -p; }','requires an integer'),

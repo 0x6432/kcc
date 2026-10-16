@@ -99,6 +99,7 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_function_pointers.py
 	QBE="$(QBE)" python3 tests/test_void_functions.py
 	QBE="$(QBE)" python3 tests/test_object_void_conversions.py
+	QBE="$(QBE)" python3 tests/test_explicit_pointer_casts.py
 
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
@@ -159,6 +160,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_function_pointers.py
 	python3 tests/test_void_functions.py
 	python3 tests/test_object_void_conversions.py
+	python3 tests/test_explicit_pointer_casts.py
 
 clean:
 	rm -rf build

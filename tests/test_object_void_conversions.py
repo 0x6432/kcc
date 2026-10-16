@@ -115,7 +115,6 @@ with tempfile.TemporaryDirectory(prefix='kcc object void pointers ') as director
       'int f(void *p,int (*q)(void)) { return p==q; }', 'int f(void *p,int (*q)(void)) { return q!=p; }',
       'int **f(void **p) { return p; }', 'void **f(int **p) { return p; }',
       'int f(void **p,int **q) { return p==q; }', 'int f(void **p,int **q) { return p!=q; }',
-      'int **f(void **p) { return (int **)p; }', 'void **f(int **p) { return (void **)p; }',
       'int f(void *p,int *q) { return p<q; }', 'int f(void *p,int *q) { return q<=p; }',
       'void *f(void *p) { return p+0; }', 'int f(void *p) { return p[0]; }',
       'long f(void *p) { return p-p; }', 'int f(void *p) { return *p; }',

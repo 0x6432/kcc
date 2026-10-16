@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14h. Read the latest entries together with README.md and
+Current milestone: M14i. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1107,3 +1107,16 @@ void **/int **. Function pointers cannot bridge to void *, but pointers to
 function-pointer objects can. Mixed ordering, integer null constants, incomplete
 strides, other incompatible explicit pointer casts, qualifiers and typedefs are
 not added. M14i explicit object/function pointer casts is designed separately.
+
+## M14i
+
+Explicit casts between object pointers and, separately, between function pointers
+are supported. This includes nested object-pointer casts; implicit compatibility
+and assignment/call/return rules are unchanged. Object/function bridges and
+integer/pointer mapping remain unsupported. Character pointers can access object
+representation; runtime alignment/effective-type requirements remain the source
+program's obligations. A function-pointer cast is not an ABI adapter: calling
+through an incompatible function type has undefined behavior and is never used
+in curated runtime tests. Qualifiers, typedefs and full declarators remain work.
+Next bring forward M19a sequenced comma expressions, using the new effect-only
+path and explicit argument/declaration separator floors; M14 stays incomplete.

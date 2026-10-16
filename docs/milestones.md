@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-g declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1102,3 +1102,23 @@ and compiler-rt were restored; unfinished immutable snapshot matrices were
 requeued under the same external lock, preserving old logs and recording new
 results in /data/tools/*-resumed-validation.log. The active M14g matrix is
 independent. All remote checkpoints remain exact-source, not inferred.
+
+## M14i tested source checkpoint
+
+Full GCC normal regression and QBE suites passed. Targeted GCC and Clang checks
+cover 31 full-value programs, every primitive object's character-pointer round
+trip, defined byte-representation access, complete/incomplete arrays, nested
+pointer objects, both primitive/function ABI linkage directions, mixed stack
+callbacks, host-supplied object/function null pointers, once-only effects, exact
+typed depth and 21 constraints. Function casts are restored to compatible
+signatures before calls. Typed units preserve real cast syntax/cache/types,
+incompatibility and depth rather than weakening implicit conversions.
+
+Bounded ASan/UBSan fuzz completed 22,538 lexer and 69,788 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+Old explicit object-cast rejections were migrated to unchanged implicit
+constraints; nested pointer implicit conversions still reject. Full isolated
+and exact-source remote checks remain pending for this source. M19a comma
+expressions are designed before implementation and brought forward because
+they exercise M14g discard paths and declaration/call separator boundaries.
+M14 qualifiers/typedefs and the rest of M19 remain incomplete.

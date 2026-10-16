@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M14h implementation: object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
+M14i implementation: explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
 casts/discards; prior explicit function designators/decay, callback values and
 indirect fixed calls; concrete concrete fixed-function declarator syntax/array-pointer returns,
 C23 unnamed definitions with positional ABI and no fake spills,
@@ -33,9 +33,9 @@ external flock. Logs/snapshots are in /data/tools and /data/validation-* outside
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14i explicit object/function pointer casts, designed in
-m14-explicit-pointer-casts.md.
-Null constants, other explicit pointer casts and full declarators,
+Next: bring forward M19a sequenced comma expressions, designed in
+m19-comma-expressions.md; then return to unfinished M14 qualifier/typedef work.
+Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
@@ -1578,3 +1578,23 @@ and compiler-rt were restored; unfinished immutable snapshot matrices were
 requeued under the same external lock, preserving old logs and recording new
 results in /data/tools/*-resumed-validation.log. The active M14g matrix is
 independent. All remote checkpoints remain exact-source, not inferred.
+
+## M14i tested source checkpoint
+
+Full GCC normal regression and QBE suites passed. Targeted GCC and Clang checks
+cover 31 full-value programs, every primitive object's character-pointer round
+trip, defined byte-representation access, complete/incomplete arrays, nested
+pointer objects, both primitive/function ABI linkage directions, mixed stack
+callbacks, host-supplied object/function null pointers, once-only effects, exact
+typed depth and 21 constraints. Function casts are restored to compatible
+signatures before calls. Typed units preserve real cast syntax/cache/types,
+incompatibility and depth rather than weakening implicit conversions.
+
+Bounded ASan/UBSan fuzz completed 22,538 lexer and 69,788 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+Old explicit object-cast rejections were migrated to unchanged implicit
+constraints; nested pointer implicit conversions still reject. Full isolated
+and exact-source remote checks remain pending for this source. M19a comma
+expressions are designed before implementation and brought forward because
+they exercise M14g discard paths and declaration/call separator boundaries.
+M14 qualifiers/typedefs and the rest of M19 remain incomplete.

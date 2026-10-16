@@ -1196,3 +1196,13 @@ only the object-pointer operand to the existing void-pointer type, then follows
 the ordinary compatible-pointer comparison path. Relational comparison does
 not take this normalization path. QBE's existing full-pointer-width copy remains
 sufficient; no type flattening, dereference, stride or ABI modification is used.
+
+## M14i explicit versus assignment-like conversion
+
+check_cast permits object/object and function/function referent categories only
+for explicit cast nodes, then falls back to the existing scalar conversion
+constraints. check_conversion, compatibility and declaration composites are not
+weakened. Cast operands and concrete syntax caches preserve actual source/target
+types and exact typed depth. QBE keeps pointer-width copies with no invented
+loads or function adapters. Runtime targets are called only through compatible
+function signatures in tests, including both narrow and mixed stack ABIs.
