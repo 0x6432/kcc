@@ -5,6 +5,26 @@
 #include <assert.h>
 #include <string.h>
 
+/* Aliases share type DAGs. Cache shape metrics without expanding repeated edges.
+ * The expanded size/depth bounds keep existing recursive type operations safe.
+ */
+enum typedef_type_limit {
+	typedef_max_type_nodes = 4096,
+	typedef_max_type_depth = 128,
+};
+
+struct typedef_type_shape {
+	const struct type *type;
+	size_t nodes;
+	unsigned depth;
+	struct typedef_type_shape *next;
+};
+
+struct typedef_binding {
+	struct ast_typedef_declaration *declaration;
+	struct typedef_binding *next;
+};
+
 struct binding {
 	struct ast_local_declaration *declaration;
 	struct binding *next;
@@ -44,6 +64,8 @@ struct sema {
 	size_t local_count;
 	uint64_t local_storage;
 	struct function_symbol *functions;
+	struct typedef_binding *typedefs;
+	struct typedef_type_shape *typedef_shapes;
 	size_t function_count;
 	size_t string_count;
 	struct ast_string_expression **string_tail;
@@ -55,6 +77,18 @@ static bool same_name(struct token left, struct token right)
 		memcmp(left.spelling_location.source->data + left.spelling_location.offset,
 			right.spelling_location.source->data + right.spelling_location.offset,
 			left.length) == 0;
+}
+
+static struct ast_typedef_declaration *find_typedef(struct sema *sema, struct token name)
+{
+	struct typedef_binding *binding = sema->typedefs;
+
+	while (binding) {
+		if (same_name(binding->declaration->name, name))
+			return binding->declaration;
+		binding = binding->next;
+	}
+	return NULL;
 }
 
 static struct ast_local_declaration *find_in_scope(struct scope *scope,
@@ -172,6 +206,17 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_typedef_name: {
+		struct ast_typedef_name_type_syntax *alias = (struct ast_typedef_name_type_syntax *)syntax;
+		struct ast_typedef_declaration *declaration = find_typedef(sema, alias->name);
+
+		if (!declaration) {
+			diagnostic_error(sema->diagnostics, alias->name.location, "unknown typedef name");
+			return NULL;
+		}
+		syntax->type = declaration->type;
+		break;
+	}
 	case type_syntax_qualified: {
 		struct ast_qualified_type_syntax *qualified = (struct ast_qualified_type_syntax *)syntax;
 		const struct type *base = resolve_type_syntax(sema, qualified->base);
@@ -1914,6 +1959,10 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	struct function_symbol *symbol = find_function(sema, name);
 	const struct type *return_type;
 
+	if (find_typedef(sema, name)) {
+		diagnostic_error(sema->diagnostics, name.location, "function name conflicts with typedef name");
+		return NULL;
+	}
 	if (name.length == 4 && memcmp(name.spelling_location.source->data +
 		name.spelling_location.offset, "main", 4) == 0 && type->parameter_count) {
 		diagnostic_error(sema->diagnostics, name.location,
@@ -2016,6 +2065,93 @@ static bool sema_function_declaration(struct sema *sema,
 	return sema_function_body(sema, definition);
 }
 
+static struct typedef_type_shape *measure_typedef_type(struct sema *sema,
+	const struct type *type, unsigned nesting, struct source_location location)
+{
+	struct typedef_type_shape *shape = sema->typedef_shapes;
+	const struct type *child = NULL;
+	const struct function_parameter_type *parameter = NULL;
+	size_t nodes = 1;
+	unsigned depth = 1;
+
+	while (shape) {
+		if (shape->type == type)
+			return shape;
+		shape = shape->next;
+	}
+	if (nesting == typedef_max_type_depth) {
+		diagnostic_error(sema->diagnostics, location, "typedef type exceeds expanded depth limit (128)");
+		return NULL;
+	}
+	if (type->kind == type_kind_pointer)
+		child = ((const struct pointer_type *)type)->referent;
+	else if (type->kind == type_kind_array)
+		child = ((const struct array_type *)type)->element;
+	else if (type->kind == type_kind_function) {
+		child = ((const struct function_type *)type)->return_type;
+		parameter = ((const struct function_type *)type)->parameters;
+	}
+	while (child) {
+		struct typedef_type_shape *part = measure_typedef_type(sema, child, nesting + 1, location);
+
+		if (!part)
+			return NULL;
+		if (part->depth >= typedef_max_type_depth) {
+			diagnostic_error(sema->diagnostics, location, "typedef type exceeds expanded depth limit (128)");
+			return NULL;
+		}
+		if (part->nodes > typedef_max_type_nodes - nodes) {
+			diagnostic_error(sema->diagnostics, location, "typedef type exceeds expanded node limit (4096)");
+			return NULL;
+		}
+		nodes += part->nodes;
+		if (depth < part->depth + 1)
+			depth = part->depth + 1;
+		child = parameter ? parameter->type : NULL;
+		if (parameter)
+			parameter = parameter->next;
+	}
+	shape = arena_alloc(sema->arena, sizeof(*shape));
+	if (!shape) {
+		diagnostic_error(sema->diagnostics, location, "out of memory measuring typedef type");
+		return NULL;
+	}
+	*shape = (struct typedef_type_shape) {
+		.type = type,
+		.nodes = nodes,
+		.depth = depth,
+		.next = sema->typedef_shapes,
+	};
+	sema->typedef_shapes = shape;
+	return shape;
+}
+
+static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_declaration *declaration)
+{
+	struct typedef_binding *binding;
+	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
+
+	if (!type)
+		return false;
+	if (find_function(sema, declaration->name) || find_typedef(sema, declaration->name)) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"typedef name conflicts with prior ordinary declaration");
+		return false;
+	}
+	if (!measure_typedef_type(sema, type, 0, declaration->location))
+		return false;
+
+	binding = arena_alloc(sema->arena, sizeof(*binding));
+	if (!binding) {
+		diagnostic_error(sema->diagnostics, declaration->location, "out of memory binding typedef name");
+		return false;
+	}
+	declaration->type = type;
+	*binding = (struct typedef_binding) { .declaration = declaration, .next = sema->typedefs };
+	sema->typedefs = binding;
+	return true;
+}
+
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics)
 {
@@ -2029,6 +2165,14 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 	while (external) {
 		struct ast_function *definition = NULL;
 		struct ast_function_declaration *declaration;
+
+		if (external->kind == external_typedef_declaration) {
+			if (!sema_typedef_declaration(&sema,
+				((struct ast_external_typedef_declaration *)external)->declaration))
+				return false;
+			external = external->next;
+			continue;
+		}
 
 		if (external->kind == external_static_assertion) {
 			if (!sema_static_assertion(&sema,

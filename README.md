@@ -6,6 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M14l1: unique file-scope typedef aliases now work across supported declarations,
+type names, casts, layout queries and function signatures. They preserve written
+AST syntax and immutable type identity without runtime storage. Block typedefs,
+redeclarations, comma lists and alias shadowing remain explicitly deferred.
+Alias-expanded types are bounded at 4096 nodes and 128 levels.
+
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite
 types. They declare distinct function symbols, not aliases to the query operand.

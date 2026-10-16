@@ -1539,3 +1539,35 @@ parameters, locals, data, function definitions, runtime query operations or QBE
 alias instructions. Calls/addresses use the existing shared symbol and ABI.
 The existing 256 unique-function / 512 external-declaration bounds still apply;
 repeated compatible queries do not consume additional function-symbol slots.
+
+## M14l1 unshadowed file-scope typedef foundation
+
+A language typedef keyword is converted only at token demand; raw preprocessing
+identifiers/macros retain their old behavior. Concrete ast_typedef_declaration,
+ast_external_typedef_declaration and ast_typedef_name_type_syntax retain each
+written declaration/name. Parser aliases are bounded syntax-only name bindings;
+sema independently resolves earlier aliases in source order and shares immutable
+types, never a new nominal type or synthetic runtime declaration.
+
+Aliases participate in all existing declaration/type-name ambiguities: local and
+for declarations, qualifiers, pointers, arrays, adjusted parameters, signatures,
+casts, sizeof/alignof and type queries. Alias-derived bare function declarations
+reuse M14k2 registration. Identifier-plus-colon is classified before alias local
+declarations, preserving the label namespace. Alias-named labels still consume
+one block item; consumed alias declarations reuse a shared specifier/declarator
+tail without token replay, vectors or semantic resolution during parsing.
+
+This increment supports one unique file-scope alias per typedef declaration.
+Block typedefs, typedef redeclarations, comma typedef lists, shadowing visible
+aliases, bare alias-derived function definitions and remaining storage classes
+are explicit subset limits, not newly invented C constraints. Actual ordinary
+file-scope function/typedef namespace collisions are rejected by sema. Existing
+VM, aggregate, floating, atomic and other unsupported types remain unsupported.
+
+Aliases share DAGs that could encode exponentially expanded function signatures.
+Sema caches shape metrics by immutable type identity before publishing an alias,
+with explicit expanded-node 4096 and depth 128 limits (each leaf counts as one).
+These bounded valid-C subsets protect existing recursive type operations; they
+are not incompatibility diagnostics. The existing 512 external declarations,
+256 function symbols and 4096 block items remain independently enforced. Alias
+names do not emit storage, data, functions, QBE aliases or runtime query effects.

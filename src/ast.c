@@ -1094,3 +1094,42 @@ struct ast_external_static_assertion *ast_new_external_static_assertion(struct a
 		};
 	return node;
 }
+
+struct ast_typedef_name_type_syntax *ast_new_typedef_name_type_syntax(struct arena *arena, struct token name)
+{
+	struct ast_typedef_name_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_typedef_name_type_syntax) {
+			.syntax = { .kind = type_syntax_typedef_name, .location = name.location },
+			.name = name,
+		};
+	return node;
+}
+
+struct ast_typedef_declaration *ast_new_typedef_declaration(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name)
+{
+	struct ast_typedef_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_typedef_declaration) {
+			.location = location,
+			.type_syntax = type_syntax,
+			.name = name,
+		};
+	return node;
+}
+
+struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(struct arena *arena,
+	struct ast_typedef_declaration *declaration)
+{
+	struct ast_external_typedef_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_external_typedef_declaration) {
+			.external = { .kind = external_typedef_declaration, .location = declaration->location },
+			.declaration = declaration,
+		};
+	return node;
+}

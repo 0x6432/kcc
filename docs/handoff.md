@@ -2,6 +2,47 @@
 
 ## Current checkpoint
 
+M14l1 is implemented and validated. Read m14-file-typedef-foundation.md, including
+the shape-safety refinement. All three implementation/test/shape scripts under
+/data/tools were already applied; do NOT rerun them. The test generator initially
+inserted functions into embedded C strings; this was repaired by placing complete
+units before the actual line-anchored test main. No compiler acceptance changed
+for that test insertion error. Exact source hashes: /data/tools/m14l1-source.sha256.
+
+M14l1 validation: complete normal and QBE regression, complete normal regression
+with original-source native Clang 18.1.8, both GCC 11 / Clang 15 targeted ASan/UBSan
+lexer/sema/query/nullptr/control/compound suites, and bounded sanitized fuzz passed.
+Fuzz executed 19,290 lexer / 71,849 pipeline inputs in 26/26 seconds; no generated
+C or invalid curated source ran. Focused typedef suite: 42 standard + 10 C23
+original programs, 13 strict native constraint rejections, 24 mixed-stack ABI
+arrangements per host, canonical AST/cache identity and exact external/function/
+item/expanded-shape/depth boundaries. GCC 11 / Clang 15 agree on all 42 standard
+programs; GCC 14.1 / Clang 18 agree on all 52 originals, with no query rewriting.
+Only the exact keyword-macro fixture needs Clang's style warning disabled; the
+unchanged source and pedantic errors remain. Public CI is not a local-pass claim.
+The full normal run and GCC targeted void suite preceded the independent native-
+warning classifier correction; final focused void checks and complete QBE/modern
+Clang runs include that correction. No compiler source changed during validation.
+
+Independent test-only correction 9bf0a40 is committed/pushed. Runs 38922632027 /
+38922740646 passed fuzz but failed GCC's old named-void nonzero-status assertion.
+GCC 14 emits two exact warnings and strictly rejects the other ten fixtures;
+Clang 18 strictly rejects all twelve. Classify only exact sources and single
+warnings, separately from strict rejection/runtime agreements; no kcc rule change.
+Read m14-void-native-diagnostics.md. Four-host normal and both frozen sanitizer
+binaries with both modern native oracles passed. Its CI remains pending.
+
+Next M14l1b same-type typedef redeclarations is already implemented ONLY in
+/data/next-m14l1b. Read m14-typedef-redeclarations.md. Its scripts are already
+applied. Focused four-host tests and full/sanitizer/fuzz runs have separate logs
+/data/tools/m14l1b-*. Do not copy its source into the primary checkout until this
+foundation is committed and that exact frozen snapshot finishes validation.
+Transfer only changed source/tests/Makefile, not stale docs; verify the manifest
+/data/tools/m14l1b-source.sha256. Preserve both older stashes.
+Modern native GCC 14.1.0 is /data/tools/gcc14-native/gcc: a compact compiler using
+host startup/link libraries via explicit sysroot/-B paths, not C-source rewrites.
+Clang 18.1.8 is /data/tools/clang18/bin/clang-18. Tools remain under 1 GiB.
+
 The M23d2 null-conversion correctness fix passed complete normal/QBE regression,
 both-host targeted ASan/UBSan and bounded sanitized fuzz: 10,946 lexer / 45,467
 pipeline inputs in 26/26 seconds. No generated C or invalid curated program ran.
@@ -30,7 +71,7 @@ No generated C or invalid curated source executed. SHA-256 verified exact frozen
 source/test bytes before and after integration from /data/next-m14k2. Public CI
 for this increment remains pending; no isolated full sanitizer-matrix claim.
 
-Next prewritten design: m14-file-typedef-foundation.md, not yet implemented.
+Historical next design m14-file-typedef-foundation.md is now implemented above.
 Preserve both older stashes. Compact Clang 18.1.8 is available under
 /data/tools/clang18/bin/clang-18 (~247 MiB).
 

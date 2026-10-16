@@ -2006,3 +2006,50 @@ bounded fuzz passed 17,747 lexer / 76,739 pipeline inputs in 26/26 seconds.
 No generated C or invalid curated source executed. SHA-256 verified exact frozen
 source/test bytes before and after integration from /data/next-m14k2. Public CI
 for this increment remains pending; no isolated full sanitizer-matrix claim.
+
+## M14l1 unshadowed file-scope typedef foundation
+
+A language typedef keyword is converted only at token demand; raw preprocessing
+identifiers/macros retain their old behavior. Concrete ast_typedef_declaration,
+ast_external_typedef_declaration and ast_typedef_name_type_syntax retain each
+written declaration/name. Parser aliases are bounded syntax-only name bindings;
+sema independently resolves earlier aliases in source order and shares immutable
+types, never a new nominal type or synthetic runtime declaration.
+
+Aliases participate in all existing declaration/type-name ambiguities: local and
+for declarations, qualifiers, pointers, arrays, adjusted parameters, signatures,
+casts, sizeof/alignof and type queries. Alias-derived bare function declarations
+reuse M14k2 registration. Identifier-plus-colon is classified before alias local
+declarations, preserving the label namespace. Alias-named labels still consume
+one block item; consumed alias declarations reuse a shared specifier/declarator
+tail without token replay, vectors or semantic resolution during parsing.
+
+This increment supports one unique file-scope alias per typedef declaration.
+Block typedefs, typedef redeclarations, comma typedef lists, shadowing visible
+aliases, bare alias-derived function definitions and remaining storage classes
+are explicit subset limits, not newly invented C constraints. Actual ordinary
+file-scope function/typedef namespace collisions are rejected by sema. Existing
+VM, aggregate, floating, atomic and other unsupported types remain unsupported.
+
+Aliases share DAGs that could encode exponentially expanded function signatures.
+Sema caches shape metrics by immutable type identity before publishing an alias,
+with explicit expanded-node 4096 and depth 128 limits (each leaf counts as one).
+These bounded valid-C subsets protect existing recursive type operations; they
+are not incompatibility diagnostics. The existing 512 external declarations,
+256 function symbols and 4096 block items remain independently enforced. Alias
+names do not emit storage, data, functions, QBE aliases or runtime query effects.
+
+M14l1 validation: complete normal and QBE regression, complete normal regression
+with original-source native Clang 18.1.8, both GCC 11 / Clang 15 targeted ASan/UBSan
+lexer/sema/query/nullptr/control/compound suites, and bounded sanitized fuzz passed.
+Fuzz executed 19,290 lexer / 71,849 pipeline inputs in 26/26 seconds; no generated
+C or invalid curated source ran. Focused typedef suite: 42 standard + 10 C23
+original programs, 13 strict native constraint rejections, 24 mixed-stack ABI
+arrangements per host, canonical AST/cache identity and exact external/function/
+item/expanded-shape/depth boundaries. GCC 11 / Clang 15 agree on all 42 standard
+programs; GCC 14.1 / Clang 18 agree on all 52 originals, with no query rewriting.
+Only the exact keyword-macro fixture needs Clang's style warning disabled; the
+unchanged source and pedantic errors remain. Public CI is not a local-pass claim.
+The full normal run and GCC targeted void suite preceded the independent native-
+warning classifier correction; final focused void checks and complete QBE/modern
+Clang runs include that correction. No compiler source changed during validation.

@@ -322,6 +322,7 @@ enum integer_specifier {
 };
 
 enum type_syntax_kind {
+	type_syntax_typedef_name,
 	type_syntax_void,
 	type_syntax_qualified,
 	type_syntax_typeof_type,
@@ -336,6 +337,11 @@ struct ast_type_syntax {
 	enum type_syntax_kind kind;
 	struct source_location location;
 	const struct type *type;
+};
+
+struct ast_typedef_name_type_syntax {
+	struct ast_type_syntax syntax;
+	struct token name;
 };
 
 struct ast_qualified_type_syntax {
@@ -585,12 +591,25 @@ enum external_declaration_kind {
 	external_function_definition,
 	external_static_assertion,
 	external_type_declaration,
+	external_typedef_declaration,
 };
 
 struct ast_external_declaration {
 	enum external_declaration_kind kind;
 	struct source_location location;
 	struct ast_external_declaration *next;
+};
+
+struct ast_typedef_declaration {
+	struct source_location location;
+	struct ast_type_syntax *type_syntax;
+	struct token name;
+	const struct type *type;
+};
+
+struct ast_external_typedef_declaration {
+	struct ast_external_declaration external;
+	struct ast_typedef_declaration *declaration;
 };
 
 struct ast_external_static_assertion {
@@ -677,6 +696,11 @@ struct ast_call_expression *ast_new_call(struct arena *arena,
 struct ast_argument *ast_new_argument(struct arena *arena, struct ast_expression *value);
 struct ast_parameter *ast_new_parameter(struct arena *arena,
 	struct source_location location, struct token name, bool has_name);
+struct ast_typedef_name_type_syntax *ast_new_typedef_name_type_syntax(struct arena *arena, struct token name);
+struct ast_typedef_declaration *ast_new_typedef_declaration(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
+struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(struct arena *arena,
+	struct ast_typedef_declaration *declaration);
 struct ast_external_type_declaration *ast_new_external_type_declaration(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,

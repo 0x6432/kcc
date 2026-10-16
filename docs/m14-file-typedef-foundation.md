@@ -47,3 +47,14 @@ constraint boundaries, byte budgets, ABI and non-emission. Strict native oracles
 must use original source; do not rewrite aliases or execute invalid/fuzz inputs.
 Run full normal/QBE, both-host ASan/UBSan, modern C23 oracles and bounded lexer/
 pipeline fuzz, update coverage/contracts/handoff and commit/push actual results.
+
+
+Implementation safety refinement: aliases can encode an exponentially expanded
+function-type tree with very little source, unlike previously written tree
+syntax. Before publishing an alias, sema caches type-DAG shape metrics by actual
+immutable type pointer and rejects expanded type shapes above 4,096 nodes or
+128 levels (leaf counts as one). Repeated alias names do not expand those nodes
+in memory. These are explicit implementation limits on otherwise valid C, not
+compatibility errors. Exact boundaries and repeated branching DAGs must be tested.
+Alias-named labels must also charge the existing 4,096 block-item budget after
+the identifier/colon distinction; declaration-start prediction alone is not enough.

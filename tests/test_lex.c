@@ -432,8 +432,17 @@ static void test_typeof_keywords(void)
 	assert(strcmp(token_kind_name(token_typeof_unqual), "typeof_unqual") == 0);
 }
 
+static void test_typedef_keyword(void)
+{
+	const enum token_kind kinds[] = { token_typedef, token_identifier };
+
+	check_tokens("#define DECL typedef\nDECL name", kinds, 2, 0);
+	assert(strcmp(token_kind_name(token_typedef), "typedef") == 0);
+}
+
 int main(void)
 {
+	test_typedef_keyword();
 	test_typeof_keywords();
 	test_case_keywords();
 	test_switch_keyword();

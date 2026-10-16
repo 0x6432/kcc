@@ -3495,8 +3495,64 @@ static void test_queried_function_declaration_tree(void)
 	source_destroy(&source);
 }
 
+static void test_typedef_tree(void)
+{
+	const char *text = "typedef int number; typedef number pair[2]; typedef int signature(number); "
+		"signature f; int f(int x) { return x; } int main(void) { "
+		"goto number; number: pair a; a[0]=42; return f(a[0]); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_typedef_declaration *number;
+	struct ast_typedef_declaration *pair;
+	struct ast_typedef_declaration *signature;
+	struct ast_external_type_declaration *prototype;
+	struct ast_function *definition;
+	struct ast_function *main_function;
+	struct ast_local_declaration *local;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	assert(unit->declarations->kind == external_typedef_declaration);
+	number = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+	pair = ((struct ast_external_typedef_declaration *)unit->declarations->next)->declaration;
+	signature = ((struct ast_external_typedef_declaration *)unit->declarations->next->next)->declaration;
+	prototype = (struct ast_external_type_declaration *)unit->declarations->next->next->next;
+	assert(prototype->external.kind == external_type_declaration);
+	assert(prototype->type_syntax->kind == type_syntax_typedef_name);
+	assert(!number->type && !pair->type && !signature->type && !prototype->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	assert(number->type == &type_int);
+	assert(pair->type == pair->type_syntax->type && pair->type->kind == type_kind_array);
+	assert(((const struct array_type *)pair->type)->element == number->type);
+	assert(signature->type == signature->type_syntax->type && signature->type->kind == type_kind_function);
+	assert(prototype->type_syntax->type == signature->type && prototype->type == signature->type);
+	definition = (struct ast_function *)prototype->external.next;
+	assert(definition->external.kind == external_function_definition);
+	assert(prototype->symbol == definition->declaration->symbol);
+	main_function = (struct ast_function *)definition->external.next;
+	assert(main_function->external.kind == external_function_definition);
+	local = main_function->locals;
+	assert(local && !local->next_local && local->type == pair->type);
+	assert(local->type_syntax->kind == type_syntax_typedef_name);
+	assert(!unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_tree();
 	test_queried_function_declaration_tree();
 	test_nullptr_assignment_conversion_tree();
 	test_void_parameter_query_tree();
