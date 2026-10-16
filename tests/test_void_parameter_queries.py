@@ -56,6 +56,31 @@ subset_errors = [
     ('int main(int x) { return x; }','only zero-parameter main'),
     ('int main(typeof(int) x) { return x; }','only zero-parameter main'),
 ]
+def native_named_void_warning(text, status, diagnostics):
+    expected = {
+        'int f(typeof(void) x);': "parameter 1 ('x') has void type",
+        'int f(void) { int (*p)(typeof(void) named); return 0; }': "parameter 1 ('named') has void type",
+    }
+    if text not in expected or status != 0:
+        return False
+    normalized = diagnostics.replace('‘', "'").replace('’', "'")
+    messages = re.findall(r'(fatal error|error|warning): ([^\n]+)', normalized)
+    return messages == [('warning', expected[text])]
+
+
+# A required diagnostic need not have error severity. Count these exact GCC
+# warnings separately from strict native rejections; kcc acceptance is unchanged.
+for original, name in [('int f(typeof(void) x);', 'x'),
+                       ('int f(void) { int (*p)(typeof(void) named); return 0; }', 'named')]:
+    warning = f"source.c:1:1: warning: parameter 1 ('{name}') has void type\n"
+    assert native_named_void_warning(original, 0, warning)
+    assert not native_named_void_warning('int other(void);', 0, warning)
+    assert not native_named_void_warning(original, 1, warning)
+    assert not native_named_void_warning(original, 0, '')
+    assert not native_named_void_warning(original, 0, warning+'source.c:1:2: error: unexpected\n')
+    assert not native_named_void_warning(original, 0, warning+'source.c:1:2: warning: unrelated\n')
+
+
 with tempfile.TemporaryDirectory(prefix='kcc void parameter queries ') as directory:
     directory = Path(directory)
     source,native,il,assembly,obj,executable = [directory/n for n in ('k.c','h.c','p.ssa','p.s','h.o','p')]
@@ -89,6 +114,7 @@ with tempfile.TemporaryDirectory(prefix='kcc void parameter queries ') as direct
     native_supported = all(support)
     native_programs = 0
     native_constraints = 0
+    native_void_warnings = 0
     for text in programs:
         compile_source(text)
         if qbe:
@@ -104,8 +130,12 @@ with tempfile.TemporaryDirectory(prefix='kcc void parameter queries ') as direct
         if native_supported:
             native.write_text(text+'\n')
             result = subprocess.run([host,'-std=c2x','-pedantic-errors','-fsyntax-only',str(native)], capture_output=True, text=True, timeout=10)
-            assert result.returncode != 0, text
-            native_constraints += 1
+            if native_named_void_warning(text, result.returncode, result.stderr):
+                assert not result.stdout
+                native_void_warnings += 1
+            else:
+                assert result.returncode != 0, (text,result.stderr)
+                native_constraints += 1
     for text in syntax_errors:
         compile_source(text,False,'error:')
     for text,message in subset_errors:
@@ -132,6 +162,6 @@ with tempfile.TemporaryDirectory(prefix='kcc void parameter queries ') as direct
                 result = subprocess.run([host,'-std=c2x','-pedantic-errors','-c',str(native),'-o',str(obj)], capture_output=True, text=True, timeout=10)
                 assert result.returncode == 0, (host_text,result.stderr)
                 link_run([assembly,obj])
-print(f'Void parameter queries passed: {len(programs)} original programs, {native_programs} strict native agreements, {len(constraints)} kcc constraints / {native_constraints} strict native rejections; syntax/subset/128-real-parameter limits and no marker ABI slot; {host}'
+print(f'Void parameter queries passed: {len(programs)} original programs, {native_programs} strict native agreements, {len(constraints)} kcc constraints / {native_constraints} strict native rejections / {native_void_warnings} exact native named-void diagnostics; syntax/subset/128-real-parameter limits and no marker ABI slot; {host}'
       + ('; native original C23 keyword support' if native_supported else '; exact legacy keyword absence (no GNU alias oracle)')
       + ('; QBE/runtime and 24 zero-argument primitive-result ABI arrangements passed' if qbe else ''))
