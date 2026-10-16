@@ -1142,3 +1142,19 @@ named definition parameter is bound/spilled. Signature emission uses parameter.t
 not the presence of a local. Stores are conditional on the local, but argument
 indices always advance. Caller conversion/evaluation still processes every
 argument, including arguments unused by an unnamed callee parameter.
+
+## M14e concrete fixed-function syntax
+
+Function suffixes fill the same syntax-chain base slot as arrays. Concrete
+ast_function_type_syntax owns return syntax, parameter list/count and cache.
+External declaration return/parameter fields are views of its outer function
+node. Integer specifiers and one derived parser now serve all declaration/type-
+name contexts; external parsing no longer has a separate prefix-star grammar.
+
+After an abstract opening parenthesis, the current specifier/void/closing token
+disambiguates a function suffix from grouping without rewind. The shared parser
+nesting wrapper covers grouping and nested parameter types; flat function layers
+are separately bounded. Sema resolves one cached function graph, adjusts arrays
+and checks return/parameter categories before constructing signatures. Composite
+symbol graphs do not rewrite syntax caches. Existing fixed call/return QBE paths
+need no special array-pointer-return representation.

@@ -527,6 +527,19 @@ struct ast_parameter *ast_new_parameter(struct arena *arena,
 	return node;
 }
 
+struct ast_function_type_syntax *ast_new_function_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *return_syntax)
+{
+	struct ast_function_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_function_type_syntax) {
+			.syntax = { .kind = type_syntax_function, .location = location },
+			.return_syntax = return_syntax,
+		};
+	return node;
+}
+
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *element, bool has_bound, struct token bound)
 {

@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-d object declarators/lists, incomplete pointers/composites and unnamed definitions; function/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-e object/function declarators, lists, incomplete pointers/composites and unnamed definitions; function/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1039,3 +1039,10 @@ exact parameter/storage budgets plus bounded sanitizer fuzz. Full isolated/
 remote checks remain pending. M14e fixed-function declarator syntax is designed.
 M14a c10fa56 passed exact-source CI 38832685806. M13d 1435382 completed its
 isolated GCC/Clang normal + ASan/UBSan matrix, with prior CI 38826152470.
+
+M14e source checkpoint: concrete fixed-function declarators passed full normal
+GCC suites, 21 both-host/QBE programs, both all-primitive row-return ABI directions,
+syntax/cache/composite/view units, exact function/nested-type budgets and bounded
+sanitizer fuzz. Full isolated/remote checks remain pending. M14f function
+designators/pointers and indirect fixed calls are designed. M14b 1bfd4a9 passed
+exact-source CI 38833251538; later source runs remain separate.

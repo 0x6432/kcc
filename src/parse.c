@@ -8,6 +8,7 @@ struct parser {
 	struct diagnostics *diagnostics;
 	unsigned depth;
 	unsigned statement_nesting;
+	unsigned declarator_nesting;
 	size_t block_items;
 	size_t string_bytes;
 	size_t string_count;
@@ -155,59 +156,57 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 	return &base->syntax;
 }
 
-/* external-return-type ::= declaration-specifiers { "*" }
- * General external/function declarators are a later increment.
- */
-static struct ast_type_syntax *parse_type_name(struct parser *parser, struct token *beginning)
-{
-	struct ast_type_syntax *syntax = parse_declaration_specifiers(parser, beginning);
-	size_t pointers = 0;
-
-	if (!syntax)
-		return NULL;
-	while (preprocess_peek(parser->preprocessor).kind == token_star) {
-		struct token star = preprocess_peek(parser->preprocessor);
-		struct ast_pointer_type_syntax *pointer;
-
-		if (pointers == ast_max_pointer_depth) {
-			diagnostic_error(parser->diagnostics, star.location, "pointer type exceeds depth limit (64)");
-			return NULL;
-		}
-		preprocess_next(parser->preprocessor);
-		pointer = ast_new_pointer_type_syntax(parser->arena, star.location, syntax);
-		if (!pointer) {
-			allocation_error(parser, star.location);
-			return NULL;
-		}
-		syntax = &pointer->syntax;
-		pointers++;
-	}
-	return syntax;
-}
-
-enum object_declarator_context {
-	object_declarator_local,
-	object_declarator_parameter,
-	object_declarator_cast,
+enum declarator_context {
+	declarator_local,
+	declarator_external,
+	declarator_parameter,
+	declarator_cast,
 };
 
 /* The base slot is construction state: every published syntax has a base. */
-struct object_declarator {
+struct parsed_declarator {
 	struct ast_type_syntax *syntax;
 	struct ast_type_syntax **base_slot;
 	struct token name;
 	bool has_name;
 	size_t pointers;
 	size_t dimensions;
-	unsigned nesting;
+	size_t functions;
 };
+
+static bool parse_parameters(struct parser *parser,
+	struct ast_function_type_syntax *function);
+
+/* function-suffix ::= "(" ("void" | [ parameter-list ]) ")" */
+static bool parse_function_suffix(struct parser *parser,
+	struct parsed_declarator *declarator, struct token opening)
+{
+	struct ast_function_type_syntax *function;
+
+	if (declarator->functions == ast_max_function_layers) {
+		diagnostic_error(parser->diagnostics, opening.location, "function declarator exceeds layer limit (64)");
+		return false;
+	}
+	function = ast_new_function_type_syntax(parser->arena, opening.location, NULL);
+	if (!function) {
+		allocation_error(parser, opening.location);
+		return false;
+	}
+	if (!parse_parameters(parser, function) ||
+		!expect_token(parser, token_right_paren, "expected ')' after parameter list", NULL))
+		return false;
+	*declarator->base_slot = &function->syntax;
+	declarator->base_slot = &function->return_syntax;
+	declarator->functions++;
+	return true;
+}
 
 /* object-array-suffix ::= "[" [ integer-token ] "]"
  * Sema rejects incomplete elements/objects before layout, while a pointer to
  * an unknown-bound array is complete. Append dimensions in source order.
  */
 static bool parse_object_array_suffixes(struct parser *parser,
-	struct object_declarator *declarator)
+	struct parsed_declarator *declarator)
 {
 	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
 		struct token opening = preprocess_next(parser->preprocessor);
@@ -236,14 +235,16 @@ static bool parse_object_array_suffixes(struct parser *parser,
 	return true;
 }
 
-/* object-declarator ::= { "*" } direct-object-declarator { object-array-suffix }
- * direct-object-declarator ::= identifier | "(" object-declarator ")"
- * Abstract forms omit the identifier; an absent abstract form is allowed, but
- * empty grouping () is a function declarator, not an object declarator.
- * Grouping extends the same chain before enclosing suffixes and prefix stars.
+static bool parse_declarator(struct parser *parser,
+	struct parsed_declarator *declarator, enum declarator_context context);
+
+/* declarator ::= { "*" } direct-declarator { array-suffix | function-suffix }
+ * direct-declarator ::= identifier | "(" declarator ")"
+ * Abstract forms omit the identifier. At an abstract opening parenthesis,
+ * a specifier/void/closing parenthesis starts a function suffix, not grouping.
  */
-static bool parse_object_declarator(struct parser *parser,
-	struct object_declarator *declarator, enum object_declarator_context context)
+static bool parse_declarator_contents(struct parser *parser,
+	struct parsed_declarator *declarator, enum declarator_context context)
 {
 	struct ast_type_syntax *prefix = NULL;
 	struct ast_type_syntax **prefix_base = NULL;
@@ -268,35 +269,44 @@ static bool parse_object_declarator(struct parser *parser,
 		declarator->pointers++;
 	}
 	token = preprocess_peek(parser->preprocessor);
-	if (token.kind == token_identifier && context != object_declarator_cast) {
+	if (token.kind == token_identifier && context != declarator_cast) {
 		declarator->name = preprocess_next(parser->preprocessor);
 		declarator->has_name = true;
 	} else if (token.kind == token_left_paren) {
-		size_t derived_before = declarator->pointers + declarator->dimensions;
+		size_t derived_before = declarator->pointers + declarator->dimensions + declarator->functions;
 		bool name_before = declarator->has_name;
+		struct token next;
 
-		if (declarator->nesting == ast_max_declarator_nesting) {
-			diagnostic_error(parser->diagnostics, token.location, "declarator exceeds nesting limit (64)");
-			return false;
-		}
 		preprocess_next(parser->preprocessor);
-		declarator->nesting++;
-		if (!parse_object_declarator(parser, declarator, context))
-			return false;
-		declarator->nesting--;
-		if (derived_before == declarator->pointers + declarator->dimensions &&
-			name_before == declarator->has_name) {
-			diagnostic_error(parser->diagnostics, token.location, "expected object declarator inside parentheses");
-			return false;
+		next = preprocess_peek(parser->preprocessor);
+		if (begins_integer_type(next.kind) || next.kind == token_void || next.kind == token_right_paren) {
+			if (!parse_function_suffix(parser, declarator, token))
+				return false;
+		} else {
+			if (!parse_declarator(parser, declarator, context))
+				return false;
+			if (derived_before == declarator->pointers + declarator->dimensions + declarator->functions &&
+				name_before == declarator->has_name) {
+				diagnostic_error(parser->diagnostics, token.location, "expected object declarator inside parentheses");
+				return false;
+			}
+			if (!expect_token(parser, token_right_paren, "expected ')' after object declarator", NULL))
+				return false;
 		}
-		if (!expect_token(parser, token_right_paren, "expected ')' after object declarator", NULL))
-			return false;
-	} else if (context == object_declarator_local) {
-		diagnostic_error(parser->diagnostics, token.location, "expected local name");
-		return false;
 	}
-	if (!parse_object_array_suffixes(parser, declarator))
-		return false;
+	for (;;) {
+		token = preprocess_peek(parser->preprocessor);
+		if (token.kind == token_left_bracket) {
+			if (!parse_object_array_suffixes(parser, declarator))
+				return false;
+		} else if (token.kind == token_left_paren) {
+			preprocess_next(parser->preprocessor);
+			if (!parse_function_suffix(parser, declarator, token))
+				return false;
+		} else {
+			break;
+		}
+	}
 	if (prefix) {
 		*declarator->base_slot = prefix;
 		declarator->base_slot = prefix_base;
@@ -304,20 +314,42 @@ static bool parse_object_declarator(struct parser *parser,
 	return true;
 }
 
-/* derived-object-type ::= object-declarator
+/* Guard grouping AND nested parameter types; the outer declarator is level 0. */
+static bool parse_declarator(struct parser *parser,
+	struct parsed_declarator *declarator, enum declarator_context context)
+{
+	bool success;
+
+	if (parser->declarator_nesting > ast_max_declarator_nesting) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"declarator exceeds nesting limit (64)");
+		return false;
+	}
+	parser->declarator_nesting++;
+	success = parse_declarator_contents(parser, declarator, context);
+	parser->declarator_nesting--;
+	return success;
+}
+
+/* derived-type ::= declarator
  * Each declarator gets its own derived chain around the shared specifier base.
  */
-static struct ast_type_syntax *parse_derived_object_type(struct parser *parser,
+static struct ast_type_syntax *parse_derived_type(struct parser *parser,
 	struct ast_type_syntax *base, struct token *name, bool *has_name,
-	enum object_declarator_context context)
+	enum declarator_context context)
 {
-	struct object_declarator declarator = { 0 };
+	struct parsed_declarator declarator = { 0 };
 
 	if (!base)
 		return NULL;
 	declarator.base_slot = &declarator.syntax;
-	if (!parse_object_declarator(parser, &declarator, context))
+	if (!parse_declarator(parser, &declarator, context))
 		return NULL;
+	if ((context == declarator_local || context == declarator_external) && !declarator.has_name) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			context == declarator_local ? "expected local name" : "expected function name");
+		return NULL;
+	}
 	*declarator.base_slot = base;
 	if (name)
 		*name = declarator.name;
@@ -326,16 +358,16 @@ static struct ast_type_syntax *parse_derived_object_type(struct parser *parser,
 	return declarator.syntax;
 }
 
-/* object-type ::= declaration-specifiers [ object-declarator ]
+/* type-name ::= declaration-specifiers [ declarator ]
  * A local declarator is required; parameter/cast abstract forms may be absent.
  */
-static struct ast_type_syntax *parse_object_type(struct parser *parser,
+static struct ast_type_syntax *parse_type_name(struct parser *parser,
 	struct token *beginning, struct token *name, bool *has_name,
-	enum object_declarator_context context)
+	enum declarator_context context)
 {
 	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning);
 
-	return parse_derived_object_type(parser, base, name, has_name, context);
+	return parse_derived_type(parser, base, name, has_name, context);
 }
 
 /* integer-expression ::= integer-token (decimal/octal/hex/binary, separators allowed) */
@@ -663,7 +695,7 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 			return NULL;
 		return parse_postfix_suffix(parser, operand);
 	}
-	type_syntax = parse_object_type(parser, &beginning, NULL, NULL, object_declarator_cast);
+	type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
 	if (!type_syntax ||
 		!expect_token(parser, token_right_paren, "expected ')' after cast type", NULL))
 		return NULL;
@@ -1246,7 +1278,7 @@ static bool count_block_item(struct parser *parser, struct source_location locat
 
 /* local-declaration ::= declaration-specifiers init-declarator
  *                       { "," init-declarator } ";"
- * init-declarator ::= object-declarator [ "=" assignment-expression ]
+ * init-declarator ::= declarator [ "=" assignment-expression ]
  * Array initializers are diagnosed by sema (braced lists are not parsed yet).
  * Assignment expressions stop before a declarator comma, not call-argument commas.
  */
@@ -1267,7 +1299,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 
 		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
-		type_syntax = parse_derived_object_type(parser, base, &name, NULL, object_declarator_local);
+		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 		if (!type_syntax)
 			return NULL;
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
@@ -1361,13 +1393,13 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 }
 
 /* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
- * parameter-declaration ::= declaration-specifiers [ object-declarator ]
+ * parameter-declaration ::= declaration-specifiers [ declarator ]
  * C23's empty list specifies zero parameters, just like (void).
  */
 static bool parse_parameters(struct parser *parser,
-	struct ast_function_declaration *declaration)
+	struct ast_function_type_syntax *function)
 {
-	struct ast_parameter **tail = &declaration->parameters;
+	struct ast_parameter **tail = &function->parameters;
 
 	if (preprocess_peek(parser->preprocessor).kind == token_void) {
 		preprocess_next(parser->preprocessor);
@@ -1382,13 +1414,13 @@ static bool parse_parameters(struct parser *parser,
 		struct ast_type_syntax *type_syntax;
 		bool has_name = false;
 
-		if (declaration->parameter_count == ast_max_parameters) {
+		if (function->parameter_count == ast_max_parameters) {
 			diagnostic_error(parser->diagnostics,
 				preprocess_peek(parser->preprocessor).location,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
-		type_syntax = parse_object_type(parser, &beginning, &name, &has_name, object_declarator_parameter);
+		type_syntax = parse_type_name(parser, &beginning, &name, &has_name, declarator_parameter);
 		if (!type_syntax)
 			return false;
 		parameter = ast_new_parameter(parser->arena, beginning.location, name, has_name);
@@ -1399,14 +1431,14 @@ static bool parse_parameters(struct parser *parser,
 		parameter->type_syntax = type_syntax;
 		*tail = parameter;
 		tail = &parameter->next;
-		declaration->parameter_count++;
+		function->parameter_count++;
 		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			return true;
 		preprocess_next(parser->preprocessor);
 	}
 }
 
-/* external-declaration ::= type-name identifier "(" parameter-list ")"
+/* external-declaration ::= declaration-specifiers declarator
  *                          (";" | compound-statement)
  */
 static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
@@ -1418,23 +1450,23 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	struct ast_compound_statement *body;
 	struct ast_function *function;
 
-	type_syntax = parse_type_name(parser, &beginning);
+	type_syntax = parse_type_name(parser, &beginning, &name, NULL, declarator_external);
 	if (!type_syntax)
 		return NULL;
-	if (!expect_token(parser, token_identifier, "expected function name", &name))
+	if (type_syntax->kind != type_syntax_function) {
+		diagnostic_error(parser->diagnostics, name.location, "file-scope object declarations are not supported yet");
 		return NULL;
-	if (!expect_token(parser, token_left_paren, "expected '('", NULL))
-		return NULL;
+	}
 	declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
 	if (!declaration) {
 		allocation_error(parser, beginning.location);
 		return NULL;
 	}
-	declaration->return_syntax = type_syntax;
-	if (!parse_parameters(parser, declaration))
-		return NULL;
-	if (!expect_token(parser, token_right_paren, "expected ')'", NULL))
-		return NULL;
+	declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
+	/* These are views of the one outer function syntax, not reparsed copies. */
+	declaration->return_syntax = declaration->type_syntax->return_syntax;
+	declaration->parameters = declaration->type_syntax->parameters;
+	declaration->parameter_count = declaration->type_syntax->parameter_count;
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 		preprocess_next(parser->preprocessor);
 		return &declaration->external;

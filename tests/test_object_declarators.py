@@ -137,12 +137,12 @@ with tempfile.TemporaryDirectory(prefix='kcc object declarators ') as directory:
         ('int f(void) { int (*p)[][]; return 0; }', 'array element type must be complete'),
         ('int f(int (*a)[][]);', 'array element type must be complete'),
         ('int f(void) { int (); return 0; }', 'expected local name'),
-        ('int f(int ());', 'expected object declarator'),
+        ('int f(int ());', 'function parameter adjustment is not supported yet'),
         ('int f(void) { int x=0; return (int (name))x; }', 'expected object declarator'),
         ('int f(void) { int (*p[2])[0]; return 0; }', 'array bound'),
         ('int f(void) { int (*p)[3; return 0; }', "expected ']'"),
         ('int f(void) { int (*p[2]; return 0; }', "expected ')'"),
-        ('int f(void) { int (*p)(int); return 0; }', "expected ';'"),
+        ('int f(void) { int (*p)(int); return 0; }', 'function pointers are not supported yet'),
         ('int f(void) { int a[3]; return (int [3])a; }', 'cast target must be a scalar type'),
     ]
     for text, message in rejected:

@@ -1697,8 +1697,69 @@ static void test_unnamed_definition_parameter_tree(void)
 	source_destroy(&source);
 }
 
+static void test_function_declarator_syntax_tree(void)
+{
+	const char *text = "int (*row(int (*)[]))[]; "
+		"int (*(row)(int (*p)[3]))[3] { return p; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_function *definition;
+	struct ast_function_declaration *declaration;
+	struct ast_function_type_syntax *syntax;
+	struct ast_pointer_type_syntax *pointer_syntax;
+	struct ast_array_type_syntax *array_syntax;
+	const struct function_type *declared;
+	const struct function_type *visible;
+	const struct pointer_type *pointer;
+	const struct array_type *array;
+
+	assert(source_from_bytes(&source, "function-declarator.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	definition = (struct ast_function *)prototype->external.next;
+	declaration = definition->declaration;
+	syntax = declaration->type_syntax;
+	assert(syntax->syntax.kind == type_syntax_function && !syntax->syntax.type);
+	assert(declaration->return_syntax == syntax->return_syntax && declaration->parameters == syntax->parameters);
+	assert(declaration->parameter_count == 1 && syntax->parameter_count == 1);
+	pointer_syntax = (struct ast_pointer_type_syntax *)syntax->return_syntax;
+	assert(pointer_syntax->syntax.kind == type_syntax_pointer);
+	array_syntax = (struct ast_array_type_syntax *)pointer_syntax->referent;
+	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->has_bound);
+	assert(array_syntax->bound.integer == 3 && array_syntax->element->kind == type_syntax_integer);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	declared = (const struct function_type *)prototype->type_syntax->syntax.type;
+	assert(declared->type.kind == type_kind_function && declared->parameter_count == 1);
+	pointer = (const struct pointer_type *)declared->return_type;
+	array = (const struct array_type *)pointer->referent;
+	assert(pointer->type.kind == type_kind_pointer && array->type.kind == type_kind_array && !array->count);
+	assert(!type_is_complete_object(&array->type) && type_object_size(&pointer->type) == 8);
+	visible = declaration->symbol->type;
+	assert(prototype->symbol == declaration->symbol && visible != declared);
+	pointer = (const struct pointer_type *)visible->return_type;
+	array = (const struct array_type *)pointer->referent;
+	assert(array->count == 3 && array->element == &type_int && type_object_size(&array->type) == 12);
+	pointer = (const struct pointer_type *)visible->parameters->type;
+	assert(((const struct array_type *)pointer->referent)->count == 3);
+	assert(definition->return_type == visible->return_type);
+	assert(declaration->parameters->local && declaration->parameters->local->type == declaration->parameters->type);
+	assert(type_compatible(declaration->parameters->type, visible->parameters->type));
+	assert(((const struct function_type *)syntax->syntax.type)->return_type == pointer_syntax->syntax.type);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_function_declarator_syntax_tree();
 	test_unnamed_definition_parameter_tree();
 	test_local_declaration_list_tree();
 	test_incomplete_object_pointer_composite();

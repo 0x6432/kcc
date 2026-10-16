@@ -6,7 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14d: C23 definitions may omit parameter names without removing ABI arguments
+M14e: fixed function suffixes share the single-pass declarator parser, including
+parenthesized function names and functions returning array pointers.
+C23 definitions may omit parameter names without removing ABI arguments
 or caller-side evaluation. Only named parameters receive local spills.
 Comma-separated local declarations and for-header declaration lists keep
 independent derived types, source-order bindings and initializer evaluation.
@@ -14,7 +16,7 @@ Compatible pointers to unknown-bound arrays preserve incomplete referents
 without inventing a stride. Composite redeclarations retain known bounds.
 Parenthesized local/parameter object declarators and abstract cast types
 preserve pointer/array precedence, including int (*p)[3] and int (*p[2])[3].
-Function suffixes, typedef names and qualifiers remain later increments.
+Function pointer values, typedef names and qualifiers remain later increments.
 Array parameters permit an omitted outer bound, including int a[][3].
 Declared incomplete shape remains distinct from the effective pointer.
 Literal-bound array parameters retain their declared shape but adjust once

@@ -9,7 +9,7 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a) | M03, M08, M12-M18, M23-M24 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
@@ -238,3 +238,15 @@ now includes an unnamed definition. Both former now-valid rejection occurrences
 became invalid incomplete-inner-array declarators; duplicate/count/conversion
 constraints remain. Full regression was restarted after finding the second old
 negative fixture. Host runtime agreement is not an ISO conformance claim.
+
+### M14e fixed function declarators
+
+21 both-host/QBE full-value programs cover parenthesized external names, all
+primitive row-pointer returns, matrix/unknown array pointers, static string-array
+address returns, recursion and composite return signatures. Both host directions
+exercise every primitive row-return ABI. Units inspect one syntax-owned signature,
+shared declaration views, original unknown caches and visible known composites.
+Exact 64/65 flat function layers and shared nested-parameter recursion limits
+pass compile-only. Earlier function grouping/pointer negatives remain invalid
+under explicit semantic unsupported-feature diagnostics instead of parser-only
+errors. Function pointer values/decay/indirect calls remain the next increment.

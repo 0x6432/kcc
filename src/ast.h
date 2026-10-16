@@ -42,6 +42,7 @@ enum {
 	ast_max_pointer_depth = 64,
 	ast_max_array_dimensions = 64,
 	ast_max_declarator_nesting = 64,
+	ast_max_function_layers = 64,
 	ast_max_string_length = 1024 * 1024,
 	ast_max_string_storage = 8 * 1024 * 1024,
 	ast_max_string_literals = 4096,
@@ -223,6 +224,7 @@ enum type_syntax_kind {
 	type_syntax_integer,
 	type_syntax_pointer,
 	type_syntax_array,
+	type_syntax_function,
 };
 
 struct ast_type_syntax {
@@ -246,6 +248,13 @@ struct ast_array_type_syntax {
 	struct ast_type_syntax *element;
 	bool has_bound;
 	struct token bound;
+};
+
+struct ast_function_type_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_type_syntax *return_syntax;
+	struct ast_parameter *parameters;
+	size_t parameter_count;
 };
 
 struct ast_cast_expression {
@@ -378,6 +387,7 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
+	struct ast_function_type_syntax *type_syntax;
 	struct ast_type_syntax *return_syntax;
 	struct token name;
 	struct function_symbol *symbol;
@@ -402,6 +412,8 @@ struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
 	struct source_location location, enum integer_specifier specifier);
 struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *referent);
+struct ast_function_type_syntax *ast_new_function_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *return_syntax);
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *element, bool has_bound, struct token bound);
 struct ast_array_decay_expression *ast_new_array_decay(struct arena *arena,

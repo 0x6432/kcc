@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14d. Read the latest entries together with README.md and
+Current milestone: M14e. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1058,3 +1058,19 @@ The 128-parameter budget still counts unnamed entries. The actual 256-local and
 ABI positions. Void remains only the existing sole empty-list marker. General
 function/void types, function pointers, variadics, typedefs, qualifiers and other
 C23 additions remain unsupported; this is not complete C23 conformance.
+
+## M14e
+
+General fixed-function suffixes join the shared declarator chain. Parenthesized
+external names and functions returning complete/unknown array pointers are
+supported, including compatible composite return declarations. One concrete
+function syntax owns return/parameter syntax and its cache; declaration fields
+are views, not separately parsed trees. Array/function returns are rejected
+before scalar ABI helpers. Empty () denotes a C23 zero-parameter function type.
+
+Function pointer values and function-typed parameter adjustment are still
+explicitly unsupported; so are block-scope function declarations, file-scope
+objects/groups, general void types, variadics, qualifiers and typedefs. Function
+suffix layers are bounded to 64. Shared declarator recursion also covers nested
+parameter types, so new parameter lists cannot reset the 64 nested-edge budget.
+The existing local 64/65 grouping, pointer and dimension boundaries remain tested.

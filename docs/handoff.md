@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14d implementation: C23 unnamed definitions with positional ABI and no fake spills,
+M14e implementation: concrete fixed-function declarator syntax/array-pointer returns,
+C23 unnamed definitions with positional ABI and no fake spills,
 grouped local/for-header declarators,
 incomplete array referent pointers and composite declarations,
 single-pass parenthesized object/abstract declarators,
@@ -19,17 +20,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M14a c10fa56, run 38832685806, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f/g/h/i/j/k also passed their exact-source CI.
-M14d full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M14b 1bfd4a9, run 38833251538, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f/g/h/i/j/k and M14a also passed their exact-source CI.
+M14e full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14e general fixed-function declarator syntax, designed in
-m14-function-declarators.md; function pointer values/indirect calls follow M14f.
+Next: M14f function designators/pointers and indirect fixed calls, designed in
+m14-function-pointer-values.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1495,3 +1496,25 @@ isolated/remote checks remain pending. M14e fixed function declarator syntax
 is pre-designed; function pointer values/decay/indirect calls remain M14f.
 M14a c10fa56 passed exact-source CI 38832685806. M13d 1435382 completed the
 isolated GCC/Clang normal + ASan/UBSan matrix; prior CI 38826152470 passed.
+
+## M14e tested source checkpoint
+
+Function suffixes now share the single-pass derived parser, including abstract
+function types and parenthesized external names. Concrete function syntax owns
+return/parameter syntax and its cached semantic signature; declaration fields
+are views. Shared recursion covers nested parameter types and flat function
+layers have an independent 64 limit. Return/parameter category constraints run
+before scalar ABI helpers. Function pointer values remain explicitly unsupported.
+
+Full normal GCC regression/QBE/reference/ABI passed. 21 new full-value programs
+and both-direction all-primitive row-return ABI passed with GCC and Clang.
+Matrix/unknown array-pointer returns, static string-array addresses, recursive
+borrowing and composite return signatures pass without backend shortcuts. Units
+check syntax-owned signatures/views and original unknown versus visible known
+composites. Exact function-layer/nested-type budgets pass compile-only. Earlier
+function grouping/pointer negatives retain explicit semantic unsupported-feature
+diagnostics. Sanitized bounded fuzz passed 23977 lexer + 71669 pipeline inputs
+(95646 total), 26/26 seconds. No arbitrary fuzz C or undefined curated access
+executes. Full isolated/remote checks remain pending. M14f function designators,
+compatible pointer values and indirect fixed calls are pre-designed. M14b
+1bfd4a9 passed exact-source CI 38833251538; later runs remain independent.

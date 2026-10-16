@@ -112,6 +112,28 @@ static const struct type *specifier_type(enum integer_specifier specifier)
 	return NULL;
 }
 
+static bool sema_parameter_names(struct sema *sema,
+	struct ast_parameter *parameters)
+{
+	for (struct ast_parameter *parameter = parameters; parameter;
+		parameter = parameter->next) {
+		if (!parameter->has_name)
+			continue;
+		for (struct ast_parameter *prior = parameters; prior != parameter;
+			prior = prior->next) {
+			if (prior->has_name && same_name(prior->name, parameter->name)) {
+				diagnostic_error(sema->diagnostics, parameter->name.location,
+					"duplicate parameter name");
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+static const struct type *adjust_parameter_type(struct sema *sema,
+	const struct type *declared, struct source_location location);
+
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
 {
@@ -131,6 +153,10 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!referent)
 			return NULL;
+		if (referent->kind == type_kind_function) {
+			diagnostic_error(sema->diagnostics, syntax->location, "function pointers are not supported yet");
+			return NULL;
+		}
 		if (!type_is_object(referent)) {
 			diagnostic_error(sema->diagnostics, syntax->location, "pointer referent must be an object type");
 			return NULL;
@@ -138,6 +164,43 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		type = type_new_pointer(sema->arena, referent);
 		if (!type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating pointer type");
+			return NULL;
+		}
+		syntax->type = &type->type;
+		break;
+	}
+	case type_syntax_function: {
+		struct ast_function_type_syntax *function = (struct ast_function_type_syntax *)syntax;
+		const struct type *return_type = resolve_type_syntax(sema, function->return_syntax);
+		const struct type *parameters[ast_max_parameters];
+		struct function_type *type;
+		size_t count = 0;
+
+		if (!return_type || !sema_parameter_names(sema, function->parameters))
+			return NULL;
+		if (!type_is_scalar(return_type)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "function return type must be an implemented scalar type");
+			return NULL;
+		}
+		for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
+			const struct type *declared = resolve_type_syntax(sema, parameter->type_syntax);
+
+			if (!declared)
+				return NULL;
+			if (declared->kind == type_kind_function) {
+				diagnostic_error(sema->diagnostics, parameter->location,
+					"function parameter adjustment is not supported yet");
+				return NULL;
+			}
+			parameter->type = adjust_parameter_type(sema, declared, parameter->location);
+			if (!parameter->type)
+				return NULL;
+			parameters[count++] = parameter->type;
+		}
+		assert(count == function->parameter_count && count <= ast_max_parameters);
+		type = type_new_function(sema->arena, return_type, parameters, count);
+		if (!type) {
+			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating function type");
 			return NULL;
 		}
 		syntax->type = &type->type;
@@ -707,6 +770,11 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 
 	if (!type)
 		return false;
+	if (type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"block-scope function declarations are not supported yet");
+		return false;
+	}
 	if (!type_is_complete_object(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
 		return false;
@@ -892,25 +960,6 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 	return success;
 }
 
-static bool sema_parameter_names(struct sema *sema,
-	struct ast_function_declaration *declaration)
-{
-	for (struct ast_parameter *parameter = declaration->parameters; parameter;
-		parameter = parameter->next) {
-		if (!parameter->has_name)
-			continue;
-		for (struct ast_parameter *prior = declaration->parameters; prior != parameter;
-			prior = prior->next) {
-			if (prior->has_name && same_name(prior->name, parameter->name)) {
-				diagnostic_error(sema->diagnostics, parameter->name.location,
-					"duplicate parameter name");
-				return false;
-			}
-		}
-	}
-	return true;
-}
-
 static bool sema_function_body(struct sema *sema, struct ast_function *definition)
 {
 	struct scope scope = { 0 };
@@ -949,45 +998,26 @@ static bool sema_function_declaration(struct sema *sema,
 	struct ast_function_declaration *declaration, struct ast_function *definition)
 {
 	struct function_symbol *symbol = find_function(sema, declaration->name);
-	struct function_type *type;
+	const struct function_type *type;
 	struct token main_name = declaration->name;
 	const struct type *return_type;
-	const struct type *parameters[ast_max_parameters];
-	size_t parameter_count = 0;
-
-	if (!sema_parameter_names(sema, declaration))
-		return false;
+	const struct type *resolved;
 	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
 		main_name.spelling_location.offset, "main", 4) == 0 && declaration->parameter_count) {
 		diagnostic_error(sema->diagnostics, main_name.location,
 			"only zero-parameter main is supported yet");
 		return false;
 	}
-	return_type = resolve_type_syntax(sema, declaration->return_syntax);
-	if (!return_type)
+	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
+	if (!resolved)
 		return false;
+	assert(resolved->kind == type_kind_function);
+	type = (const struct function_type *)resolved;
+	return_type = type->return_type;
 	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
 		main_name.spelling_location.offset, "main", 4) == 0 &&
 		!type_compatible(return_type, &type_int)) {
 		diagnostic_error(sema->diagnostics, main_name.location, "main must return int");
-		return false;
-	}
-	for (struct ast_parameter *parameter = declaration->parameters; parameter; parameter = parameter->next) {
-		const struct type *type = resolve_type_syntax(sema, parameter->type_syntax);
-
-		if (!type)
-			return false;
-		parameter->type = adjust_parameter_type(sema, type, parameter->location);
-		if (!parameter->type)
-			return false;
-		parameters[parameter_count++] = parameter->type;
-	}
-	assert(parameter_count == declaration->parameter_count && parameter_count <= ast_max_parameters);
-	type = type_new_function(sema->arena, return_type,
-		parameters, parameter_count);
-	if (!type) {
-		diagnostic_error(sema->diagnostics, declaration->name.location,
-			"out of memory creating function type");
 		return false;
 	}
 	if (symbol && !type_compatible(&symbol->type->type, &type->type)) {
