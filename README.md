@@ -6,6 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19e1: named labels have a separate function-wide namespace. C23 standalone
+block labels can precede declarations or end a block; secondary labeled
+statements still require a child statement. Demand parsing keeps one peek and
+resumes postfix/Pratt parsing from consumed identifiers. Goto/switch/case/default
+remain separate increments; labels alone do not change control flow.
+
 M19d2: remaining integer `*=`, `/=`, `%=`, `&=`, `^=`, `|=`, `<<=` and `>>=`
 are supported. Shifts promote operands independently; all other integer compound
 operators use usual arithmetic conversions. All retain one left lvalue and

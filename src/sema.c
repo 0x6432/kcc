@@ -20,12 +20,19 @@ struct loop_context {
 	struct ast_statement *statement;
 };
 
+struct label_binding {
+	struct ast_label *label;
+	struct label_binding *next;
+};
+
 struct sema {
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	struct ast_function *function;
 	struct scope *scope;
 	struct loop_context *loop;
+	struct label_binding *labels;
+	size_t label_count;
 	size_t local_count;
 	uint64_t local_storage;
 	struct function_symbol *functions;
@@ -1424,9 +1431,39 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 	return success;
 }
 
+/* Labels have function scope, separate from ordinary object/function names. */
+static bool sema_label(struct sema *sema, struct ast_label *label)
+{
+	struct label_binding *binding;
+
+	for (binding = sema->labels; binding; binding = binding->next)
+		if (same_name(binding->label->name, label->name)) {
+			diagnostic_error(sema->diagnostics, label->name.location, "duplicate label in function");
+			return false;
+		}
+	if (sema->label_count == ast_max_labels) {
+		diagnostic_error(sema->diagnostics, label->name.location, "function exceeds label limit (512)");
+		return false;
+	}
+	binding = arena_alloc(sema->arena, sizeof(*binding));
+	if (!binding) {
+		diagnostic_error(sema->diagnostics, label->name.location, "out of memory binding label");
+		return false;
+	}
+	*binding = (struct label_binding) { .label = label, .next = sema->labels };
+	sema->labels = binding;
+	sema->label_count++;
+	return true;
+}
+
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
 	switch (statement->kind) {
+	case statement_labeled: {
+		struct ast_labeled_statement *node = (struct ast_labeled_statement *)statement;
+
+		return sema_label(sema, node->label) && sema_statement(sema, node->body);
+	}
 	case statement_return: {
 		struct ast_return_statement *node =
 			(struct ast_return_statement *)statement;
@@ -1556,6 +1593,10 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 {
 	while (item) {
 		switch (item->kind) {
+		case block_item_label:
+			if (!sema_label(sema, ((struct ast_block_label *)item)->label))
+				return false;
+			break;
 		case block_item_static_assertion:
 			if (!sema_static_assertion(sema, ((struct ast_block_static_assertion *)item)->declaration))
 				return false;
@@ -1595,6 +1636,8 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 
 	assert(!sema->scope && !sema->loop);
 	sema->function = definition;
+	sema->labels = NULL;
+	sema->label_count = 0;
 	sema->local_count = 0;
 	sema->local_storage = 0;
 	sema->scope = &scope;
@@ -1619,6 +1662,8 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 done:
 	sema->scope = NULL;
 	sema->function = NULL;
+	sema->labels = NULL;
+	sema->label_count = 0;
 	return success;
 }
 

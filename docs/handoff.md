@@ -2,16 +2,19 @@
 
 ## Current checkpoint
 
-M19d2 remaining integer compound assignment is complete: full normal/QBE
-regressions, both-host ASan/UBSan lexer/sema units and integer/additive/prefix/
-postfix runtime/ABI passed. Bounded sanitized fuzz completed 21,351 lexer and
-54,832 pipeline inputs in 26 seconds each without reported failure. All ten
-compound operators preserve one left lvalue; shifts promote operands independently.
-Next: M19e1 named labels, predesigned in m19-named-labels.md. This foundation
-intentionally precedes goto; existing stop-at-terminator emission cannot support
-forward jumps yet. Never execute fuzz-generated or curated runtime-invalid C.
-Latest previous pushed checkpoint e1e5eb3 (M19d1); its remote/isolated matrices
-remain pending. M19c1 d8c57ab CI 38882170561 passed every job.
+M19e1 named labels complete: full normal/QBE, both-host targeted ASan/UBSan
+lexer/sema and named-label/integer/additive/prefix/postfix runtime/ABI passed.
+Bounded sanitized fuzz completed 22,997 lexer and 58,129 pipeline inputs in
+26 seconds each without reported failure. Parser still uses one demand peek;
+identifier-leading expressions resume postfix/Pratt continuations with unchanged
+depth accounting. Labels have a separate function-wide namespace and distinct
+block/secondary representations. Next: M19e2 goto, designed in m19-goto.md.
+Prepared scripts/tests/unit outside repo are /data/tools/implement-m19e2.py,
+/data/tools/test_goto.py and /data/tools/m19e2-unit.c, not yet applied. Verify
+current git hash and snapshot before applying. Never execute generated fuzz C.
+Previous pushed checkpoint b8bd4e0 is M19d2; its remote/isolated full matrices are
+pending. M19c2 4da4287 remote CI 38883017908 and M13m isolated GCC/Clang normal+
+ASan/UBSan full matrices passed. Later results require exact final markers.
 
 ### Earlier foundation (chronological)
 

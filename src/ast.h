@@ -44,6 +44,7 @@ enum expression_kind {
 enum {
 	ast_max_expression_depth = 128,
 	ast_max_statement_nesting = 128,
+	ast_max_labels = 512,
 	ast_max_block_items = 4096,
 	ast_max_locals = 256,
 	ast_max_local_storage = 1024 * 1024,
@@ -371,6 +372,7 @@ struct ast_cast_expression {
 };
 
 enum statement_kind {
+	statement_labeled,
 	statement_return,
 	statement_expression,
 	statement_empty,
@@ -386,6 +388,17 @@ enum statement_kind {
 struct ast_statement {
 	enum statement_kind kind;
 	struct source_location location;
+};
+
+/* Labels use the function's separate label namespace, never an object type. */
+struct ast_label {
+	struct token name;
+};
+
+struct ast_labeled_statement {
+	struct ast_statement statement;
+	struct ast_label *label;
+	struct ast_statement *body;
 };
 
 struct ast_return_statement {
@@ -447,6 +460,7 @@ struct ast_static_assertion {
 };
 
 enum block_item_kind {
+	block_item_label,
 	block_item_declaration,
 	block_item_statement,
 	block_item_static_assertion,
@@ -456,6 +470,12 @@ struct ast_block_item {
 	enum block_item_kind kind;
 	struct source_location location;
 	struct ast_block_item *next;
+};
+
+/* C23 block labels stand alone, also before declarations or at block end. */
+struct ast_block_label {
+	struct ast_block_item item;
+	struct ast_label *label;
 };
 
 struct ast_block_static_assertion {
@@ -624,6 +644,10 @@ struct ast_cast_expression *ast_new_cast(struct arena *arena,
 	struct ast_expression *operand);
 struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	struct ast_expression *operand, const struct type *target);
+struct ast_label *ast_new_label(struct arena *arena, struct token name);
+struct ast_labeled_statement *ast_new_labeled_statement(struct arena *arena,
+	struct ast_label *label, struct ast_statement *body);
+struct ast_block_label *ast_new_block_label(struct arena *arena, struct ast_label *label);
 struct ast_return_statement *ast_new_return(struct arena *arena,
 	struct source_location location, struct ast_expression *value);
 struct ast_expression_statement *ast_new_expression_statement(struct arena *arena,

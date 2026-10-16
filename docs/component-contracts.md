@@ -1394,3 +1394,16 @@ uses the existing signedness-aware integer instruction selector and a shared
 word shift-count helper. Neither RHS signedness nor its rank silently changes
 left shift/right-shift calculation type. Back-conversion is exactly the same
 whole-value bool/narrow/scalar conversion path as additive compound assignment.
+
+## M19e1 named-label and consumed-name contract
+
+A consumed identifier selects colon-label versus an ordinary name expression
+with one demand peek only. The ordinary path constructs its name once, resumes
+postfix then shared Pratt infix parsing, and owns the same bounded expression
+recursion frame. No rewind or extra language-token buffer is introduced.
+Concrete labels, standalone block label items and secondary labeled statements
+are separate. Sema uses a function-local label namespace, independent of object
+scopes; duplicates are checked through skipped/unreachable syntax and the
+namespace resets between functions. Labels add no local/string object. Codegen
+ignores standalone labels and propagates child termination for labeled statements
+without goto; a future jump-target change must revisit unreachable traversal.

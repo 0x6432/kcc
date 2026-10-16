@@ -2951,8 +2951,63 @@ static void test_integer_compound_tree(void)
 }
 
 
+
+static void test_named_label_tree(void)
+{
+	const char *text = "int f(int x) { x: int y=1; if(x) yes: y+=1; tail: return y; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_block_label *first;
+	struct ast_block_label *tail;
+	struct ast_local_declaration *local;
+	struct ast_statement_item *item;
+	struct ast_if_statement *branch;
+	struct ast_labeled_statement *labeled;
+	struct ast_compound_assignment_expression *assignment;
+	size_t local_count = 0;
+
+	assert(source_from_bytes(&source, "labels.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	first = (struct ast_block_label *)function->body->items;
+	assert(first->item.kind == block_item_label && first->label->name.kind == token_identifier);
+	assert(first->label->name.location.offset == (size_t)(strstr(text, "x:") - text));
+	local = (struct ast_local_declaration *)first->item.next;
+	assert(local->item.kind == block_item_declaration);
+	item = (struct ast_statement_item *)local->item.next;
+	branch = (struct ast_if_statement *)item->statement;
+	assert(branch->statement.kind == statement_if);
+	labeled = (struct ast_labeled_statement *)branch->then_branch;
+	assert(labeled->statement.kind == statement_labeled);
+	assert(labeled->label->name.location.offset == (size_t)(strstr(text, "yes:") - text));
+	assert(labeled->body->kind == statement_expression);
+	assignment = (struct ast_compound_assignment_expression *)((struct ast_expression_statement *)labeled->body)->value;
+	assert(assignment->expression.kind == expression_compound_assignment);
+	tail = (struct ast_block_label *)item->item.next;
+	assert(tail->item.kind == block_item_label && tail->item.next->kind == block_item_statement);
+	assert(tail->label->name.location.offset == (size_t)(strstr(text, "tail:") - text));
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(assignment->expression.type == &type_int && assignment->left->is_lvalue);
+	assert(((struct ast_name_expression *)assignment->left)->declaration == local);
+	for (local = function->locals; local; local = local->next_local)
+		local_count++;
+	assert(local_count == 2 && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_named_label_tree();
 	test_integer_compound_tree();
 	test_compound_assignment_tree();
 	test_postfix_update_tree();

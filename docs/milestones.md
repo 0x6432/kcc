@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; control-flow rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels implemented; goto/switch rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1641,3 +1641,39 @@ runtime/ABI suites passed. Bounded sanitized fuzz completed 21,351 lexer and
 C or curated invalid runtime arithmetic was executed. Isolated full matrix and
 remote CI require their own final markers. Next: M19e1 named labels, designed
 in m19-named-labels.md before goto target/control-flow changes.
+
+## M19e1 named-label foundation
+
+Implemented distinct concrete label/block-label/labeled-statement representations
+and subset BNF parsing. Identifier-leading items/statements consume one name and
+inspect the colon with one demand peek; ordinary names continue through shared
+postfix/Pratt suffix parsing with unchanged recursion accounting and precedence.
+No token vector, rewind or new lookahead buffer. Function-local label bindings
+are separate from objects/functions, check duplicates even in skipped/unreachable
+syntax and reset per function. Explicit 512-label resource bound complements
+statement nesting/block-item limits. Labels add no runtime storage; standalone
+ones are ignored and labeled statements propagate child termination. Goto and
+its needed unreachable-label traversal remain a separate increment.
+
+Both native hosts pass 15 strict original ordinary-label programs, five duplicate
+label constraint rejections, syntax/nesting/512-label boundaries and 24 both-
+direction mixed-stack primitive-result ABI arrangements. GCC also strictly
+accepts both original C23 declaration/end-block placement programs; Clang 15
+rejects them with exactly expected-expression/expected-statement grammar errors.
+These are labelled host gaps, not rewritten comparisons; kcc/QBE executes both
+originals. AST units retain all three concrete node forms, source positions,
+ordinary binding through labels and exactly two preexisting parameter/local
+objects with no label-created static objects. Full/sanitizer/fuzz follow.
+
+M19e1 targeted sanitizer evidence: both-host ASan/UBSan lexer/sema units and
+named-label/integer-compound/additive/prefix/postfix runtime/ABI suites passed.
+Full normal suite passed; QBE/fuzz remain running. Next M19e2 goto is designed
+in m19-goto.md. A standalone QBE probe confirmed predecessor-free dead blocks
+using entry allocations are accepted; no generated C was executed by the probe.
+
+M19e1 final local validation: complete normal regression and QBE suites passed.
+Both-host ASan/UBSan lexer/sema and named-label/integer/additive/prefix/postfix
+runtime/ABI suites passed. Bounded sanitized fuzz completed 22,997 lexer and
+58,129 pipeline inputs in 26 seconds each without reported failure. No generated
+C was executed. Full isolated/remote matrices are tracked separately. Next:
+M19e2 goto resolution/target lowering per the prewritten m19-goto.md design.

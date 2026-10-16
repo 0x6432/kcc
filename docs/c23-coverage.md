@@ -400,3 +400,10 @@ Usual arithmetic conversions and independent shift promotions remain distinct;
 the result is the stored unqualified type, not an lvalue. Tests cover original
 source, pointer/non-lvalue/const constraints and both-direction narrow ABI. No
 floating or atomic operation support or runtime UB diagnosis is claimed.
+
+### M19e1 identifier labels
+
+N3096 6.8.1 and 6.8.2 subset: named labels are function-scoped and unique, in a
+separate namespace. C23 standalone block-item labels act as null statements and
+may precede declarations or block end; secondary labels retain a child statement.
+No goto/case/default/switch/attribute support is claimed in this foundation.

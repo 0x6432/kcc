@@ -1130,6 +1130,46 @@ static struct ast_expression *parse_conditional_expression(struct parser *parser
 	return node ? &node->expression : NULL;
 }
 
+/* infix-suffix ::= { infix-operator right-operand }
+ * Continue the Pratt tiers at the supplied floor after one parsed left operand.
+ * The caller owns the recursion-depth frame, also for consumed identifiers.
+ */
+static struct ast_expression *parse_infix_suffix(struct parser *parser,
+	struct ast_expression *left, unsigned minimum_binding_power)
+{
+	for (;;) {
+		struct token token = preprocess_peek(parser->preprocessor);
+		const struct infix_operator *operator = find_infix_operator(token.kind);
+		struct ast_expression *right;
+		struct ast_expression *node;
+
+		if (!operator || operator->left_binding_power < minimum_binding_power)
+			break;
+		preprocess_next(parser->preprocessor);
+		if (token.kind == token_question) {
+			node = parse_conditional_expression(parser, token, left);
+			if (!node)
+				return NULL;
+			left = node;
+			continue;
+		}
+		right = parse_expression(parser, operator->right_binding_power);
+		if (!right)
+			return NULL;
+		if (left->depth >= ast_max_expression_depth ||
+			right->depth >= ast_max_expression_depth) {
+			diagnostic_error(parser->diagnostics, token.location,
+				"expression tree exceeds depth limit (128)");
+			return NULL;
+		}
+		node = new_infix_expression(parser, token, left, right);
+		if (!node)
+			return NULL;
+		left = node;
+	}
+	return left;
+}
+
 /* expression ::= assignment-expression { "," assignment-expression }
  * assignment-expression ::= conditional-expression
  *                         | unary-expression assignment-operator assignment-expression
@@ -1162,45 +1202,11 @@ static struct ast_expression *parse_expression(struct parser *parser,
 	}
 	parser->depth++;
 	left = parse_prefix_expression(parser);
-	if (!left)
-		goto failure;
 
-	for (;;) {
-		struct token token = preprocess_peek(parser->preprocessor);
-		const struct infix_operator *operator = find_infix_operator(token.kind);
-		struct ast_expression *right;
-		struct ast_expression *node;
-
-		if (!operator || operator->left_binding_power < minimum_binding_power)
-			break;
-		preprocess_next(parser->preprocessor);
-		if (token.kind == token_question) {
-			node = parse_conditional_expression(parser, token, left);
-			if (!node)
-				goto failure;
-			left = node;
-			continue;
-		}
-		right = parse_expression(parser, operator->right_binding_power);
-		if (!right)
-			goto failure;
-		if (left->depth >= ast_max_expression_depth ||
-			right->depth >= ast_max_expression_depth) {
-			diagnostic_error(parser->diagnostics, token.location,
-				"expression tree exceeds depth limit (128)");
-			goto failure;
-		}
-		node = new_infix_expression(parser, token, left, right);
-		if (!node)
-			goto failure;
-		left = node;
-	}
+	if (left)
+		left = parse_infix_suffix(parser, left, minimum_binding_power);
 	parser->depth--;
 	return left;
-
-failure:
-	parser->depth--;
-	return NULL;
 }
 
 /* return-statement ::= "return" [ expression ] ";" */
@@ -1225,10 +1231,10 @@ static struct ast_return_statement *parse_return_statement(struct parser *parser
 	return node;
 }
 
-/* expression-statement ::= expression ";" */
-static struct ast_statement *parse_expression_statement(struct parser *parser)
+/* expression-statement-tail ::= ";"; the expression was already parsed. */
+static struct ast_statement *parse_expression_statement_tail(struct parser *parser,
+	struct ast_expression *value)
 {
-	struct ast_expression *value = parse_expression(parser, 0);
 	struct ast_expression_statement *node;
 
 	if (!value)
@@ -1242,6 +1248,37 @@ static struct ast_statement *parse_expression_statement(struct parser *parser)
 		return NULL;
 	}
 	return &node->statement;
+}
+
+/* expression-statement ::= expression ";" */
+static struct ast_statement *parse_expression_statement(struct parser *parser)
+{
+	return parse_expression_statement_tail(parser, parse_expression(parser, 0));
+}
+
+/* identifier-expression-statement ::= identifier postfix-suffix infix-suffix ";"
+ * The identifier has been consumed to distinguish a colon with one peek only.
+ */
+static struct ast_statement *parse_identifier_expression_statement(struct parser *parser,
+	struct token name)
+{
+	struct ast_name_expression *node;
+	struct ast_expression *value;
+
+	if (parser->depth == ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, name.location,
+			"expression nesting exceeds depth limit (128)");
+		return NULL;
+	}
+	parser->depth++;
+	node = ast_new_name(parser->arena, name);
+	if (!node)
+		allocation_error(parser, name.location);
+	value = node ? parse_postfix_suffix(parser, &node->expression) : NULL;
+	if (value)
+		value = parse_infix_suffix(parser, value, 0);
+	parser->depth--;
+	return parse_expression_statement_tail(parser, value);
 }
 
 /* empty-statement ::= ";" */
@@ -1274,6 +1311,40 @@ static bool begin_nested_statement(struct parser *parser)
 	}
 	parser->statement_nesting++;
 	return true;
+}
+
+/* label-tail ::= ":"; the identifier was consumed exactly once. */
+static struct ast_label *parse_label_tail(struct parser *parser, struct token name)
+{
+	struct ast_label *label;
+
+	if (!expect_token(parser, token_colon, "expected ':' after label", NULL))
+		return NULL;
+	label = ast_new_label(parser->arena, name);
+	if (!label)
+		allocation_error(parser, name.location);
+	return label;
+}
+
+/* labeled-statement ::= identifier ":" statement
+ * Unlike standalone block labels, this form requires a following statement.
+ */
+static struct ast_statement *parse_labeled_statement(struct parser *parser, struct token name)
+{
+	struct ast_label *label = parse_label_tail(parser, name);
+	struct ast_statement *body;
+	struct ast_labeled_statement *node;
+
+	if (!label || !begin_nested_statement(parser))
+		return NULL;
+	body = parse_statement(parser);
+	parser->statement_nesting--;
+	if (!body)
+		return NULL;
+	node = ast_new_labeled_statement(parser->arena, label, body);
+	if (!node)
+		allocation_error(parser, name.location);
+	return node ? &node->statement : NULL;
 }
 
 /* if-statement ::= "if" "(" expression ")" statement [ "else" statement ]
@@ -1526,11 +1597,18 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
 /* statement ::= return-statement | expression-statement | empty-statement
  *             | compound-statement | if-statement | while-statement
  *             | break-statement | continue-statement | do-statement
- *             | for-statement
+ *             | for-statement | labeled-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
+
+	if (token.kind == token_identifier) {
+		preprocess_next(parser->preprocessor);
+		if (preprocess_peek(parser->preprocessor).kind == token_colon)
+			return parse_labeled_statement(parser, token);
+		return parse_identifier_expression_statement(parser, token);
+	}
 
 	if (begins_static_assertion(token.kind)) {
 		diagnostic_error(parser->diagnostics, token.location,
@@ -1694,13 +1772,28 @@ static struct ast_static_assertion *parse_static_assertion(struct parser *parser
 	return node;
 }
 
-/* block-item ::= local-declaration | static-assert-declaration | statement */
+/* block-item ::= local-declaration | static-assert-declaration | unlabeled-statement | identifier ":" */
 static struct ast_block_item *parse_block_item(struct parser *parser)
 {
 	struct ast_statement *statement;
 	struct ast_statement_item *node;
+	struct token token = preprocess_peek(parser->preprocessor);
 
-	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+	if (token.kind == token_identifier) {
+		preprocess_next(parser->preprocessor);
+		if (preprocess_peek(parser->preprocessor).kind == token_colon) {
+			struct ast_label *label = parse_label_tail(parser, token);
+			struct ast_block_label *block;
+
+			if (!label)
+				return NULL;
+			block = ast_new_block_label(parser->arena, label);
+			if (!block)
+				allocation_error(parser, token.location);
+			return block ? &block->item : NULL;
+		}
+		statement = parse_identifier_expression_statement(parser, token);
+	} else if (begins_static_assertion(token.kind)) {
 		struct ast_static_assertion *declaration = parse_static_assertion(parser);
 		struct ast_block_static_assertion *assertion;
 
@@ -1710,10 +1803,11 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 		if (!assertion)
 			allocation_error(parser, declaration->location);
 		return assertion ? &assertion->item : NULL;
-	}
-	if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind))
+	} else if (begins_declaration_specifier(token.kind)) {
 		return parse_local_declaration(parser);
-	statement = parse_statement(parser);
+	} else {
+		statement = parse_statement(parser);
+	}
 	if (!statement)
 		return NULL;
 	node = ast_new_statement_item(parser->arena, statement);

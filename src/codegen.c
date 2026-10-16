@@ -849,6 +849,9 @@ static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
 {
 	switch (statement->kind) {
+	case statement_labeled:
+		/* Without goto, an identifier label has no effect on execution. */
+		return codegen_statement(codegen, ((const struct ast_labeled_statement *)statement)->body);
 	case statement_return: {
 		const struct ast_return_statement *node =
 			(const struct ast_return_statement *)statement;
@@ -910,6 +913,9 @@ static bool codegen_block_items(struct codegen *codegen,
 {
 	while (item) {
 		switch (item->kind) {
+		case block_item_label:
+			/* C23 standalone label is translated as a null statement. */
+			break;
 		case block_item_static_assertion:
 			/* Fully checked at translation time; no runtime effect or datum. */
 			break;

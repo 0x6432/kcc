@@ -1467,3 +1467,17 @@ not compiler-defined wrapping behavior. Such curated sources are compiled only;
 fuzz-generated source is never executed. Negative signed right shift follows
 the existing Linux amd64 arithmetic-shift target choice. Native test agreements
 use matching target assumptions, not a claim of universal implementation behavior.
+
+## M19e1 named-label boundary
+
+Identifier labels are supported, not goto/case/default/switch or attributes yet.
+C23 standalone labels are valid before declarations and at compound-block end;
+a label in secondary-statement position still requires a following statement.
+Function-wide uniqueness uses a separate namespace. A function is limited to
+512 labels; standalone items also count toward the existing 4096 block-item
+limit and secondary label chains toward 128 statement nesting. These are resource
+limits, not C constraints. No extra object or runtime target is allocated.
+Native Clang 15 lacks the two C23 placement forms: exact expected-expression/
+expected-statement diagnostics are labelled grammar gaps, never native agreements.
+Original sources still compile/run through kcc/QBE; no null-statement rewrite
+is used to manufacture native C23 support.

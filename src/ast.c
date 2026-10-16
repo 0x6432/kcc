@@ -523,6 +523,41 @@ struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	return node;
 }
 
+struct ast_label *ast_new_label(struct arena *arena, struct token name)
+{
+	struct ast_label *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_label) { .name = name };
+	return node;
+}
+
+struct ast_labeled_statement *ast_new_labeled_statement(struct arena *arena,
+	struct ast_label *label, struct ast_statement *body)
+{
+	struct ast_labeled_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_labeled_statement) {
+			.statement = { statement_labeled, label->name.location },
+			.label = label,
+			.body = body,
+		};
+	return node;
+}
+
+struct ast_block_label *ast_new_block_label(struct arena *arena, struct ast_label *label)
+{
+	struct ast_block_label *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_block_label) {
+			.item = { .kind = block_item_label, .location = label->name.location },
+			.label = label,
+		};
+	return node;
+}
+
 struct ast_return_statement *ast_new_return(struct arena *arena,
 	struct source_location location, struct ast_expression *value)
 {
