@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M23E0 local-binding preparation (inference still absent). Read the latest entries together with README.md and
+Current milestone: M23E1 single-identifier block/for auto inference. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2032,3 +2032,27 @@ from actual constraints. Such probes were syntax-compiled only, never executed.
 Register parameters, globals, VM types, array initializers and other storage
 classes remain unsupported. Read m23-auto-inference-research.md before planning
 inference; no full C23 claim or native-acceptance shortcut.
+
+## M23e1 inferred automatic scalar objects
+
+Only bare/parenthesized identifiers without a visible typedef ambiguity are
+supported. Visible typedef T in auto T=42 or auto (T)=42 remains explicitly
+outside this first subset; explicit auto T x is unchanged. Inferred derived
+declarators, braced initializers, register combinations, globals, attributes,
+constexpr and VM types remain unsupported. Multiple underspecified identifiers
+and prior same-scope declarations have UB under N3096 6.7p12: refusal probes
+compile only and are NOT required native diagnostics. Register parameters remain
+unsupported. This is not full C23 conformance.
+
+A converted initializer must have an implemented complete scalar object type;
+void does not create guessed int. Ordinary arrays/functions decay, but register
+array conversion remains refused, even inside outer unevaluated queries. Root
+const from a source lvalue/cast/return is removed by existing value rules; written
+const and const referents are retained. Storage hints never travel through types.
+
+The initializer may use neither the unfinished object nor an outer namesake,
+even in sizeof/typeof, dead branches or a function callee. There is no fallback
+to an outer binding when the reserved local has no type. Ordinary explicit auto
+keeps the DIFFERENT complete-declarator/own-initializer rule. No extra runtime
+local, semantic type kind or backend inference is introduced. Read the ledger
+for frozen original/native/ABI/sanitizer/fuzz evidence and independent CI status.

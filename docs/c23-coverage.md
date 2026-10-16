@@ -940,3 +940,28 @@ inferred auto remains absent: its unavailable-name interval, concrete syntax,
 qualifier/inference policy and single-identifier/underspecified-UB cases need a
 separate final design. No native acceptance of UB is counted as a missing
 constraint diagnostic. Read the research notes and ledger; not full C23.
+
+## M23e1 single-identifier auto inference (N3096 6.2.1 / 6.7 / 6.7.9)
+
+Validated block/for subset: one bare/grouped identifier, assignment initializer,
+optional written const; infer its complete scalar type AFTER ordinary value
+conversions without integer-promotion shortcuts. Fixed ordinary arrays, strings
+and functions decay to pointers; nullptr retains its distinct type. Inferred
+names are unavailable during initialization while hiding outer namesakes;
+sizeof/typeof/dead branches do not escape the rule. Subsequent uses see the
+completed ordinary local. Explicit auto/register paths remain distinct.
+
+Only bare/parenthesized identifiers without a visible typedef ambiguity are
+supported. Visible typedef T in auto T=42 or auto (T)=42 remains explicitly
+outside this first subset; explicit auto T x is unchanged. Inferred derived
+declarators, braced initializers, register combinations, globals, attributes,
+constexpr and VM types remain unsupported. Multiple underspecified identifiers
+and prior same-scope declarations have UB under N3096 6.7p12: refusal probes
+compile only and are NOT required native diagnostics. Register parameters remain
+unsupported. This is not full C23 conformance.
+
+Modern native original-source comparisons and independent legacy feature probes,
+24 both-direction cross-object arrangements per host, AST identity/storage and
+exact boundaries are recorded in the ledger. Legacy linkage is not inference
+syntax support. No UB probe or generated boundary is executed. Full frozen
+normal/QBE/sanitizer/fuzz evidence and remote CI are recorded separately.

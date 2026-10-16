@@ -4458,8 +4458,123 @@ static void test_local_binding_phases_tree(void)
 	fclose(stream);
 }
 
+static void test_auto_inference_tree(void)
+{
+	const char *text = "int f(void) { register const int x=40; auto y=x; "
+		"const auto z=y+2; auto s=\"*\"; auto q=f; int a[2]; auto r=a; return z; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *locals[7];
+	struct ast_block_item *item;
+	struct ast_inferred_type_syntax *syntax;
+	struct ast_array_decay_expression *decay;
+	struct ast_function_decay_expression *callback;
+	struct ast_load_expression *load;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = function->body->items;
+	for (size_t i = 0; i < 7; i++) {
+		assert(item && item->kind == block_item_declaration);
+		locals[i] = (struct ast_local_declaration *)item;
+		assert(!locals[i]->type);
+		if (i != 0 && i != 5) {
+			assert(locals[i]->type_syntax->kind == type_syntax_inferred);
+			assert(!locals[i]->type_syntax->type && !locals[i]->is_register);
+		}
+		item = item->next;
+	}
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	for (size_t i = 0; i < 7; i++) {
+		assert(locals[i]->slot == i && locals[i]->type);
+		assert(locals[i]->type_syntax->type == locals[i]->type);
+		assert(locals[i]->next_local == (i ? locals[i - 1] : NULL));
+	}
+	assert(function->locals == locals[6]);
+	assert(locals[0]->is_register && locals[0]->type->qualifiers == type_qualifier_const);
+	assert(type_compatible(locals[1]->type, &type_int) && locals[1]->initializer->kind == expression_load);
+	load = (struct ast_load_expression *)locals[1]->initializer;
+	assert(load->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)load->operand)->declaration == locals[0]);
+	syntax = (struct ast_inferred_type_syntax *)locals[2]->type_syntax;
+	assert(syntax->qualifiers == type_qualifier_const);
+	assert(locals[2]->type->qualifiers == type_qualifier_const);
+	assert(locals[2]->initializer->kind == expression_binary);
+	assert(!locals[2]->initializer->type->qualifiers);
+	assert(locals[3]->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)locals[3]->initializer;
+	assert(decay->operand->kind == expression_string);
+	assert(unit->strings == (struct ast_string_expression *)decay->operand);
+	assert(unit->strings->object_id == 0 && !unit->strings->next_string);
+	assert(locals[3]->type == locals[3]->initializer->type);
+	assert(locals[4]->initializer->kind == expression_function_decay);
+	callback = (struct ast_function_decay_expression *)locals[4]->initializer;
+	assert(callback->operand->kind == expression_function_designator);
+	assert(((struct ast_function_designator_expression *)callback->operand)->function == function->declaration->symbol);
+	assert(locals[5]->type->kind == type_kind_array);
+	assert(locals[6]->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)locals[6]->initializer;
+	assert(decay->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)decay->operand)->declaration == locals[5]);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
+static void test_auto_inference_unavailable_tree(void)
+{
+	const char *text = "int f(void) { int x=40; { auto x=sizeof(x); } return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_compound_statement *block;
+	struct ast_local_declaration *outer;
+	struct ast_local_declaration *inner;
+	struct ast_sizeof_expression *size;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	outer = (struct ast_local_declaration *)function->body->items;
+	item = (struct ast_statement_item *)outer->item.next;
+	block = (struct ast_compound_statement *)item->statement;
+	inner = (struct ast_local_declaration *)block->items;
+	assert(!sema_translation_unit(unit, &arena, &diagnostics) && diagnostics.errors == 1);
+	assert(outer->type == &type_int && !inner->type && !inner->type_syntax->type);
+	assert(function->locals == outer && !outer->next_local);
+	size = (struct ast_sizeof_expression *)inner->initializer;
+	assert(size->expression.kind == expression_sizeof && size->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)size->operand)->declaration == inner);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_auto_inference_tree();
+	test_auto_inference_unavailable_tree();
 	test_local_binding_phases_tree();
 	test_explicit_auto_tree();
 	test_register_array_tree();

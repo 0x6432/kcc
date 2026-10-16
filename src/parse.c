@@ -282,9 +282,18 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
 	}
 	if (!seen_int && !seen_char && !seen_short && !seen_bool && !seen_sign && !long_count) {
+		if (storage_keyword && storage_keyword->kind == token_auto) {
+			struct ast_inferred_type_syntax *node = ast_new_inferred_type_syntax(parser->arena,
+				beginning->location, qualifiers);
+
+			if (!node) {
+				allocation_error(parser, beginning->location);
+				return NULL;
+			}
+			return &node->syntax;
+		}
 		diagnostic_error(parser->diagnostics, beginning->location,
-			storage_keyword && storage_keyword->kind == token_auto ?
-			"auto type inference is not supported yet" : "expected type specifier with qualifier");
+			"expected type specifier with qualifier");
 		return NULL;
 	}
 	if (seen_bool && (seen_sign || seen_char || seen_short || seen_int || long_count)) {
@@ -2012,6 +2021,9 @@ static bool count_block_item(struct parser *parser, struct source_location locat
 /* local-declaration ::= declaration-specifiers init-declarator
  *                       { "," init-declarator } ";"
  * init-declarator ::= declarator [ "=" assignment-expression ]
+ * inferred-declaration ::= auto-specifiers inferred-identifier "=" assignment-expression ";"
+ * auto-specifiers ::= { "const" } "auto" { "const" }
+ * inferred-identifier ::= identifier | "(" inferred-identifier ")"
  * Array initializers are diagnosed by sema (braced lists are not parsed yet).
  * Assignment expressions stop before a declarator comma, not call-argument commas.
  */
@@ -2034,6 +2046,18 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 		if (!type_syntax)
 			return NULL;
+		if (base->kind == type_syntax_inferred) {
+			if (type_syntax != base) {
+				diagnostic_error(parser->diagnostics, name.location,
+					"inferred auto requires a single identifier declarator");
+				return NULL;
+			}
+			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
+				diagnostic_error(parser->diagnostics, name.location,
+					"inferred auto requires an assignment initializer");
+				return NULL;
+			}
+		}
 		if (storage_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
 			diagnostic_error(parser->diagnostics, name.location,
 				"auto storage requires an object type");
@@ -2058,6 +2082,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		tail = &node->item.next;
 		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			break;
+		if (base->kind == type_syntax_inferred) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"multiple inferred auto declarators are not supported");
+			return NULL;
+		}
 		preprocess_next(parser->preprocessor);
 	}
 	if (!expect_token(parser, token_semicolon, "expected ';' after declaration", NULL))

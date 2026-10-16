@@ -6,6 +6,17 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23E1: C23 inferred `auto` now supports one bare/parenthesized identifier with an
+assignment initializer at block/for scope, optionally const-qualified. Type
+inference follows ordinary value conversions, including array/function decay.
+The new name hides outer namesakes but is unavailable throughout its initializer;
+subsequent items see its completed type. Initializers are analyzed exactly once,
+with ordinary slots and unchanged QBE/ABI. Read docs/m23-auto-inference.md.
+Visible-typedef ambiguities, inferred derived declarators, braced initializers,
+auto/register combinations and file scope remain unsupported; not full C23.
+
+Earlier checkpoint entries below are chronological, not current exclusions.
+
 M23E0: Semantic preparation only—local name reservation, storage completion and
 initializer analysis are now explicit ordered phases. Ordinary declarations
 still bind before their initializer, and parameters retain their adjusted spill

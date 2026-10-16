@@ -52,7 +52,6 @@ c23_constraints = [
 ]
 subset_errors = [
     ('int f(int n) { int a[n]; return 0; }', 'variable-length arrays'),
-    ('int main(void) { auto x=42; return x; }', 'auto type inference is not supported'),
     ('int f(register int x);', 'register storage is not supported in this context'),
     ('int main(void) { int a[2]=0; return 0; }', 'array initializers are not supported'),
 ]

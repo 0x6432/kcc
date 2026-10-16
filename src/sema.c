@@ -223,6 +223,10 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_inferred:
+		diagnostic_error(sema->diagnostics, syntax->location,
+			"inferred type requires an initialized local definition");
+		return NULL;
 	case type_syntax_typedef_name: {
 		struct ast_typedef_name_type_syntax *alias = (struct ast_typedef_name_type_syntax *)syntax;
 		struct ast_typedef_declaration *declaration = find_typedef(sema, alias->name);
@@ -983,6 +987,11 @@ static bool sema_expression(struct sema *sema,
 		}
 		node->declaration = find_local(sema, node->name);
 		if (node->declaration) {
+			if (!node->declaration->type) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"inferred name is unavailable in its initializer");
+				return false;
+			}
 			result_type = node->declaration->type;
 			expression->is_lvalue = true;
 		} else {
@@ -1489,10 +1498,46 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 		sema_local_initializer(sema, local);
 }
 
+/* Hide outer names immediately, but expose no type until inference completes. */
+static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration *local)
+{
+	struct ast_inferred_type_syntax *syntax = (struct ast_inferred_type_syntax *)local->type_syntax;
+	const struct type *type;
+	const struct type *target;
+
+	if (!local->initializer) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"inferred auto requires an assignment initializer");
+		return false;
+	}
+	if (!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true))
+		return false;
+	type = local->initializer->type;
+	if (!type_is_scalar(type) || !type_is_complete_object(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"inferred auto requires a complete scalar initializer type");
+		return false;
+	}
+	type = type_qualified(sema->arena, type, syntax->qualifiers);
+	if (!type) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"out of memory qualifying inferred type");
+		return false;
+	}
+	syntax->syntax.type = type;
+	if (!complete_local_storage(sema, local, type))
+		return false;
+	target = unqualified_type(sema, type, local->name.location);
+	return target && convert_expression(sema, &local->initializer, target);
+}
+
 static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 {
-	const struct type *type = resolve_type_syntax(sema, local->type_syntax);
+	const struct type *type;
 
+	if (local->type_syntax->kind == type_syntax_inferred)
+		return sema_inferred_local(sema, local);
+	type = resolve_type_syntax(sema, local->type_syntax);
 	if (!type)
 		return false;
 	if (local->is_register && type->kind == type_kind_function) {

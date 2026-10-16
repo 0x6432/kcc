@@ -73,8 +73,7 @@ constraints = [
 ]
 c23_constraints = []
 subset_errors = [
-    ('int main(void) { auto x=42; return x; }', 'auto type inference is not supported yet'),
-    ('auto x=42;', 'auto type inference is not supported yet'),
+    ('auto x=42;', 'file-scope auto declarations are not supported yet'),
     ('int main(void) { auto register x=42; return x; }', 'combined auto storage classes are not supported'),
     ('int main(void) { register auto x=42; return x; }', 'combined auto storage classes are not supported'),
     ('int f(int n) { auto int a[n]; return 0; }', 'variable-length arrays'),

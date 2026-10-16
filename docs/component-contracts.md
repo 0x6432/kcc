@@ -1934,3 +1934,29 @@ initializer new-object meaning remain different, as before. AST tests retain
 self-size/address/array/string/function identities, one static string occurrence
 and exact slot/list order. The later inference path needs its own explicit
 unavailable-name and one-pass design before using these phases differently.
+
+## M23e1 concrete inferred syntax and unavailable-name lifetime
+
+ast_inferred_type_syntax contains the common header/cache and written qualifier
+bits only. The concrete local remains the sole initializer owner. The shared
+specifier scanner constructs inferred syntax only for bare auto without a type;
+visible aliases keep explicit-type disambiguation. The local tail requires base
+identity (bare/grouped name), assignment initialization and one declarator, then
+publishes the syntax-only object mask before parsing the initializer. Existing
+declarator nesting/resource guards apply. Type names/parameters still reject
+auto; external auto remains unsupported. No replay or token-vector shortcut.
+
+sema_inferred_local first reserves the actual local with no type, so the old
+find-local/typedef barriers hide outer meanings immediately. expression_name
+rejects a found untyped local, including inside unevaluated operands, never
+falls back to an outer object/function/alias. Analyze the initializer ONCE with
+normal value conversions; require a complete scalar; apply written qualifiers,
+cache the result, complete the SAME ordinary local storage, and convert the
+already analyzed initializer to its unqualified target. Lowered loads/decays/
+conversions are never passed through sema_expression twice. Generic unresolved
+inferred syntax cannot resolve outside an initialized local definition.
+
+Ordinary bind_local and named spills keep name/storage/initializer order.
+Prototype-only objects allocate no runtime storage. No new semantic type kind,
+register propagation, QBE/ABI protocol or alias storage. Existing resource,
+source-string occurrence and immutable type/syntax ownership contracts remain.

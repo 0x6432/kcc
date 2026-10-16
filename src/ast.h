@@ -322,6 +322,7 @@ enum integer_specifier {
 };
 
 enum type_syntax_kind {
+	type_syntax_inferred,
 	type_syntax_typedef_name,
 	type_syntax_void,
 	type_syntax_qualified,
@@ -342,6 +343,11 @@ struct ast_type_syntax {
 struct ast_typedef_name_type_syntax {
 	struct ast_type_syntax syntax;
 	struct token name;
+};
+
+struct ast_inferred_type_syntax {
+	struct ast_type_syntax syntax;
+	unsigned qualifiers;
 };
 
 struct ast_qualified_type_syntax {
@@ -676,6 +682,8 @@ struct ast_block_static_assertion *ast_new_block_static_assertion(struct arena *
 	struct ast_static_assertion *declaration);
 struct ast_external_static_assertion *ast_new_external_static_assertion(struct arena *arena,
 	struct ast_static_assertion *declaration);
+struct ast_inferred_type_syntax *ast_new_inferred_type_syntax(struct arena *arena,
+	struct source_location location, unsigned qualifiers);
 struct ast_qualified_type_syntax *ast_new_qualified_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *base, unsigned qualifiers);
 struct ast_typeof_type_syntax *ast_new_typeof_type_syntax(struct arena *arena,

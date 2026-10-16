@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inference/parameters/other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; parameters/other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -33,7 +33,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
-| M23e | auto inference | Valid initializers and forbidden declarations | preparation only (M23e0 binding phases); inferred types remain absent |
+| M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases and M23e1 single-identifier block/for scalar inference); derived/alias ambiguity/storage/constexpr/VM work remains |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
 | M23h | constexpr objects and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
@@ -2667,3 +2667,65 @@ M15a2 CI run 38977217404 remains pending; no remote pass is claimed.
 New M23e0 exact-commit CI remains pending until checked after push. Local passes
 are independent of remote evidence. Inference remains absent and needs its own
 final design, especially its unavailable-name interval and typedef ambiguity.
+
+## M23e1 single-identifier block/for inferred auto
+
+Design recorded before implementation in m23-auto-inference.md after pushed
+9c08154. Add concrete qualifier-only inferred syntax and a dedicated one-pass
+semantic path, reserving an unavailable name before inference and completing
+the same ordinary storage afterward. No generic guessed-int type or backend
+inference. Ordinary explicit object/parameter paths remain unchanged.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 as native
+comparison hosts; normal C11 helpers were built with GCC 11. Full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 21 targeted suites passed; the new inference and
+binding suites also passed with Clang 18 as native oracle. Normal helpers were
+built serially before parallel validation. Frozen primary and isolated source,
+test and Makefile manifests matched before/after. Bounded compile-only sanitized
+fuzz passed 11,433 lexer / 28,284 pipeline inputs in 26 seconds each. No invalid
+curated or generated C executed. Logs/manifests /data/tools/m23e1-*, isolated
+trees /data/validation-m23e1/{gcc,clang}.
+
+The previous M23e0 sanitized compiler and frozen M23e1 compiler have identical
+return codes/stdout/stderr on all 149 pre-existing compile corpus files
+(117 accepted / 32 rejected), compiled only, excluding the new inference seed.
+
+Focused inference suite: 65 original C23 programs passed through kcc/QBE;
+GCC 14 and Clang 18 strictly agree on all 65, without rewriting originals or
+adding gap exceptions. Independent inferred-auto probes identify exact legacy
+GCC 11/Clang 15 absence (zero inference agreements, not an implicit-int fallback).
+Each of four hosts passes 24 both-direction mixed-stack primitive ABI
+arrangements with inferred kcc code and ordinary native helpers/drivers; native
+linkage does not masquerade as inferred-source support. Sixteen unavailable-name
+barriers plus four other constraints are rejected by both modern native hosts;
+three UB refusals and thirteen subset refusals are compile-only, never executed.
+Auto-explicit/binding/both register suites were rerun on all four hosts with
+existing native gap counts unchanged. Old unsupported block-inference assertions
+were explicitly replaced by this new positive coverage; file-auto diagnostics
+were updated, not silently dropped. Their subset counts are now five/three.
+
+AST assertions verify concrete syntax and cached qualifiers/types, root const
+loss on value conversion, no register flag propagation, captured load/array/
+function/string identities, one static-string occurrence and seven exact real
+slots/reverse-list entries. A failed self-size initializer captures the reserved
+INNER local with no type/storage, not the outer typed object; no IL is emitted.
+Exact 256/257 locals, 4096/4097 items, 1 MiB/overflow storage, 64/65 parenthesized
+identifier nesting and 128/129 expanded-typedef depth boundaries pass. Extra
+128 named spills plus inferred local/storage tests retain shared accounting.
+
+Pre-freeze fixture corrections: unqualifying const may return a structurally
+compatible leaf rather than the singleton type_int address, so the AST assertion
+checks type compatibility instead of inventing a type interning contract. Braced,
+parameter and visible-alias refusals now assert actual parser diagnostics; no
+compiler behavior was changed to fake native agreement. An extra eight qualifier,
+promotion, captured-object and scope-restoration originals were added before
+freezing and the final 65-original GCC 14 suite rerun; earlier 57-source logs
+are preliminary evidence only. Parenthesized visible-typedef probes confirmed
+the same deliberate ambiguity limit (GCC rejects/Clang accepts), compiled only.
+
+M15a2 CI run 38977217404 completed/success, all three jobs green.
+M23e0 CI run 38979609085 is still pending; no remote pass is claimed.
+New M23e1 exact-commit CI is pending until queried after push; local passes do
+not prove remote success. No stashes discarded, historical snapshots rerun,
+credentials committed or subagents used. User authorizes continuous development.

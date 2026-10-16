@@ -2,6 +2,76 @@
 
 ## Current checkpoint
 
+M23e1 single-identifier block/for inferred auto is implemented and locally
+validated. Read m23-auto-inference.md and the latest ledger/contracts/coverage/
+limitations. An assignment initializer is analyzed once with value conversions;
+its complete scalar type, plus written const, completes one ordinary local.
+Array/string/function initializers decay to pointers; nullptr stays distinct.
+The concrete inferred syntax owns qualifiers, not a duplicate initializer.
+A reserved no-type name hides outer namesakes during initialization and reports
+unavailability even inside sizeof/typeof/dead branches. Completed definitions
+then expose the same real local. Ordinary explicit declarations/parameter spills,
+shared bases, scope restoration, no-alias storage and QBE/ABI remain unchanged.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 as native
+comparison hosts; normal C11 helpers were built with GCC 11. Full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 21 targeted suites passed; the new inference and
+binding suites also passed with Clang 18 as native oracle. Normal helpers were
+built serially before parallel validation. Frozen primary and isolated source,
+test and Makefile manifests matched before/after. Bounded compile-only sanitized
+fuzz passed 11,433 lexer / 28,284 pipeline inputs in 26 seconds each. No invalid
+curated or generated C executed. Logs/manifests /data/tools/m23e1-*, isolated
+trees /data/validation-m23e1/{gcc,clang}.
+
+The previous M23e0 sanitized compiler and frozen M23e1 compiler have identical
+return codes/stdout/stderr on all 149 pre-existing compile corpus files
+(117 accepted / 32 rejected), compiled only, excluding the new inference seed.
+
+Focused inference suite: 65 original C23 programs passed through kcc/QBE;
+GCC 14 and Clang 18 strictly agree on all 65, without rewriting originals or
+adding gap exceptions. Independent inferred-auto probes identify exact legacy
+GCC 11/Clang 15 absence (zero inference agreements, not an implicit-int fallback).
+Each of four hosts passes 24 both-direction mixed-stack primitive ABI
+arrangements with inferred kcc code and ordinary native helpers/drivers; native
+linkage does not masquerade as inferred-source support. Sixteen unavailable-name
+barriers plus four other constraints are rejected by both modern native hosts;
+three UB refusals and thirteen subset refusals are compile-only, never executed.
+Auto-explicit/binding/both register suites were rerun on all four hosts with
+existing native gap counts unchanged. Old unsupported block-inference assertions
+were explicitly replaced by this new positive coverage; file-auto diagnostics
+were updated, not silently dropped. Their subset counts are now five/three.
+
+AST assertions verify concrete syntax and cached qualifiers/types, root const
+loss on value conversion, no register flag propagation, captured load/array/
+function/string identities, one static-string occurrence and seven exact real
+slots/reverse-list entries. A failed self-size initializer captures the reserved
+INNER local with no type/storage, not the outer typed object; no IL is emitted.
+Exact 256/257 locals, 4096/4097 items, 1 MiB/overflow storage, 64/65 parenthesized
+identifier nesting and 128/129 expanded-typedef depth boundaries pass. Extra
+128 named spills plus inferred local/storage tests retain shared accounting.
+
+Only bare/parenthesized identifiers without a visible typedef ambiguity are
+supported. Visible typedef T in auto T=42 or auto (T)=42 remains explicitly
+outside this first subset; explicit auto T x is unchanged. Inferred derived
+declarators, braced initializers, register combinations, globals, attributes,
+constexpr and VM types remain unsupported. Multiple underspecified identifiers
+and prior same-scope declarations have UB under N3096 6.7p12: refusal probes
+compile only and are NOT required native diagnostics. Register parameters remain
+unsupported. This is not full C23 conformance.
+
+M15a2 CI run 38977217404 completed/success, all three jobs green.
+M23e0 CI run 38979609085 is still pending; no remote pass is claimed.
+New M23e1 exact-commit CI is pending until checked after push; no remote pass
+is implied. User authorizes continued work and supersedes historical STOP.
+No stashes discarded or old snapshot generators rerun; no subagents used.
+Implementation scripts under /data/tools were applied once; do not rerun.
+Preserve historical named stashes if a reset restores them. Verify tools/remote
+before continuing after any reset. Next increment needs its own recorded design;
+register parameter storage has only outside-tree compile-only research so far.
+
+## Earlier M23e0 checkpoint (historical)
+
 M23e0 local-binding semantic preparation is implemented and locally validated.
 Read m23-auto-binding-phases.md, m23-auto-inference-research.md and the latest
 ledger/contracts/coverage/limits. Private name reservation, storage completion
