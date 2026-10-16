@@ -1960,3 +1960,24 @@ Ordinary bind_local and named spills keep name/storage/initializer order.
 Prototype-only objects allocate no runtime storage. No new semantic type kind,
 register propagation, QBE/ABI protocol or alias storage. Existing resource,
 source-string occurrence and immutable type/syntax ownership contracts remain.
+
+## M23e2 independent storage and inference specifier tokens
+
+Private parse.c declaration_storage has ordinary keyword and auto_keyword tokens,
+preserving source locations and separating typedef/register from inference.
+NULL output still disallows every storage class in type names and parameters.
+Each slot permits one specifier; duplicates and forbidden typedef combinations
+reject. Only auto may omit a type; register+auto with any explicit builtin/void/
+alias/query type rejects under 6.7.1p4 before declarator publication. Local and
+consumed-alias callers share the scanner; comma bases stay shared. The local
+flag comes only from the ordinary register token; explicit-auto function guards
+and external refusals use the independent auto token. No synthetic token or
+lookahead replay. Existing qualifier/typedef disambiguation policy is unchanged.
+
+No sema/type/codegen source or public header changes: existing inferred syntax,
+unavailable-name reservation, one-pass value conversion, qualifier cache and
+ordinary storage completion preserve is_register on the real declaration.
+Unary & already checks that exact identity. An ordinary query/inferred copy has
+no register flag; referents are not confused with register pointer objects.
+No extra runtime slot/alias storage, type qualifier or ABI protocol. Parameter/
+prototype lifetimes, budget accounting and immutable source caches remain.

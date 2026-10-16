@@ -33,7 +33,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
-| M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases and M23e1 single-identifier block/for scalar inference); derived/alias ambiguity/storage/constexpr/VM work remains |
+| M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases, M23e1 single-identifier block/for scalar inference and M23e2 register combinations); derived/alias ambiguity/other storage/constexpr/VM work remains |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
 | M23h | constexpr objects and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
@@ -2729,3 +2729,62 @@ M23e0 CI run 38979609085 is still pending; no remote pass is claimed.
 New M23e1 exact-commit CI is pending until queried after push; local passes do
 not prove remote success. No stashes discarded, historical snapshots rerun,
 credentials committed or subagents used. User authorizes continuous development.
+
+## M23e2 inferred register objects
+
+Design recorded before implementation in m23-register-auto-inference.md after
+validated/pushed 9a1044b. Separate private ordinary-storage and auto token slots
+so both specifiers compose without adding semantic flags/types or backend logic.
+6.7.1p4 explicitly forbids an explicit type with the combined classes; no native
+acceptance shortcut. All prior ordinary/scoped-name/initializer paths remain.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 as native
+comparison hosts; normal C11 helpers were built with GCC 11. Full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 22 targeted suites passed; register-inference,
+ordinary inference and binding suites also passed with Clang 18 as native oracle.
+Normal helpers were built serially before parallel validation. Frozen primary
+and isolated source/test/Makefile manifests matched before/after. Bounded
+compile-only sanitized fuzz passed 9,040 lexer / 30,885 pipeline inputs in
+26 seconds each. No invalid curated or generated C executed. Logs/manifests
+/data/tools/m23e2-*, isolated trees /data/validation-m23e2/{gcc,clang}.
+
+The previous M23e1 sanitized compiler and frozen M23e2 compiler have identical
+return codes/stdout/stderr on all 150 pre-existing compile corpus files
+(118 accepted / 32 rejected), compiled only, excluding the new register seed.
+
+Focused register-inference suite: 52 original C23 programs passed through kcc/
+QBE; GCC 14 and Clang 18 strictly agree on all 52, with no original rewriting or
+new gap exceptions. Thirty-four native constraint rejections include twelve
+unavailable-name barriers, direct/query register addresses, const modification,
+explicit-type combined storage, duplicate/typedef mixtures and no implicit-int
+fallback. Three UB refusals and nine subset refusals remain compile-only. Legacy
+GCC 11/Clang 15 have exact independently probed inference absence, not native
+inference agreements. All four hosts pass 24 both-direction mixed-stack primitive
+ABI arrangements using inferred register kcc code and ordinary native helpers/
+drivers; linkage is not a claim of legacy inferred-source support.
+
+Ordinary inference, explicit auto, binding and both register suites reran on all
+four hosts. Their original native gap counts remain unchanged. Four former
+combined-inference subset refusals in auto_explicit/auto_inference were replaced
+by explicit new positive coverage; their subset counts are now three/eleven.
+AST checks prove inferred syntax/cache identity, register flags only on source
+objects, const removal in ordinary copies, captured loads, one static string,
+pointer sharing and four exact real slots/reverse-list entries. Exact 256/257
+locals including 128 named spills, 4096/4097 items, 1 MiB/overflow storage,
+64/65 grouping and 128/129 expanded-typedef boundaries pass. One register object
+allocates one slot regardless of two specifiers; aliases/prototypes still none.
+
+Before freezing, two compile-only no-type register constraints were added to
+prove no implicit-int/inference fallback. The copied grouping-boundary fixture
+was corrected from ordinary auto to register auto and exact 64/65 combined forms
+were separately compiled before freezing; full final validation uses that fixture.
+An outside generator's first attempt stopped at an ambiguous text anchor BEFORE
+writing source; the anchor was narrowed and applied once. No compiler behavior
+or native source was changed to fake agreement, no intermediate run claimed final.
+
+M23e0 CI run 38979609085 completed/success, all three jobs green.
+M23e1 CI run 38982126026 is pending; no remote pass is claimed.
+New M23e2 exact-commit CI is pending until checked after push; local passes
+never imply remote success. No subagents, discarded stashes, historical snapshot
+regeneration, force push or committed credentials. User authorizes continuous work.

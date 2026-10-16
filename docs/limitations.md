@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M23E1 single-identifier block/for auto inference. Read the latest entries together with README.md and
+Current milestone: M23E2 inferred auto with register storage. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2056,3 +2056,23 @@ to an outer binding when the reserved local has no type. Ordinary explicit auto
 keeps the DIFFERENT complete-declarator/own-initializer rule. No extra runtime
 local, semantic type kind or backend inference is introduced. Read the ledger
 for frozen original/native/ABI/sanitizer/fuzz evidence and independent CI status.
+
+## M23e2 inferred auto with register storage
+
+C23 6.7.1p4 requires inference when auto accompanies another storage class:
+auto register int x=42 is a CONSTRAINT violation, not valid traditional explicit
+auto. Those explicit primitive/alias/query/void forms remain rejected. Register
+alone without a type does not silently infer or default to int. Duplicate/typedef
+mixtures still reject. Register parameters, globals, other storage classes,
+attributes/constexpr/VM, visible-typedef ambiguities and inferred derived/braced
+forms remain unsupported. Multiple underspecified identifiers and prior same-
+scope declarations are UB refusal probes, not native constraint requirements;
+none execute. This is still an incomplete C23 subset.
+
+The existing one-pass initializer/name barrier is unchanged: new inferred names
+hide outer namesakes but remain unavailable until initialization completes,
+including in sizeof/typeof/dead branches. Array/string/function initializers
+undergo normal conversion to pointers; register-array decay still rejects.
+Address restrictions belong to the actual register local, not its type or an
+ordinary copied local. Storage/local/item/type/declarator limits are unchanged.
+Read the ledger for exact frozen local validation and independent remote CI.

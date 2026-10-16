@@ -965,3 +965,27 @@ Modern native original-source comparisons and independent legacy feature probes,
 exact boundaries are recorded in the ledger. Legacy linkage is not inference
 syntax support. No UB probe or generated boundary is executed. Full frozen
 normal/QBE/sanitizer/fuzz evidence and remote CI are recorded separately.
+
+## M23e2 auto/register inferred objects (N3096 6.7.1 / 6.7.9)
+
+Validated block/for extension: auto and register may appear in either order,
+with existing const positions, for a single supported initialized inferred
+identifier. Source object identity carries register's address restriction;
+ordinary copies carry only types. Existing complete scalar inference, normal
+array/function decay, unavailable-name interval and one-pass initialization
+remain. No new backend/type feature or claim of inferred array object storage.
+
+C23 6.7.1p4 requires inference when auto accompanies another storage class:
+auto register int x=42 is a CONSTRAINT violation, not valid traditional explicit
+auto. Those explicit primitive/alias/query/void forms remain rejected. Register
+alone without a type does not silently infer or default to int. Duplicate/typedef
+mixtures still reject. Register parameters, globals, other storage classes,
+attributes/constexpr/VM, visible-typedef ambiguities and inferred derived/braced
+forms remain unsupported. Multiple underspecified identifiers and prior same-
+scope declarations are UB refusal probes, not native constraint requirements;
+none execute. This is still an incomplete C23 subset.
+
+Modern original-source agreement, independently probed legacy absence, exact
+AST/budget tests and both-direction ABI arrangements are recorded in the ledger.
+Native acceptance of UB never proves a missing constraint. Frozen full normal/
+QBE/both-host sanitizers/fuzz evidence and remote CI are independently recorded.

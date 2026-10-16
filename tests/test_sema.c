@@ -4571,8 +4571,69 @@ static void test_auto_inference_unavailable_tree(void)
 	fclose(stream);
 }
 
+static void test_register_auto_inference_tree(void)
+{
+	const char *text = "int f(void) { const register auto x=40; auto y=x; "
+		"auto register s=\"*\"; auto p=s; return y+2; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *locals[4];
+	struct ast_block_item *item;
+	struct ast_array_decay_expression *decay;
+	struct ast_load_expression *load;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = function->body->items;
+	for (size_t i = 0; i < 4; i++) {
+		assert(item && item->kind == block_item_declaration);
+		locals[i] = (struct ast_local_declaration *)item;
+		assert(locals[i]->type_syntax->kind == type_syntax_inferred);
+		assert(locals[i]->is_register == (i == 0 || i == 2));
+		assert(!locals[i]->type && !locals[i]->type_syntax->type);
+		item = item->next;
+	}
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	for (size_t i = 0; i < 4; i++) {
+		assert(locals[i]->slot == i && locals[i]->type_syntax->type == locals[i]->type);
+		assert(locals[i]->next_local == (i ? locals[i - 1] : NULL));
+	}
+	assert(function->locals == locals[3]);
+	assert(locals[0]->type->qualifiers == type_qualifier_const);
+	assert(!locals[1]->type->qualifiers && type_compatible(locals[1]->type, &type_int));
+	assert(locals[1]->initializer->kind == expression_load);
+	load = (struct ast_load_expression *)locals[1]->initializer;
+	assert(load->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)load->operand)->declaration == locals[0]);
+	assert(locals[2]->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)locals[2]->initializer;
+	assert(decay->operand->kind == expression_string);
+	assert(unit->strings == (struct ast_string_expression *)decay->operand);
+	assert(unit->strings->object_id == 0 && !unit->strings->next_string);
+	assert(locals[3]->initializer->kind == expression_load);
+	load = (struct ast_load_expression *)locals[3]->initializer;
+	assert(load->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)load->operand)->declaration == locals[2]);
+	assert(locals[2]->type == locals[3]->type);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_register_auto_inference_tree();
 	test_auto_inference_tree();
 	test_auto_inference_unavailable_tree();
 	test_local_binding_phases_tree();

@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23E2: C23 inferred `auto` may now combine with `register` at block/for scope,
+in either order and with const qualifiers. The existing real local retains the
+register address restriction; inferred copies do not inherit it. Combined auto/
+register with an EXPLICIT type is still a constraint violation (C23 6.7.1p4).
+No semantic/backend type, extra local or ABI change. Read
+docs/m23-register-auto-inference.md; other storage/globals/register parameters,
+visible-typedef ambiguities and complete C23 remain unsupported.
+
 M23E1: C23 inferred `auto` now supports one bare/parenthesized identifier with an
 assignment initializer at block/for scope, optionally const-qualified. Type
 inference follows ordinary value conversions, including array/function decay.

@@ -91,8 +91,6 @@ subset_errors = [
     ('int main(void) { auto x(void)=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { auto x={42}; return 0; }', 'expected integer literal'),
     ('int main(void) { auto x=(void)42; return 0; }', 'complete scalar initializer type'),
-    ('int main(void) { auto register x=42; return 0; }', 'combined auto storage classes'),
-    ('int main(void) { register auto x=42; return 0; }', 'combined auto storage classes'),
     ('int f(auto x);', 'auto is not permitted in a type name or parameter declaration'),
     ('typedef int T; int main(void) { auto T=42; return 0; }', 'expected local name'),
     ('typedef long T; int main(void) { auto (T)=42; return 0; }', 'expected local name'),
