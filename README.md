@@ -6,6 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19f1: switch foundation supports integer control and case-free bodies. Break
+selects the nearest loop/switch; continue skips switches to its enclosing loop.
+Goto into a switch body is supported. Case/default dispatch is the next increment.
+
 M19e2: direct `goto` resolves function-local labels after the complete body is
 checked. Forward/backward jumps and targets inside nested control flow retain
 correct fallthrough and loop contexts. Unreachable syntax remains checked and

@@ -351,7 +351,7 @@ static const struct keyword keywords[] = {
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
-	{ "if", token_if }, { "else", token_else }, { "while", token_while },
+	{ "if", token_if }, { "else", token_else }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
 	{ "sizeof", token_sizeof }, { "alignof", token_alignof },
@@ -758,6 +758,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_return: return "return";
 	case token_if: return "if";
 	case token_else: return "else";
+	case token_switch: return "switch";
 	case token_while: return "while";
 	case token_do: return "do";
 	case token_for: return "for";

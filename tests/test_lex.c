@@ -117,7 +117,7 @@ static void test_errors(void)
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };
 
-		check_tokens("switch", keyword, 1, 0);
+		check_tokens("struct", keyword, 1, 0);
 		check_tokens("constexpr", keyword, 1, 0);
 		check_tokens("=", equal, 1, 0);
 	}
@@ -406,8 +406,17 @@ static void test_goto_keyword(void)
 	assert(strcmp(token_kind_name(token_goto), "goto") == 0);
 }
 
+static void test_switch_keyword(void)
+{
+	const enum token_kind kinds[] = { token_switch, token_left_paren, token_integer, token_right_paren, token_semicolon };
+
+	check_tokens("#define SELECT switch\nSELECT(1);", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_switch), "switch") == 0);
+}
+
 int main(void)
 {
+	test_switch_keyword();
 	test_goto_keyword();
 	test_integer_compound_tokens();
 	test_compound_assignment_tokens();

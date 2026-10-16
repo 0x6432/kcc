@@ -15,8 +15,8 @@ struct scope {
 	struct binding *bindings;
 };
 
-struct loop_context {
-	struct loop_context *parent;
+struct control_context {
+	struct control_context *parent;
 	struct ast_statement *statement;
 };
 
@@ -35,7 +35,7 @@ struct sema {
 	struct diagnostics *diagnostics;
 	struct ast_function *function;
 	struct scope *scope;
-	struct loop_context *loop;
+	struct control_context *control;
 	struct label_binding *labels;
 	size_t label_count;
 	struct goto_reference *gotos;
@@ -1378,15 +1378,36 @@ static bool sema_if(struct sema *sema, struct ast_if_statement *node)
 	return success;
 }
 
-static bool sema_loop_body(struct sema *sema, struct ast_statement *loop,
+static bool sema_control_body(struct sema *sema, struct ast_statement *statement,
 	struct ast_statement *body)
 {
-	struct loop_context context = { sema->loop, loop };
+	struct control_context context = { sema->control, statement };
 	bool success;
 
-	sema->loop = &context;
+	sema->control = &context;
 	success = sema_substatement(sema, body);
-	sema->loop = context.parent;
+	sema->control = context.parent;
+	return success;
+}
+
+static bool sema_switch(struct sema *sema, struct ast_switch_statement *node)
+{
+	struct scope scope = { .parent = sema->scope };
+	bool success;
+
+	sema->scope = &scope;
+	success = sema_expression(sema, &node->control, true);
+	if (success && !type_is_integer(node->control->type)) {
+		diagnostic_error(sema->diagnostics, node->control->location,
+			"switch control requires an integer expression");
+		success = false;
+	}
+	if (success)
+		success = convert_expression(sema, &node->control,
+			type_integer_promotion(node->control->type));
+	if (success)
+		success = sema_control_body(sema, &node->statement, node->body);
+	sema->scope = scope.parent;
 	return success;
 }
 
@@ -1398,7 +1419,7 @@ static bool sema_while(struct sema *sema, struct ast_while_statement *node)
 	sema->scope = &scope;
 	success = sema_condition(sema, &node->condition);
 	if (success)
-		success = sema_loop_body(sema, &node->statement, node->body);
+		success = sema_control_body(sema, &node->statement, node->body);
 	sema->scope = scope.parent;
 	return success;
 }
@@ -1409,7 +1430,7 @@ static bool sema_do(struct sema *sema, struct ast_do_statement *node)
 	bool success;
 
 	sema->scope = &scope;
-	success = sema_loop_body(sema, &node->statement, node->body);
+	success = sema_control_body(sema, &node->statement, node->body);
 	if (success)
 		success = sema_condition(sema, &node->condition);
 	sema->scope = scope.parent;
@@ -1433,7 +1454,7 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 	if (success && node->step)
 		success = sema_expression(sema, &node->step, true);
 	if (success)
-		success = sema_loop_body(sema, &node->statement, node->body);
+		success = sema_control_body(sema, &node->statement, node->body);
 	sema->scope = scope.parent;
 	return success;
 }
@@ -1542,29 +1563,34 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 		return sema_for(sema, (struct ast_for_statement *)statement);
 	case statement_do:
 		return sema_do(sema, (struct ast_do_statement *)statement);
+	case statement_switch:
+		return sema_switch(sema, (struct ast_switch_statement *)statement);
 	case statement_while:
 		return sema_while(sema, (struct ast_while_statement *)statement);
 	case statement_break: {
 		struct ast_break_statement *node = (struct ast_break_statement *)statement;
 
-		if (!sema->loop) {
+		if (!sema->control) {
 			diagnostic_error(sema->diagnostics, statement->location,
-				"break is only supported inside a loop");
+				"break requires an enclosing loop or switch");
 			return false;
 		}
-		node->target = sema->loop->statement;
+		node->target = sema->control->statement;
 		return true;
 	}
 	case statement_continue: {
 		struct ast_continue_statement *node =
 			(struct ast_continue_statement *)statement;
+		struct control_context *context = sema->control;
 
-		if (!sema->loop) {
+		while (context && context->statement->kind == statement_switch)
+			context = context->parent;
+		if (!context) {
 			diagnostic_error(sema->diagnostics, statement->location,
 				"continue requires an enclosing loop");
 			return false;
 		}
-		node->target = sema->loop->statement;
+		node->target = context->statement;
 		return true;
 	}
 	case statement_if:
@@ -1682,7 +1708,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	struct scope scope = { 0 };
 	bool success = false;
 
-	assert(!sema->scope && !sema->loop);
+	assert(!sema->scope && !sema->control);
 	sema->function = definition;
 	sema->labels = NULL;
 	sema->label_count = 0;

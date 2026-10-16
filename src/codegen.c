@@ -5,8 +5,8 @@
 #include <assert.h>
 #include <stdarg.h>
 
-struct loop_codegen {
-	struct loop_codegen *parent;
+struct control_codegen {
+	struct control_codegen *parent;
 	const struct ast_statement *statement;
 	size_t break_label;
 	size_t continue_label;
@@ -14,7 +14,7 @@ struct loop_codegen {
 
 struct codegen {
 	FILE *stream;
-	struct loop_codegen *loop;
+	struct control_codegen *control;
 	size_t next_temporary;
 	size_t next_label;
 	size_t current_label;
@@ -734,22 +734,54 @@ static bool codegen_if(struct codegen *codegen, const struct ast_if_statement *n
 	return false;
 }
 
-static bool codegen_loop_body(struct codegen *codegen,
+static bool codegen_control_body(struct codegen *codegen,
 	const struct ast_statement *statement, const struct ast_statement *body,
 	size_t break_label, size_t continue_label)
 {
-	struct loop_codegen context = {
-		.parent = codegen->loop,
+	struct control_codegen context = {
+		.parent = codegen->control,
 		.statement = statement,
 		.break_label = break_label,
 		.continue_label = continue_label,
 	};
 	bool terminated;
 
-	codegen->loop = &context;
+	codegen->control = &context;
 	terminated = codegen_statement(codegen, body);
-	codegen->loop = context.parent;
+	codegen->control = context.parent;
 	return terminated;
+}
+
+static bool codegen_switch(struct codegen *codegen,
+	const struct ast_switch_statement *node)
+{
+	size_t body_label = new_label(codegen);
+	size_t exit_label = new_label(codegen);
+	bool body_terminated;
+
+	/* With no case/default, normal entry evaluates control and skips the body. */
+	codegen_discard_expression(codegen, node->control);
+	emit(codegen, "\tjmp @b%zu\n", exit_label);
+	/* Keep named targets reachable by goto, with switch break/loop continue. */
+	emit_label(codegen, body_label);
+	body_terminated = codegen_control_body(codegen, &node->statement,
+		node->body, exit_label, 0);
+	if (!body_terminated)
+		emit(codegen, "\tjmp @b%zu\n", exit_label);
+	emit_label(codegen, exit_label);
+	return false;
+}
+
+/* Sema has already resolved the enclosing statement, even across switches. */
+static const struct control_codegen *codegen_jump_target(struct codegen *codegen,
+	const struct ast_statement *statement)
+{
+	const struct control_codegen *context = codegen->control;
+
+	while (context && context->statement != statement)
+		context = context->parent;
+	assert(context);
+	return context;
 }
 
 static bool codegen_while(struct codegen *codegen,
@@ -767,7 +799,7 @@ static bool codegen_while(struct codegen *codegen,
 	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n",
 		condition, body_label, exit_label);
 	emit_label(codegen, body_label);
-	body_terminated = codegen_loop_body(codegen, &node->statement,
+	body_terminated = codegen_control_body(codegen, &node->statement,
 		node->body, exit_label, condition_label);
 	if (!body_terminated)
 		emit(codegen, "\tjmp @b%zu\n", condition_label);
@@ -785,7 +817,7 @@ static bool codegen_do(struct codegen *codegen, const struct ast_do_statement *n
 
 	emit(codegen, "\tjmp @b%zu\n", body_label);
 	emit_label(codegen, body_label);
-	body_terminated = codegen_loop_body(codegen, &node->statement,
+	body_terminated = codegen_control_body(codegen, &node->statement,
 		node->body, exit_label, condition_label);
 	if (!body_terminated)
 		emit(codegen, "\tjmp @b%zu\n", condition_label);
@@ -832,7 +864,7 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 		emit(codegen, "\tjmp @b%zu\n", body_label);
 	}
 	emit_label(codegen, body_label);
-	body_terminated = codegen_loop_body(codegen, &node->statement,
+	body_terminated = codegen_control_body(codegen, &node->statement,
 		node->body, exit_label, step_label);
 	if (!body_terminated)
 		emit(codegen, "\tjmp @b%zu\n", step_label);
@@ -898,22 +930,25 @@ static bool codegen_statement(struct codegen *codegen,
 		return codegen_for(codegen, (const struct ast_for_statement *)statement);
 	case statement_do:
 		return codegen_do(codegen, (const struct ast_do_statement *)statement);
+	case statement_switch:
+		return codegen_switch(codegen, (const struct ast_switch_statement *)statement);
 	case statement_while:
 		return codegen_while(codegen, (const struct ast_while_statement *)statement);
 	case statement_break: {
 		const struct ast_break_statement *node =
 			(const struct ast_break_statement *)statement;
+		const struct control_codegen *target = codegen_jump_target(codegen, node->target);
 
-		assert(codegen->loop && node->target == codegen->loop->statement);
-		emit(codegen, "\tjmp @b%zu\n", codegen->loop->break_label);
+		emit(codegen, "\tjmp @b%zu\n", target->break_label);
 		return true;
 	}
 	case statement_continue: {
 		const struct ast_continue_statement *node =
 			(const struct ast_continue_statement *)statement;
+		const struct control_codegen *target = codegen_jump_target(codegen, node->target);
 
-		assert(codegen->loop && node->target == codegen->loop->statement);
-		emit(codegen, "\tjmp @b%zu\n", codegen->loop->continue_label);
+		assert(target->statement->kind != statement_switch);
+		emit(codegen, "\tjmp @b%zu\n", target->continue_label);
 		return true;
 	}
 	case statement_if:

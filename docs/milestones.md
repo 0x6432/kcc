@@ -1712,3 +1712,27 @@ failure. No generated fuzz C or constraint-invalid/runtime-UB source was execute
 M19d1 e1e5eb3 remote CI 38884494636 passed every job. Later remote and full
 isolated matrices remain separately tracked, not claimed as completed.
 User requested a stop after this milestone; no next milestone was started.
+
+## M19f1 switch foundation
+
+Case-free switches evaluate an integer control exactly once with explicit integer
+promotion, then skip the body. Full body checking and predecessor-free backend
+traversal preserve named goto targets; goto entry bypasses control evaluation.
+One enclosing-control context stack binds break to the closest loop/switch and
+continue to the closest loop across switches. AST jumps retain exact target
+identity and backend target lookup follows it. Scope and context parents restore
+on failure. Case/default dispatch, attributes and VLA jump-scope constraints
+remain unsupported and are not implied by this foundation. Existing loops and
+function/ABI contracts are unchanged; no new runtime storage is introduced.
+
+M19f1 initial full/sanitizer runs exposed the old lexer fixture still classifying
+switch as unsupported. Kept unsupported-keyword coverage with struct and retained
+the new direct/macro switch-token assertions. No compiler change was needed.
+Both complete validation chains are rerun after the fixture correction.
+
+M19f1 final validation: complete normal and QBE regression passed. GCC/Clang
+ASan/UBSan lexer/sema and switch-foundation/goto/named-label/integer-compound
+runtime/ABI suites passed. Sanitized bounded fuzz ran 14,107 lexer and 49,285
+pipeline inputs in 26 seconds each without reported failures; generated C was
+never executed. Remote exact-source and isolated full matrices remain separate.
+Next: M19f2, designed before implementation in m19-switch-cases.md.

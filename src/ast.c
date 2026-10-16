@@ -625,6 +625,21 @@ struct ast_if_statement *ast_new_if(struct arena *arena,
 	return node;
 }
 
+struct ast_switch_statement *ast_new_switch(struct arena *arena,
+	struct source_location location, struct ast_expression *control,
+	struct ast_statement *body)
+{
+	struct ast_switch_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_switch_statement) {
+			.statement = { statement_switch, location },
+			.control = control,
+			.body = body,
+		};
+	return node;
+}
+
 struct ast_while_statement *ast_new_while(struct arena *arena,
 	struct source_location location, struct ast_expression *condition,
 	struct ast_statement *body)

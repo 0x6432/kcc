@@ -739,7 +739,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int f(void) {} int f(void) {}", "redefinition of function"),
         ("int f(void);"*513, "declaration limit (512)"),
         ("".join(f"int f{i}(void);" for i in range(257)), "function limit (256)"),
-        ("int main(void) { break; }", "break is only supported inside a loop"),
+        ("int main(void) { break; }", "break requires an enclosing loop or switch"),
         ("int main(void) { continue; }", "continue requires an enclosing loop"),
         ("int main(void) { return missing; }", "use of undeclared identifier"),
         ("int main(void) { int x; int x; }", "redeclaration of local"),

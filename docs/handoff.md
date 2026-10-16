@@ -2,30 +2,21 @@
 
 ## Current checkpoint
 
-M19e2 direct goto complete. Full normal regression and QBE suites passed.
-Both-host targeted ASan/UBSan lexer/sema units and goto/named-label/integer-
-compound/additive/prefix/postfix runtime/ABI passed. Bounded sanitized fuzz
-completed 22,770 lexer and 54,016 pipeline inputs in 26 seconds each without
-reported failure. No generated fuzz C was executed.
+M19f1 switch foundation complete: full normal/QBE passed, both-host targeted
+ASan/UBSan lexer/sema and runtime/ABI passed. Bounded sanitized fuzz ran 14,107
+lexer and 49,285 pipeline inputs in 26 seconds each without reported failures. Restored stale sandbox from cade2cd to remote 867dd5c after stashing
+its uncommitted array-bound snapshot (preserved separately from the old stash).
+The restored M19e2 full normal/QBE baseline passed. Confirmed all jobs passed for
+remote M19e2 run 38887882846, M19e1 38886473048 and M19d2 38885424621.
 
-STOPPED at the user's request after completing this milestone. Do not begin
-another milestone until requested. Next work is switch/case/default; its design
-and implementation have NOT been started. Scripts implement-m19e2.py and
-test_goto.py outside the repo are already applied; never reapply blindly.
-Goto resolution is function-local after full-body checking; concrete targets
-keep source-order indices. Codegen reserves label IDs and visits code after
-terminators without false fallthrough, including nested branch/loop targets.
-The only full-suite failure was a stale raw-IL test expecting dead source to
-disappear; the exact expectation now retains three returns, with the original
-no-false-merge-jump assertion intact. The complete chain then passed.
-
-M19d1 e1e5eb3 remote CI 38884494636 passed every job; M19d2 and M19e1 remote
-runs were still running at last check. M13m isolated GCC/Clang full normal+
-ASan/UBSan matrices passed; M23a2 isolated GCC passed, Clang still pending.
-Newer isolated matrices remain queued under /data/tools/kcc-validation.lock.
-Current exact-source M19e2 isolated/remote matrices are separate pending checks;
-inspect final markers before claiming success. Logs: /data/tools/m19e2-tests.log,
-m19e2-fuzz.log, m19e2-sanitized-targets.log, m19e2-final-validation.log.
+Current design: m19-switch-foundation.md. Only case-free switches are implemented
+in this increment. Next M19f2 adds case/default collection, ICE conversion/duplicate
+checking and dispatch; do not claim case support yet. Focused tests have 36 strict
+native originals, 12 native constraint rejections, nesting boundaries and 24
+both-direction ABI arrangements per host. No generated fuzz C is executed.
+Scripts /data/tools/implement-m19f1.py and m19f1-unit.c are already applied.
+M19f1 full isolated and remote exact-source checks are separately pending.
+Working policy resumed by user: continue across tested small milestones.
 
 ### Earlier foundation (chronological)
 

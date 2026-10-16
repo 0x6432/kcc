@@ -3059,8 +3059,67 @@ static void test_goto_tree(void)
 }
 
 
+static void test_switch_foundation_tree(void)
+{
+	const char *text = "int f(unsigned char x) { for(;;) switch(x) { switch(x) continue; break; } return 0; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_for_statement *loop;
+	struct ast_switch_statement *outer;
+	struct ast_switch_statement *inner;
+	struct ast_compound_statement *body;
+	struct ast_continue_statement *continuation;
+	struct ast_break_statement *exit;
+	struct ast_expression *original;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	item = (struct ast_statement_item *)first_function(unit)->body->items;
+	loop = (struct ast_for_statement *)item->statement;
+	assert(loop->statement.kind == statement_for);
+	outer = (struct ast_switch_statement *)loop->body;
+	assert(outer->statement.kind == statement_switch);
+	assert(outer->statement.location.offset == (size_t)(strstr(text, "switch") - text));
+	original = outer->control;
+	assert(original->kind == expression_name);
+	body = (struct ast_compound_statement *)outer->body;
+	assert(body->statement.kind == statement_compound);
+	item = (struct ast_statement_item *)body->items;
+	inner = (struct ast_switch_statement *)item->statement;
+	assert(inner->statement.kind == statement_switch);
+	continuation = (struct ast_continue_statement *)inner->body;
+	assert(continuation->statement.kind == statement_continue && !continuation->target);
+	exit = (struct ast_break_statement *)((struct ast_statement_item *)item->item.next)->statement;
+	assert(exit->statement.kind == statement_break && !exit->target);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(!diagnostics.errors);
+	assert(outer->control->kind == expression_conversion && outer->control->type == &type_int);
+	assert(inner->control->type == &type_int);
+	assert(original->type == &type_uchar);
+	assert(continuation->target == &loop->statement);
+	assert(exit->target == &outer->statement);
+	assert(first_function(unit)->locals && !first_function(unit)->locals->next_local);
+	assert(!unit->strings);
+
+	fclose(stream);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_switch_foundation_tree();
 	test_goto_tree();
 	test_named_label_tree();
 	test_integer_compound_tree();

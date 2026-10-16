@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M19e2. Read the latest entries together with README.md and
+Current milestone: M19f1. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1493,3 +1493,15 @@ continues after terminators using predecessor-free blocks, preserving nested
 targets without inventing fallthrough. Initializers execute only when reached.
 Computed goto, switch/case/default, attributes and VLA jump-scope rules remain
 unsupported; this does not claim full C23 control-flow support.
+
+## M19f1 switch foundation
+
+Case-free switches evaluate an integer control exactly once with explicit integer
+promotion, then skip the body. Full body checking and predecessor-free backend
+traversal preserve named goto targets; goto entry bypasses control evaluation.
+One enclosing-control context stack binds break to the closest loop/switch and
+continue to the closest loop across switches. AST jumps retain exact target
+identity and backend target lookup follows it. Scope and context parents restore
+on failure. Case/default dispatch, attributes and VLA jump-scope constraints
+remain unsupported and are not implied by this foundation. Existing loops and
+function/ABI contracts are unchanged; no new runtime storage is introduced.

@@ -1395,6 +1395,44 @@ static struct ast_if_statement *parse_if_statement(struct parser *parser)
 	return node;
 }
 
+/* switch-statement ::= "switch" "(" expression ")" statement */
+static struct ast_switch_statement *parse_switch_contents(struct parser *parser)
+{
+	struct token keyword;
+	struct ast_expression *control;
+	struct ast_statement *body;
+	struct ast_switch_statement *node;
+
+	if (!expect_token(parser, token_switch, "expected 'switch'", &keyword))
+		return NULL;
+	if (!expect_token(parser, token_left_paren, "expected '(' after switch", NULL))
+		return NULL;
+	control = parse_expression(parser, 0);
+	if (!control)
+		return NULL;
+	if (!expect_token(parser, token_right_paren, "expected ')' after switch control", NULL))
+		return NULL;
+	body = parse_statement(parser);
+	if (!body)
+		return NULL;
+	node = ast_new_switch(parser->arena, keyword.location, control, body);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
+}
+
+/* switch-statement ::= "switch" "(" expression ")" statement; guard nesting. */
+static struct ast_switch_statement *parse_switch_statement(struct parser *parser)
+{
+	struct ast_switch_statement *node;
+
+	if (!begin_nested_statement(parser))
+		return NULL;
+	node = parse_switch_contents(parser);
+	parser->statement_nesting--;
+	return node;
+}
+
 /* while-statement ::= "while" "(" expression ")" statement */
 static struct ast_while_statement *parse_while_contents(struct parser *parser)
 {
@@ -1614,7 +1652,7 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
 /* statement ::= return-statement | expression-statement | empty-statement
  *             | compound-statement | if-statement | while-statement
  *             | break-statement | continue-statement | do-statement
- *             | for-statement | labeled-statement | goto-statement
+ *             | for-statement | labeled-statement | goto-statement | switch-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
@@ -1642,6 +1680,13 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	}
 	if (token.kind == token_do) {
 		struct ast_do_statement *node = parse_do_statement(parser);
+
+		if (!node)
+			return NULL;
+		return &node->statement;
+	}
+	if (token.kind == token_switch) {
+		struct ast_switch_statement *node = parse_switch_statement(parser);
 
 		if (!node)
 			return NULL;
