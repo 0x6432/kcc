@@ -2,15 +2,16 @@
 
 ## Current checkpoint
 
-M19c2 postfix updates are complete. Separate concrete ASTs and iterative
-postfix parsing share checked operand and QBE single-evaluation lowering with
-prefix updates, selecting old/new values respectively. Full normal/QBE suites
-passed, as did both-host ASan/UBSan semantic units and prefix/postfix runtime/ABI
-checks. Bounded sanitized fuzz completed 23,138 lexer and 50,219 pipeline inputs
-in 26 seconds each without reported failure. Never execute generated fuzz C.
-Continue the prewritten M19d1 +=/-= design in m19-additive-assignment.md.
-Get the exact checkpoint hash with git log -1; full isolated matrices and remote
-CI require their own final markers and are not implied by focused checks.
+M19d1 +=/-= is complete. Full normal and QBE regressions passed, as did
+both-host ASan/UBSan lexer/sema units and additive/prefix/postfix runtime/ABI.
+Sanitized bounded fuzz ran 22,986 lexer and 60,623 pipeline inputs in 26 seconds
+each without reported failure. Concrete compound nodes preserve one left lvalue,
+explicit RHS conversion, calculation type and checked pointer stride. Backend
+value conversions are shared without duplicated loads/addresses. Never execute
+fuzz-generated C. Next: M19d2 remaining integer compound operators, predesigned
+in m19-integer-compound-assignment.md. M19c2 was pushed as 4da4287; full isolated
+and remote results require final markers. Prior nullptr oracle correction
+f3df148 remote run 38881463571 passed all GCC/Clang/fuzz jobs.
 
 ### Earlier foundation (chronological)
 

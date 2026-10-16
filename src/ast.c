@@ -448,6 +448,27 @@ struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 	return node;
 }
 
+struct ast_compound_assignment_expression *ast_new_compound_assignment(struct arena *arena,
+	struct source_location location, enum binary_operator operation,
+	struct ast_expression *left, struct ast_expression *right)
+{
+	struct ast_compound_assignment_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_compound_assignment_expression) {
+			.expression = {
+				.kind = expression_compound_assignment,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.operation = operation,
+			.left = left,
+			.right = right,
+		};
+	return node;
+}
+
 struct ast_load_expression *ast_new_load(struct arena *arena,
 	struct ast_expression *operand)
 {

@@ -1107,6 +1107,53 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_compound_assignment: {
+		struct ast_compound_assignment_expression *node =
+			(struct ast_compound_assignment_expression *)expression;
+		const struct type *left_type;
+		unsigned depth;
+
+		if (!sema_expression(sema, &node->left, false))
+			return false;
+		left_type = node->left->type;
+		if (!node->left->is_lvalue || (left_type->qualifiers & type_qualifier_const) ||
+			(!type_is_integer(left_type) && left_type->kind != type_kind_pointer)) {
+			diagnostic_error(sema->diagnostics, node->left->location,
+				"compound assignment requires a modifiable integer or pointer lvalue");
+			return false;
+		}
+		if (!sema_expression(sema, &node->right, true))
+			return false;
+		if (!type_is_integer(node->right->type)) {
+			diagnostic_error(sema->diagnostics, node->right->location,
+				"additive compound assignment requires an integer right operand");
+			return false;
+		}
+		result_type = unqualified_type(sema, left_type, expression->location);
+		if (!result_type)
+			return false;
+		if (left_type->kind == type_kind_pointer) {
+			const struct type *referent = ((const struct pointer_type *)left_type)->referent;
+
+			if (!type_is_complete_object(referent)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"pointer compound assignment requires a complete object referent");
+				return false;
+			}
+			node->calculation_type = result_type;
+			node->element_size = type_object_size(referent);
+			if (!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+				return false;
+		} else {
+			node->calculation_type = type_usual_arithmetic(result_type, node->right->type);
+			node->element_size = 0;
+			if (!convert_expression(sema, &node->right, node->calculation_type))
+				return false;
+		}
+		depth = node->left->depth > node->right->depth ? node->left->depth : node->right->depth;
+		expression->depth = depth + 1;
+		break;
+	}
 	case expression_assignment: {
 		struct ast_assignment_expression *node =
 			(struct ast_assignment_expression *)expression;

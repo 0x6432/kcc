@@ -110,6 +110,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle
 	python3 tests/test_nullptr.py
 	python3 tests/test_prefix_updates.py
 	python3 tests/test_postfix_updates.py
+	python3 tests/test_additive_assignment.py
 	python3 tests/test_static_assertions.py
 	python3 tests/test_consteval.py
 
@@ -190,6 +191,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_nullptr.py
 	python3 tests/test_prefix_updates.py
 	python3 tests/test_postfix_updates.py
+	python3 tests/test_additive_assignment.py
 	python3 tests/test_static_assertions.py
 	python3 tests/test_consteval.py
 

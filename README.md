@@ -6,10 +6,15 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19d1: `+=`/`-=` support current integers and complete-object pointers. One
+lvalue address/load/store, usual arithmetic conversions and stored-type results
+are explicit; bool uses truth conversion after calculation. Remaining compound
+operators, floats and atomics are later work.
+
 M19c1/c2: prefix and postfix `++`/`--` update integer and complete-object pointer
 lvalues. Operand addresses are evaluated once; narrow/bool conversion and pointer
-strides are explicit. Postfix yields the old value, prefix the new. Compound
-assignment remains a later increment.
+strides are explicit. Postfix yields the old value, prefix the new. Additive compound
+assignment is now supported separately.
 
 M23a2: C23 `nullptr` has its own complete scalar type, neither integer nor
 pointer. It converts to pointers and bool, supports equality, scalar control,

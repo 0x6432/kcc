@@ -385,3 +385,10 @@ Postfix, compound assignment, floating and atomic cases remain separate work.
 N3096 6.5.2.4 subset adds the old-value result with stored new value for current
 integer and complete-object pointer types. Postfix precedence/loops/once-only
 addresses and both ABI directions are tested; no atomic/float semantics claimed.
+
+### M19d1 additive compound assignment
+
+N3096 6.5.16.2 subset: +=/-= integer usual arithmetic/back conversion, boolean
+truth conversion, complete-object pointer/integer offsets and once-only lvalue
+evaluation. Concrete nodes retain calculation/result types and pointer strides.
+All remaining compound operators, floating and atomic operations are separate.

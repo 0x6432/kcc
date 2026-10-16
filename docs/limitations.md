@@ -1446,3 +1446,13 @@ prefix. Compound assignment, float and atomic updates remain later work. C's
 unsequenced side-effect rules still apply: x++ + x, x=x++ and similar sources are
 not made defined by a chosen backend order. The compiler does not diagnose all
 such runtime undefined behavior. Tests only execute curated defined cases.
+
+## M19d1 additive compound assignment boundary
+
++=/-= now support current integer and complete-object pointer modifiable lvalues.
+Remaining compound operators, floats and atomic semantics remain later work.
+Pointer RHS must be integer; void/function/incomplete referents are rejected.
+The stored result is not an lvalue. Runtime signed overflow, invalid pointer
+ranges and unsequenced conflicting effects remain undefined, not safety checks.
+Tests choose defined inputs without imposing an unspecified operand order.
+Evaluated updates are not ICEs; VLA bounds remain a separate subset limitation.

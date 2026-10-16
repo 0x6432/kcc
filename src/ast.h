@@ -27,6 +27,7 @@ enum expression_kind {
 	expression_pointer_offset,
 	expression_pointer_difference,
 	expression_assignment,
+	expression_compound_assignment,
 	expression_load,
 	expression_array_decay,
 	expression_conversion,
@@ -268,6 +269,18 @@ struct ast_assignment_expression {
 	struct ast_expression expression;
 	struct ast_expression *left;
 	struct ast_expression *right;
+};
+
+/* The left remains one lvalue, not an expression duplicated into an assignment.
+ * Sema records promoted arithmetic or a complete-pointer stride (zero for ints).
+ */
+struct ast_compound_assignment_expression {
+	struct ast_expression expression;
+	enum binary_operator operation;
+	struct ast_expression *left;
+	struct ast_expression *right;
+	const struct type *calculation_type;
+	uint64_t element_size;
 };
 
 /* Inserted by sema, never by the parser. Operand denotes an object lvalue. */
@@ -601,6 +614,9 @@ struct ast_logical_expression *ast_new_logical(struct arena *arena,
 struct ast_assignment_expression *ast_new_assignment(struct arena *arena,
 	struct source_location location, struct ast_expression *left,
 	struct ast_expression *right);
+struct ast_compound_assignment_expression *ast_new_compound_assignment(struct arena *arena,
+	struct source_location location, enum binary_operator operation,
+	struct ast_expression *left, struct ast_expression *right);
 struct ast_load_expression *ast_new_load(struct arena *arena,
 	struct ast_expression *operand);
 struct ast_cast_expression *ast_new_cast(struct arena *arena,

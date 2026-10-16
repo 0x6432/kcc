@@ -599,6 +599,8 @@ struct infix_operator {
 static const struct infix_operator infix_operators[] = {
 	{ token_comma, 0, 1 },
 	{ token_equal, 1, 1 },
+	{ token_plus_equal, 1, 1 },
+	{ token_minus_equal, 1, 1 },
 	{ token_question, 2, 2 },
 	{ token_or_or, 3, 4 },
 	{ token_and_and, 4, 5 },
@@ -1036,6 +1038,13 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 
 		if (node)
 			return &node->expression;
+	} else if (token.kind == token_plus_equal || token.kind == token_minus_equal) {
+		enum binary_operator operation = token.kind == token_plus_equal ? binary_add : binary_subtract;
+		struct ast_compound_assignment_expression *node = ast_new_compound_assignment(
+			parser->arena, token.location, operation, left, right);
+
+		if (node)
+			return &node->expression;
 	} else if (token.kind == token_and_and || token.kind == token_or_or) {
 		enum logical_operator operation = token.kind == token_and_and ?
 			logical_and : logical_or;
@@ -1085,7 +1094,8 @@ static struct ast_expression *parse_conditional_expression(struct parser *parser
 }
 
 /* expression ::= assignment-expression { "," assignment-expression }
- * assignment-expression ::= conditional-expression | unary-expression "=" assignment-expression
+ * assignment-expression ::= conditional-expression
+ *                         | unary-expression ("=" | "+=" | "-=") assignment-expression
  * conditional-expression ::= logical-OR-expression [ "?" expression ":" conditional-expression ]
  * logical-OR-expression ::= logical-AND-expression { "||" logical-AND-expression }
  * logical-AND-expression ::= bitwise-OR-expression { "&&" bitwise-OR-expression }

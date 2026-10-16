@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates implemented; compound/control-flow rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1 additive compound assignment implemented; other compounds/control-flow rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1576,3 +1576,43 @@ Both-host ASan/UBSan semantic units and prefix/postfix runtime/ABI passed.
 Sanitized bounded fuzz completed 23,138 lexer and 50,219 pipeline inputs in
 26 seconds each without reported failure. No generated C was executed.
 Full isolated matrix and remote CI are queued separately, not claimed passed.
+
+## M19d1 additive compound assignment
+
+Implemented +=/-= with demand post-pp tokens, right-associative assignment Pratt
+powers and a concrete compound AST, never assignment expansion. Sema preserves
+the modifiable left lvalue, explicitly converts RHS, records usual calculation
+type/complete-object pointer stride, and yields the unqualified stored type.
+Backend value conversions are factored from expression conversions so the old
+load and result share ordinary extension/narrow/bool semantics without repeated
+addresses. Pointer offsets reuse signedness-aware scaling. Unevaluated sizeof
+still validates constraints; consteval rejects evaluated updates.
+
+The first conditional fixture omitted required parentheses around an assignment
+in the last arm; corrected the fixture, not compiler precedence or constraints.
+Target/full/sanitizer/fuzz results follow once validated.
+
+An obsolete += rejection in the broad compiler suite is now an undefined-RHS
+name rejection; the semantic positive suite covers the newly valid syntax.
+The compound static-assert negative is parenthesized to satisfy its conditional
+expression grammar before testing the ICE restriction. Both were test-fixture
+repairs, not relaxed compiler semantics. Next: M19d2, predesigned in
+m19-integer-compound-assignment.md.
+
+M19d1 targeted evidence: both hosts passed 59 strict-native original programs,
+19 strict-native constraint rejections and 48 both-direction narrow/pointer-return
+mixed-stack ABI arrangements. Separate nullptr constraints, VLA subset limit,
+compile-only null-pointer update and exact typed-depth boundary passed. Semantic
+units preserve original left/right identity, location, stored/calculation types,
+referent const, explicit bool-index promotion and pointer stride. Both-host
+ASan/UBSan lexer/sema plus additive/prefix/postfix runtime/ABI suites passed.
+An initial sanitizer orchestration attempted Clang before its binaries existed;
+after building them its complete stage passed; no compiler source change was
+needed. Full normal/QBE/fuzz remain pending until final markers.
+
+M19d1 final local validation: complete normal regression and QBE suites passed.
+Both-host targeted ASan/UBSan lexer/sema and additive/prefix/postfix runtime/ABI
+passed. Bounded sanitized fuzz completed 22,986 lexer and 60,623 pipeline inputs
+in 26 seconds each without reported failure. No generated C or curated runtime
+invalid arithmetic/pointer source was executed. Remote/isolated full matrices
+are queued separately. Prior f3df148 CI run 38881463571 passed every job.

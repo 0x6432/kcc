@@ -1370,3 +1370,16 @@ The shared backend helper returns a local previous/current temporary pair after
 one address/load/store. Each concrete expression branch selects its own value.
 No source ordering guarantee beyond C sequencing is introduced. Both kinds are
 nonconstant evaluator forms; opaque sizeof skips all update code generation.
+
+## M19d1 compound assignment contract
+
++=/-= have their own concrete node, retaining one left lvalue subtree and a
+normally evaluated right subtree. Sema records the usual arithmetic type or
+complete-object pointer stride; the stored result type is unqualified and not
+an lvalue. Integer RHS conversions are explicit nodes. The old left value is
+loaded and converted using a value-based backend helper, not a second AST load
+or expanded assignment. QBE chooses RHS-first, computes one address, loads once,
+arithmetically updates, converts back and stores once. Pointer indices use the
+existing signedness-aware extension. No particular operand evaluation order is
+promised beyond C. Bool truth conversion examines the whole calculation width.
+Consteval rejects evaluated compound forms; sizeof checks but does not emit them.

@@ -525,7 +525,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { int x=0; (x+1)=2; return x; }",
         "int main(void) { int x=0; +x=2; return x; }",
         "int main(void) { int x=0; (x=1)=2; return x; }",
-        "int main(void) { int x=0; x+=1; return x; }",
+        "int main(void) { int x=0; x+=p; return x; }",
 
         "int main(void) { int x, int y; return 0; }",
         "int main(void) { int x=; return 0; }",

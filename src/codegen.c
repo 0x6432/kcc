@@ -227,22 +227,63 @@ static size_t codegen_truth(struct codegen *codegen, const struct ast_expression
 	return codegen_truth_value(codegen, value, expression->type);
 }
 
-static size_t codegen_conversion(struct codegen *codegen, const struct ast_expression *operand,
-	const struct type *target)
+/* Use the same conversions for AST operands and once-loaded compound lvalues. */
+static size_t codegen_convert_value(struct codegen *codegen, size_t value,
+	const struct type *source, const struct type *target)
 {
-	size_t value = codegen_expression(codegen, operand);
 	size_t result;
 	const char *instruction = "copy";
 
 	if (target->kind == type_kind_bool)
-		return codegen_truth_value(codegen, value, operand->type);
+		return codegen_truth_value(codegen, value, source);
 	if (type_value_width(target) < 32)
 		return codegen_canonicalize(codegen, value, target);
 	result = codegen->next_temporary++;
-	if (type_value_width(target) == 64 && type_value_width(operand->type) <= 32)
-		instruction = type_is_unsigned(operand->type) ? "extuw" : "extsw";
+	if (type_value_width(target) == 64 && type_value_width(source) <= 32)
+		instruction = type_is_unsigned(source) ? "extuw" : "extsw";
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
 	return result;
+}
+
+static size_t codegen_conversion(struct codegen *codegen, const struct ast_expression *operand,
+	const struct type *target)
+{
+	size_t value = codegen_expression(codegen, operand);
+
+	return codegen_convert_value(codegen, value, operand->type, target);
+}
+
+/* RHS-first is a permitted operand order; the lvalue address is never repeated. */
+static size_t codegen_compound_assignment(struct codegen *codegen,
+	const struct ast_compound_assignment_expression *node)
+{
+	size_t right;
+	size_t address;
+	size_t left;
+	size_t value;
+
+	if (node->element_size) {
+		right = codegen_pointer_index(codegen, node->right);
+		if (node->element_size != 1) {
+			size_t scaled = codegen->next_temporary++;
+
+			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, right, (uintmax_t)node->element_size);
+			right = scaled;
+		}
+	} else {
+		right = codegen_expression(codegen, node->right);
+	}
+	address = codegen_address(codegen, node->left);
+	left = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", left, qbe_type(node->left->type),
+		qbe_load_instruction(node->left->type), address);
+	left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
+	value = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", value, qbe_type(node->calculation_type),
+		node->operation == binary_add ? "add" : "sub", left, right);
+	value = codegen_convert_value(codegen, value, node->calculation_type, node->expression.type);
+	emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
+	return value;
 }
 
 struct update_values {
@@ -569,6 +610,9 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		return values.current;
 	}
+	case expression_compound_assignment:
+		return codegen_compound_assignment(codegen,
+			(const struct ast_compound_assignment_expression *)expression);
 	case expression_assignment: {
 		const struct ast_assignment_expression *node =
 			(const struct ast_assignment_expression *)expression;

@@ -52,6 +52,8 @@ enum token_kind {
 	token_colon,
 	token_increment,
 	token_decrement,
+	token_plus_equal,
+	token_minus_equal,
 	token_plus,
 	token_minus,
 	token_star,
