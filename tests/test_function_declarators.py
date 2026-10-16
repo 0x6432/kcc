@@ -85,25 +85,27 @@ with tempfile.TemporaryDirectory(prefix='kcc function declarators ') as director
         source.write_text('int f' + '()' * layers + ';')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
-    for layers, message in [(63, 'function parameter adjustment'), (64, 'declarator exceeds nesting limit (64)')]:
+    for layers, valid in [(63, True), (64, False)]:
         source.write_text('int f(' + 'int g(' * layers + 'int' + ')' * layers + ');')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
-        assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
+        assert (result.returncode == 0) == valid and not result.stdout, result.stderr
+        if not valid:
+            assert 'declarator exceeds nesting limit (64)' in result.stderr, result.stderr
 
     rejected = [
         ('int f(void)[3];', 'function return type'),
         ('int f(void)(int);', 'function return type'),
         ('int f(void) { int a[2](void); return 0; }', 'array element type must be complete'),
         ('int (*p)(int);', 'file-scope object declarations'),
-        ('int f(void) { int (*p)(int); return 0; }', 'function pointers are not supported yet'),
-        ('int f(int (int));', 'function parameter adjustment is not supported yet'),
+        ('int f(void) { int (*p)(int)=1; return 0; }', 'pointer conversion'),
+        ('int f(int (int)[3]);', 'function return type'),
         ('int f(void) { int g(int); return 0; }', 'block-scope function declarations'),
         ('int f(void) { return (int ())0; }', 'cast target must be a scalar type'),
         ('int (*row(int (*)[3]))[3]; int (*row(int (*)[3]))[4];', 'incompatible function'),
         ('int (*row(int (*)[]))[]; int (*row(int (*)[]))[3]; int (*row(int (*)[]))[4];', 'incompatible function'),
         ('int (f)(int x,int x);', 'duplicate parameter name'),
         ('int (f)(int x) { int x; return 0; }', 'redeclaration'),
-        ('int f(int (*)(int));', 'function pointers are not supported yet'),
+        ('int f(int (*)(int)); int f(int (*)(long));', 'incompatible function'),
     ]
     for text, message in rejected:
         source.write_text(text)

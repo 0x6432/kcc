@@ -250,3 +250,10 @@ Exact 64/65 flat function layers and shared nested-parameter recursion limits
 pass compile-only. Earlier function grouping/pointer negatives remain invalid
 under explicit semantic unsupported-feature diagnostics instead of parser-only
 errors. Function pointer values/decay/indirect calls remain the next increment.
+
+### M14f function pointers and indirect calls
+
+Concrete designators/decay, compatible function pointers, function-parameter
+adjustment, callbacks/factories and direct/indirect fixed calls are implemented.
+No object/function conversions, function pointer arithmetic/ordering, variadics
+or null integer constants are implied. Void remains next.

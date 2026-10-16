@@ -169,8 +169,18 @@ static size_t codegen_pointer_index(struct codegen *codegen,
 /* Object lvalues produce addresses; value-context loads are separate nodes. */
 static size_t codegen_address(struct codegen *codegen, const struct ast_expression *expression)
 {
-	assert(expression->is_lvalue);
+	assert(expression->is_lvalue || expression->type->kind == type_kind_function);
 	switch (expression->kind) {
+	case expression_function_designator: {
+		const struct ast_function_designator_expression *function =
+			(const struct ast_function_designator_expression *)expression;
+		struct token name = function->function->name;
+		size_t result = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =l copy $%.*s\n", result, (int)name.length,
+			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		return result;
+	}
 	case expression_string: {
 		const struct ast_string_expression *string = (const struct ast_string_expression *)expression;
 		size_t result = codegen->next_temporary++;
@@ -278,20 +288,31 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_call: {
 		const struct ast_call_expression *node =
 			(const struct ast_call_expression *)expression;
-		struct token name = node->function->name;
 		size_t arguments[ast_max_arguments];
+		size_t target = 0;
 		size_t count = 0;
 		size_t result;
 
+		/* A direct target is a pure named designator. Computed targets evaluate
+		 * once before the arguments, one of C's permitted evaluation orders.
+		 */
+		if (!node->function)
+			target = codegen_expression(codegen, node->callee);
 		/* Finish each argument's IL, including branches, before the call line. */
 		for (const struct ast_argument *argument = node->arguments; argument;
 			argument = argument->next)
 			arguments[count++] = codegen_expression(codegen, argument->value);
 		assert(count == node->argument_count && count <= ast_max_arguments);
 		result = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =%s call $%.*s(", result, qbe_abi_type(expression->type),
-			(int)name.length,
-			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		emit(codegen, "\t%%t%zu =%s call ", result, qbe_abi_type(expression->type));
+		if (node->function) {
+			struct token name = node->function->name;
+
+			emit(codegen, "$%.*s(", (int)name.length,
+				(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		} else {
+			emit(codegen, "%%t%zu(", target);
+		}
 		count = 0;
 		for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
 			emit(codegen, "%s%s %%t%zu", count ? ", " : "", qbe_abi_type(argument->value->type), arguments[count]);
@@ -404,6 +425,12 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_logical:
 		return codegen_logical(codegen,
 			(const struct ast_logical_expression *)expression);
+	case expression_function_decay: {
+		const struct ast_function_decay_expression *node =
+			(const struct ast_function_decay_expression *)expression;
+
+		return codegen_address(codegen, node->operand);
+	}
 	case expression_array_decay: {
 		const struct ast_array_decay_expression *node =
 			(const struct ast_array_decay_expression *)expression;
@@ -429,6 +456,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 		return value;
 	}
+	case expression_function_designator:
 	case expression_string:
 	case expression_subscript:
 	case expression_name:

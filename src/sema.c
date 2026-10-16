@@ -153,11 +153,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!referent)
 			return NULL;
-		if (referent->kind == type_kind_function) {
-			diagnostic_error(sema->diagnostics, syntax->location, "function pointers are not supported yet");
-			return NULL;
-		}
-		if (!type_is_object(referent)) {
+		if (!type_is_object(referent) && referent->kind != type_kind_function) {
 			diagnostic_error(sema->diagnostics, syntax->location, "pointer referent must be an object type");
 			return NULL;
 		}
@@ -187,11 +183,6 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 			if (!declared)
 				return NULL;
-			if (declared->kind == type_kind_function) {
-				diagnostic_error(sema->diagnostics, parameter->location,
-					"function parameter adjustment is not supported yet");
-				return NULL;
-			}
 			parameter->type = adjust_parameter_type(sema, declared, parameter->location);
 			if (!parameter->type)
 				return NULL;
@@ -248,12 +239,16 @@ static const struct type *adjust_parameter_type(struct sema *sema,
 	const struct array_type *array;
 	struct pointer_type *pointer;
 
-	if (declared->kind != type_kind_array)
+	if (declared->kind == type_kind_array) {
+		array = (const struct array_type *)declared;
+		pointer = type_new_pointer(sema->arena, array->element);
+	} else if (declared->kind == type_kind_function) {
+		pointer = type_new_pointer(sema->arena, declared);
+	} else {
 		return declared;
-	array = (const struct array_type *)declared;
-	pointer = type_new_pointer(sema->arena, array->element);
+	}
 	if (!pointer) {
-		diagnostic_error(sema->diagnostics, location, "out of memory adjusting array parameter");
+		diagnostic_error(sema->diagnostics, location, "out of memory adjusting parameter");
 		return NULL;
 	}
 	return &pointer->type;
@@ -407,34 +402,40 @@ static bool sema_expression(struct sema *sema,
 	switch (expression->kind) {
 	case expression_call: {
 		struct ast_call_expression *node = (struct ast_call_expression *)expression;
-		struct ast_name_expression *callee;
+		const struct pointer_type *pointer;
 		const struct function_parameter_type *parameter;
 
-		if (node->callee->kind != expression_name) {
-			diagnostic_error(sema->diagnostics, node->callee->location,
-				"only direct calls to named functions are supported");
+		/* Retain the useful undeclared bare-call diagnostic before name typing. */
+		if (node->callee->kind == expression_name) {
+			struct ast_name_expression *name = (struct ast_name_expression *)node->callee;
+
+			if (!find_local(sema, name->name) && !find_function(sema, name->name)) {
+				diagnostic_error(sema->diagnostics, name->expression.location, "call to undeclared function");
+				return false;
+			}
+		}
+		if (!sema_expression(sema, &node->callee, true))
+			return false;
+		if (node->callee->type->kind != type_kind_pointer ||
+			((const struct pointer_type *)node->callee->type)->referent->kind != type_kind_function) {
+			diagnostic_error(sema->diagnostics, node->callee->location, "called expression is not a function pointer");
 			return false;
 		}
-		callee = (struct ast_name_expression *)node->callee;
-		if (find_local(sema, callee->name)) {
-			diagnostic_error(sema->diagnostics, node->callee->location,
-				"called identifier denotes a local object, not a function");
-			return false;
+		pointer = (const struct pointer_type *)node->callee->type;
+		node->signature = (const struct function_type *)pointer->referent;
+		if (node->callee->kind == expression_function_decay) {
+			struct ast_function_decay_expression *decay = (struct ast_function_decay_expression *)node->callee;
+
+			if (decay->operand->kind == expression_function_designator)
+				node->function = ((struct ast_function_designator_expression *)decay->operand)->function;
 		}
-		node->function = find_function(sema, callee->name);
-		if (!node->function) {
-			diagnostic_error(sema->diagnostics, node->callee->location,
-				"call to undeclared function");
-			return false;
-		}
-		node->callee->type = &node->function->type->type;
-		if (node->argument_count != node->function->type->parameter_count) {
+		if (node->argument_count != node->signature->parameter_count) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"argument count does not match function signature");
 			return false;
 		}
-		result_type = node->function->type->return_type;
-		parameter = node->function->type->parameters;
+		result_type = node->signature->return_type;
+		parameter = node->signature->parameters;
 		expression->depth = node->callee->depth + 1;
 		for (struct ast_argument *argument = node->arguments; argument;
 			argument = argument->next) {
@@ -453,8 +454,8 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, false))
 			return false;
-		if (!node->operand->is_lvalue) {
-			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue");
+		if (!node->operand->is_lvalue && node->operand->type->kind != type_kind_function) {
+			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
 			return false;
 		}
 		pointer = type_new_pointer(sema->arena, node->operand->type);
@@ -504,7 +505,7 @@ static bool sema_expression(struct sema *sema,
 		}
 		pointer = (const struct pointer_type *)node->operand->type;
 		result_type = pointer->referent;
-		expression->is_lvalue = true;
+		expression->is_lvalue = result_type->kind != type_kind_function;
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
@@ -543,13 +544,26 @@ static bool sema_expression(struct sema *sema,
 			(struct ast_name_expression *)expression;
 
 		node->declaration = find_local(sema, node->name);
-		if (!node->declaration) {
-			diagnostic_error(sema->diagnostics, expression->location,
-				"use of undeclared identifier");
-			return false;
+		if (node->declaration) {
+			result_type = node->declaration->type;
+			expression->is_lvalue = true;
+		} else {
+			struct function_symbol *function = find_function(sema, node->name);
+			struct ast_function_designator_expression *designator;
+
+			if (!function) {
+				diagnostic_error(sema->diagnostics, expression->location, "use of undeclared identifier");
+				return false;
+			}
+			designator = ast_new_function_designator(sema->arena, expression->location, function);
+			if (!designator) {
+				diagnostic_error(sema->diagnostics, expression->location, "out of memory creating function designator");
+				return false;
+			}
+			expression = &designator->expression;
+			*expression_slot = expression;
+			result_type = &function->type->type;
 		}
-		result_type = node->declaration->type;
-		expression->is_lvalue = true;
 		break;
 	}
 	case expression_cast: {
@@ -612,6 +626,12 @@ static bool sema_expression(struct sema *sema,
 					"pointer comparison requires compatible pointer operands; null constants are not supported yet");
 				return false;
 			}
+			if (node->operation != binary_equal && node->operation != binary_not_equal &&
+				!type_is_object(((const struct pointer_type *)node->left->type)->referent)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"relational comparison requires object pointers");
+				return false;
+			}
 			result_type = &type_int;
 		} else {
 			if (!convert_expression(sema, &node->left, type_integer_promotion(node->left->type)) ||
@@ -669,6 +689,8 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_function_designator:
+	case expression_function_decay:
 	case expression_pointer_offset:
 	case expression_pointer_difference:
 	case expression_conversion:
@@ -682,7 +704,23 @@ static bool sema_expression(struct sema *sema,
 	if (!check_expression_depth(sema, expression))
 		return false;
 
-	if (value_required && expression->type->kind == type_kind_array) {
+	if (value_required && expression->type->kind == type_kind_function) {
+		struct pointer_type *pointer = type_new_pointer(sema->arena, expression->type);
+		struct ast_function_decay_expression *decay;
+
+		if (!pointer) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating function decay type");
+			return false;
+		}
+		decay = ast_new_function_decay(sema->arena, expression, &pointer->type);
+		if (!decay) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory inserting function decay");
+			return false;
+		}
+		if (!check_expression_depth(sema, &decay->expression))
+			return false;
+		*expression_slot = &decay->expression;
+	} else if (value_required && expression->type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)expression->type;
 		struct pointer_type *pointer = type_new_pointer(sema->arena, array->element);
 		struct ast_array_decay_expression *decay;

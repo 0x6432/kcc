@@ -16,6 +16,8 @@ enum expression_kind {
 	expression_indirection,
 	expression_subscript,
 	expression_name,
+	expression_function_designator,
+	expression_function_decay,
 	expression_unary,
 	expression_binary,
 	expression_pointer_offset,
@@ -101,6 +103,16 @@ struct ast_name_expression {
 	struct ast_local_declaration *declaration;
 };
 
+struct ast_function_designator_expression {
+	struct ast_expression expression;
+	struct function_symbol *function;
+};
+
+struct ast_function_decay_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
+};
+
 struct ast_argument {
 	struct ast_expression *value;
 	struct ast_argument *next;
@@ -111,7 +123,8 @@ struct ast_call_expression {
 	struct ast_expression *callee;
 	struct ast_argument *arguments;
 	size_t argument_count;
-	struct function_symbol *function;
+	struct function_symbol *function; /* Non-NULL only for a pure direct target. */
+	const struct function_type *signature;
 };
 
 enum unary_operator {
@@ -416,6 +429,10 @@ struct ast_function_type_syntax *ast_new_function_type_syntax(struct arena *aren
 	struct source_location location, struct ast_type_syntax *return_syntax);
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *element, bool has_bound, struct token bound);
+struct ast_function_designator_expression *ast_new_function_designator(struct arena *arena,
+	struct source_location location, struct function_symbol *function);
+struct ast_function_decay_expression *ast_new_function_decay(struct arena *arena,
+	struct ast_expression *operand, const struct type *pointer_type);
 struct ast_array_decay_expression *ast_new_array_decay(struct arena *arena,
 	struct ast_expression *operand, const struct type *pointer_type);
 struct ast_call_expression *ast_new_call(struct arena *arena,

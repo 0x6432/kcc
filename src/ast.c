@@ -635,3 +635,38 @@ struct ast_translation_unit *ast_new_translation_unit(struct arena *arena,
 		*node = (struct ast_translation_unit) { .declarations = declarations };
 	return node;
 }
+
+struct ast_function_designator_expression *ast_new_function_designator(struct arena *arena,
+	struct source_location location, struct function_symbol *function)
+{
+	struct ast_function_designator_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_function_designator_expression) {
+			.expression = {
+				.kind = expression_function_designator,
+				.location = location,
+				.depth = 1,
+			},
+			.function = function,
+		};
+	return node;
+}
+
+struct ast_function_decay_expression *ast_new_function_decay(struct arena *arena,
+	struct ast_expression *operand, const struct type *pointer_type)
+{
+	struct ast_function_decay_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_function_decay_expression) {
+			.expression = {
+				.kind = expression_function_decay,
+				.location = operand->location,
+				.type = pointer_type,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
+		};
+	return node;
+}

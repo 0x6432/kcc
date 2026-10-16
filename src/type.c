@@ -127,7 +127,7 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 {
 	struct pointer_type *pointer = arena_alloc(arena, sizeof(*pointer));
 
-	assert(type_is_object(referent));
+	assert(type_is_object(referent) || referent->kind == type_kind_function);
 	if (pointer)
 		*pointer = (struct pointer_type) {
 			.type = { type_kind_pointer },

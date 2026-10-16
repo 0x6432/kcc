@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14e. Read the latest entries together with README.md and
+Current milestone: M14f. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1074,3 +1074,13 @@ objects/groups, general void types, variadics, qualifiers and typedefs. Function
 suffix layers are bounded to 64. Shared declarator recursion also covers nested
 parameter types, so new parameter lists cannot reset the 64 nested-edge budget.
 The existing local 64/65 grouping, pointer and dimension boundaries remain tested.
+
+## M14f
+
+Function designators and explicit decay support compatible function pointer
+values, adjusted function parameters, callbacks/factories and indirect fixed
+calls. Function pointers have no arithmetic, ordering or object stride. No
+object/function pointer conversions, integer null constants or incompatible
+function casts are added. Void, variadics, qualifiers, typedefs, block function
+declarations and file objects remain unsupported. Typed expression depth stays
+128; explicit callee decay participates rather than raising the bound.

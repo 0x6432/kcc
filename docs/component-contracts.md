@@ -1158,3 +1158,14 @@ are separately bounded. Sema resolves one cached function graph, adjusts arrays
 and checks return/parameter categories before constructing signatures. Composite
 symbol graphs do not rewrite syntax caches. Existing fixed call/return QBE paths
 need no special array-pointer-return representation.
+
+## M14f designators and calls
+
+Concrete function-designator nodes identify symbols; concrete decay nodes
+produce pointers without an object load. A call stores its resolved signature
+snapshot and an optional direct symbol only for a pure named designator. Other
+callees evaluate exactly once before arguments. Address-of suppresses decay;
+&* cancellation forwards its pointer. Function parameters adjust once, keeping
+declared syntax separate from effective types. QBE indirect targets and narrow
+return canonicalization share the fixed-call ABI. Function referents never
+reach object layout or pointer offset helpers.

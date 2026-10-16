@@ -1046,3 +1046,16 @@ syntax/cache/composite/view units, exact function/nested-type budgets and bounde
 sanitizer fuzz. Full isolated/remote checks remain pending. M14f function
 designators/pointers and indirect fixed calls are designed. M14b 1bfd4a9 passed
 exact-source CI 38833251538; later source runs remain separate.
+
+## M14f tested source checkpoint
+
+Full GCC regression/QBE suites passed, with 22 targeted runtime programs under
+both GCC and Clang. Callback/factory ABI checks cover both linkage directions
+for all primitive/pointer leaves, mixed eight-argument stack ABI, six dirty
+narrow-return assembly stubs, null &* cancellation and exact typed call depth.
+Bounded sanitized fuzz passed 23,769 lexer and 68,371 pipeline runs (26 seconds
+each); arbitrary fuzz programs were never executed. The existing integer-call
+negative now expects the more precise not-a-function-pointer diagnostic.
+Full isolated matrices and exact-source remote CI remain pending for this
+checkpoint. Next M14g void types/functions/discards is designed in
+m14-void-functions.md. Function pointer design is m14-function-pointer-values.md.

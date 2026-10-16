@@ -333,7 +333,9 @@ static void test_function_symbols(void)
 	assert(call->expression.kind == expression_call);
 	assert(call->function == prototype->symbol);
 	assert(call->expression.type == &type_int);
-	assert(call->callee->type->kind == type_kind_function);
+	assert(call->callee->kind == expression_function_decay && call->callee->type->kind == type_kind_pointer);
+	assert(&call->signature->type == prototype->type_syntax->syntax.type ||
+		type_compatible(&call->signature->type, prototype->type_syntax->syntax.type));
 	item = (struct ast_statement_item *)definition->body->items;
 	call = (struct ast_call_expression *)
 		((struct ast_return_statement *)item->statement)->value;
@@ -1757,8 +1759,68 @@ static void test_function_declarator_syntax_tree(void)
 	source_destroy(&source);
 }
 
+static void test_function_pointer_expression_tree(void)
+{
+	const char *text = "int apply(int cb(int),int x) { return cb(x); } "
+		"int identity(int x) { return x; } int main(void) { int (*p)(int)=identity; return apply(p,42); }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *apply;
+	struct ast_function *identity;
+	struct ast_function *main_function;
+	struct ast_parameter *callback;
+	struct ast_local_declaration *p;
+	struct ast_call_expression *call;
+	struct ast_statement_item *item;
+	struct ast_function_decay_expression *decay;
+	struct ast_function_designator_expression *designator;
+	struct ast_load_expression *load;
+	const struct pointer_type *pointer;
+
+	assert(source_from_bytes(&source, "callbacks.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	apply = first_function(unit);
+	identity = (struct ast_function *)apply->external.next;
+	main_function = (struct ast_function *)identity->external.next;
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	callback = apply->declaration->parameters;
+	assert(callback->type_syntax->kind == type_syntax_function && callback->type_syntax->type->kind == type_kind_function);
+	assert(callback->type->kind == type_kind_pointer && callback->local->type == callback->type);
+	pointer = (const struct pointer_type *)callback->type;
+	assert(pointer->referent == callback->type_syntax->type && !type_is_object(pointer->referent));
+	assert(type_object_size(&pointer->type) == 8);
+	item = (struct ast_statement_item *)apply->body->items;
+	call = (struct ast_call_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(call->expression.kind == expression_call && !call->function && call->expression.depth == 3);
+	assert(&call->signature->type == pointer->referent && call->signature->parameter_count == 1);
+	load = (struct ast_load_expression *)call->callee;
+	assert(load->expression.kind == expression_load && ((struct ast_name_expression *)load->operand)->declaration == callback->local);
+	p = (struct ast_local_declaration *)main_function->body->items;
+	decay = (struct ast_function_decay_expression *)p->initializer;
+	assert(decay->expression.kind == expression_function_decay && decay->expression.depth == 2);
+	assert(decay->expression.type->kind == type_kind_pointer && type_compatible(decay->expression.type, p->type));
+	designator = (struct ast_function_designator_expression *)decay->operand;
+	assert(designator->expression.kind == expression_function_designator && designator->expression.depth == 1);
+	assert(designator->function == identity->declaration->symbol && !designator->expression.is_lvalue);
+	assert(designator->expression.type->kind == type_kind_function);
+	item = (struct ast_statement_item *)p->item.next;
+	call = (struct ast_call_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(call->function == apply->declaration->symbol && call->callee->kind == expression_function_decay);
+	assert(call->expression.depth == 3 && call->signature->parameter_count == 2);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_function_pointer_expression_tree();
 	test_function_declarator_syntax_tree();
 	test_unnamed_definition_parameter_tree();
 	test_local_declaration_list_tree();

@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14e implementation: concrete fixed-function declarator syntax/array-pointer returns,
+M14f implementation: explicit function designators/decay, callback values and
+indirect fixed calls; concrete concrete fixed-function declarator syntax/array-pointer returns,
 C23 unnamed definitions with positional ABI and no fake spills,
 grouped local/for-header declarators,
 incomplete array referent pointers and composite declarations,
@@ -29,8 +30,8 @@ external flock. Logs/snapshots are in /data/tools and /data/validation-* outside
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14f function designators/pointers and indirect fixed calls, designed in
-m14-function-pointer-values.md.
+Next: M14g void types/functions and discarded expressions, designed in
+m14-void-functions.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1518,3 +1519,16 @@ diagnostics. Sanitized bounded fuzz passed 23977 lexer + 71669 pipeline inputs
 executes. Full isolated/remote checks remain pending. M14f function designators,
 compatible pointer values and indirect fixed calls are pre-designed. M14b
 1bfd4a9 passed exact-source CI 38833251538; later runs remain independent.
+
+## M14f tested source checkpoint
+
+Full GCC regression/QBE suites passed, with 22 targeted runtime programs under
+both GCC and Clang. Callback/factory ABI checks cover both linkage directions
+for all primitive/pointer leaves, mixed eight-argument stack ABI, six dirty
+narrow-return assembly stubs, null &* cancellation and exact typed call depth.
+Bounded sanitized fuzz passed 23,769 lexer and 68,371 pipeline runs (26 seconds
+each); arbitrary fuzz programs were never executed. The existing integer-call
+negative now expects the more precise not-a-function-pointer diagnostic.
+Full isolated matrices and exact-source remote CI remain pending for this
+checkpoint. Next M14g void types/functions/discards is designed in
+m14-void-functions.md. Function pointer design is m14-function-pointer-values.md.
