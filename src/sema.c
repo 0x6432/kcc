@@ -20,6 +20,11 @@ struct loop_context {
 	struct ast_statement *statement;
 };
 
+struct goto_reference {
+	struct ast_goto_statement *statement;
+	struct goto_reference *next;
+};
+
 struct label_binding {
 	struct ast_label *label;
 	struct label_binding *next;
@@ -33,6 +38,8 @@ struct sema {
 	struct loop_context *loop;
 	struct label_binding *labels;
 	size_t label_count;
+	struct goto_reference *gotos;
+	size_t goto_count;
 	size_t local_count;
 	uint64_t local_storage;
 	struct function_symbol *functions;
@@ -1452,13 +1459,54 @@ static bool sema_label(struct sema *sema, struct ast_label *label)
 	}
 	*binding = (struct label_binding) { .label = label, .next = sema->labels };
 	sema->labels = binding;
-	sema->label_count++;
+	label->index = sema->label_count++;
+	return true;
+}
+
+static bool sema_goto(struct sema *sema, struct ast_goto_statement *node)
+{
+	struct goto_reference *reference;
+
+	if (sema->goto_count == ast_max_gotos) {
+		diagnostic_error(sema->diagnostics, node->statement.location, "function exceeds goto limit (4096)");
+		return false;
+	}
+	reference = arena_alloc(sema->arena, sizeof(*reference));
+	if (!reference) {
+		diagnostic_error(sema->diagnostics, node->statement.location, "out of memory recording goto");
+		return false;
+	}
+	*reference = (struct goto_reference) { .statement = node, .next = sema->gotos };
+	sema->gotos = reference;
+	sema->goto_count++;
+	return true;
+}
+
+/* Only the complete function label namespace can resolve forward references. */
+static bool resolve_gotos(struct sema *sema)
+{
+	for (struct goto_reference *reference = sema->gotos; reference; reference = reference->next) {
+		struct ast_goto_statement *node = reference->statement;
+		struct label_binding *binding;
+
+		for (binding = sema->labels; binding; binding = binding->next)
+			if (same_name(binding->label->name, node->name))
+				break;
+		if (!binding) {
+			diagnostic_error(sema->diagnostics, node->name.location,
+				"goto target is not defined in this function");
+			return false;
+		}
+		node->target = binding->label;
+	}
 	return true;
 }
 
 static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 {
 	switch (statement->kind) {
+	case statement_goto:
+		return sema_goto(sema, (struct ast_goto_statement *)statement);
 	case statement_labeled: {
 		struct ast_labeled_statement *node = (struct ast_labeled_statement *)statement;
 
@@ -1638,6 +1686,8 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	sema->function = definition;
 	sema->labels = NULL;
 	sema->label_count = 0;
+	sema->gotos = NULL;
+	sema->goto_count = 0;
 	sema->local_count = 0;
 	sema->local_storage = 0;
 	sema->scope = &scope;
@@ -1658,12 +1708,16 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 			goto done;
 	}
 	/* Parameters and outermost body declarations inhabit the same scope. */
-	success = sema_block_items(sema, definition->body->items);
+	success = sema_block_items(sema, definition->body->items) && resolve_gotos(sema);
+	if (success)
+		definition->label_count = sema->label_count;
 done:
 	sema->scope = NULL;
 	sema->function = NULL;
 	sema->labels = NULL;
 	sema->label_count = 0;
+	sema->gotos = NULL;
+	sema->goto_count = 0;
 	return success;
 }
 

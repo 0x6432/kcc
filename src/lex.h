@@ -40,6 +40,7 @@ enum token_kind {
 	token_for,
 	token_break,
 	token_continue,
+	token_goto,
 	token_left_paren,
 	token_right_paren,
 	token_left_bracket,

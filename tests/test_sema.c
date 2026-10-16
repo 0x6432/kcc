@@ -3005,8 +3005,63 @@ static void test_named_label_tree(void)
 }
 
 
+static void test_goto_tree(void)
+{
+	const char *text = "int f(void) { goto tail; head: if(0) inner: goto head; tail: return 42; } "
+		"int g(void) { goto head; head: return 1; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_goto_statement *forward;
+	struct ast_goto_statement *backward;
+	struct ast_block_label *head;
+	struct ast_block_label *tail;
+	struct ast_if_statement *branch;
+	struct ast_labeled_statement *inner;
+
+	assert(source_from_bytes(&source, "goto.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	forward = (struct ast_goto_statement *)item->statement;
+	assert(forward->statement.kind == statement_goto && !forward->target);
+	assert(forward->name.location.offset == (size_t)(strstr(text, "goto tail") + 5 - text));
+	head = (struct ast_block_label *)item->item.next;
+	assert(head->item.kind == block_item_label);
+	item = (struct ast_statement_item *)head->item.next;
+	branch = (struct ast_if_statement *)item->statement;
+	assert(branch->statement.kind == statement_if);
+	inner = (struct ast_labeled_statement *)branch->then_branch;
+	assert(inner->statement.kind == statement_labeled);
+	backward = (struct ast_goto_statement *)inner->body;
+	assert(backward->statement.kind == statement_goto && !backward->target);
+	tail = (struct ast_block_label *)item->item.next;
+	assert(tail->item.kind == block_item_label);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(function->label_count == 3 && !function->locals && !unit->strings);
+	assert(forward->target == tail->label && backward->target == head->label);
+	assert(head->label->index == 0 && inner->label->index == 1 && tail->label->index == 2);
+	function = (struct ast_function *)function->external.next;
+	item = (struct ast_statement_item *)function->body->items;
+	forward = (struct ast_goto_statement *)item->statement;
+	head = (struct ast_block_label *)item->item.next;
+	assert(function->label_count == 1 && forward->target == head->label && head->label->index == 0);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_goto_tree();
 	test_named_label_tree();
 	test_integer_compound_tree();
 	test_compound_assignment_tree();

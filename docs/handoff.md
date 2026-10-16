@@ -2,19 +2,30 @@
 
 ## Current checkpoint
 
-M19e1 named labels complete: full normal/QBE, both-host targeted ASan/UBSan
-lexer/sema and named-label/integer/additive/prefix/postfix runtime/ABI passed.
-Bounded sanitized fuzz completed 22,997 lexer and 58,129 pipeline inputs in
-26 seconds each without reported failure. Parser still uses one demand peek;
-identifier-leading expressions resume postfix/Pratt continuations with unchanged
-depth accounting. Labels have a separate function-wide namespace and distinct
-block/secondary representations. Next: M19e2 goto, designed in m19-goto.md.
-Prepared scripts/tests/unit outside repo are /data/tools/implement-m19e2.py,
-/data/tools/test_goto.py and /data/tools/m19e2-unit.c, not yet applied. Verify
-current git hash and snapshot before applying. Never execute generated fuzz C.
-Previous pushed checkpoint b8bd4e0 is M19d2; its remote/isolated full matrices are
-pending. M19c2 4da4287 remote CI 38883017908 and M13m isolated GCC/Clang normal+
-ASan/UBSan full matrices passed. Later results require exact final markers.
+M19e2 direct goto complete. Full normal regression and QBE suites passed.
+Both-host targeted ASan/UBSan lexer/sema units and goto/named-label/integer-
+compound/additive/prefix/postfix runtime/ABI passed. Bounded sanitized fuzz
+completed 22,770 lexer and 54,016 pipeline inputs in 26 seconds each without
+reported failure. No generated fuzz C was executed.
+
+STOPPED at the user's request after completing this milestone. Do not begin
+another milestone until requested. Next work is switch/case/default; its design
+and implementation have NOT been started. Scripts implement-m19e2.py and
+test_goto.py outside the repo are already applied; never reapply blindly.
+Goto resolution is function-local after full-body checking; concrete targets
+keep source-order indices. Codegen reserves label IDs and visits code after
+terminators without false fallthrough, including nested branch/loop targets.
+The only full-suite failure was a stale raw-IL test expecting dead source to
+disappear; the exact expectation now retains three returns, with the original
+no-false-merge-jump assertion intact. The complete chain then passed.
+
+M19d1 e1e5eb3 remote CI 38884494636 passed every job; M19d2 and M19e1 remote
+runs were still running at last check. M13m isolated GCC/Clang full normal+
+ASan/UBSan matrices passed; M23a2 isolated GCC passed, Clang still pending.
+Newer isolated matrices remain queued under /data/tools/kcc-validation.lock.
+Current exact-source M19e2 isolated/remote matrices are separate pending checks;
+inspect final markers before claiming success. Logs: /data/tools/m19e2-tests.log,
+m19e2-fuzz.log, m19e2-sanitized-targets.log, m19e2-final-validation.log.
 
 ### Earlier foundation (chronological)
 

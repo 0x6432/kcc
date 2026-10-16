@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels implemented; goto/switch rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels and M19e2 direct goto implemented; switch rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1677,3 +1677,38 @@ runtime/ABI suites passed. Bounded sanitized fuzz completed 22,997 lexer and
 58,129 pipeline inputs in 26 seconds each without reported failure. No generated
 C was executed. Full isolated/remote matrices are tracked separately. Next:
 M19e2 goto resolution/target lowering per the prewritten m19-goto.md design.
+
+## M19e2 direct goto
+
+Concrete goto nodes keep identifier locations and resolve original label pointers
+after the whole function body is checked, including dead syntax. Labels receive
+source-order indices; functions retain their checked label count. References are
+bounded to 4096 per function, independently of 512 labels and block-item limits.
+Codegen reserves target IDs, tracks the current numeric block for phi nodes and
+continues after terminators using predecessor-free blocks, preserving nested
+targets without inventing fallthrough. Initializers execute only when reached.
+Computed goto, switch/case/default, attributes and VLA jump-scope rules remain
+unsupported; this does not claim full C23 control-flow support.
+
+Focused validation passed on both hosts: lexer/sema units, 22 strict original
+native programs, six native missing-target constraints, syntax and 4096/4097
+reference boundaries, and 24 both-direction mixed-stack primitive-result ABI
+arrangements. Both original C23 placement programs run through kcc/QBE; GCC
+agrees, while Clang 15 has two exact labelled grammar gaps, not agreements.
+Named-label regression also passed both hosts. Full normal/QBE, sanitizer and
+bounded fuzz validation follow; only final markers count as completed runs.
+
+The first full run exposed an obsolete raw-IL test expecting post-terminator
+syntax to disappear. With goto it must remain in predecessor-free blocks until
+QBE reachability removal. Updated only that exact return-count expectation
+(two to three), retaining the no-false-merge-jump assertion; rerun the complete
+chain. No compiler semantics were relaxed to satisfy the old fixture.
+
+M19e2 final local validation: complete normal regression and QBE suites passed.
+Both GCC/Clang ASan/UBSan lexer/sema units and goto/named-label/integer-compound/
+additive/prefix/postfix runtime/ABI suites passed. Bounded sanitized fuzz completed
+22,770 lexer and 54,016 pipeline inputs in 26 seconds each with no reported
+failure. No generated fuzz C or constraint-invalid/runtime-UB source was executed.
+M19d1 e1e5eb3 remote CI 38884494636 passed every job. Later remote and full
+isolated matrices remain separately tracked, not claimed as completed.
+User requested a stop after this milestone; no next milestone was started.

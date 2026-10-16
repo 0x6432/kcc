@@ -1407,3 +1407,15 @@ scopes; duplicates are checked through skipped/unreachable syntax and the
 namespace resets between functions. Labels add no local/string object. Codegen
 ignores standalone labels and propagates child termination for labeled statements
 without goto; a future jump-target change must revisit unreachable traversal.
+
+## M19e2 direct goto
+
+Concrete goto nodes keep identifier locations and resolve original label pointers
+after the whole function body is checked, including dead syntax. Labels receive
+source-order indices; functions retain their checked label count. References are
+bounded to 4096 per function, independently of 512 labels and block-item limits.
+Codegen reserves target IDs, tracks the current numeric block for phi nodes and
+continues after terminators using predecessor-free blocks, preserving nested
+targets without inventing fallthrough. Initializers execute only when reached.
+Computed goto, switch/case/default, attributes and VLA jump-scope rules remain
+unsupported; this does not claim full C23 control-flow support.

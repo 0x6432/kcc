@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M19c2. Read the latest entries together with README.md and
+Current milestone: M19e2. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1481,3 +1481,15 @@ Native Clang 15 lacks the two C23 placement forms: exact expected-expression/
 expected-statement diagnostics are labelled grammar gaps, never native agreements.
 Original sources still compile/run through kcc/QBE; no null-statement rewrite
 is used to manufacture native C23 support.
+
+## M19e2 direct goto
+
+Concrete goto nodes keep identifier locations and resolve original label pointers
+after the whole function body is checked, including dead syntax. Labels receive
+source-order indices; functions retain their checked label count. References are
+bounded to 4096 per function, independently of 512 labels and block-item limits.
+Codegen reserves target IDs, tracks the current numeric block for phi nodes and
+continues after terminators using predecessor-free blocks, preserving nested
+targets without inventing fallthrough. Initializers execute only when reached.
+Computed goto, switch/case/default, attributes and VLA jump-scope rules remain
+unsupported; this does not claim full C23 control-flow support.

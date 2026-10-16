@@ -407,3 +407,15 @@ N3096 6.8.1 and 6.8.2 subset: named labels are function-scoped and unique, in a
 separate namespace. C23 standalone block-item labels act as null statements and
 may precede declarations or block end; secondary labels retain a child statement.
 No goto/case/default/switch/attribute support is claimed in this foundation.
+
+## M19e2 direct goto
+
+Concrete goto nodes keep identifier locations and resolve original label pointers
+after the whole function body is checked, including dead syntax. Labels receive
+source-order indices; functions retain their checked label count. References are
+bounded to 4096 per function, independently of 512 labels and block-item limits.
+Codegen reserves target IDs, tracks the current numeric block for phi nodes and
+continues after terminators using predecessor-free blocks, preserving nested
+targets without inventing fallthrough. Initializers execute only when reached.
+Computed goto, switch/case/default, attributes and VLA jump-scope rules remain
+unsupported; this does not claim full C23 control-flow support.

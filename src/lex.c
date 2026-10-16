@@ -353,7 +353,7 @@ static const struct keyword keywords[] = {
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
-	{ "continue", token_continue }, { "const", token_const },
+	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
 	{ "sizeof", token_sizeof }, { "alignof", token_alignof },
 	{ "_Alignof", token_legacy_alignof },
 	{ "static_assert", token_static_assert }, { "_Static_assert", token_legacy_static_assert },
@@ -763,6 +763,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_for: return "for";
 	case token_break: return "break";
 	case token_continue: return "continue";
+	case token_goto: return "goto";
 	case token_left_paren: return "(";
 	case token_right_paren: return ")";
 	case token_left_bracket: return "[";

@@ -398,8 +398,17 @@ static void test_integer_compound_tokens(void)
 	assert(strcmp(token_kind_name(token_shift_right_equal), ">>=") == 0);
 }
 
+static void test_goto_keyword(void)
+{
+	const enum token_kind kinds[] = { token_goto, token_identifier, token_semicolon };
+
+	check_tokens("#define JUMP goto\nJUMP target;", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_goto), "goto") == 0);
+}
+
 int main(void)
 {
+	test_goto_keyword();
 	test_integer_compound_tokens();
 	test_compound_assignment_tokens();
 	test_update_tokens();

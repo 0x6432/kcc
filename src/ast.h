@@ -45,6 +45,7 @@ enum {
 	ast_max_expression_depth = 128,
 	ast_max_statement_nesting = 128,
 	ast_max_labels = 512,
+	ast_max_gotos = 4096,
 	ast_max_block_items = 4096,
 	ast_max_locals = 256,
 	ast_max_local_storage = 1024 * 1024,
@@ -373,6 +374,7 @@ struct ast_cast_expression {
 
 enum statement_kind {
 	statement_labeled,
+	statement_goto,
 	statement_return,
 	statement_expression,
 	statement_empty,
@@ -393,6 +395,13 @@ struct ast_statement {
 /* Labels use the function's separate label namespace, never an object type. */
 struct ast_label {
 	struct token name;
+	size_t index;
+};
+
+struct ast_goto_statement {
+	struct ast_statement statement;
+	struct token name;
+	struct ast_label *target;
 };
 
 struct ast_labeled_statement {
@@ -546,6 +555,7 @@ struct ast_function {
 	const struct type *return_type;
 	struct ast_compound_statement *body;
 	struct ast_local_declaration *locals;
+	size_t label_count;
 };
 
 struct ast_translation_unit {
@@ -644,6 +654,8 @@ struct ast_cast_expression *ast_new_cast(struct arena *arena,
 	struct ast_expression *operand);
 struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	struct ast_expression *operand, const struct type *target);
+struct ast_goto_statement *ast_new_goto(struct arena *arena,
+	struct source_location location, struct token name);
 struct ast_label *ast_new_label(struct arena *arena, struct token name);
 struct ast_labeled_statement *ast_new_labeled_statement(struct arena *arena,
 	struct ast_label *label, struct ast_statement *body);

@@ -844,14 +844,35 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 	return false;
 }
 
+/* Named targets occupy 1..function->label_count, before generated CFG labels. */
+static void codegen_named_label(struct codegen *codegen, const struct ast_label *label,
+	bool terminated)
+{
+	size_t target = label->index + 1;
+
+	if (!terminated)
+		emit(codegen, "\tjmp @b%zu\n", target);
+	emit_label(codegen, target);
+}
+
 /* True means the current block has terminated, not an I/O success flag. */
 static bool codegen_statement(struct codegen *codegen,
 	const struct ast_statement *statement)
 {
 	switch (statement->kind) {
-	case statement_labeled:
-		/* Without goto, an identifier label has no effect on execution. */
-		return codegen_statement(codegen, ((const struct ast_labeled_statement *)statement)->body);
+	case statement_goto: {
+		const struct ast_goto_statement *node = (const struct ast_goto_statement *)statement;
+
+		assert(node->target);
+		emit(codegen, "\tjmp @b%zu\n", node->target->index + 1);
+		return true;
+	}
+	case statement_labeled: {
+		const struct ast_labeled_statement *node = (const struct ast_labeled_statement *)statement;
+
+		codegen_named_label(codegen, node->label, false);
+		return codegen_statement(codegen, node->body);
+	}
 	case statement_return: {
 		const struct ast_return_statement *node =
 			(const struct ast_return_statement *)statement;
@@ -911,10 +932,13 @@ static bool codegen_statement(struct codegen *codegen,
 static bool codegen_block_items(struct codegen *codegen,
 	const struct ast_block_item *item)
 {
+	bool terminated = false;
+
 	while (item) {
 		switch (item->kind) {
 		case block_item_label:
-			/* C23 standalone label is translated as a null statement. */
+			codegen_named_label(codegen, ((const struct ast_block_label *)item)->label, terminated);
+			terminated = false;
 			break;
 		case block_item_static_assertion:
 			/* Fully checked at translation time; no runtime effect or datum. */
@@ -923,6 +947,11 @@ static bool codegen_block_items(struct codegen *codegen,
 			const struct ast_local_declaration *local =
 				(const struct ast_local_declaration *)item;
 
+			if (terminated) {
+				/* Keep later nested targets without inventing a fallthrough edge. */
+				emit_label(codegen, new_label(codegen));
+				terminated = false;
+			}
 			codegen_local_initializer(codegen, local);
 			break;
 		}
@@ -930,21 +959,22 @@ static bool codegen_block_items(struct codegen *codegen,
 			const struct ast_statement_item *node =
 				(const struct ast_statement_item *)item;
 
-			if (codegen_statement(codegen, node->statement))
-				return true;
+			if (terminated)
+				emit_label(codegen, new_label(codegen));
+			terminated = codegen_statement(codegen, node->statement);
 			break;
 		}
 		}
 		item = item->next;
 	}
-	return false;
+	return terminated;
 }
 
 static bool codegen_function(FILE *stream, const struct ast_function *function)
 {
 	struct codegen codegen = {
 		.stream = stream,
-		.next_label = 1,
+		.next_label = function->label_count + 1,
 		.output_ok = true,
 	};
 	const struct ast_local_declaration *local = function->locals;

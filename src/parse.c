@@ -1558,6 +1558,23 @@ static struct ast_for_statement *parse_for_statement(struct parser *parser)
 	return node;
 }
 
+/* goto-statement ::= "goto" identifier ";" */
+static struct ast_statement *parse_goto_statement(struct parser *parser)
+{
+	struct token keyword;
+	struct token name;
+	struct ast_goto_statement *node;
+
+	if (!expect_token(parser, token_goto, "expected 'goto'", &keyword) ||
+		!expect_token(parser, token_identifier, "expected label identifier after goto", &name) ||
+		!expect_token(parser, token_semicolon, "expected ';' after goto", NULL))
+		return NULL;
+	node = ast_new_goto(parser->arena, keyword.location, name);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node ? &node->statement : NULL;
+}
+
 /* break-statement ::= "break" ";" */
 static struct ast_statement *parse_break_statement(struct parser *parser)
 {
@@ -1597,7 +1614,7 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
 /* statement ::= return-statement | expression-statement | empty-statement
  *             | compound-statement | if-statement | while-statement
  *             | break-statement | continue-statement | do-statement
- *             | for-statement | labeled-statement
+ *             | for-statement | labeled-statement | goto-statement
  */
 static struct ast_statement *parse_statement(struct parser *parser)
 {
@@ -1637,6 +1654,8 @@ static struct ast_statement *parse_statement(struct parser *parser)
 			return NULL;
 		return &node->statement;
 	}
+	if (token.kind == token_goto)
+		return parse_goto_statement(parser);
 	if (token.kind == token_break)
 		return parse_break_statement(parser);
 	if (token.kind == token_continue)

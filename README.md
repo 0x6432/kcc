@@ -6,11 +6,17 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19e2: direct `goto` resolves function-local labels after the complete body is
+checked. Forward/backward jumps and targets inside nested control flow retain
+correct fallthrough and loop contexts. Unreachable syntax remains checked and
+codegen continues through terminators to preserve later targets. Computed goto,
+switch/case/default and variably modified types remain unsupported.
+
 M19e1: named labels have a separate function-wide namespace. C23 standalone
 block labels can precede declarations or end a block; secondary labeled
 statements still require a child statement. Demand parsing keeps one peek and
-resumes postfix/Pratt parsing from consumed identifiers. Goto/switch/case/default
-remain separate increments; labels alone do not change control flow.
+resumes postfix/Pratt parsing from consumed identifiers. Switch/case/default
+remain separate increments; goto builds on this label foundation.
 
 M19d2: remaining integer `*=`, `/=`, `%=`, `&=`, `^=`, `|=`, `<<=` and `>>=`
 are supported. Shifts promote operands independently; all other integer compound

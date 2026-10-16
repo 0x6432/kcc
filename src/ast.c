@@ -523,6 +523,19 @@ struct ast_conversion_expression *ast_new_conversion(struct arena *arena,
 	return node;
 }
 
+struct ast_goto_statement *ast_new_goto(struct arena *arena,
+	struct source_location location, struct token name)
+{
+	struct ast_goto_statement *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_goto_statement) {
+			.statement = { statement_goto, location },
+			.name = name,
+		};
+	return node;
+}
+
 struct ast_label *ast_new_label(struct arena *arena, struct token name)
 {
 	struct ast_label *node = arena_alloc(arena, sizeof(*node));

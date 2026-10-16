@@ -760,7 +760,9 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     source.write_text("int main(void) { if (1) return 2; else return 3; return 9; }")
     result = subprocess.run([str(compiler), str(source)],
                             capture_output=True, text=True, timeout=5)
-    assert result.returncode == 0 and result.stdout.count("\tret ") == 2
+    # Keep the third return in a predecessor-free block: later syntax may contain
+    # a goto target. Both if branches still terminate without a false merge edge.
+    assert result.returncode == 0 and result.stdout.count("\tret ") == 3
     assert "\tjmp " not in result.stdout  # both paths terminate; no merge jump
     source.write_text("int main(void) { return (0 || 1) && (0 || 5); }")
     result = subprocess.run([str(compiler), str(source)],
