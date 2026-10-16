@@ -52,3 +52,7 @@ constraints and exact typed-depth boundaries. Add typed conversion/cast/common-
 result units, both-direction host ABI and mixed stack/callback cases, both-host
 sanitizers, full regression/QBE/fuzz/CI. Update obsolete null-rejection fixtures
 with nonzero or variable forms rather than dropping constraint coverage.
+
+Next consumer: M23a2 adds the nullptr keyword with its own distinct scalar type,
+not an integer/pointer macro alias. See m23-nullptr-constant.md for pre-implementation
+AST/type/conversion/equality/conditional decisions and declaration/header limits.

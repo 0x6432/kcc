@@ -136,7 +136,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer arithmetic ') as directory:
         ('long f(int *p,unsigned *q) { return p-q; }', 'compatible pointer'),
         ('int f(char *p,signed char *q) { return p<q; }', 'compatible pointer'),
         ('int f(int *p,int **q) { return p>=q; }', 'compatible pointer'),
-        ('int f(int *p) { return p<0; }', 'null constants'),
+        ('int f(int *p) { return p<0; }', 'compatible pointers'),
         ('int *f(int *p) { return p+1.0; }', ''),
         ('int main(void) { int x=0; (&x+1)=&x; return 0; }', 'modifiable lvalue'),
     ]

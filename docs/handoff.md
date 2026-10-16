@@ -2,6 +2,18 @@
 
 ## Current checkpoint
 
+M13m traditional null pointer constants implemented: checked integer-ICE zero,
+explicit void * zero and C23 false convert to implemented pointer types; equality
+and conditional rules preserve exact pointer types. Existing concrete conversion
+ASTs/QBE lowering are reused without treating arbitrary zero values as constants.
+M13l1 fixed ICE array bounds/prototype name scopes and M18b1/b2 integer constant
+evaluation/static assertions are also implemented. Full local normal/QBE/fuzz and
+focused both-host sanitizer checks pass; see final checkpoint entries below for
+exact counts, CI-oracle exceptions and remote/matrix status. Continue with the
+prewritten M23a2 nullptr design after committing/pushing this tested source.
+
+### Earlier foundation (chronological)
+
 M18a implementation: fixed sizeof/alignof with checked unevaluated operands;
 prior M19b conditional scalar/void values and immutable pointer composites;
 prior M23a1 C23 bool/true/false typed constants and raw macro separation;
@@ -1884,3 +1896,59 @@ The first native-oracle correction's remote Clang job progressed to the separate
 keyword-macro warning policy; a second exact-diagnostic/same-source warning
 control fixes that test, documented in m18-static-assertions.md. Neither compiler
 language acceptance nor warning policy for other tests was weakened.
+
+## M13m traditional null pointer constants
+
+Sema recognizes checked integer constant expressions with value zero, and
+explicit casts of those expressions to unqualified void *. A zero-valued local,
+assignment/comma result, arbitrary pointer, typed int * null value or pointer
+conditional result does not gain null-constant status. Invalid constant arithmetic
+is not proof of zero. C23 nullptr/nullptr_t remain a separate next milestone.
+
+Assignment-like conversions (initialization/assignment/call/return), explicit
+pointer casts, equality in both orders and conditional arms share the predicate.
+Equality handles null constants before compatible/common pointer types; relational
+comparisons still reject pointer/integer zero. Conditional arms select the exact
+other pointer type before the object/void common-type rule, preserving qualified
+objects, functions and incomplete-array pointers. Pointer+0 remains ordinary
+pointer offset arithmetic, not a null conversion. Function/object bridges and
+nonzero integer/pointer casts stay unsupported; the latter are implementation
+limits, not claimed C constraints. Pointer-to-bool conversion remains available.
+
+Existing concrete conversion/cast ASTs retain original operands, source locations,
+resolved types and depth checks. No token vectors, synthetic literal rewrites,
+extra local slots, global folding or runtime ABI adapters were added. Existing
+QBE integer extension/copy lowering was audited: this amd64 LP64 target uses
+all-zero 64-bit null pointers for implemented object/function pointer types.
+That is an explicit target representation choice, not a portable C assumption.
+
+Both-host focused tests cover 37 original curated programs, 36 strict GCC and 37
+strict Clang native agreements, 25 compile-only constraints/implementation limits,
+11 strict native constraint rejections, concrete AST/type/slot/depth invariants
+and 24 mixed-register/stack/callback cross-object ABI arrangements. Once-only
+non-null effects and selected conditional arms are checked without null calls,
+dereferences, arithmetic or incompatible calls. Existing obsolete zero-rejection
+fixtures were replaced with nonzero forms, not dropped. The ABI failure path uses
+a live caller-owned sentinel, so an argument mismatch cannot accidentally return
+null and pass. Both-host ASan/UBSan semantic/targeted results and full regression/
+fuzz outcomes follow once complete; no generated fuzz C is ever executed.
+
+A native-oracle audit found GCC 11 rejects a zero _Bool ICE in initialization,
+assignment and return, despite C23 6.3.2.3/6.6 permitting it. Clang accepts the
+same original program. Tests recognize only those three exact GCC errors, keep
+the original kcc/QBE run, report the gap and do not count a native agreement.
+An early test-generation failure was a missing parenthesis around interpolated
+conditional zero forms; grouping was fixed, not compiler precedence. Strict
+native rejection tests explicitly exclude legal-but-unimplemented cast forms.
+
+M13m final validation: full normal regression and QBE suites passed. Both-host
+ASan/UBSan semantic units and final targeted null suites passed, including the
+extra original C23 false-leaf QBE program and its exact typed conversion unit.
+Bounded sanitized fuzz ran 22,403 lexer and 63,128 pipeline inputs in
+26/26 seconds without reported failures; generated C was never executed.
+The full-suite audit found two additional obsolete zero/false rejections in void
+function and boolean tests. Both were replaced with nonzero/true cases, retaining
+constraint coverage, then the entire regression/QBE/fuzz chain was rerun.
+No partial early run was called a full pass. Full isolated and remote exact-source
+checks for this checkpoint are pending. Next: M23a2 nullptr constant with its own
+scalar type, designed before implementation in m23-nullptr-constant.md.

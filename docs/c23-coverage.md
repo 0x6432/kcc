@@ -353,3 +353,13 @@ rules; names in sizeof consume no runtime locals. Runtime VLA bounds, [*],
 static/qualified brackets, enums/constexpr and general constant consumers remain
 unsupported. Tests cover both-host strict forms, concrete typed ASTs, QBE/ABI,
 storage/recursion boundaries and sanitizer/fuzz paths.
+
+### M13m traditional null pointer constants
+
+Checked integer ICE zero and explicit void * casts of such expressions implement
+traditional null conversions. Equality accepts either order; conditionals keep
+the other pointer's exact type. Typed pointer null values are not integer/void *
+null constant forms. This LP64 target uses all-zero 64-bit null representations.
+Both-host originals/strict rejection, QBE runtime/ABI and typed limits are tested;
+one exact GCC 11 _Bool-zero oracle gap is labelled. C23 nullptr/nullptr_t, general
+integer/pointer casts, headers and other constant-expression consumers remain.

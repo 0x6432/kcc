@@ -61,8 +61,8 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer equality ') as directory:
             assert subprocess.run([str(executable)],timeout=5).returncode==42
     rejected=[('int f(int *p,unsigned *q) { return p==q; }','compatible pointer'),
               ('int f(char *p,signed char *q) { return p!=q; }','compatible pointer'),
-              ('int f(int *p) { return p==0; }','null constants'),
-              ('int f(int *p) { return 0!=p; }','null constants'),
+              ('int f(int *p) { return p==1; }','compatible pointers'),
+              ('int f(int *p) { return 1!=p; }','compatible pointers'),
               ('int f(int *p) { return p/p; }','pointer binary'),
               ('int *f(int *p) { return p*2; }','pointer binary'),
               ('int f(int *p) { return p&p; }','pointer binary')]

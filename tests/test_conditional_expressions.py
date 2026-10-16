@@ -97,7 +97,7 @@ constraints = [
     ('int main(void) { const int n=7; return 1?42:(n=0); }', 'modifiable'),
     ('void done(void) { return; } int main(void) { return done()?42:7; }', 'scalar condition'),
     ('void done(void) { return; } int main(void) { 1?done():7; return 0; }', 'incompatible conditional'),
-    ('int main(void) { int x=0; return 1?&x:0; }', 'null pointer constants'),
+    ('int main(void) { int x=0; return 1?&x:1; }', 'incompatible conditional'),
     ('int main(void) { int x=0; const int *p=&x; *(1?&x:p)=7; return 0; }', 'modifiable'),
     ('int main(void) { int x=0; long y=0; 1?&x:&y; return 0; }', 'incompatible conditional'),
     ('int main(void) { int x=0,*p=&x; const int *q=p; 1?&p:&q; return 0; }', 'incompatible conditional'),

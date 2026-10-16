@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M13m: traditional integer-ICE-zero and `(void *)` null constants now convert to
+implemented object/function pointers in initialization, assignment, calls,
+returns, equality and conditional expressions. Nonconstant zero is not a null
+constant. C23 `nullptr`, nonzero integer/pointer casts and VLAs remain later work.
+
 M13l1: fixed array bounds use checked integer constant expressions, including
 sizeof/alignof and short-circuit arithmetic. Prototype parameter names resolve
 in explicit temporary scopes without allocating runtime slots. Positive/storage

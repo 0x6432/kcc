@@ -80,8 +80,8 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer values ') as directory:
     rejected = [
         ('int *f(char *p) { return p; }','pointer conversion'),
         ('int *f(int **p) { return p; }','pointer conversion'),
-        ('int *f(int *p) { int *q=0; return p; }','pointer conversion'),
-        ('int *f(int *p) { return (int *)0; }','pointer conversion'),
+        ('int *f(int *p) { int *q=1; return p; }','pointer conversion'),
+        ('int *f(int *p) { return (int *)1; }','pointer conversion'),
         ('int f(int *p) { return (int)p; }','pointer conversion'),
         ('char *f(int *p) { return p; }','pointer conversion'),
         ('int *f(int *p) { p=1; return p; }','pointer conversion'),

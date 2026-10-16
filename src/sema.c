@@ -391,10 +391,35 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 	return false;
 }
 
+/* C23 6.3.2.3: a zero integer constant expression, or that expression
+ * explicitly cast to unqualified void *. A zero-valued object is not enough.
+ * Query only checked trees; failure is not evidence of a null constant.
+ */
+static bool is_null_pointer_constant(const struct ast_expression *expression)
+{
+	struct constant_result result;
+
+	if (expression->kind == expression_cast && expression->type->kind == type_kind_pointer) {
+		const struct type *referent = ((const struct pointer_type *)expression->type)->referent;
+
+		if (referent->kind != type_kind_void || referent->qualifiers)
+			return false;
+		expression = ((const struct ast_cast_expression *)expression)->operand;
+	}
+	if (!type_is_integer(expression->type))
+		return false;
+	result = evaluate_integer_constant(expression);
+	return result.status == constant_value && result.bits == 0;
+}
+
 /* Explicit casts do not grant assignment compatibility or adapt function ABIs. */
-static bool check_cast(struct sema *sema, const struct type *source,
+static bool check_cast(struct sema *sema, const struct ast_expression *operand,
 	const struct type *target, struct source_location location)
 {
+	const struct type *source = operand->type;
+
+	if (target->kind == type_kind_pointer && is_null_pointer_constant(operand))
+		return true;
 	if (source->kind == type_kind_pointer && target->kind == type_kind_pointer) {
 		const struct type *source_referent = ((const struct pointer_type *)source)->referent;
 		const struct type *target_referent = ((const struct pointer_type *)target)->referent;
@@ -411,7 +436,8 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 {
 	struct ast_conversion_expression *conversion;
 
-	if (!check_conversion(sema, (*slot)->type, target, (*slot)->location))
+	if (!(target->kind == type_kind_pointer && is_null_pointer_constant(*slot)) &&
+		!check_conversion(sema, (*slot)->type, target, (*slot)->location))
 		return false;
 	if (type_compatible((*slot)->type, target))
 		return true;
@@ -467,6 +493,13 @@ static bool convert_comparison_pointers(struct sema *sema, struct ast_binary_exp
 	const struct type *common;
 	bool equality = node->operation == binary_equal || node->operation == binary_not_equal;
 
+	/* Equality accepts a null constant in either position, including void *
+	 * null constants opposite function pointers. Relational operators do not.
+	 */
+	if (equality && left->kind == type_kind_pointer && is_null_pointer_constant(node->right))
+		return convert_expression(sema, &node->right, left);
+	if (equality && right->kind == type_kind_pointer && is_null_pointer_constant(node->left))
+		return convert_expression(sema, &node->left, right);
 	if (left->kind != type_kind_pointer || right->kind != type_kind_pointer ||
 		type_compatible(left, right))
 		return true;
@@ -825,7 +858,7 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "cast target must be a scalar type");
 			return false;
 		}
-		if (!check_cast(sema, node->operand->type, result_type, expression->location))
+		if (!check_cast(sema, node->operand, result_type, expression->location))
 			return false;
 		expression->depth = node->operand->depth + 1;
 		break;
@@ -880,7 +913,7 @@ static bool sema_expression(struct sema *sema,
 			if (node->left->type->kind != type_kind_pointer || node->right->type->kind != type_kind_pointer ||
 				!type_compatible(node->left->type, node->right->type)) {
 				diagnostic_error(sema->diagnostics, expression->location,
-					"pointer comparison requires compatible pointer operands; null constants are not supported yet");
+					"pointer comparison requires compatible pointers or an equality null constant");
 				return false;
 			}
 			if (node->operation != binary_equal && node->operation != binary_not_equal &&
@@ -931,6 +964,10 @@ static bool sema_expression(struct sema *sema,
 			result_type = type_usual_arithmetic(a, b);
 		} else if (a->kind == type_kind_void && b->kind == type_kind_void) {
 			result_type = &type_void;
+		} else if (a->kind == type_kind_pointer && is_null_pointer_constant(node->else_value)) {
+			result_type = a;
+		} else if (b->kind == type_kind_pointer && is_null_pointer_constant(node->then_value)) {
+			result_type = b;
 		} else if (a->kind == type_kind_pointer && b->kind == type_kind_pointer &&
 			(type_unqualified_compatible(((const struct pointer_type *)a)->referent,
 				((const struct pointer_type *)b)->referent) || object_void_pointer_conversion(a, b))) {
@@ -939,7 +976,7 @@ static bool sema_expression(struct sema *sema,
 				return false;
 		} else {
 			diagnostic_error(sema->diagnostics, expression->location,
-				"incompatible conditional operands (null pointer constants are not implemented yet)");
+				"incompatible conditional operands");
 			return false;
 		}
 		if (result_type->kind != type_kind_void &&

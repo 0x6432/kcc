@@ -1315,3 +1315,19 @@ scope links are stack-local and restored on every exit; type-only declaration/
 binding ASTs are arena-owned but never linked into runtime locals or assigned
 slots. Nested callback scopes cannot leak names. Actual definition parameter
 locals are separately created in the body and remain the runtime bindings.
+
+## M13m expression-aware null conversion contract
+
+Sema queries consteval only on checked integer trees, including the operand of
+an explicit unqualified void * cast. A pure null-constant predicate never treats
+query failure, zero variables or arbitrary pointer values as constants. Existing
+conversion nodes retain the operand/target/location and are depth-accounted.
+Explicit casts retain their own nodes. Conversion constraints are expression-
+aware only for null constants; all other pointer compatibility checks survive.
+
+Equality may normalize a null constant to the opposite pointer type before
+common-pointer construction. Relational operators never do this. Conditional
+arms preserve arithmetic processing first and choose the other pointer type
+before generic object/void common-type rules. QBE's existing extension/copy
+path implements the documented all-zero 64-bit target null representation;
+there is no new ABI wrapper, pointer bit reinterpretation or optimizer.

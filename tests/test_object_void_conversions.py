@@ -119,8 +119,8 @@ with tempfile.TemporaryDirectory(prefix='kcc object void pointers ') as director
       'void *f(void *p) { return p+0; }', 'int f(void *p) { return p[0]; }',
       'long f(void *p) { return p-p; }', 'int f(void *p) { return *p; }',
       'void *f(void); int *f(void);', 'void f(void *); void f(int *);',
-      'void *f(void) { return 0; }', 'void *f(void) { return (void *)0; }',
-      'int f(void *p) { return p==0; }', 'int f(void *p) { return (int)p; }',
+      'void *f(void) { return 1; }', 'void *f(void) { return (void *)1; }',
+      'int f(void *p) { return p==1; }', 'int f(void *p) { return (int)p; }',
     ]
     for text in invalid:
         source.write_text(text)

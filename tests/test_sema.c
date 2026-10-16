@@ -2566,8 +2566,116 @@ static void test_constant_bound_tree(void)
 	source_destroy(&source);
 }
 
+static void test_null_constant_tree(void)
+{
+	const char *text = "int f(const int *p,int (*cb)(int)) { int *q=1-1; "
+		"int (*r)(int)=(void *)0; const int *s=1?p:(void *)0; "
+		"int (*t)(int)=0?(void *)0:cb; return 0==p; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *q;
+	struct ast_local_declaration *r;
+	struct ast_local_declaration *local_s;
+	struct ast_local_declaration *t;
+	struct ast_conversion_expression *conversion;
+	struct ast_cast_expression *cast;
+	struct ast_conditional_expression *conditional;
+	struct ast_statement_item *item;
+	struct ast_return_statement *return_statement;
+	struct ast_binary_expression *comparison;
+	const struct type *p_type;
+	const struct type *cb_type;
+
+	assert(source_from_bytes(&source, "null-constants.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	q = (struct ast_local_declaration *)function->body->items;
+	r = (struct ast_local_declaration *)q->item.next;
+	local_s = (struct ast_local_declaration *)r->item.next;
+	t = (struct ast_local_declaration *)local_s->item.next;
+	assert(q->initializer->kind == expression_binary);
+	assert(r->initializer->kind == expression_cast);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	p_type = function->declaration->parameters->type;
+	cb_type = function->declaration->parameters->next->type;
+	assert(q->slot == 2 && r->slot == 3 && local_s->slot == 4 && t->slot == 5);
+	assert(function->locals == t && t->next_local == local_s);
+	assert(q->initializer->kind == expression_conversion);
+	conversion = (struct ast_conversion_expression *)q->initializer;
+	assert(conversion->expression.type == q->type && conversion->operand->kind == expression_binary);
+	assert(conversion->operand->type == &type_int && conversion->expression.depth == 3);
+	assert(r->initializer->kind == expression_conversion);
+	conversion = (struct ast_conversion_expression *)r->initializer;
+	assert(conversion->expression.type == r->type && conversion->operand->kind == expression_cast);
+	cast = (struct ast_cast_expression *)conversion->operand;
+	assert(((const struct pointer_type *)cast->expression.type)->referent == &type_void);
+	assert(cast->operand->kind == expression_integer && cast->operand->type == &type_int);
+	assert(conversion->expression.depth == 3 && cast->expression.depth == 2);
+	assert(local_s->initializer->kind == expression_conditional);
+	conditional = (struct ast_conditional_expression *)local_s->initializer;
+	assert(conditional->expression.type == p_type);
+	assert(((const struct pointer_type *)p_type)->referent->qualifiers == type_qualifier_const);
+	assert(conditional->else_value->kind == expression_conversion);
+	assert(conditional->else_value->type == p_type);
+	assert(t->initializer->kind == expression_conditional);
+	conditional = (struct ast_conditional_expression *)t->initializer;
+	assert(conditional->expression.type == cb_type && conditional->then_value->type == cb_type);
+	assert(conditional->then_value->kind == expression_conversion && conditional->else_value->kind == expression_load);
+	item = (struct ast_statement_item *)t->item.next;
+	return_statement = (struct ast_return_statement *)item->statement;
+	comparison = (struct ast_binary_expression *)return_statement->value;
+	assert(comparison->expression.kind == expression_binary && comparison->expression.type == &type_int);
+	assert(comparison->left->kind == expression_conversion && comparison->right->kind == expression_load);
+	assert(comparison->left->type == p_type && comparison->right->type == p_type);
+	assert(!unit->strings && !item->item.next);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
+
+static void test_null_boolean_tree(void)
+{
+	const char *text = "int *f(void) { return false; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_conversion_expression *conversion;
+	struct ast_boolean_expression *boolean;
+
+	assert(source_from_bytes(&source, "false-null.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	item = (struct ast_statement_item *)first_function(unit)->body->items;
+	conversion = (struct ast_conversion_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(conversion->expression.kind == expression_conversion && conversion->expression.depth == 2);
+	assert(conversion->expression.type->kind == type_kind_pointer);
+	boolean = (struct ast_boolean_expression *)conversion->operand;
+	assert(boolean->expression.kind == expression_boolean && boolean->expression.type == &type_bool);
+	assert(!boolean->value && boolean->expression.depth == 1);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_null_boolean_tree();
+	test_null_constant_tree();
 	test_constant_bound_tree();
 	test_static_assertion_tree();
 	test_sizeof_alignment_tree();

@@ -136,7 +136,7 @@ with tempfile.TemporaryDirectory(prefix='kcc function pointers ') as directory:
     rejected = [
         ('int f(int); int main(void) { int (*p)(long)=f; return 0; }', 'pointer conversion'),
         ('int f(int); int main(void) { int *p=&f; return 0; }', 'pointer conversion'),
-        ('int f(int); int main(void) { int (*p)(int)=0; return 0; }', 'pointer conversion'),
+        ('int f(int); int main(void) { int (*p)(int)=1; return 0; }', 'pointer conversion'),
         ('int f(int); int main(void) { return f<f; }', 'relational comparison requires object pointers'),
         ('int f(int); int main(void) { return f+0==f; }', 'complete object referent'),
         ('int f(int); int main(void) { return f-f; }', 'complete object referents'),

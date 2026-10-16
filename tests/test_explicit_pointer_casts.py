@@ -126,7 +126,7 @@ with tempfile.TemporaryDirectory(prefix='kcc explicit pointer casts ') as direct
       'int (*f(void (*p)(void)))(int) { return p; }',
       'void f(int (*p)(int)) { void (*q)(void)=p; }',
       'int f(int *); int f(unsigned char *);', 'int f(void); long f(void);',
-      'int *f(void) { return (int *)0; }', 'int f(int *p) { return (int)p; }',
+      'int *f(void) { return (int *)1; }', 'int f(int *p) { return (int)p; }',
       'int f(void *p) { return *(int [3])p; }', 'int f(void *p) { return (int (int))p; }',
       'int f(void *p) { return *(void *)p; }',
     ]
