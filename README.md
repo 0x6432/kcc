@@ -6,13 +6,22 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15A1: Scalar block/for objects may use `register` in any declaration-specifier
+position. The hint uses ordinary QBE local slots; taking the declared object's
+address is rejected, even in unevaluated queries. Pointee addresses through
+register pointers remain valid. Storage class is not a type qualifier and does
+not propagate through `typeof`. Register arrays and parameters remain explicit
+subset limits. Read docs/m15-register-scalars.md and the latest ledger/contracts.
+Other storage classes, globals and full C23 remain unsupported.
+
 M14L4: The typedef storage class may appear anywhere among declaration
 specifiers at file, block and C23 for scope, including alias/query-derived bases.
 Declarations still use the existing concrete ASTs and shared comma-list bases;
 parameters/type names reject typedef, and aliases allocate no runtime storage.
 Read docs/m14-typedef-specifier-placement.md and the latest ledger/limitations.
 Earlier ordinary-name shadowing, including parameter/prototype lifetimes, remains
-supported. Other storage classes, VM types and full C23 remain unsupported.
+supported. Beyond the M15a1 scalar register subset, other storage classes, VM
+types and full C23 remain unsupported.
 Native for-typedef grammar gaps remain separately classified on unchanged source.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now

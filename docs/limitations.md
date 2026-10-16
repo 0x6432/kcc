@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14L4 typedef placement in declaration specifiers. Read the latest entries together with README.md and
+Current milestone: M15A1 scalar block/for register objects. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1945,3 +1945,26 @@ block function declarations and bare alias-derived definitions are not added.
 Read m14-typedef-specifier-placement.md and the M14l4 ledger for exact frozen
 validation and native gaps. Earlier general placement restrictions are historical;
 only typedef placement is broadened, not all storage-class combinations.
+
+## M15a1 scalar register objects
+
+Block/for declarations support register for implemented scalar object types,
+including pointers/function pointers and query-derived nullptr types. It is a
+hint, not a hardware-register allocation promise. Real locals retain normal
+slots, ABI and 256-local/1 MiB budgets. Taking the direct register object's
+address is a language constraint, also inside sizeof/typeof; &*p and addresses
+of ordinary pointees remain valid. typeof does not copy storage class.
+
+Register arrays (including non-decaying sizeof-only arrays) and all register
+parameters are valid-C subset limits, not native constraint rejections. Parameter
+storage needs separate definition/prototype handling per N3096 6.7.6.3 paragraph
+12, including nested callback declarations, later queries and void markers.
+File-scope register, register function declarations and duplicate/mixed currently
+implemented storage classes are rejected. Other storage classes/globals remain
+unsupported; this is not full C23.
+
+Clang 15/18's exact -Wkeyword-macro error under -pedantic-errors on the unchanged
+header-free keyword-macro original is recorded separately, not a native agreement
+or kcc bug. No standard header is included/expanded by that fixture. Other errors,
+additional diagnostics, different sources and signals are not classified away.
+Read the M15a1 ledger for actual frozen local results and remote CI status.

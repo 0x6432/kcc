@@ -1865,3 +1865,21 @@ Shared written bases, complete-declarator publication and label priority remain.
 Sema/type/codegen interfaces and no-alias-storage behavior are unchanged. Existing
 resource limits and same-scope constraints remain independently enforced. AST
 assertions verify base identity, keyword location and real-local-only slots.
+
+## M15a1 scalar register storage
+
+Raw pp tokens retain identifier classification; language conversion alone emits
+token_register after macro expansion. The shared specifier scanner optionally
+returns the actual storage token, rejecting duplicates/mixed typedef-register
+classes. NULL storage outputs keep type-name/parameter contexts unsupported;
+external declarations reject register before ordinary classification. The block
+consumed-alias path shares the same scanner, and every comma declarator retains
+one base and the group's class. Complete-declarator publication is unchanged.
+
+Concrete ast_local_declaration adds is_register, zero by default. Sema tests the
+resolved name's declaration flag for unary &: parentheses preserve that identity,
+while indirection/subscript pointees are not confused with their register pointer
+objects. Register arrays/functions are rejected before binding. Storage is not
+part of any semantic type; typeof copies no class. QBE/ABI APIs are unchanged,
+register objects use normal slots, and aliases allocate none. Existing lexical,
+parser-scope, local/item/type/depth/storage budgets and immutable caches remain.

@@ -326,7 +326,7 @@ static bool is_unsupported_keyword(struct token token)
 	static const char *const keywords[] = {
 		"auto", "break", "case", "const", "continue", "default",
 		"do", "double", "else", "enum", "extern", "float", "for", "goto",
-		"if", "inline", "register", "restrict",
+		"if", "inline", "restrict",
 		"sizeof", "static", "struct", "switch", "union",
 		"volatile", "while", "_Alignas", "_Alignof", "_Atomic",
 		"_Complex", "_Decimal32", "_Decimal64", "_Decimal128",
@@ -354,7 +354,7 @@ static const struct keyword keywords[] = {
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
-	{ "typedef", token_typedef }, { "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
+	{ "register", token_register }, { "typedef", token_typedef }, { "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
 	{ "sizeof", token_sizeof }, { "alignof", token_alignof },
 	{ "_Alignof", token_legacy_alignof },
 	{ "static_assert", token_static_assert }, { "_Static_assert", token_legacy_static_assert },
@@ -752,6 +752,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_void: return "void";
 	case token_const: return "const";
 	case token_typedef: return "typedef";
+	case token_register: return "register";
 	case token_typeof: return "typeof";
 	case token_typeof_unqual: return "typeof_unqual";
 	case token_sizeof: return "sizeof";

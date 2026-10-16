@@ -879,6 +879,12 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
 			return false;
 		}
+		if (node->operand->kind == expression_name &&
+			((struct ast_name_expression *)node->operand)->declaration->is_register) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"cannot take the address of a register object");
+			return false;
+		}
 		pointer = type_new_pointer(sema->arena, node->operand->type);
 		if (!pointer) {
 			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating address type");
@@ -1464,6 +1470,16 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 
 	if (!type)
 		return false;
+	if (local->is_register && type->kind == type_kind_array) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"register array objects are not supported yet");
+		return false;
+	}
+	if (local->is_register && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"register storage requires an object type");
+		return false;
+	}
 	if (type->kind == type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"block-scope function declarations are not supported yet");

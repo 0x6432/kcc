@@ -2,6 +2,34 @@
 
 ## Current checkpoint
 
+M15a1 scalar block/for register objects is implemented and locally validated.
+Read m15-register-scalars.md and the latest ledger/contracts/coverage/limits.
+Register is declaration storage, not a type qualifier/hardware-register promise.
+Objects use ordinary slots; unary & of the register object is rejected even in
+unevaluated queries; ordinary pointee addresses remain valid. Type queries carry
+no storage class. Shared comma bases, point of declaration, scope restoration,
+identity and no-alias-storage invariants remain. Register arrays and parameters
+are unsupported valid-C subsets; prototype/definition lifetimes need a separate
+design before parameter implementation. Other storage/globals/VM remain absent.
+
+Full normal GCC 11/GCC 14/Clang 18, full QBE with both modern hosts, four-host
+focused/ABI and both-host targeted ASan/UBSan lexer/sema plus 17 suites passed.
+Bounded compile-only fuzz: 9,125 lexer / 37,520 pipeline inputs in
+26 seconds each; no invalid/generated C executed. Frozen primary/isolated
+manifests match; helpers built serially before parallel validation. See ledger
+for exact native agreements, Clang's keyword-macro diagnostic gap and fixture
+corrections. Logs /data/tools/m15a1-*, isolated trees /data/validation-m15a1/.
+
+M14l4 CI run 38958469583 is completed/success, all three jobs green. New M15a1
+exact-commit CI is pending until checked after push, not implied by local passes.
+The user authorizes continuous development and supersedes the old STOP REQUEST.
+No stashes were present/discarded; preserve historical named stashes if restored.
+No historical snapshot generators were rerun. Current implementation/test scripts
+under /data/tools were already applied once; do not rerun them. No subagents used.
+Next increment needs its own pre-implementation design. Verify tools after resets.
+
+## Earlier M14l4 checkpoint (historical)
+
 M14l4 typedef specifier placement is implemented and locally validated. Read
 m14-typedef-specifier-placement.md and the latest ledger/contracts/coverage/limits.
 One shared specifier scan selects existing concrete alias/ordinary tails at

@@ -4244,8 +4244,59 @@ static void test_typedef_specifier_placement_tree(void)
 	fclose(stream);
 }
 
+static void test_register_scalar_tree(void)
+{
+	const char *text = "typedef long T; int f(void) { T register x=40,y=x+2; "
+		"typeof(x) z=y; long *p=&z; return *p; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *y;
+	struct ast_local_declaration *z;
+	struct ast_local_declaration *p;
+	struct ast_binary_expression *sum;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = (struct ast_function *)unit->declarations->next;
+	x = (struct ast_local_declaration *)function->body->items;
+	y = (struct ast_local_declaration *)x->item.next;
+	z = (struct ast_local_declaration *)y->item.next;
+	p = (struct ast_local_declaration *)z->item.next;
+	assert(x->is_register && y->is_register && !z->is_register && !p->is_register);
+	assert(x->type_syntax == y->type_syntax);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(x->type == &type_long && y->type == x->type && z->type == x->type);
+	assert(x->slot == 0 && y->slot == 1 && z->slot == 2 && p->slot == 3);
+	assert(function->locals == p && p->next_local == z && z->next_local == y);
+	assert(y->next_local == x && !x->next_local);
+	sum = (struct ast_binary_expression *)y->initializer;
+	assert(sum->left->kind == expression_load);
+	assert(((struct ast_load_expression *)sum->left)->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)((struct ast_load_expression *)sum->left)->operand)->declaration == x);
+	assert(z->initializer->kind == expression_load);
+	assert(((struct ast_load_expression *)z->initializer)->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)((struct ast_load_expression *)z->initializer)->operand)->declaration == y);
+	assert(p->initializer->kind == expression_address);
+	assert(((struct ast_name_expression *)((struct ast_address_expression *)p->initializer)->operand)->declaration == z);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_register_scalar_tree();
 	test_typedef_specifier_placement_tree();
 	test_parameter_typedef_shadowing_tree();
 	test_object_typedef_shadowing_tree();

@@ -577,6 +577,7 @@ struct ast_local_declaration {
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	struct ast_expression *initializer;
+	bool is_register;
 	const struct type *type;
 	size_t slot;
 	struct ast_local_declaration *next_local;

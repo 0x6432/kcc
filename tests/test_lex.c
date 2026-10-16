@@ -440,8 +440,17 @@ static void test_typedef_keyword(void)
 	assert(strcmp(token_kind_name(token_typedef), "typedef") == 0);
 }
 
+static void test_register_keyword(void)
+{
+	const enum token_kind kinds[] = { token_register, token_identifier, token_int };
+
+	check_tokens("#define STORE register\nSTORE name\n#define register int\nregister", kinds, 3, 0);
+	assert(strcmp(token_kind_name(token_register), "register") == 0);
+}
+
 int main(void)
 {
+	test_register_keyword();
 	test_typedef_keyword();
 	test_typeof_keywords();
 	test_case_keywords();

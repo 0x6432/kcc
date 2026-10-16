@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar block/for register objects; parameters, arrays, other storage classes/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -2482,3 +2482,44 @@ initializers and bare alias-derived definitions remain unsupported. This is not
 full C23. a7a9528 correction CI run 38954615388 completed successfully.
 c3cc992's failed GCC native-oracle run remains a historical failure. New M14l4
 exact-commit CI is pending until checked after push, separately from local passes.
+
+## M15a1 scalar block/for register objects
+
+Design recorded before implementation in m15-register-scalars.md. Add demand-only
+language register conversion, generalized nullable storage-token output and a
+concrete local-declaration is_register flag. Ordinary block/for comma lists,
+including consumed alias starts, preserve shared bases and publication. Sema
+rejects unary & of a direct resolved register object, including unevaluated
+queries, but preserves ordinary pointee addressing. Register scalar objects use
+normal local slots and the unchanged QBE/ABI. Storage does not propagate through
+type queries. Register arrays and parameters remain explicit valid-C subset
+limits; file scope/functions/mixed or duplicate current classes remain errors.
+
+Frozen local validation: full make test with GCC 11.5/GCC 14.2.1/Clang 18.1.8
+native oracles; full make test-codegen with QBE 1.2 and both modern hosts; GCC 11
+and Clang 15 targeted ASan/UBSan lexer/sema plus 17 focused suites, with the new
+suite also checked against Clang 18. Normal helpers built serially before
+parallel runs, no frozen source modifications. Primary and both isolated source,
+tests and Makefile manifests match before/after. Bounded compile-only sanitized
+fuzz: 9,125 lexer / 37,520 pipeline inputs, 26 seconds each.
+No invalid curated or generated C executed. Logs/manifests /data/tools/m15a1-*,
+isolated sanitizer trees /data/validation-m15a1/{gcc,clang}.
+
+Focused originals: 47 standard + 5 C23, all accepted/executed through kcc/QBE.
+GCC 14 strictly agrees on 52; Clang 18 on 51 with one exact keyword-macro strict
+diagnostic gap. Legacy GCC 11 agrees on 47, Clang 15 on 46 with that same gap;
+their exact C23 keyword absence excludes five comparisons (not agreements).
+Seventeen native constraints on modern hosts, 15 on legacy hosts; five explicit
+valid-C subset rejections. Each host passes 24 both-direction mixed-stack
+primitive ABI arrangements. AST checks prove shared bases, captured identities,
+register flags, ordinary typeof-copy flags/types and exactly four ordinary local
+slots. Exact 256/257 locals, 4096/4097 items and 1 MiB storage boundaries pass.
+
+Pre-freeze fixture checks corrected a new AST assertion to traverse existing
+explicit load nodes; no compiler behavior was altered to hide it. The initial
+four-host run exposed Clang's keyword-macro warning-as-error on a header-free
+valid original: an exact-source/status/diagnostic classifier was added and
+negative-tested before freezing. The source was not rewritten. No intermediate
+failure is counted as a pass. M14l4 CI run 38958469583 completed/success in all
+three jobs. New M15a1 exact-commit CI remains pending until checked after push;
+local validation is not remote evidence. Not full C23.
