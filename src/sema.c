@@ -1551,6 +1551,7 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item);
 static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 {
 	struct scope scope = { .parent = sema->scope };
+	struct typedef_binding *saved_typedefs = sema->typedefs;
 	bool success = true;
 
 	sema->scope = &scope;
@@ -1564,6 +1565,7 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 		success = sema_expression(sema, &node->step, true);
 	if (success)
 		success = sema_control_body(sema, &node->statement, node->body);
+	sema->typedefs = saved_typedefs;
 	sema->scope = scope.parent;
 	return success;
 }

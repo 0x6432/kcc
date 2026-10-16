@@ -6,12 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14l2: compound blocks now accept scoped typedef declaration lists, including
-same-type redeclarations. Parser name classification and semantic aliases have
-independent scoped lifetimes; names cannot leak into later functions or siblings.
-Concrete typedef items create no locals or QBE storage. Each alias consumes one
-block item, while file aliases consume one external item. For-initializer aliases,
-alias shadowing and storage-specifier permutations remain separate increments.
+M14l2b: typedef declaration lists work in compound blocks and C23 for
+initializers, with same-type redeclarations and independent syntax/semantic scope
+lifetimes. Loop aliases are visible through clause-1, condition, step and body,
+but not afterward. Each alias is a concrete compile-time-only item with no local
+or QBE storage; block and external item budgets remain independent. Alias
+shadowing and storage-specifier permutations remain separate increments.
 Alias-expanded types remain bounded at 4096 nodes and 128 levels.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now

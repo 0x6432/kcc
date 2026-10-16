@@ -1714,14 +1714,16 @@ static struct ast_do_statement *parse_do_statement(struct parser *parser)
 }
 
 static struct ast_block_item *parse_local_declaration(struct parser *parser);
+static struct ast_block_item *parse_block_typedef_declaration(struct parser *parser);
 static struct ast_block_item *parse_block_item(struct parser *parser);
 static bool begins_static_assertion(enum token_kind kind);
 static bool count_block_item(struct parser *parser, struct source_location location);
 
 /* for-statement ::= "for" "(" for-initializer [ expression ] ";"
  *                   [ expression ] ")" statement
- * for-initializer ::= local-declaration | static-assert-declaration | [ expression ] ";"
- * local-declaration already consumes its semicolon; consume it exactly once.
+ * for-initializer ::= local-declaration | block-typedef-declaration |
+ *                     static-assert-declaration | [ expression ] ";"
+ * Each declaration parser consumes its semicolon; consume it exactly once.
  */
 static struct ast_for_statement *parse_for_contents(struct parser *parser)
 {
@@ -1738,11 +1740,10 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_typedef) {
-		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-			"typedef declarations in for initializers are not supported yet");
-		return NULL;
-	}
-	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+		initializer_declarations = parse_block_typedef_declaration(parser);
+		if (!initializer_declarations)
+			return NULL;
+	} else if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
 		initializer_declarations = parse_block_item(parser);
@@ -1793,10 +1794,12 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 static struct ast_for_statement *parse_for_statement(struct parser *parser)
 {
 	struct ast_for_statement *node;
+	struct parser_typedef_name *saved_typedefs = parser->typedef_names;
 
 	if (!begin_nested_statement(parser))
 		return NULL;
 	node = parse_for_contents(parser);
+	parser->typedef_names = saved_typedefs;
 	parser->statement_nesting--;
 	return node;
 }

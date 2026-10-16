@@ -3742,8 +3742,70 @@ static void test_block_typedef_tree(void)
 	fclose(stream);
 }
 
+static void test_for_typedef_tree(void)
+{
+	const char *text = "int main(void) { int done=0; "
+		"for(typedef int T,T,*P;done<1;done+=(T)1) { T x=42; if(x!=42) return 1; } "
+		"typedef long T; T x=42; return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_block_item *item;
+	struct ast_for_statement *loop;
+	struct ast_typedef_declaration *alias;
+	struct ast_typedef_declaration *repeated;
+	struct ast_typedef_declaration *pointer;
+	struct ast_typedef_declaration *after;
+	struct ast_local_declaration *local;
+	size_t local_count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	function = (struct ast_function *)unit->declarations;
+	assert(function->external.kind == external_function_definition && !function->external.next);
+	item = function->body->items->next;
+	assert(item->kind == block_item_statement);
+	loop = (struct ast_for_statement *)((struct ast_statement_item *)item)->statement;
+	assert(loop->statement.kind == statement_for && !loop->initializer_expression);
+	assert(item->next->kind == block_item_typedef_declaration);
+	after = ((struct ast_block_typedef_declaration *)item->next)->declaration;
+	item = loop->initializer_declarations;
+	assert(item->kind == block_item_typedef_declaration);
+	alias = ((struct ast_block_typedef_declaration *)item)->declaration;
+	item = item->next;
+	assert(item->kind == block_item_typedef_declaration);
+	repeated = ((struct ast_block_typedef_declaration *)item)->declaration;
+	item = item->next;
+	assert(item->kind == block_item_typedef_declaration && !item->next);
+	pointer = ((struct ast_block_typedef_declaration *)item)->declaration;
+	assert(alias->type_syntax == repeated->type_syntax);
+	assert(((struct ast_pointer_type_syntax *)pointer->type_syntax)->referent == alias->type_syntax);
+	assert(!alias->type && !repeated->type && !pointer->type && !after->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	assert(alias->type == &type_int && repeated->type == alias->type);
+	assert(((const struct pointer_type *)pointer->type)->referent == alias->type);
+	assert(after->type == &type_long);
+	for (local = function->locals; local; local = local->next_local)
+		local_count++;
+	assert(local_count == 3 && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_for_typedef_tree();
 	test_block_typedef_tree();
 	test_typedef_declaration_list_tree();
 	test_typedef_redeclaration_tree();

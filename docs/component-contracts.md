@@ -1650,3 +1650,43 @@ no alias locals and exact block/external/expanded-depth boundaries. Legacy hosts
 agree on 36 originals, modern hosts on all 40 without rewriting. Frozen manifest
 /data/tools/m14l2-source.sha256 matched before and after integration. Remote CI
 is separate from these local passes.
+
+## M14l2b C23 for-initializer typedefs
+
+For clause-1 accepts the existing block typedef declaration group, preserving its
+concrete AST wrappers, per-declarator source order and single-semicolon parser
+contract. Each alias consumes one function block item, independently of the
+containing for statement. A bare return loop body is not a compound block item.
+
+The guarded parser for wrapper restores syntax-only alias names on success and
+failure. Sema_for independently restores semantic aliases around its existing
+loop scope. Aliases are visible after their complete declarator through the
+remaining initializer, condition, step and body, but not after the loop. Compound
+bodies retain their own nested scopes. No new AST representation or backend path
+is required: initializer item emission already skips compile-time-only aliases.
+
+N3096 6.8.5 / 6.8.5.3 and N3220 6.8.6.4 permit these declarations; do not revive
+C17's removed object/storage constraint. GCC 14 accepts original C23 sources.
+GCC 11, Clang 15 and Clang 18 reject an exact minimal for-typedef probe; tests
+recognize only those specific sole diagnostics, report a feature gap separately
+and still execute original defined kcc/QBE programs and primitive ABI comparisons.
+They never rewrite aliases into objects or move declarations to fake agreements.
+
+Shadowing, storage-class permutations, VM/aggregate types and prototype scopes
+remain outside this increment. Existing item/alias-expanded budgets and semantic
+same-scope constraints remain unchanged. Read m14-for-typedefs.md.
+
+M14l2b validation: complete normal/QBE regression, complete normal regressions
+with original-source GCC 14.1.0 and Clang 18.1.8 native oracles, both GCC 11 /
+Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control suites and
+bounded sanitized fuzz passed. Fuzz executed 3,394 lexer / 9,630 pipeline inputs
+in 26/26 seconds; no generated or invalid curated C ran. Focused suite: 34
+base-type + 4 query originals, all 38 strict native agreements / 4 constraints
+with GCC 14; exact for-typedef grammar gaps, not agreements, on GCC 11 / Clang 15 /
+Clang 18. All four hosts passed original kcc/QBE runs and 24 mixed-stack primitive
+ABI arrangements each. AST tests verify scoped aliases, canonical repeats and
+independent post-loop names with no alias locals. Exact 4096-item and alias-only
+IL checks passed. Frozen manifest /data/tools/m14l2b-source.sha256 matched before
+and after integration. Earlier interrupted helper-build-race runs are not passes;
+all final normal helpers were built serially before parallel tests. Remote CI
+remains separate from these local results.

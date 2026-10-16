@@ -45,7 +45,6 @@ constraints = [
     ('int f(int T) { typedef int T; return 0; }','typedef name conflicts with prior ordinary declaration'),
 ]
 subset_errors = [
-    ('int main(void) { for(typedef int T;;) return 42; }','typedef declarations in for initializers are not supported yet'),
     ('typedef int T; int main(void) { typedef int T; return 42; }','block typedef shadowing a typedef'),
     ('int main(void) { typedef int T; { typedef long T; } return 42; }','block typedef shadowing a typedef'),
     ('int f(void); int main(void) { typedef int f; return 42; }','block typedef shadowing a function'),

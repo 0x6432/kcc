@@ -76,7 +76,6 @@ constraints = [
 ]
 subset_errors = [
     ('typedef int T=42;','cannot have initializers'),
-    ('int main(void) { for(typedef int T;;) return 42; }','typedef declarations in for initializers are not supported yet'),
     ('typedef int T; int main(void) { int T=42; return T; }','shadowing a typedef'),
     ('typedef int T; int main(void) { T T=42; return T; }','shadowing a typedef'),
     ('typedef int T; int f(int T) { return T; }','shadowing a typedef'),
