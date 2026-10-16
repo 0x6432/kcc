@@ -1456,3 +1456,14 @@ The stored result is not an lvalue. Runtime signed overflow, invalid pointer
 ranges and unsequenced conflicting effects remain undefined, not safety checks.
 Tests choose defined inputs without imposing an unspecified operand order.
 Evaluated updates are not ICEs; VLA bounds remain a separate subset limitation.
+
+## M19d2 integer compound boundary
+
+All ten compound assignments support current integer types; only +=/-= accept
+current complete-object pointers. Float/atomic/aggregate semantics remain later.
+Division/remainder by zero, signed arithmetic overflow, out-of-range or negative
+shift counts and invalid signed left shifts remain runtime undefined behavior,
+not compiler-defined wrapping behavior. Such curated sources are compiled only;
+fuzz-generated source is never executed. Negative signed right shift follows
+the existing Linux amd64 arithmetic-shift target choice. Native test agreements
+use matching target assumptions, not a claim of universal implementation behavior.

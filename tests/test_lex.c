@@ -107,7 +107,7 @@ static void test_errors(void)
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "0xg", "0b2", "12.5", "3.5", "@",
-		"18446744073709551616", "->", "*=", "/=", "%=", "<<=", ">>=",
+		"18446744073709551616", "->",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
@@ -371,8 +371,36 @@ static void test_compound_assignment_tokens(void)
 	assert(strcmp(token_kind_name(token_minus_equal), "-=") == 0);
 }
 
+static void test_integer_compound_tokens(void)
+{
+	const enum token_kind kinds[] = {
+		token_star_equal,
+		token_slash_equal,
+		token_percent_equal,
+		token_ampersand_equal,
+		token_caret_equal,
+		token_pipe_equal,
+		token_shift_left_equal,
+		token_shift_right_equal,
+		token_shift_left_equal, token_greater, token_greater_equal,
+		token_star, token_equal,
+	};
+
+	check_tokens("*= /= %= &= ^= |= <<= >>=\n#define JOIN(a,b) a##b\nJOIN(<<,=) > >= * =", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_star_equal), "*=") == 0);
+	assert(strcmp(token_kind_name(token_slash_equal), "/=") == 0);
+	assert(strcmp(token_kind_name(token_percent_equal), "%=") == 0);
+	assert(strcmp(token_kind_name(token_ampersand_equal), "&=") == 0);
+	assert(strcmp(token_kind_name(token_caret_equal), "^=") == 0);
+	assert(strcmp(token_kind_name(token_pipe_equal), "|=") == 0);
+	assert(strcmp(token_kind_name(token_shift_left_equal), "<<=") == 0);
+	assert(strcmp(token_kind_name(token_shift_right_equal), ">>=") == 0);
+}
+
 int main(void)
 {
+	test_integer_compound_tokens();
 	test_compound_assignment_tokens();
 	test_update_tokens();
 	test_nullptr_keyword();

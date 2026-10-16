@@ -253,6 +253,19 @@ static size_t codegen_conversion(struct codegen *codegen, const struct ast_expre
 	return codegen_convert_value(codegen, value, operand->type, target);
 }
 
+/* QBE consumes a word count; valid C shift counts 0..63 are preserved. */
+static size_t codegen_shift_count(struct codegen *codegen, size_t value,
+	const struct type *type)
+{
+	size_t count;
+
+	if (type_value_width(type) != 64)
+		return value;
+	count = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w copy %%t%zu\n", count, value);
+	return count;
+}
+
 /* RHS-first is a permitted operand order; the lvalue address is never repeated. */
 static size_t codegen_compound_assignment(struct codegen *codegen,
 	const struct ast_compound_assignment_expression *node)
@@ -261,6 +274,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	size_t address;
 	size_t left;
 	size_t value;
+	const char *instruction;
 
 	if (node->element_size) {
 		right = codegen_pointer_index(codegen, node->right);
@@ -272,6 +286,8 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		}
 	} else {
 		right = codegen_expression(codegen, node->right);
+		if (node->operation == binary_shift_left || node->operation == binary_shift_right)
+			right = codegen_shift_count(codegen, right, node->right->type);
 	}
 	address = codegen_address(codegen, node->left);
 	left = codegen->next_temporary++;
@@ -279,8 +295,12 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		qbe_load_instruction(node->left->type), address);
 	left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
 	value = codegen->next_temporary++;
+	if (node->element_size)
+		instruction = node->operation == binary_add ? "add" : "sub";
+	else
+		instruction = binary_instruction(node->operation, node->calculation_type);
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", value, qbe_type(node->calculation_type),
-		node->operation == binary_add ? "add" : "sub", left, right);
+		instruction, left, right);
 	value = codegen_convert_value(codegen, value, node->calculation_type, node->expression.type);
 	emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 	return value;
@@ -518,14 +538,8 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t left = codegen_expression(codegen, node->left);
 		size_t right = codegen_expression(codegen, node->right);
 
-		if ((node->operation == binary_shift_left || node->operation == binary_shift_right) &&
-			type_value_width(node->right->type) == 64) {
-			size_t count = codegen->next_temporary++;
-
-			/* QBE shift counts are words; valid C counts 0..63 are preserved. */
-			emit(codegen, "\t%%t%zu =w copy %%t%zu\n", count, right);
-			right = count;
-		}
+		if (node->operation == binary_shift_left || node->operation == binary_shift_right)
+			right = codegen_shift_count(codegen, right, node->right->type);
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", temporary, qbe_type(expression->type),
 			binary_instruction(node->operation, node->left->type), left, right);

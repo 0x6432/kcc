@@ -601,6 +601,14 @@ static const struct infix_operator infix_operators[] = {
 	{ token_equal, 1, 1 },
 	{ token_plus_equal, 1, 1 },
 	{ token_minus_equal, 1, 1 },
+	{ token_star_equal, 1, 1 },
+	{ token_slash_equal, 1, 1 },
+	{ token_percent_equal, 1, 1 },
+	{ token_ampersand_equal, 1, 1 },
+	{ token_caret_equal, 1, 1 },
+	{ token_pipe_equal, 1, 1 },
+	{ token_shift_left_equal, 1, 1 },
+	{ token_shift_right_equal, 1, 1 },
 	{ token_question, 2, 2 },
 	{ token_or_or, 3, 4 },
 	{ token_and_and, 4, 5 },
@@ -1001,15 +1009,25 @@ static struct ast_expression *parse_prefix_expression(struct parser *parser)
 static enum binary_operator binary_operator_for_token(enum token_kind kind)
 {
 	switch (kind) {
+	case token_plus_equal:
 	case token_plus: return binary_add;
+	case token_minus_equal:
 	case token_minus: return binary_subtract;
+	case token_star_equal:
 	case token_star: return binary_multiply;
+	case token_slash_equal:
 	case token_slash: return binary_divide;
+	case token_percent_equal:
 	case token_percent: return binary_remainder;
+	case token_ampersand_equal:
 	case token_ampersand: return binary_bit_and;
+	case token_caret_equal:
 	case token_caret: return binary_bit_xor;
+	case token_pipe_equal:
 	case token_pipe: return binary_bit_or;
+	case token_shift_left_equal:
 	case token_shift_left: return binary_shift_left;
+	case token_shift_right_equal:
 	case token_shift_right: return binary_shift_right;
 	case token_equal_equal: return binary_equal;
 	case token_not_equal: return binary_not_equal;
@@ -1020,6 +1038,25 @@ static enum binary_operator binary_operator_for_token(enum token_kind kind)
 	default:
 		assert(0 && "unknown arithmetic token");
 		return binary_add;
+	}
+}
+
+static bool is_compound_assignment(enum token_kind kind)
+{
+	switch (kind) {
+	case token_plus_equal:
+	case token_minus_equal:
+	case token_star_equal:
+	case token_slash_equal:
+	case token_percent_equal:
+	case token_ampersand_equal:
+	case token_caret_equal:
+	case token_pipe_equal:
+	case token_shift_left_equal:
+	case token_shift_right_equal:
+		return true;
+	default:
+		return false;
 	}
 }
 
@@ -1038,8 +1075,8 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 
 		if (node)
 			return &node->expression;
-	} else if (token.kind == token_plus_equal || token.kind == token_minus_equal) {
-		enum binary_operator operation = token.kind == token_plus_equal ? binary_add : binary_subtract;
+	} else if (is_compound_assignment(token.kind)) {
+		enum binary_operator operation = binary_operator_for_token(token.kind);
 		struct ast_compound_assignment_expression *node = ast_new_compound_assignment(
 			parser->arena, token.location, operation, left, right);
 
@@ -1095,7 +1132,8 @@ static struct ast_expression *parse_conditional_expression(struct parser *parser
 
 /* expression ::= assignment-expression { "," assignment-expression }
  * assignment-expression ::= conditional-expression
- *                         | unary-expression ("=" | "+=" | "-=") assignment-expression
+ *                         | unary-expression assignment-operator assignment-expression
+ * assignment-operator ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "^=" | "|=" | "<<=" | ">>="
  * conditional-expression ::= logical-OR-expression [ "?" expression ":" conditional-expression ]
  * logical-OR-expression ::= logical-AND-expression { "||" logical-AND-expression }
  * logical-AND-expression ::= bitwise-OR-expression { "&&" bitwise-OR-expression }

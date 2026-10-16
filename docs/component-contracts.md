@@ -1383,3 +1383,14 @@ arithmetically updates, converts back and stores once. Pointer indices use the
 existing signedness-aware extension. No particular operand evaluation order is
 promised beyond C. Bool truth conversion examines the whole calculation width.
 Consteval rejects evaluated compound forms; sizeof checks but does not emit them.
+
+## M19d2 integer compound calculation contract
+
+The same concrete compound node now supports *= /= %= &= ^= |= <<= >>= without
+changing the once-only lvalue/RHS contract. Nonadditive operators forbid pointer
+left operands. Integer shifts record promoted-left calculation type and promote
+RHS independently; other operators record usual arithmetic type. The backend
+uses the existing signedness-aware integer instruction selector and a shared
+word shift-count helper. Neither RHS signedness nor its rank silently changes
+left shift/right-shift calculation type. Back-conversion is exactly the same
+whole-value bool/narrow/scalar conversion path as additive compound assignment.

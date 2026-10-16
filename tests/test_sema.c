@@ -2893,8 +2893,67 @@ static void test_compound_assignment_tree(void)
 }
 
 
+static void test_integer_compound_tree(void)
+{
+	const char *text = "int f(unsigned char c,int i,long l,_Bool b,unsigned short s) { "
+		"c*=3UL; i>>=1UL; l<<=2U; b|=4294967296UL; i<<=s; return 42; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_compound_assignment_expression *update;
+	struct ast_expression *parsed_left;
+	struct ast_expression *parsed_right;
+
+	assert(source_from_bytes(&source, "integer-compound.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	update = (struct ast_compound_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->expression.kind == expression_compound_assignment && update->expression.depth == 2);
+	parsed_left = update->left;
+	parsed_right = update->right;
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(update->left == parsed_left && update->right == parsed_right);
+	assert(update->left->kind == expression_name && update->left->is_lvalue);
+	assert(update->expression.type == &type_uchar && !update->expression.is_lvalue);
+	assert(update->operation == binary_multiply && update->calculation_type == &type_ulong);
+	assert(!update->element_size && update->expression.depth == 2);
+	assert(update->expression.location.offset == (size_t)(strstr(text, "c*=") + 1 - text));
+	item = (struct ast_statement_item *)item->item.next;
+	update = (struct ast_compound_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->operation == binary_shift_right && update->calculation_type == &type_int);
+	assert(update->expression.type == &type_int && update->right->type == &type_ulong);
+	assert(update->right->kind == expression_integer && !update->expression.is_lvalue);
+	item = (struct ast_statement_item *)item->item.next;
+	update = (struct ast_compound_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->operation == binary_shift_left && update->calculation_type == &type_long);
+	assert(update->expression.type == &type_long && update->right->type == &type_uint);
+	item = (struct ast_statement_item *)item->item.next;
+	update = (struct ast_compound_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->operation == binary_bit_or && update->calculation_type == &type_ulong);
+	assert(update->expression.type == &type_bool && update->left->is_lvalue && !update->expression.is_lvalue);
+	item = (struct ast_statement_item *)item->item.next;
+	update = (struct ast_compound_assignment_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(update->operation == binary_shift_left && update->calculation_type == &type_int);
+	assert(update->expression.type == &type_int && update->expression.depth == 4);
+	require_conversion(update->right, &type_int, &type_ushort);
+	assert(((struct ast_conversion_expression *)update->right)->operand->kind == expression_load);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_integer_compound_tree();
 	test_compound_assignment_tree();
 	test_postfix_update_tree();
 	test_prefix_update_tree();

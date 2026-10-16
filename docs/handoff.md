@@ -2,16 +2,16 @@
 
 ## Current checkpoint
 
-M19d1 +=/-= is complete. Full normal and QBE regressions passed, as did
-both-host ASan/UBSan lexer/sema units and additive/prefix/postfix runtime/ABI.
-Sanitized bounded fuzz ran 22,986 lexer and 60,623 pipeline inputs in 26 seconds
-each without reported failure. Concrete compound nodes preserve one left lvalue,
-explicit RHS conversion, calculation type and checked pointer stride. Backend
-value conversions are shared without duplicated loads/addresses. Never execute
-fuzz-generated C. Next: M19d2 remaining integer compound operators, predesigned
-in m19-integer-compound-assignment.md. M19c2 was pushed as 4da4287; full isolated
-and remote results require final markers. Prior nullptr oracle correction
-f3df148 remote run 38881463571 passed all GCC/Clang/fuzz jobs.
+M19d2 remaining integer compound assignment is complete: full normal/QBE
+regressions, both-host ASan/UBSan lexer/sema units and integer/additive/prefix/
+postfix runtime/ABI passed. Bounded sanitized fuzz completed 21,351 lexer and
+54,832 pipeline inputs in 26 seconds each without reported failure. All ten
+compound operators preserve one left lvalue; shifts promote operands independently.
+Next: M19e1 named labels, predesigned in m19-named-labels.md. This foundation
+intentionally precedes goto; existing stop-at-terminator emission cannot support
+forward jumps yet. Never execute fuzz-generated or curated runtime-invalid C.
+Latest previous pushed checkpoint e1e5eb3 (M19d1); its remote/isolated matrices
+remain pending. M19c1 d8c57ab CI 38882170561 passed every job.
 
 ### Earlier foundation (chronological)
 

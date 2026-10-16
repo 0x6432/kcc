@@ -1126,7 +1126,7 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!type_is_integer(node->right->type)) {
 			diagnostic_error(sema->diagnostics, node->right->location,
-				"additive compound assignment requires an integer right operand");
+				"compound assignment requires an integer right operand");
 			return false;
 		}
 		result_type = unqualified_type(sema, left_type, expression->location);
@@ -1135,6 +1135,11 @@ static bool sema_expression(struct sema *sema,
 		if (left_type->kind == type_kind_pointer) {
 			const struct type *referent = ((const struct pointer_type *)left_type)->referent;
 
+			if (node->operation != binary_add && node->operation != binary_subtract) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"only additive compound assignment accepts a pointer left operand");
+				return false;
+			}
 			if (!type_is_complete_object(referent)) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"pointer compound assignment requires a complete object referent");
@@ -1142,6 +1147,12 @@ static bool sema_expression(struct sema *sema,
 			}
 			node->calculation_type = result_type;
 			node->element_size = type_object_size(referent);
+			if (!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+				return false;
+		} else if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
+			/* Shift operands promote independently; unsigned RHS does not change left. */
+			node->calculation_type = type_integer_promotion(result_type);
+			node->element_size = 0;
 			if (!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
 				return false;
 		} else {

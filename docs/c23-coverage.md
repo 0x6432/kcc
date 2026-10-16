@@ -392,3 +392,11 @@ N3096 6.5.16.2 subset: +=/-= integer usual arithmetic/back conversion, boolean
 truth conversion, complete-object pointer/integer offsets and once-only lvalue
 evaluation. Concrete nodes retain calculation/result types and pointer strides.
 All remaining compound operators, floating and atomic operations are separate.
+
+### M19d2 remaining integer compound operators
+
+N3096 6.5.16.2 adds integer *= /= %= &= ^= |= <<= >>= to the additive subset.
+Usual arithmetic conversions and independent shift promotions remain distinct;
+the result is the stored unqualified type, not an lvalue. Tests cover original
+source, pointer/non-lvalue/const constraints and both-direction narrow ABI. No
+floating or atomic operation support or runtime UB diagnosis is claimed.

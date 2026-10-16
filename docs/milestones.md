@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1 additive compound assignment implemented; other compounds/control-flow rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; control-flow rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1616,3 +1616,28 @@ passed. Bounded sanitized fuzz completed 22,986 lexer and 60,623 pipeline inputs
 in 26 seconds each without reported failure. No generated C or curated runtime
 invalid arithmetic/pointer source was executed. Remote/isolated full matrices
 are queued separately. Prior f3df148 CI run 38881463571 passed every job.
+
+## M19d2 remaining integer compound assignment
+
+Added demand post-pp tokens/Pratt assignment operators and extended the concrete
+compound node, preserving one left lvalue and one RHS. Integer shifts promote
+operands independently; other operators use usual arithmetic calculation types.
+Only +=/-= permit pointer left operands. Shared signedness-aware integer
+instruction selection and QBE word shift-count normalization avoid duplicated
+lowering rules. Stored result back-conversion and checked/unevaluated sizeof
+reuse M19d1 semantics. No generic AST, assignment expansion or folding shortcut.
+
+Both native hosts pass 127 strict-native original programs, 43 native constraint
+rejections, separate nullptr/VLA-subset checks, exact typed-depth boundaries,
+compile-only invalid arithmetic and 48 both-direction mixed-stack narrow-result/
+wide-count ABI arrangements. Concrete AST units retain original left/right
+identity, operator/location, calculation/result types and independent RHS shift
+promotions. Full/sanitizer/fuzz results follow once validated.
+
+M19d2 final local validation: complete normal regression and QBE suites passed.
+Both-host ASan/UBSan lexer/sema units and integer/additive/prefix/postfix update
+runtime/ABI suites passed. Bounded sanitized fuzz completed 21,351 lexer and
+54,832 pipeline inputs in 26 seconds each without reported failure. No generated
+C or curated invalid runtime arithmetic was executed. Isolated full matrix and
+remote CI require their own final markers. Next: M19e1 named labels, designed
+in m19-named-labels.md before goto target/control-flow changes.
