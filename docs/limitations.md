@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M19a. Read the latest entries together with README.md and
+Current milestone: M14j1. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1132,3 +1132,19 @@ Typed depth stays 128. M14 const/other qualifiers, typedefs and the remaining
 C23 features are not implied. Next split const into an immutable type-model
 increment (M14j1), then syntax and semantic enforcement (M14j2), with tests at
 both boundaries; see m14-const-qualification.md before changing the type graph.
+
+## M14j1
+
+The semantic type header records const qualification. Immutable qualification
+and root-only unqualification preserve concrete pointer/array shapes and shared
+inputs. C23 arrays inherit the immediate element qualifier set; pointer referents
+remain separate levels. Strict compatibility checks every qualifier level;
+root-unqualified compatibility is a distinct operation and does not erase nested
+pointer qualifiers. Composites preserve pointer qualifiers and known bounds.
+
+This checkpoint exposes no const syntax or modification/conversion enforcement.
+No source type can acquire qualifiers yet, so bounded pipeline fuzz checks the
+unchanged language paths, not new qualified source semantics. Dedicated both-host
+normal/sanitized units exercise qualified graphs directly. M14j2 adds the planned
+language integration before claiming source-level const support. Volatile,
+restrict, atomic, bracket qualifiers, typedefs and full C23 remain later work.

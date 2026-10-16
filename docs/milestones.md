@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1 type-model foundation; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1147,3 +1147,23 @@ Next M14j const is designed in m14-const-qualification.md. Implement immutable
 qualification, strict versus root-unqualified compatibility and qualified
 composites as M14j1, then parsing/value conversions and enforcement as M14j2.
 No const syntax is claimed until the latter passes its language tests.
+
+## M14j1 tested source checkpoint
+
+Implemented immutable type qualification/unqualification, qualification-aware
+strict/root-only compatibility and qualifier-preserving composites. All primitive
+leaves and void, independent pointer levels, function referents, const pointer
+arrays versus pointers to const elements, nested C23 arrays, unknown/known-bound
+composites and 64-layer graphs have dedicated unit checks. Input graphs and
+singletons remain unchanged; no-op operations share existing nodes. Layout/ABI
+helpers retain their kind-based representation behavior.
+
+Full normal GCC regression and QBE suites passed. The new type-unit executable
+passed GCC and Clang ASan/UBSan directly and is part of make test and CI matrices.
+Bounded sanitized fuzz completed 19,665 lexer and 54,466 pipeline inputs in
+26 seconds each without reported errors; no generated C was executed. These
+harnesses do not yet construct qualified types through source syntax: M14j2 is
+next. Exact-source remote and full isolated checks for M14j1 remain pending.
+
+The independent M14g full GCC/Clang normal + ASan/UBSan matrix now passed both
+halves. Other queued matrices remain separate; do not infer newer-source results.

@@ -286,3 +286,10 @@ results, are implemented independently of list separators. Full expressions
 and assignment-expressions have distinct Pratt entry floors. Switch/labels/goto,
 conditional and other remaining operators are still later work. Const remains
 a designed next increment, not an implemented syntax feature at this checkpoint.
+
+### M14j1 qualification type-model foundation
+
+Immutable qualifier operations, strict/root-only compatibility and C23 matching
+array/element qualification are unit-tested. Const language syntax, qualification
+conversions and modification constraints are not implemented until M14j2. No
+source-level const support or general qualifier conformance is claimed here.

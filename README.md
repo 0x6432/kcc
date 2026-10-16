@@ -6,7 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M19a: sequenced comma expressions preserve scalar/void/pointer results without
+M14j1: immutable semantic qualifier operations, C23 array qualification and
+strict versus root-unqualified compatibility are implemented and unit-tested.
+Const source syntax/enforcement is the next increment, not yet claimed.
+M19a sequenced comma expressions preserve scalar/void/pointer results without
 confusing call arguments or declaration separators. M14i explicit object/object and function/function pointer casts preserve
 addresses without granting implicit compatibility or adapting call ABIs. Object/void pointer conversions and mixed equality preserve real types
 and explicit conversion nodes, including arrays and pointer objects. Real void types, void-returning functions/callbacks, bare returns and

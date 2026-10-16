@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M19a implementation: sequenced comma values/discards with separate argument and
+M14j1 implementation: immutable semantic qualifier model and operations,
+without const source syntax yet; prior M19a sequenced comma values/discards with separate argument and
 declaration separator floors; M14i explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
 casts/discards; prior explicit function designators/decay, callback values and
 indirect fixed calls; concrete fixed-function declarator syntax/array-pointer returns,
@@ -26,12 +27,11 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 Latest confirmed exact-source CI: M14g 592b551 run 38859101528 passed;
 M14f 6586319 runs 38836315858/38846879414 passed. M14h 274d966 and
 M14i 1ed1cc8 exact runs were still running at the latest check. New M19a
-isolated/remote checks remain pending. Immutable M14g GCC normal/ASan/UBSan
-passed; check its Clang and queued snapshots before claiming full matrices.
+isolated/remote checks remain pending. Immutable M14g full GCC/Clang normal/ASan/UBSan passed; queued newer snapshots
+remain pending until their actual logs confirm completion.
 Logs/snapshots live in /data/tools and /data/validation-* outside the repo.
 
-Next: M14j1 immutable const type-model operations, then M14j2 const language
-support, designed before implementation in m14-const-qualification.md; then
+Next: M14j2 const language support, designed before implementation in m14-const-qualification.md; then
 unfinished M14 other qualifiers/typedef work.
 Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
@@ -1621,3 +1621,23 @@ Next M14j const is designed in m14-const-qualification.md. Implement immutable
 qualification, strict versus root-unqualified compatibility and qualified
 composites as M14j1, then parsing/value conversions and enforcement as M14j2.
 No const syntax is claimed until the latter passes its language tests.
+
+## M14j1 tested source checkpoint
+
+Implemented immutable type qualification/unqualification, qualification-aware
+strict/root-only compatibility and qualifier-preserving composites. All primitive
+leaves and void, independent pointer levels, function referents, const pointer
+arrays versus pointers to const elements, nested C23 arrays, unknown/known-bound
+composites and 64-layer graphs have dedicated unit checks. Input graphs and
+singletons remain unchanged; no-op operations share existing nodes. Layout/ABI
+helpers retain their kind-based representation behavior.
+
+Full normal GCC regression and QBE suites passed. The new type-unit executable
+passed GCC and Clang ASan/UBSan directly and is part of make test and CI matrices.
+Bounded sanitized fuzz completed 19,665 lexer and 54,466 pipeline inputs in
+26 seconds each without reported errors; no generated C was executed. These
+harnesses do not yet construct qualified types through source syntax: M14j2 is
+next. Exact-source remote and full isolated checks for M14j1 remain pending.
+
+The independent M14g full GCC/Clang normal + ASan/UBSan matrix now passed both
+halves. Other queued matrices remain separate; do not infer newer-source results.

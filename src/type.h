@@ -25,8 +25,13 @@ enum type_kind {
 	type_kind_function,
 };
 
+enum type_qualifier {
+	type_qualifier_const = 1u << 0,
+};
+
 struct type {
 	enum type_kind kind;
+	unsigned qualifiers;
 };
 
 struct pointer_type {
@@ -86,7 +91,16 @@ const struct type *type_integer_literal(uint64_t value, unsigned base,
 	bool unsigned_suffix, unsigned long_suffix);
 struct function_type *type_new_function(struct arena *arena, const struct type *return_type,
 	const struct type *const *parameters, size_t parameter_count);
+/* Qualifier operations preserve shared inputs; NULL means allocation failure.
+ * Array qualification follows C23 through elements, never pointer referents.
+ * Function types cannot be qualified. Existing no-op results may be shared. */
+const struct type *type_qualified(struct arena *arena, const struct type *type,
+	unsigned qualifiers);
+const struct type *type_unqualified(struct arena *arena, const struct type *type);
 bool type_compatible(const struct type *left, const struct type *right);
+/* Ignore only root qualifiers (including equivalent array element qualifiers).
+ * Below a pointer, qualification must still match exactly. */
+bool type_unqualified_compatible(const struct type *left, const struct type *right);
 /* Merge compatible declarations without changing either input type graph. */
 const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right);

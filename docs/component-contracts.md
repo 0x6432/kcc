@@ -1217,3 +1217,16 @@ Both parse and typed depth use max(children)+1. Scalar codegen discards left,
 then evaluates right; void discard recursively discards both, with branch
 merges and no fabricated result. Lists still own separator tokens. There is
 no TU token buffer, AST flattening or unsequenced argument lowering.
+
+## M14j1 immutable qualification model
+
+Every semantic type header has a qualifier set. type_qualified unions root
+qualifiers; type_unqualified clears root qualifiers; both return shared no-op
+results or arena-owned concrete copies, NULL on allocation failure. Functions
+cannot be qualified. Array constructors inherit element qualifiers, and array
+qualification recurses through elements, never pointer referents. Compatibility
+is strict; type_unqualified_compatible deliberately ignores only root/equivalent
+array qualifiers. Composite reconstruction preserves root pointer qualification
+and known-bound array shapes. Consumers must distinguish representation-neutral
+qualifiers from source constraints; parser/sema integration is M14j2, not present
+in this checkpoint. New type units run under the standard CI sanitizer matrices.

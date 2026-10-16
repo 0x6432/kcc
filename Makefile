@@ -102,13 +102,16 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_explicit_pointer_casts.py
 	QBE="$(QBE)" python3 tests/test_comma_expressions.py
 
+build/test_type: tests/test_type.c src/type.c src/arena.c src/type.h src/arena.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_type.c src/type.c src/arena.c $(LDFLAGS) $(LDLIBS) -o $@
+
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
 build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pp_oracle.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
-test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_sema
+test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
@@ -116,6 +119,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	./build/test_pp_lex
 	./build/test_preprocess
 	python3 tests/test_macros.py
+	./build/test_type
 	./build/test_sema
 	python3 tests/test_compile.py
 	python3 tests/test_diagnostics.py

@@ -2,19 +2,19 @@
 
 #include <assert.h>
 
-const struct type type_void = { type_kind_void };
-const struct type type_bool = { type_kind_bool };
-const struct type type_char = { type_kind_char };
-const struct type type_schar = { type_kind_schar };
-const struct type type_uchar = { type_kind_uchar };
-const struct type type_short = { type_kind_short };
-const struct type type_ushort = { type_kind_ushort };
-const struct type type_int = { type_kind_int };
-const struct type type_uint = { type_kind_uint };
-const struct type type_long = { type_kind_long };
-const struct type type_ulong = { type_kind_ulong };
-const struct type type_long_long = { type_kind_long_long };
-const struct type type_ulong_long = { type_kind_ulong_long };
+const struct type type_void = { .kind = type_kind_void };
+const struct type type_bool = { .kind = type_kind_bool };
+const struct type type_char = { .kind = type_kind_char };
+const struct type type_schar = { .kind = type_kind_schar };
+const struct type type_uchar = { .kind = type_kind_uchar };
+const struct type type_short = { .kind = type_kind_short };
+const struct type type_ushort = { .kind = type_kind_ushort };
+const struct type type_int = { .kind = type_kind_int };
+const struct type type_uint = { .kind = type_kind_uint };
+const struct type type_long = { .kind = type_kind_long };
+const struct type type_ulong = { .kind = type_kind_ulong };
+const struct type type_long_long = { .kind = type_kind_long_long };
+const struct type type_ulong_long = { .kind = type_kind_ulong_long };
 
 struct integer_properties {
 	enum type_kind kind;
@@ -101,7 +101,7 @@ struct array_type *type_new_incomplete_array(struct arena *arena, const struct t
 	array = arena_alloc(arena, sizeof(*array));
 	if (array)
 		*array = (struct array_type) {
-			.type = { type_kind_array },
+			.type = { .kind = type_kind_array, .qualifiers = element->qualifiers },
 			.element = element,
 			.count = 0,
 		};
@@ -118,7 +118,7 @@ struct array_type *type_new_array(struct arena *arena, const struct type *elemen
 	array = arena_alloc(arena, sizeof(*array));
 	if (array)
 		*array = (struct array_type) {
-			.type = { type_kind_array },
+			.type = { .kind = type_kind_array, .qualifiers = element->qualifiers },
 			.element = element,
 			.count = count,
 		};
@@ -132,7 +132,7 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 	assert(type_is_object(referent) || referent->kind == type_kind_function);
 	if (pointer)
 		*pointer = (struct pointer_type) {
-			.type = { type_kind_pointer },
+			.type = { .kind = type_kind_pointer },
 			.referent = referent,
 		};
 	return pointer;
@@ -240,7 +240,7 @@ struct function_type *type_new_function(struct arena *arena, const struct type *
 	if (!type)
 		return NULL;
 	*type = (struct function_type) {
-		.type = { type_kind_function },
+		.type = { .kind = type_kind_function },
 		.return_type = return_type,
 		.parameter_count = parameter_count,
 	};
@@ -257,14 +257,66 @@ struct function_type *type_new_function(struct arena *arena, const struct type *
 	return type;
 }
 
-bool type_compatible(const struct type *left, const struct type *right)
+/* Replace only top-level qualification. Arrays and their elements have the
+ * same qualification in C23; pointer referents are separate type levels. */
+static const struct type *type_with_qualifiers(struct arena *arena, const struct type *type,
+	unsigned qualifiers)
+{
+	struct type *leaf;
+
+	assert(!(qualifiers & ~type_qualifier_const));
+	assert(type->kind != type_kind_function || !qualifiers);
+	if (type->qualifiers == qualifiers)
+		return type;
+	if (type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+		const struct type *element = type_with_qualifiers(arena, array->element, qualifiers);
+		struct array_type *copy;
+
+		if (!element)
+			return NULL;
+		copy = array->count ? type_new_array(arena, element, array->count) :
+			type_new_incomplete_array(arena, element);
+		return copy ? &copy->type : NULL;
+	}
+	if (type->kind == type_kind_pointer) {
+		const struct pointer_type *pointer = (const struct pointer_type *)type;
+		struct pointer_type *copy = type_new_pointer(arena, pointer->referent);
+
+		if (!copy)
+			return NULL;
+		copy->type.qualifiers = qualifiers;
+		return &copy->type;
+	}
+	assert(type_is_integer(type) || type->kind == type_kind_void);
+	leaf = arena_alloc(arena, sizeof(*leaf));
+	if (leaf)
+		*leaf = (struct type) { .kind = type->kind, .qualifiers = qualifiers };
+	return leaf;
+}
+
+const struct type *type_qualified(struct arena *arena, const struct type *type,
+	unsigned qualifiers)
+{
+	return type_with_qualifiers(arena, type, type->qualifiers | qualifiers);
+}
+
+const struct type *type_unqualified(struct arena *arena, const struct type *type)
+{
+	return type_with_qualifiers(arena, type, 0);
+}
+
+/* Array elements repeat their array's qualifier, not a new pointer level. */
+static bool compatible_types(const struct type *left, const struct type *right,
+	bool ignore_root_qualifiers)
 {
 	const struct function_type *left_function;
 	const struct function_type *right_function;
 	const struct function_parameter_type *left_parameter;
 	const struct function_parameter_type *right_parameter;
 
-	if (left->kind != right->kind)
+	if (left->kind != right->kind ||
+		(!ignore_root_qualifiers && left->qualifiers != right->qualifiers))
 		return false;
 	if (type_is_integer(left) || left->kind == type_kind_void)
 		return true;
@@ -279,7 +331,7 @@ bool type_compatible(const struct type *left, const struct type *right)
 		const struct array_type *b = (const struct array_type *)right;
 
 		return (!a->count || !b->count || a->count == b->count) &&
-			type_compatible(a->element, b->element);
+			compatible_types(a->element, b->element, ignore_root_qualifiers);
 	}
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;
@@ -295,6 +347,16 @@ bool type_compatible(const struct type *left, const struct type *right)
 		right_parameter = right_parameter->next;
 	}
 	return !left_parameter && !right_parameter;
+}
+
+bool type_compatible(const struct type *left, const struct type *right)
+{
+	return compatible_types(left, right, false);
+}
+
+bool type_unqualified_compatible(const struct type *left, const struct type *right)
+{
+	return compatible_types(left, right, true);
 }
 
 const struct type *type_composite(struct arena *arena, const struct type *left,
@@ -314,6 +376,8 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 		if (referent == a->referent)
 			return left;
 		pointer = type_new_pointer(arena, referent);
+		if (pointer)
+			pointer->type.qualifiers = left->qualifiers;
 		return pointer ? &pointer->type : NULL;
 	}
 	if (left->kind == type_kind_array) {
