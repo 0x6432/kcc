@@ -85,6 +85,7 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_pointer_equality.py
 	QBE="$(QBE)" python3 tests/test_pointer_arithmetic.py
 	QBE="$(QBE)" python3 tests/test_pointer_subscripts.py
+	QBE="$(QBE)" python3 tests/test_local_arrays.py
 
 build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
@@ -131,6 +132,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_pointer_equality.py
 	python3 tests/test_pointer_arithmetic.py
 	python3 tests/test_pointer_subscripts.py
+	python3 tests/test_local_arrays.py
 
 clean:
 	rm -rf build

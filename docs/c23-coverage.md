@@ -9,7 +9,7 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; restricted integer-object pointers M13a) | M03, M08, M12-M18, M23-M24 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; restricted object pointers and literal-bound local arrays M13f) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
@@ -118,3 +118,16 @@ chain-depth limits pass. Array declarations/decay/string literals are not yet
 implemented, so live array storage is supplied by the host in ABI tests.
 The arithmetic suite's invalid pointer+pointer/integer-pointer cases remain;
 the factored builder now diagnoses their more specific offset constraint.
+
+### M13f fixed local arrays
+
+18 both-host/QBE full-value programs, all primitive borrowed-array ABI directions,
+pointer elements, loops/scopes and pointer-to-array address/stride checks cover
+literal-bound local storage and explicit decay. Size/alignment/compatibility/cache
+units and exact storage/depth limits pass. Executed elements are initialized;
+large resource fixtures are not executed. The earlier now-valid a[2] rejection
+became incomplete a[], retaining array-declaration constraint coverage. GCC 11's
+known C23 separator gap uses an explicit equal-valued host oracle only after the
+original spelling passes kcc/QBE; Clang validates the original source directly.
+General constant-expression bounds, multidimensional/parameter arrays, aggregate
+initializers and strings are not implied by this subset.

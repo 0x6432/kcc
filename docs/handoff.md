@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M13e implementation: pointer subscripts, scaled offsets, signed-long differences and compatible
+M13f implementation: fixed local arrays and explicit decay/target layout, pointer
+subscripts, scaled offsets, signed-long differences and compatible
 comparisons, plus concrete address/indirection ASTs and general object lvalue
 addresses, with pointer mutation, fixed calls/returns/casts
 and scalar truth. Integer/pointer syntax resolves a separate semantic type graph.
@@ -12,18 +13,18 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13b 6f5e5ab, run 38824691700, passed GCC/Clang
-normal/sanitizer and fuzz jobs. M13c/d remote checks remain in progress.
-M13e full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13c dfd9742, run 38825345451, passed GCC/Clang
+normal/sanitizer and fuzz jobs. M13d/e remote checks remain in progress.
+M13f full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13f fixed local arrays, designed in m13-local-arrays.md.
+Next: M13g multidimensional local arrays, designed in m13-multidimensional-arrays.md.
 Null constants, void/functions/full declarators,
-arrays/strings and remaining C23 features stay unfinished. &*null cancellation
+general array bounds/initializers, strings and remaining C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
 never executed. Read current limitations, not old checkpoint entries alone.
 
@@ -1247,3 +1248,32 @@ explicit decay and bounded target layout are designed before implementation.
 M12h/M12i 76944c4/81db52e now passed both isolated compiler normal/sanitizer legs,
 with prior exact-source CI 38821148738/38821949608. M13b 6f5e5ab exact-source CI
 passed 38824691700. M13c/d and queued M13 local matrices remain pending separately.
+
+## M13f tested source checkpoint
+
+Local arrays have concrete literal-bound syntax and cached semantic element/count
+identity. Scalar/pointer elements decay explicitly in ordinary value contexts;
+address-of preserves pointer-to-array. Array assignment/initialization diagnose
+before scalar conversion helpers. Complete-object addressing and independent
+target size/alignment support entry storage without an array-as-scalar load.
+The 1 MiB declared-object budget includes parameter spills/scopes and resets per
+function; each count is division-checked before multiplication. Bounds remain
+literal tokens, not a shortcut constant-expression evaluator.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 18 new full-value programs
+and both-direction borrowed-array ABI passed with GCC and Clang: all primitive
+and pointer elements, loops/scopes, explicit assignment conversions, macro bounds,
+decay/calls, pointer-to-array strides, exact target alignment/size/compatibility
+and 1 MiB/depth boundaries. Every executed array element was written first; large
+limit sources and uninitialized AST fixtures were compile-only. The first runtime
+test caught an old scalar-only named-address assertion: it now correctly requires
+a complete object, retaining scalar-only ABI/memory-value helpers. GCC 11 lacks
+C23 separators: only that known failing fixture uses an explicit 5U host reference
+after original 0b1'01U passed kcc/QBE. Clang passed the original source, no gap.
+The earlier a[2] rejection became unsupported incomplete a[]; no coverage dropped.
+No undefined or arbitrary generated program was executed. Sanitized bounded fuzz
+passed 22758 lexer + 72864 pipeline inputs (95622 total),
+26/26 seconds. Full isolated/remote checks remain pending.
+M13g multidimensional local arrays are pre-designed; all remaining bound,
+initializer, parameter/full-declarator and string limitations are explicit.
+M13c exact-source CI passed 38825345451; M13a local GCC leg passed independently.

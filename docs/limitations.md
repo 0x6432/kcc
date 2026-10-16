@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13e. The chronological entries below describe what each
+Current milestone: M13f. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -892,3 +892,28 @@ loads remain undefined and are not executed. Every lowering node/promotion/load
 counts toward typed depth: 42 chained pointer subscripts reach depth 128, 43
 exceed it. The parser separately bounds recursive index nesting. Local array
 and string declarations, decay, null constants and full declarators remain later.
+
+## M13f
+
+Local arrays with one positive literal-token bound support every implemented
+scalar element, including pointers. Existing base/suffix/separator spellings
+and macro-expanded integer tokens work. This is deliberately not a general
+integer constant-expression bound parser: expressions, VLA/incomplete bounds,
+multiple dimensions, parameter array adjustment and all array/string initializers
+remain unsupported. Uninitialized arrays are not implicitly zeroed.
+
+Array types preserve count/element compatibility and target size/alignment.
+Ordinary array expressions explicitly decay one level to pointer-to-element;
+address-of retains pointer-to-array and scales by whole-array size. Subscripts/
+indirection yielding arrays follow the same decay rule. Arrays are nonmodifiable
+lvalues: assignment and initialization diagnose before scalar conversion helpers.
+Full pointer-to-array declarator spelling remains unsupported despite inferred
+&a types. No general object-pointer cast shortcut is introduced.
+
+Per function, at most 1 MiB of declared object bytes is permitted, including
+parameter spills and all nested scopes; the existing 256-local limit remains.
+Overflow-safe size validation precedes multiplication. This resource budget is
+not a C language limit or an exact bound on backend temporaries/padded frame size.
+Slots allocate at function entry using target size and at least QBE four-byte
+alignment. Tests initialize every executed element before reading it; large limit
+fixtures are compile-only. Dangling array-pointer lifetimes are not made defined.

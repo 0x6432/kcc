@@ -175,7 +175,7 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
 		size_t result = codegen->next_temporary++;
 
-		assert(name->declaration && type_is_scalar(name->declaration->type));
+		assert(name->declaration && type_is_complete_object(name->declaration->type));
 		emit(codegen, "\t%%t%zu =l copy %%v%zu\n", result, name->declaration->slot);
 		return result;
 	}
@@ -397,6 +397,12 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_logical:
 		return codegen_logical(codegen,
 			(const struct ast_logical_expression *)expression);
+	case expression_array_decay: {
+		const struct ast_array_decay_expression *node =
+			(const struct ast_array_decay_expression *)expression;
+
+		return codegen_address(codegen, node->operand);
+	}
 	case expression_load: {
 		const struct ast_load_expression *node =
 			(const struct ast_load_expression *)expression;
@@ -678,11 +684,12 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	emit_label(&codegen, 0);
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
-		unsigned bytes = type_value_width(local->type) / 8;
-		unsigned alignment = bytes < 4 ? 4 : bytes;
+		uint64_t bytes = type_object_size(local->type);
+		unsigned alignment = type_object_alignment(local->type);
 
-		assert(type_is_scalar(local->type));
-		emit(&codegen, "\t%%v%zu =l alloc%u %u\n", local->slot, alignment, bytes);
+		if (alignment < 4)
+			alignment = 4;
+		emit(&codegen, "\t%%v%zu =l alloc%u %ju\n", local->slot, alignment, (uintmax_t)bytes);
 		local = local->next_local;
 	}
 	parameter_index = 0;

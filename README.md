@@ -6,16 +6,18 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13e: pointer subscripts (p[i] and i[p]) now share scaled offsets and general
-lvalue addresses, including stores, chained indexing and address-of. Object
-pointers support compatible subtraction and comparisons. Separate concrete typed offset/difference ASTs use target
+M13f: fixed one-dimensional local arrays now use explicit array-to-pointer decay
+and target object size/alignment. Bounds are positive integer literal tokens;
+array initializers and general constant-expression bounds remain later work.
+Pointer subscripts, scaled offsets, compatible differences/comparisons and
+object lvalue addresses share the same typed lowering. Separate concrete typed offset/difference ASTs use target
 object sizes and preserve promoted index signedness. Address-of and indirection
 use general lvalue-address lowering. Integer/pointer objects
 support loads, mutations, compatible values, fixed calls/returns/casts and
 scalar truth. Null cancellation &*p evaluates p once without touching its
 pointee. All baseline primitive integer types, ordinary byte characters,
 explicit promotions/conversions and canonical byte/halfword ABIs remain
-supported. Array/string declarations, null constants and full declarators
+supported. Multidimensional arrays, strings, null constants and full declarators
 remain later increments. C23 bool/true/false spelling and full C23 are
 unfinished. Includes retain bounded explicit search and direct/computed
 quoted/basic angle support.

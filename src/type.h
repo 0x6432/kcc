@@ -20,6 +20,7 @@ enum type_kind {
 	type_kind_ulong_long,
 	type_kind_bool,
 	type_kind_pointer,
+	type_kind_array,
 	type_kind_function,
 };
 
@@ -30,6 +31,12 @@ struct type {
 struct pointer_type {
 	struct type type;
 	const struct type *referent;
+};
+
+struct array_type {
+	struct type type;
+	const struct type *element;
+	uint64_t count;
 };
 
 struct function_parameter_type {
@@ -58,10 +65,14 @@ extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
 bool type_is_scalar(const struct type *type);
+bool type_is_complete_object(const struct type *type);
 /* QBE scalar value width is separate from target object storage size. */
 unsigned type_value_width(const struct type *type);
-/* Complete scalar objects only until aggregate layout is implemented. */
+/* Target layout for implemented complete object types, not host sizeof. */
 uint64_t type_object_size(const struct type *type);
+unsigned type_object_alignment(const struct type *type);
+struct array_type *type_new_array(struct arena *arena, const struct type *element,
+	uint64_t count);
 struct pointer_type *type_new_pointer(struct arena *arena, const struct type *referent);
 bool type_is_unsigned(const struct type *type);
 unsigned type_integer_width(const struct type *type);

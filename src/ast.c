@@ -509,6 +509,38 @@ struct ast_parameter *ast_new_parameter(struct arena *arena,
 	return node;
 }
 
+struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *element, struct token bound)
+{
+	struct ast_array_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_array_type_syntax) {
+			.syntax = { .kind = type_syntax_array, .location = location },
+			.element = element,
+			.bound = bound,
+		};
+	return node;
+}
+
+struct ast_array_decay_expression *ast_new_array_decay(struct arena *arena,
+	struct ast_expression *operand, const struct type *pointer_type)
+{
+	struct ast_array_decay_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_array_decay_expression) {
+			.expression = {
+				.kind = expression_array_decay,
+				.location = operand->location,
+				.type = pointer_type,
+				.depth = operand->depth + 1,
+			},
+			.operand = operand,
+		};
+	return node;
+}
+
 struct ast_call_expression *ast_new_call(struct arena *arena,
 	struct ast_expression *callee, struct ast_argument *arguments, size_t argument_count)
 {

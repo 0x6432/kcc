@@ -986,7 +986,32 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* local-declaration ::= type-name identifier [ "=" expression ] ";" */
+/* local-array-suffix ::= "[" integer-token "]"
+ * This restricted literal bound is not a general integer constant expression.
+ */
+static struct ast_type_syntax *parse_local_array_suffix(struct parser *parser,
+	struct ast_type_syntax *element)
+{
+	struct token opening = preprocess_next(parser->preprocessor);
+	struct token bound;
+	struct ast_array_type_syntax *array;
+
+	if (!expect_token(parser, token_integer, "array bound must be an integer literal", &bound))
+		return NULL;
+	if (!expect_token(parser, token_right_bracket, "expected ']' after array bound", NULL))
+		return NULL;
+	array = ast_new_array_type_syntax(parser->arena, opening.location, element, bound);
+	if (!array) {
+		allocation_error(parser, opening.location);
+		return NULL;
+	}
+	return &array->syntax;
+}
+
+/* local-declaration ::= type-name identifier [ local-array-suffix ]
+ *                       [ "=" expression ] ";"
+ * Array initializers are diagnosed by sema (braced lists are not parsed yet).
+ */
 static struct ast_block_item *parse_local_declaration(struct parser *parser)
 {
 	struct ast_type_syntax *type_syntax;
@@ -1000,6 +1025,11 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
+	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
+		type_syntax = parse_local_array_suffix(parser, type_syntax);
+		if (!type_syntax)
+			return NULL;
+	}
 	if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 		preprocess_next(parser->preprocessor);
 		initializer = parse_expression(parser, 0);

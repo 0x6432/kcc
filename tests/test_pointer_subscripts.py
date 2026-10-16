@@ -133,7 +133,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer subscripts ') as directory:
         ('int f(int *p) { return p[]; }', 'expected integer literal'),
         ('int f(int *p) { return p[0](); }', 'only direct calls'),
         ('int f(int *p) { return p[1.0]; }', ''),
-        ('int main(void) { int a[2]; return 0; }', ''),
+        ('int main(void) { int a[]; return 0; }', ''),
         ('int main(void) { int x=0; (&x)[0][0]=1; return 0; }', 'one pointer and one integer'),
     ]
     for text, message in rejected:

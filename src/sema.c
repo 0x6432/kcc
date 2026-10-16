@@ -26,6 +26,7 @@ struct sema {
 	struct scope *scope;
 	struct loop_context *loop;
 	size_t local_count;
+	uint64_t local_storage;
 	struct function_symbol *functions;
 	size_t function_count;
 };
@@ -131,6 +132,27 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		type = type_new_pointer(sema->arena, referent);
 		if (!type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating pointer type");
+			return NULL;
+		}
+		syntax->type = &type->type;
+		break;
+	}
+	case type_syntax_array: {
+		struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)syntax;
+		const struct type *element = resolve_type_syntax(sema, array->element);
+		struct array_type *type;
+		uint64_t count = array->bound.integer;
+
+		if (!element)
+			return NULL;
+		if (!count || count > ast_max_local_storage / type_object_size(element)) {
+			diagnostic_error(sema->diagnostics, array->bound.location,
+				"array bound must be positive and fit local object storage limit (1 MiB)");
+			return NULL;
+		}
+		type = type_new_array(sema->arena, element, count);
+		if (!type) {
+			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating array type");
 			return NULL;
 		}
 		syntax->type = &type->type;
@@ -505,7 +527,7 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->left, false))
 			return false;
-		if (!node->left->is_lvalue) {
+		if (!node->left->is_lvalue || node->left->type->kind == type_kind_array) {
 			diagnostic_error(sema->diagnostics, node->left->location,
 				"assignment requires a modifiable lvalue");
 			return false;
@@ -523,6 +545,7 @@ static bool sema_expression(struct sema *sema,
 	case expression_pointer_difference:
 	case expression_conversion:
 	case expression_load:
+	case expression_array_decay:
 		/* Lowered nodes are introduced during this single semantic pass. */
 		assert(0 && "conversion node before semantic analysis");
 		return false;
@@ -531,7 +554,24 @@ static bool sema_expression(struct sema *sema,
 	if (!check_expression_depth(sema, expression))
 		return false;
 
-	if (value_required && expression->is_lvalue) {
+	if (value_required && expression->type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)expression->type;
+		struct pointer_type *pointer = type_new_pointer(sema->arena, array->element);
+		struct ast_array_decay_expression *decay;
+
+		if (!pointer) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating decay type");
+			return false;
+		}
+		decay = ast_new_array_decay(sema->arena, expression, &pointer->type);
+		if (!decay) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory inserting array decay");
+			return false;
+		}
+		if (!check_expression_depth(sema, &decay->expression))
+			return false;
+		*expression_slot = &decay->expression;
+	} else if (value_required && expression->is_lvalue) {
 		struct ast_load_expression *load = ast_new_load(sema->arena, expression);
 
 		if (!load) {
@@ -575,6 +615,16 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 	local->type = resolve_type_syntax(sema, local->type_syntax);
 	if (!local->type)
 		return false;
+	if (type_object_size(local->type) > ast_max_local_storage - sema->local_storage) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"function exceeds local object storage limit (1 MiB)");
+		return false;
+	}
+	sema->local_storage += type_object_size(local->type);
+	if (local->type->kind == type_kind_array && local->initializer) {
+		diagnostic_error(sema->diagnostics, local->name.location, "array initializers are not supported yet");
+		return false;
+	}
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
@@ -792,6 +842,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	assert(!sema->scope && !sema->loop);
 	sema->function = definition;
 	sema->local_count = 0;
+	sema->local_storage = 0;
 	sema->scope = &scope;
 	for (struct ast_parameter *parameter = definition->declaration->parameters; parameter;
 		parameter = parameter->next) {

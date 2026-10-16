@@ -999,3 +999,25 @@ slot with an indirection lvalue around the offset. The common completion path
 checks/annotates that lvalue and inserts a value load only when required. No fake
 parsed binary node is built/reanalyzed. Offset/difference semantics are unchanged;
 backend needs no new address/load/store path and rejects unlowered subscript ASTs.
+
+## M13f array objects, decay and target layout
+
+Concrete ast_array_type_syntax stores element syntax and a borrowed literal bound
+token; the restricted bound grammar is explicit. Cached array_type stores complete
+element/count and compares both recursively. type_is_complete_object includes
+arrays, enabling inferred pointer-to-array; type_is_scalar/width/rank do not.
+Target size multiplication is validated by division before array construction.
+Target alignment is independent of stronger QBE local-slot allocation alignment.
+
+Ordinary value completion replaces array lvalues with ast_array_decay_expression,
+whose child remains the actual array lvalue and whose result is pointer-to-element.
+No scalar load reads array bytes. Address-of suppresses decay; assignment rejects
+array targets. Array initialization diagnoses before scalar conversion. General
+name/indirection addresses now accept every complete implemented object, while
+ABI/load/store helpers still accept only scalar values. Codegen decay simply
+computes the child address; slots use target object size/alignment.
+
+Sema counts declared object bytes (parameters included) against the 1 MiB budget,
+retains counts across scope exits because all slots allocate at entry, and resets
+for each function. Resource limits precede codegen; every decay counts in typed
+depth. Source/pp lifetime rules also apply to borrowed array-bound tokens.

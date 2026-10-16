@@ -1049,8 +1049,10 @@ static void test_pointer_arithmetic_tree(void)
 	struct ast_conversion_expression *promotion;
 	struct pointer_type *pointer;
 
-	for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++)
+	for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
 		assert(type_object_size(types[i]) == sizes[i]);
+		assert(type_object_alignment(types[i]) == sizes[i]);
+	}
 	pointer = type_new_pointer(&arena, &type_int);
 	assert(pointer && type_object_size(&pointer->type) == 8);
 	assert(source_from_bytes(&source, "pointer-arithmetic.c", (const unsigned char *)text, strlen(text)));
@@ -1145,8 +1147,69 @@ static void test_pointer_subscript_tree(void)
 	source_destroy(&source);
 }
 
+static void test_local_array_tree(void)
+{
+	const char *text = "int f(void) { int a[3]; int *p=a; return a[1]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *p;
+	struct ast_array_type_syntax *syntax;
+	const struct array_type *type;
+	struct array_type *other;
+	struct ast_array_decay_expression *decay;
+	struct ast_statement_item *item;
+	struct ast_expression *value;
+	struct ast_indirection_expression *indirection;
+	struct ast_pointer_offset_expression *offset;
+
+	assert(source_from_bytes(&source, "local-array.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	a = (struct ast_local_declaration *)first_function(unit)->body->items;
+	assert(a->type_syntax->kind == type_syntax_array && !a->type_syntax->type);
+	syntax = (struct ast_array_type_syntax *)a->type_syntax;
+	assert(syntax->bound.integer == 3 && syntax->element->kind == type_syntax_integer);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(a->type == syntax->syntax.type && a->type->kind == type_kind_array);
+	type = (const struct array_type *)a->type;
+	assert(type->element == &type_int && type->count == 3 && syntax->element->type == &type_int);
+	assert(type_is_complete_object(a->type) && !type_is_scalar(a->type) && !type_is_integer(a->type));
+	assert(type_object_size(a->type) == 12 && type_object_alignment(a->type) == 4);
+	other = type_new_array(&arena, &type_int, 3);
+	assert(other && type_compatible(a->type, &other->type));
+	other = type_new_array(&arena, &type_int, 4);
+	assert(other && !type_compatible(a->type, &other->type));
+	other = type_new_array(&arena, &type_uint, 3);
+	assert(other && !type_compatible(a->type, &other->type));
+	p = (struct ast_local_declaration *)a->item.next;
+	assert(p->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)p->initializer;
+	assert(decay->expression.type->kind == type_kind_pointer && decay->expression.depth == 2);
+	assert(!decay->expression.is_lvalue && decay->operand->is_lvalue && decay->operand->type == a->type);
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &type_int);
+	assert(((struct ast_name_expression *)decay->operand)->declaration == a);
+	item = (struct ast_statement_item *)p->item.next;
+	value = ((struct ast_return_statement *)item->statement)->value;
+	assert(value->kind == expression_load && value->type == &type_int && value->depth == 5);
+	indirection = (struct ast_indirection_expression *)((struct ast_load_expression *)value)->operand;
+	assert(indirection->expression.kind == expression_indirection && indirection->expression.is_lvalue);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->expression.kind == expression_pointer_offset && offset->element_size == 4);
+	assert(offset->base->kind == expression_array_decay);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_local_array_tree();
 	test_pointer_subscript_tree();
 	test_pointer_arithmetic_tree();
 	test_pointer_equality_tree();

@@ -21,6 +21,7 @@ enum expression_kind {
 	expression_pointer_difference,
 	expression_assignment,
 	expression_load,
+	expression_array_decay,
 	expression_conversion,
 	expression_cast,
 	expression_logical,
@@ -32,6 +33,7 @@ enum {
 	ast_max_statement_nesting = 128,
 	ast_max_block_items = 4096,
 	ast_max_locals = 256,
+	ast_max_local_storage = 1024 * 1024,
 	ast_max_external_declarations = 512,
 	ast_max_functions = 256,
 	ast_max_parameters = 128,
@@ -174,6 +176,12 @@ struct ast_load_expression {
 	struct ast_expression *operand;
 };
 
+/* Inserted by sema in ordinary array value contexts, never an array load. */
+struct ast_array_decay_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
+};
+
 /* Inserted by sema for arithmetic/assignment/call/return conversion contexts. */
 struct ast_conversion_expression {
 	struct ast_expression expression;
@@ -198,6 +206,7 @@ enum integer_specifier {
 enum type_syntax_kind {
 	type_syntax_integer,
 	type_syntax_pointer,
+	type_syntax_array,
 };
 
 struct ast_type_syntax {
@@ -214,6 +223,12 @@ struct ast_integer_type_syntax {
 struct ast_pointer_type_syntax {
 	struct ast_type_syntax syntax;
 	struct ast_type_syntax *referent;
+};
+
+struct ast_array_type_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_type_syntax *element;
+	struct token bound;
 };
 
 struct ast_cast_expression {
@@ -368,6 +383,10 @@ struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
 	struct source_location location, enum integer_specifier specifier);
 struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *referent);
+struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *element, struct token bound);
+struct ast_array_decay_expression *ast_new_array_decay(struct arena *arena,
+	struct ast_expression *operand, const struct type *pointer_type);
 struct ast_call_expression *ast_new_call(struct arena *arena,
 	struct ast_expression *callee, struct ast_argument *arguments, size_t argument_count);
 struct ast_argument *ast_new_argument(struct arena *arena, struct ast_expression *value);

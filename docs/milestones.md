@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-e declarations/lvalues, comparisons, arithmetic and pointer subscripts implemented; later verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-f pointer operations/subscripts and fixed local arrays implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -956,3 +956,12 @@ M13e source checkpoint: pointer subscripts passed full normal GCC suites,
 ABI directions, chained/postfix/digraph/once-only and typed-depth checks plus
 bounded sanitized fuzz. Full isolated/remote checks remain pending. M13f fixed
 local arrays and explicit decay/layout contracts are pre-designed.
+
+M13c dfd9742 passed exact-source CI 38825345451. Later snapshots and isolated
+matrices remain separate; M13a's local GCC leg passed, Clang remains in progress.
+
+M13f source checkpoint: fixed local arrays and explicit decay passed full normal
+GCC suites, 18 both-host/QBE full-value programs, primitive/pointer storage,
+both-direction borrowed-array ABI, target layout/compatibility/cache, exact
+storage/depth and bounded sanitized fuzz checks. Full isolated/remote verification
+remains pending. M13g multidimensional shape composition is pre-designed.
