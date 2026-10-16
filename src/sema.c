@@ -326,6 +326,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	struct scope scope = { .parent = sema->scope };
 	struct function_type *type = NULL;
 	size_t count = 0;
+	bool void_marker = false;
 
 	if (!return_type || !sema_parameter_names(sema, function->parameters))
 		return NULL;
@@ -341,6 +342,13 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		if (!declared)
 			goto done;
 		if (declared->kind == type_kind_void) {
+			/* Resolve query-derived void without removing its written syntax. */
+			if (function->parameter_count == 1 && !parameter->has_name && !declared->qualifiers) {
+				parameter->type = declared;
+				parameter->is_void_marker = true;
+				void_marker = true;
+				continue;
+			}
 			diagnostic_error(sema->diagnostics, parameter->location, "parameter cannot have void type");
 			goto done;
 		}
@@ -352,7 +360,9 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 			goto done;
 		count++;
 	}
-	assert(count == function->parameter_count && count <= ast_max_parameters);
+	/* Written query-derived void has one node, but the ABI has no parameters. */
+	assert(count + (void_marker ? 1 : 0) == function->parameter_count);
+	assert(count <= ast_max_parameters);
 	return_type = unqualified_type(sema, return_type, function->return_syntax->location);
 	if (!return_type)
 		goto done;
@@ -1899,17 +1909,17 @@ static bool sema_function_declaration(struct sema *sema,
 	struct token main_name = declaration->name;
 	const struct type *return_type;
 	const struct type *resolved;
-	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
-		main_name.spelling_location.offset, "main", 4) == 0 && declaration->parameter_count) {
-		diagnostic_error(sema->diagnostics, main_name.location,
-			"only zero-parameter main is supported yet");
-		return false;
-	}
 	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
 	if (!resolved)
 		return false;
 	assert(resolved->kind == type_kind_function);
 	type = (const struct function_type *)resolved;
+	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
+		main_name.spelling_location.offset, "main", 4) == 0 && type->parameter_count) {
+		diagnostic_error(sema->diagnostics, main_name.location,
+			"only zero-parameter main is supported yet");
+		return false;
+	}
 	return_type = type->return_type;
 	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
 		main_name.spelling_location.offset, "main", 4) == 0 &&

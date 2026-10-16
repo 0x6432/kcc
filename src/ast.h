@@ -380,7 +380,7 @@ struct ast_function_type_syntax {
 	struct ast_type_syntax syntax;
 	struct ast_type_syntax *return_syntax;
 	struct ast_parameter *parameters;
-	size_t parameter_count;
+	size_t parameter_count; /* Written nodes, not the resolved ABI count. */
 };
 
 struct ast_cast_expression {
@@ -603,6 +603,7 @@ struct ast_parameter {
 	struct source_location location;
 	struct token name;
 	bool has_name;
+	bool is_void_marker; /* Checked sole unnamed void, not an ABI parameter. */
 	struct ast_local_declaration *local; /* NULL for prototypes and unnamed parameters. */
 	struct ast_parameter *next;
 };
@@ -614,7 +615,7 @@ struct ast_function_declaration {
 	struct token name;
 	struct function_symbol *symbol;
 	struct ast_parameter *parameters;
-	size_t parameter_count;
+	size_t parameter_count; /* Written nodes, not the resolved ABI count. */
 };
 
 struct ast_function {

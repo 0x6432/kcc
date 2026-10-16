@@ -3318,8 +3318,67 @@ static void test_typeof_expression_tree(void)
 	source_destroy(&source);
 }
 
+static void test_void_parameter_query_tree(void)
+{
+	const char *text = "int f(typeof(void)) { return 42; } int main(typeof((void)0)) { int (*p)(typeof_unqual(const void))=f; return p(); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *f;
+	struct ast_function *main_function;
+	struct ast_parameter *marker;
+	struct ast_parameter *main_marker;
+	struct ast_local_declaration *callback;
+	struct ast_function_type_syntax *callback_syntax;
+	struct ast_parameter *callback_marker;
+	struct ast_type_syntax *written;
+	const struct function_type *signature;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	f = first_function(unit);
+	main_function = (struct ast_function *)f->external.next;
+	marker = f->declaration->parameters;
+	main_marker = main_function->declaration->parameters;
+	assert(marker && !marker->next && !marker->has_name && !marker->is_void_marker);
+	assert(!marker->type && marker->type_syntax->kind == type_syntax_typeof_type);
+	assert(f->declaration->parameter_count == 1 && f->declaration->type_syntax->parameter_count == 1);
+	written = marker->type_syntax;
+	callback = (struct ast_local_declaration *)main_function->body->items;
+	callback_syntax = (struct ast_function_type_syntax *)((struct ast_pointer_type_syntax *)callback->type_syntax)->referent;
+	callback_marker = callback_syntax->parameters;
+	assert(callback_marker && !callback_marker->is_void_marker && !callback_marker->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(f->declaration->parameters == marker && marker->type_syntax == written);
+	assert(marker->is_void_marker && !marker->local && marker->type == &type_void);
+	assert(!f->locals && f->declaration->parameter_count == 1);
+	assert(!f->declaration->symbol->type->parameter_count && !f->declaration->symbol->type->parameters);
+	assert(main_marker->is_void_marker && !main_marker->local && main_marker->type == &type_void);
+	assert(!main_function->declaration->symbol->type->parameter_count);
+	assert(main_function->locals == callback && !callback->next_local && callback->slot == 0);
+	assert(callback_marker->is_void_marker && !callback_marker->local && !callback_marker->type->qualifiers);
+	assert(callback_marker->type->kind == type_kind_void && callback_syntax->parameter_count == 1);
+	signature = (const struct function_type *)((const struct pointer_type *)callback->type)->referent;
+	assert(!signature->parameter_count && !signature->parameters);
+	assert(type_compatible(&signature->type, &f->declaration->symbol->type->type));
+	assert(!unit->strings);
+
+	fclose(stream);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_void_parameter_query_tree();
 	test_typeof_expression_tree();
 	test_typeof_type_tree();
 	test_switch_case_tree();

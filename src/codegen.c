@@ -1069,6 +1069,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
+		if (parameter->is_void_marker)
+			continue;
 		emit(&codegen, "%s%s %%p%zu", parameter_index ? ", " : "",
 			qbe_abi_type(parameter->type), parameter_index);
 		parameter_index++;
@@ -1088,6 +1090,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
+		if (parameter->is_void_marker)
+			continue;
 		if (parameter->local)
 			emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
 				qbe_store_size(parameter->type), parameter_index, parameter->local->slot);

@@ -514,3 +514,25 @@ M14k1 source/tests/docs are stashed during this independent correction. Its
 interrupted full/sanitizer runs are not passes and must restart after restoration.
 Compiler source is unchanged by this oracle fix; full prior local M23d2 regression
 remains recorded separately, not a fresh full-run claim for this test-only change.
+
+## M14k1 query-derived void parameter normalization
+
+A sole unnamed unqualified resolved void parameter is annotated is_void_marker,
+retaining its written query syntax and checked type. It contributes no semantic
+function parameter, prototype binding, local spill or ABI operand. Parsed counts
+still describe written AST nodes (literal void keeps the existing zero-node
+parser fast path); semantic function_type counts describe the actual ABI. Named,
+qualified or mixed void parameters remain errors. Main's supported zero-parameter
+check now uses the resolved signature instead of the written node count.
+
+Backend definition-header and spill traversals skip the checked marker before
+querying its width or incrementing ABI indices. Real unnamed C23 parameters keep
+their ABI positions; no synthetic parameters or names are introduced. Direct/
+indirect calls, nested signatures, prototypes and definition compatibility reuse
+the existing semantic function types. Root query non-evaluation still applies in
+local callback declarators. This adds no new runtime storage or resource bound.
+
+Bare query-derived function declarations, block-scope function declarations,
+typedef/storage/variadic/VM work remain unsupported. Qualified void is not an
+empty-list marker unless typeof_unqual first removes its qualification. No full
+C23 declaration-normalization claim is made.

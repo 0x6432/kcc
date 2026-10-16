@@ -63,7 +63,6 @@ syntax_errors = ['int f(void) { typeof int x; }','int f(void) { typeof() x; }',
 subset_errors = [
     ('int f(int n) { typeof(int[n]) a; return 0; }','variable-length'),
     ('typeof(int(void)) f;','file-scope object declarations are not supported yet'),
-    ('int f(typeof(void));','parameter cannot have void type'),
 ]
 def native_array_qualification_gap(text, diagnostics):
     expected = 'int main(void) { typeof_unqual(const int[2][3]) a; a[1][2]=42; return a[1][2]; }'

@@ -6,6 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M14k1: a sole unnamed query-derived void parameter now denotes a zero-argument
+function, including main, callbacks and compatible prototypes/definitions. Its
+written syntax is preserved without creating a runtime parameter or spill slot.
+Named, qualified or mixed void parameters remain errors. Bare function aliases,
+typedef scopes and other declaration-normalization work remain incomplete.
+
 M23d2: `typeof` and `typeof_unqual` also accept expression operands, preserving
 root const/array/function types without operand evaluation. Children still have
 their normal constraints and conversions. Existing nullptr types become nameable;

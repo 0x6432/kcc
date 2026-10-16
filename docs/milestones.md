@@ -1910,3 +1910,39 @@ presented as a fresh full run. Bounded sanitized fuzz ran 16,211 lexer / 34,704
 pipeline inputs in 26/26 seconds without reported failure. No generated C ran.
 The exact classifier's positive/negative units passed. No compiler source or
 semantic acceptance changed. Remote CI for this correction remains pending.
+
+## M14k1 query-derived void parameter normalization
+
+A sole unnamed unqualified resolved void parameter is annotated is_void_marker,
+retaining its written query syntax and checked type. It contributes no semantic
+function parameter, prototype binding, local spill or ABI operand. Parsed counts
+still describe written AST nodes (literal void keeps the existing zero-node
+parser fast path); semantic function_type counts describe the actual ABI. Named,
+qualified or mixed void parameters remain errors. Main's supported zero-parameter
+check now uses the resolved signature instead of the written node count.
+
+Backend definition-header and spill traversals skip the checked marker before
+querying its width or incrementing ABI indices. Real unnamed C23 parameters keep
+their ABI positions; no synthetic parameters or names are introduced. Direct/
+indirect calls, nested signatures, prototypes and definition compatibility reuse
+the existing semantic function types. Root query non-evaluation still applies in
+local callback declarators. This adds no new runtime storage or resource bound.
+
+Bare query-derived function declarations, block-scope function declarations,
+typedef/storage/variadic/VM work remain unsupported. Qualified void is not an
+empty-list marker unless typeof_unqual first removes its qualification. No full
+C23 declaration-normalization claim is made.
+
+M14k1 final local validation: complete normal and QBE regression passed. Both
+GCC 11/Clang 15 ASan/UBSan lexer/sema and void-query, expression/type-name-query,
+switch-case/foundation, goto, named-label and integer-compound runtime/ABI suites
+passed. Focused: 38 original programs, 12 constraints, real-parameter 128/129
+boundaries and no marker ABI slot, 24 zero-argument primitive-result ABI
+arrangements per host. Three ordinary baseline programs agree natively per host;
+legacy hosts lack actual query keywords. Sanitized bounded fuzz: 20,758 lexer /
+61,639 pipeline inputs in 26/26 seconds, no reported failure. No generated C ran.
+Prior 6893ce3 CI 38919183328 revealed an independent nullptr implicit-conversion
+compiler bug and Clang explicit-cast oracle gaps. See the next prewritten
+m23-nullptr-assignment-conversions.md; do not claim this checkpoint's remote CI
+or an isolated full matrix passed. Query-derived function declarations are the
+next separately designed feature, after the correctness fix.

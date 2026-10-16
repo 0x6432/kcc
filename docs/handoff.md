@@ -2,39 +2,55 @@
 
 ## Current checkpoint
 
-M23d2 expression queries are locally complete; a test-only native expression-
-array qualification oracle correction passed both-host normal/QBE and sanitized
-focused tests, units and bounded fuzz (16,211 lexer / 34,704 pipeline; 26/26s) after 05097e6 CI
-38918142442 failed both reference jobs on the exact b[1] read-only diagnostic.
-Fuzz passed. See milestones.md; kcc behavior is unchanged. M14k1 uncommitted work
-is preserved in the newest named stash and its interrupted full/sanitizer runs
-must restart after restoration. Commit/push this independent correction, then restore only the M14k1 named stash. Final full normal/QBE and both-host
-targeted ASan/UBSan passed; sanitized bounded fuzz completed 15,177 lexer /
-39,321 pipeline inputs in 26/26 seconds without reported failure. Focused tests
-passed 65 original kcc/QBE programs, 17 constraints, syntax/subset/mixed 64/65
-query boundaries, operand-erasure IL and 24 primitive cross-object ABI arrangements
-per host. GCC 11/Clang 15 lack actual C23 keywords: zero manufactured agreement.
-Provider interruption lost process handles, not logs; verified both complete
-regression passes, sanitizer completion marker and both fuzz completion records.
-Scripts implement-m23d1.py / implement-m23d2.py are applied: never reapply.
-Read m23-typeof-expressions.md for contracts, nullptr explicit-cast rule and limits.
-Next: M14k1 sole query-derived void parameter normalization, designed before coding
-in m14-void-parameter-normalization.md. Keep written parameter syntax distinct
-from semantic ABI count; do not invent parameter ASTs or names.
+M14k1 sole query-derived void parameter normalization passed full normal/QBE
+regression, both-host targeted ASan/UBSan and bounded sanitized fuzz (20,758 lexer /
+61,639 pipeline inputs, 26/26 seconds). Focused: 38 original programs, 12 constraints,
+24 zero-argument primitive-result ABI arrangements per host, syntax/subset/128/129
+real-parameter boundaries and no marker ABI slot. GCC 11/Clang 15 provide three
+ordinary baseline native agreements each; actual query syntax awaits modern-host
+checks. No generated C or invalid curated source ran. Written ast_parameter nodes retain query
+syntax/type/is_void_marker, but semantic signature and QBE ABI counts omit the
+marker. Main checks the semantic signature count; header/spill traversals skip
+markers before width or index calculation. Literal void/empty lists and real
+unnamed parameters retain their old behavior. No fake parameter nodes/names.
+Read m14-void-parameter-normalization.md. implement-m14k1.py is applied; do not
+reapply. Next correctness design: m23-nullptr-assignment-conversions.md, before
+m14-query-function-declarations.md (not implemented). M14k1 was stashed during that independent oracle fix; its interrupted full and
+sanitizer runs are not passes. Those full runs were restarted from scratch and passed. Stash restoration
+had documentation-only conflicts; both the complete correction history and M14k1
+sections were preserved. No source conflicts occurred. The environment restart
+removed installed Clang; clang/compiler-rt 15
+were restored before repeating both-host focused validation. Keep older stashes.
 
-M23d1 391fd01 and independent oracle fix e77cd0a are committed/pushed. The original
-CI 38909406525 failed both native array-unqualification oracles, fuzz passed.
-Correction e77cd0a CI 38911835030 now passed every job. Only the exact observed
-original source/read-only diagnostics is a native gap, not agreement; no kcc
-semantic change. Full local normal/QBE, both-host targeted sanitizer and fresh
-fuzz for the fix passed. The M23d2 stash was restored and removed; two older reset
-stashes remain preserved. Full isolated M23d1 and current CI remain separate.
+M23d2 05097e6 expression queries are committed/pushed. Final local full normal/QBE,
+both-host targeted ASan/UBSan and sanitized bounded fuzz passed (15,177 lexer /
+39,321 pipeline, 26/26 seconds). Focused: 65 original programs, 17 constraints,
+64/65 mixed-query boundaries, no operand call in IL and 24 primitive ABI cases
+per host. GCC 11/Clang 15 lack actual C23 keywords, not native agreements.
+Public CI 38918142442 failed both native reference jobs on the exact expression-
+array b[1] read-only diagnostic; fuzz passed. Independent test-only correction
+6893ce3 is committed/pushed after both-host normal/QBE and sanitized focused tests,
+classifier units and bounded fuzz (16,211 lexer / 34,704 pipeline, 26/26 seconds).
+Only the observed source/diagnostics is a native gap, not agreement. No compiler
+source or semantic acceptance changed. Its CI 38919183328 passed fuzz but failed
+GCC on the obsolete integer-zero-to-nullptr implicit rejection and Clang on valid
+explicit null-constant-to-nullptr casts. The normative N3096 assignment constraint
+admits null pointer constants; contradictory footnote 127 was stale (N3220 keeps
+the normative rule and removes that footnote). Correct kcc implicit conversions
+next, not GCC acceptance classification. Retain valid cast tests and classify
+only exact Clang diagnostics/source separately from native agreement. Its isolated
+matrix is running independently on an archived snapshot, not this working tree.
+Scripts implement-m23d1.py / implement-m23d2.py are already applied.
 
-M19f1 cff28ab public CI 38904988323 and full isolated GCC/Clang normal/ASan/UBSan
-matrix passed. M19f2 84797f7 public CI 38907237071 now passed every job; its local
-full normal/QBE, targeted both-host sanitizer/fuzz and isolated GCC matrix passed,
-isolated Clang pending. User requests continuous tested work with periodic
-commit/push, no arbitrary fuzz C execution and no subagents.
+M23d1 391fd01 and independent oracle fix e77cd0a are pushed. The original CI
+38909406525 failed native nested-array unqualification oracles; corrected
+e77cd0a CI 38911835030 passed all jobs. Only the exact original source/read-only
+diagnostics is a native gap, never agreement; kcc follows N3096 unchanged.
+M19f1 cff28ab public CI 38904988323 and isolated full GCC/Clang matrix passed;
+M19f2 84797f7 public CI 38907237071 passed, isolated GCC passed/Clang incomplete.
+Old process handles disappeared on provider restart: inspect logs and running
+processes before treating old queues as active. User requests continuous tested
+milestones, periodic commit/push, no arbitrary fuzz C execution, no subagents.
 
 ### Earlier foundation (chronological)
 
