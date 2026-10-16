@@ -6,7 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14g: real void types, void-returning functions/callbacks, bare returns and
+M14h: object/void pointer conversions and mixed equality preserve real types
+and explicit conversion nodes, including arrays and pointer objects. Real void types, void-returning functions/callbacks, bare returns and
 effect-only casts/discards emit no dummy QBE result. Function designators decay explicitly to function pointers; compatible
 callback values, factories and indirect fixed calls preserve once-only target
 evaluation and canonical narrow returns. Fixed function suffixes share the single-pass declarator parser, including
@@ -19,7 +20,7 @@ Compatible pointers to unknown-bound arrays preserve incomplete referents
 without inventing a stride. Composite redeclarations retain known bounds.
 Parenthesized local/parameter object declarators and abstract cast types
 preserve pointer/array precedence, including int (*p)[3] and int (*p[2])[3].
-Object/void pointer conversions, typedef names and qualifiers remain later increments.
+Other incompatible explicit pointer casts, typedef names and qualifiers remain later increments.
 Array parameters permit an omitted outer bound, including int a[][3].
 Declared incomplete shape remains distinct from the effective pointer.
 Literal-bound array parameters retain their declared shape but adjust once

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14g. Read the latest entries together with README.md and
+Current milestone: M14h. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1096,3 +1096,14 @@ emits bare ret; prior nonvoid fallthrough behavior is unchanged. &* cancellation
 accepts void pointers without loading them. Compatible void-pointer values are
 supported, but object/void conversions and mixed equality are next M14h. Null
 constants, variadics, qualifiers, typedefs and remaining C23 stay unfinished.
+
+## M14h
+
+Object pointers convert to/from void * in assignment-like contexts and explicit
+casts. Mixed equality converts the object pointer to void *, in either source
+order. Compatibility is unchanged: signatures with int * versus void * still
+conflict. This rule inspects only immediate referents, not recursively nested
+void **/int **. Function pointers cannot bridge to void *, but pointers to
+function-pointer objects can. Mixed ordering, integer null constants, incomplete
+strides, other incompatible explicit pointer casts, qualifiers and typedefs are
+not added. M14i explicit object/function pointer casts is designed separately.

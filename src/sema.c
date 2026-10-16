@@ -261,6 +261,21 @@ static const struct type *adjust_parameter_type(struct sema *sema,
 	return &pointer->type;
 }
 
+/* Value conversion is broader than compatibility, and only one level deep. */
+static bool object_void_pointer_conversion(const struct type *source,
+	const struct type *target)
+{
+	const struct type *source_referent;
+	const struct type *target_referent;
+
+	if (source->kind != type_kind_pointer || target->kind != type_kind_pointer)
+		return false;
+	source_referent = ((const struct pointer_type *)source)->referent;
+	target_referent = ((const struct pointer_type *)target)->referent;
+	return (source_referent->kind == type_kind_void && type_is_object(target_referent)) ||
+		(target_referent->kind == type_kind_void && type_is_object(source_referent));
+}
+
 static bool check_conversion(struct sema *sema, const struct type *source,
 	const struct type *target, struct source_location location)
 {
@@ -268,7 +283,8 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 		diagnostic_error(sema->diagnostics, location, "conversion requires a scalar value and target");
 		return false;
 	}
-	if (type_compatible(source, target) || (type_is_integer(source) && type_is_integer(target)) ||
+	if (type_compatible(source, target) || object_void_pointer_conversion(source, target) ||
+		(type_is_integer(source) && type_is_integer(target)) ||
 		(source->kind == type_kind_pointer && target->kind == type_kind_bool))
 		return true;
 	diagnostic_error(sema->diagnostics, location,
@@ -642,6 +658,18 @@ static bool sema_expression(struct sema *sema,
 			if (!comparison_operator(node->operation)) {
 				diagnostic_error(sema->diagnostics, expression->location, "invalid pointer binary operator");
 				return false;
+			}
+			if ((node->operation == binary_equal || node->operation == binary_not_equal) &&
+				object_void_pointer_conversion(node->left->type, node->right->type)) {
+				const struct type *left_referent = ((const struct pointer_type *)node->left->type)->referent;
+
+				/* Equality converts the object pointer to the void pointer, not vice versa. */
+				if (left_referent->kind == type_kind_void) {
+					if (!convert_expression(sema, &node->right, node->left->type))
+						return false;
+				} else if (!convert_expression(sema, &node->left, node->right->type)) {
+					return false;
+				}
 			}
 			if (node->left->type->kind != type_kind_pointer || node->right->type->kind != type_kind_pointer ||
 				!type_compatible(node->left->type, node->right->type)) {

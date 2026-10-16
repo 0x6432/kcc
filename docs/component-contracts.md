@@ -1185,3 +1185,14 @@ canonical ABI results, void calls produce none. Discard emission routes void
 calls, casts and indirections through effect-only paths. Ordinary expression
 statements and for-header initializer/step use this path. Function signatures,
 explicit returns and void fallthrough omit the QBE result type/value.
+
+## M14h object/void pointer value conversion
+
+A named sema predicate checks both pointer categories and their immediate
+referents. It broadens check_conversion, not type_compatible or type_composite.
+Assignment-like conversion inserts concrete ast_conversion_expression nodes
+with original operands, target types and checked depth. Mixed ==/!= converts
+only the object-pointer operand to the existing void-pointer type, then follows
+the ordinary compatible-pointer comparison path. Relational comparison does
+not take this normalization path. QBE's existing full-pointer-width copy remains
+sufficient; no type flattening, dereference, stride or ABI modification is used.

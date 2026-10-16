@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory(prefix='kcc void functions ') as directory:
       'void f(void); void g(void) { *f(); }',
       'void f(void); void g(void) { void (*p)(void)=0; }',
       'void f(void); void g(void) { int (*p)(void)=f; }',
-      'void f(void *p) { int *q=p; }',  # Mixed object/void conversions are next.
+      'void f(void **p) { int **q=p; }',  # Nested pointer compatibility is not erased.
     ]
     invalid += ['void f(void); void g(void) { ' + expression + '; }' for expression in
                 ['!f()', '+f()', '-f()', '~f()', 'f()+1', '1+f()', 'f()==f()', 'f()<f()',

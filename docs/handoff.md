@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M14g implementation: real void types/functions, bare returns and effect-only
+M14h implementation: object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
 casts/discards; prior explicit function designators/decay, callback values and
 indirect fixed calls; concrete concrete fixed-function declarator syntax/array-pointer returns,
 C23 unnamed definitions with positional ABI and no fake spills,
@@ -22,8 +22,10 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M14b 1bfd4a9, run 38833251538, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f/g/h/i/j/k and M14a also passed their exact-source CI.
+Latest confirmed exact-source CI: M14f 6586319, runs 38836315858 and
+38846879414 passed; M14e c271d3f run 38835100462 passed. Earlier M14a-d and
+M13e-k exact-source runs passed. M14g 592b551 run 38859101528 was still running
+at this checkpoint; check actual status, not an older passing source.
 M14e full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
@@ -31,9 +33,9 @@ external flock. Logs/snapshots are in /data/tools and /data/validation-* outside
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14h object/void pointer conversions and mixed equality, designed in
-m14-object-void-conversions.md.
-Null constants, object/void conversions and full declarators,
+Next: M14i explicit object/function pointer casts, designed in
+m14-explicit-pointer-casts.md.
+Null constants, other explicit pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
@@ -1553,3 +1555,26 @@ checkpoint remain pending; do not infer them from older commits.
 M13e's independent GCC/Clang normal + ASan/UBSan matrix passed. Later matrices
 remain separately queued/running. M14h object/void conversions and mixed equality
 are designed before implementation in m14-object-void-conversions.md.
+
+## M14h tested source checkpoint
+
+Full normal GCC regression and QBE suites passed. New GCC/Clang tests cover
+21 full-value programs, all primitive object round trips, both cross-object ABI
+directions, arrays/incomplete array shapes, pointer-to-pointer and function-
+pointer objects, null conversions supplied by the host, once-only equality
+effects, exact conversion-depth limits and 24 invalid constraints. Typed units
+check explicit conversion nodes, mixed-equality normalization in both orders
+and unchanged type compatibility. A strengthened mixed register/stack fixture
+uses seven distinct live objects and an observable full-width tail; it passed
+both hosts after the full suite, avoiding an unobservable same-pointer fallback.
+
+Bounded ASan/UBSan fuzz completed 21,170 lexer and 63,070 pipeline inputs in
+26 seconds per harness, without reported errors or execution of generated C.
+Full isolated and exact-source remote checks for this checkpoint remain pending.
+M14i explicit object/function pointer casts is designed before implementation.
+
+The sandbox restart removed Clang and interrupted older isolated jobs. Clang
+and compiler-rt were restored; unfinished immutable snapshot matrices were
+requeued under the same external lock, preserving old logs and recording new
+results in /data/tools/*-resumed-validation.log. The active M14g matrix is
+independent. All remote checkpoints remain exact-source, not inferred.

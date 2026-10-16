@@ -1882,8 +1882,72 @@ static void test_void_type_and_effect_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_object_void_conversion_tree(void)
+{
+	const char *text = "void *erase(int *p) { return p; } "
+		"int equal(void *v,int *p) { v==p; return p==v; } "
+		"int *restore(void *p) { return p; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *erase;
+	struct ast_function *equal;
+	struct ast_function *restore;
+	struct ast_statement_item *item;
+	struct ast_conversion_expression *conversion;
+	struct ast_binary_expression *comparison;
+	const struct type *object_pointer;
+	const struct type *void_pointer;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && sema_translation_unit(unit, &arena, &diagnostics));
+	erase = first_function(unit);
+	equal = (struct ast_function *)erase->external.next;
+	restore = (struct ast_function *)equal->external.next;
+	object_pointer = erase->declaration->parameters->type;
+	void_pointer = erase->return_type;
+	assert(object_pointer->kind == type_kind_pointer && void_pointer->kind == type_kind_pointer);
+	assert(!type_compatible(object_pointer, void_pointer));
+	assert(((const struct pointer_type *)void_pointer)->referent == &type_void);
+	item = (struct ast_statement_item *)erase->body->items;
+	conversion = (struct ast_conversion_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(conversion->expression.kind == expression_conversion && conversion->expression.type == void_pointer);
+	assert(conversion->operand->type == object_pointer && conversion->operand->kind == expression_load);
+	assert(conversion->expression.depth == 3 && conversion->operand->depth == 2);
+	item = (struct ast_statement_item *)equal->body->items;
+	comparison = (struct ast_binary_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(comparison->expression.kind == expression_binary && comparison->expression.type == &type_int);
+	assert(comparison->left->kind == expression_load && comparison->right->kind == expression_conversion);
+	assert(type_compatible(comparison->left->type, comparison->right->type));
+	assert(((const struct pointer_type *)comparison->right->type)->referent == &type_void);
+	assert(comparison->expression.depth == 4);
+	item = (struct ast_statement_item *)item->item.next;
+	comparison = (struct ast_binary_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(comparison->left->kind == expression_conversion && comparison->right->kind == expression_load);
+	assert(type_compatible(comparison->left->type, comparison->right->type));
+	assert(comparison->expression.depth == 4);
+	item = (struct ast_statement_item *)restore->body->items;
+	conversion = (struct ast_conversion_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(conversion->expression.kind == expression_conversion);
+	assert(type_compatible(conversion->expression.type, object_pointer));
+	assert(type_compatible(conversion->operand->type, void_pointer));
+	assert(!type_compatible(object_pointer, void_pointer) && !diagnostics.errors);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_object_void_conversion_tree();
 	test_void_type_and_effect_tree();
 	test_function_pointer_expression_tree();
 	test_function_declarator_syntax_tree();

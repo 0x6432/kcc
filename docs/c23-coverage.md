@@ -264,3 +264,10 @@ Void syntax/types, fixed void callbacks, bare returns, void casts and discarded
 expressions are implemented with no scalar representation. Conditions/conversions
 reject void values. Object/void pointer conversions and mixed equality are next;
 this does not imply full declarator, qualifier or C23 conformance.
+
+### M14h object/void pointer conversion
+
+Assignment-like and explicit object/void pointer conversion and mixed equality
+are implemented with explicit typed conversions. This is not recursive pointer
+compatibility; function bridges, integer null constants and other incompatible
+pointer casts remain unsupported.

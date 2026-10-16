@@ -1079,3 +1079,26 @@ checkpoint remain pending; do not infer them from older commits.
 M13e's independent GCC/Clang normal + ASan/UBSan matrix passed. Later matrices
 remain separately queued/running. M14h object/void conversions and mixed equality
 are designed before implementation in m14-object-void-conversions.md.
+
+## M14h tested source checkpoint
+
+Full normal GCC regression and QBE suites passed. New GCC/Clang tests cover
+21 full-value programs, all primitive object round trips, both cross-object ABI
+directions, arrays/incomplete array shapes, pointer-to-pointer and function-
+pointer objects, null conversions supplied by the host, once-only equality
+effects, exact conversion-depth limits and 24 invalid constraints. Typed units
+check explicit conversion nodes, mixed-equality normalization in both orders
+and unchanged type compatibility. A strengthened mixed register/stack fixture
+uses seven distinct live objects and an observable full-width tail; it passed
+both hosts after the full suite, avoiding an unobservable same-pointer fallback.
+
+Bounded ASan/UBSan fuzz completed 21,170 lexer and 63,070 pipeline inputs in
+26 seconds per harness, without reported errors or execution of generated C.
+Full isolated and exact-source remote checks for this checkpoint remain pending.
+M14i explicit object/function pointer casts is designed before implementation.
+
+The sandbox restart removed Clang and interrupted older isolated jobs. Clang
+and compiler-rt were restored; unfinished immutable snapshot matrices were
+requeued under the same external lock, preserving old logs and recording new
+results in /data/tools/*-resumed-validation.log. The active M14g matrix is
+independent. All remote checkpoints remain exact-source, not inferred.
