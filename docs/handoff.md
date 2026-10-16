@@ -14,16 +14,26 @@ assignment constraint, not stale N3096 footnote 127, admits integer/void-pointer
 null pointer constants to nullptr_t. See m23-nullptr-assignment-conversions.md.
 The implementation scripts were already applied; do not reapply them.
 
-M14k2 is implemented ONLY in /data/next-m14k2, independently frozen and validated.
-Full normal/QBE regression, both-host targeted sanitizers and sanitized fuzz
-passed (17,747 lexer / 76,739 pipeline, 26/26 seconds). Its complete Clang 18
-native-oracle regression remains running separately; inspect actual status.
-Transfer its changed source/tests only after committing this nullfix; verify
-/data/tools/m14k2-source.sha256 before/after transfer. Do not copy stale docs.
-Its focused 34 original programs / 12 constraints agree with Clang 18 and all
-three hosts pass 24 mixed-stack ABI arrangements. Preserve both older stashes.
-Read m14-query-function-declarations.md; scripts are already applied there.
-Compact Clang 18.1.8 is /data/tools/clang18/bin/clang-18 (~247 MiB).
+M14k2 is now integrated from /data/next-m14k2; its exact frozen source/test
+SHA-256 manifest matched before and after transfer. Do NOT reapply implementation
+scripts. Read m14-query-function-declarations.md.
+M14k2 final validation: complete normal/QBE regression passed, as did a separate
+complete normal regression using original-source native Clang 18.1.8 oracles.
+Both GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema, query/nullptr/control and
+compound suites passed. Focused Clang 18: 34/34 original native agreements,
+12/12 strict native constraints; all three hosts passed 24 mixed-stack primitive
+ABI arrangements, declaration-only IL, immutable query/composite annotations and
+256/257 function / 512/513 external-declaration boundaries. Legacy hosts lack
+actual C23 keywords and are not counted as native query agreements. Sanitized
+bounded fuzz passed 17,747 lexer / 76,739 pipeline inputs in 26/26 seconds.
+No generated C or invalid curated source executed. SHA-256 verified exact frozen
+source/test bytes before and after integration from /data/next-m14k2. Public CI
+for this increment remains pending; no isolated full sanitizer-matrix claim.
+
+Next prewritten design: m14-file-typedef-foundation.md, not yet implemented.
+Preserve both older stashes. Compact Clang 18.1.8 is available under
+/data/tools/clang18/bin/clang-18 (~247 MiB).
+
 
 M14k1 sole query-derived void parameter normalization passed full normal/QBE
 regression, both-host targeted ASan/UBSan and bounded sanitized fuzz (20,758 lexer /

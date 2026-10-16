@@ -1516,3 +1516,26 @@ Bare query-derived function declarations, block-scope function declarations,
 typedef/storage/variadic/VM work remain unsupported. Qualified void is not an
 empty-list marker unless typeof_unqual first removes its qualification. No full
 C23 declaration-normalization claim is made.
+
+## M14k2 query-derived file-scope function declarations
+
+A separate concrete ast_external_type_declaration retains a query-root type
+syntax, its source name and checked type/symbol annotations. Parsing only accepts
+a semicolon-terminated declaration and does not resolve the query or manufacture
+function syntax, parameter lists, names or a definition. Sema resolves the query
+in source order and currently accepts only a function type. Query-derived object,
+pointer, array and void declarations retain the explicit file-scope-object subset
+diagnostic; query-derived bare definitions, comma lists and initializers remain
+unsupported. Block function declarations, typedef/storage/variadic/VM work remain
+separate. This does not make typeof a symbol-alias facility.
+
+Both ordinary function declarators and query-root declarations use one shared
+registration helper for main checks, symbol bounds, compatibility, immutable
+composite types and redefinition checks. Query caches remain immutable snapshots:
+a later prototype can strengthen a symbol's incomplete array bound without
+rewriting an earlier query's cached type. Definition parameter nodes/bindings and
+recursion installation retain their existing path. Queried declarations add no
+parameters, locals, data, function definitions, runtime query operations or QBE
+alias instructions. Calls/addresses use the existing shared symbol and ABI.
+The existing 256 unique-function / 512 external-declaration bounds still apply;
+repeated compatible queries do not consume additional function-symbol slots.

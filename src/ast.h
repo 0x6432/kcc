@@ -584,6 +584,7 @@ enum external_declaration_kind {
 	external_function_declaration,
 	external_function_definition,
 	external_static_assertion,
+	external_type_declaration,
 };
 
 struct ast_external_declaration {
@@ -595,6 +596,15 @@ struct ast_external_declaration {
 struct ast_external_static_assertion {
 	struct ast_external_declaration external;
 	struct ast_static_assertion *declaration;
+};
+
+/* Written query-root declaration; sema determines whether it is a function. */
+struct ast_external_type_declaration {
+	struct ast_external_declaration external;
+	struct ast_type_syntax *type_syntax;
+	struct token name;
+	const struct type *type;
+	struct function_symbol *symbol;
 };
 
 struct ast_parameter {
@@ -667,6 +677,8 @@ struct ast_call_expression *ast_new_call(struct arena *arena,
 struct ast_argument *ast_new_argument(struct arena *arena, struct ast_expression *value);
 struct ast_parameter *ast_new_parameter(struct arena *arena,
 	struct source_location location, struct token name, bool has_name);
+struct ast_external_type_declaration *ast_new_external_type_declaration(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,
 	struct source_location location, struct token name);
 struct ast_sizeof_expression *ast_new_sizeof(struct arena *arena,

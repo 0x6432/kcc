@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M14k2: semicolon-terminated query-derived file-scope function declarations now
+share ordinary prototype registration, compatibility and immutable composite
+types. They declare distinct function symbols, not aliases to the query operand.
+Query-derived objects and bare definitions remain outside the subset.
+
 M23d2 null-conversion correction: initialization, assignment, arguments and returns
 accept checked null pointer constants for query-named nullptr types. Nonconstant
 zero objects remain invalid. Explicit null casts remain accepted; exact native
@@ -14,13 +19,13 @@ Clang cast gaps are labelled separately, never counted as agreements.
 M14k1: a sole unnamed query-derived void parameter now denotes a zero-argument
 function, including main, callbacks and compatible prototypes/definitions. Its
 written syntax is preserved without creating a runtime parameter or spill slot.
-Named, qualified or mixed void parameters remain errors. Bare function aliases,
+Named, qualified or mixed void parameters remain errors. Bare query-derived definitions,
 typedef scopes and other declaration-normalization work remain incomplete.
 
 M23d2: `typeof` and `typeof_unqual` also accept expression operands, preserving
 root const/array/function types without operand evaluation. Children still have
 their normal constraints and conversions. Existing nullptr types become nameable;
-explicit casts obey the null-constant rule without allowing implicit integer-zero
+explicit casts obey the null-constant rule including checked implicit null pointer constant
 conversion to nullptr objects. VM/atomic/bit-field and alias normalization work
 remain unsupported.
 

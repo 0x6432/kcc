@@ -2149,6 +2149,32 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
+/* queried-external-declaration ::= declaration-specifiers declarator ";"
+ * The outer query remains unresolved; only sema may classify it as a function.
+ */
+static struct ast_external_declaration *parse_external_type_declaration(struct parser *parser,
+	struct ast_type_syntax *type_syntax, struct token beginning, struct token name)
+{
+	struct ast_type_syntax *base = type_syntax;
+	struct ast_external_type_declaration *declaration;
+
+	while (base->kind == type_syntax_qualified)
+		base = ((struct ast_qualified_type_syntax *)base)->base;
+	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression) {
+		diagnostic_error(parser->diagnostics, name.location,
+			"file-scope object declarations are not supported yet");
+		return NULL;
+	}
+	if (!expect_token(parser, token_semicolon,
+		"query-derived external declarations require ';'", NULL))
+		return NULL;
+	declaration = ast_new_external_type_declaration(parser->arena,
+		beginning.location, type_syntax, name);
+	if (!declaration)
+		allocation_error(parser, beginning.location);
+	return declaration ? &declaration->external : NULL;
+}
+
 /* external-declaration ::= static-assert-declaration |
  *     declaration-specifiers declarator (";" | compound-statement)
  */
@@ -2175,10 +2201,8 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	type_syntax = parse_type_name(parser, &beginning, &name, NULL, declarator_external);
 	if (!type_syntax)
 		return NULL;
-	if (type_syntax->kind != type_syntax_function) {
-		diagnostic_error(parser->diagnostics, name.location, "file-scope object declarations are not supported yet");
-		return NULL;
-	}
+	if (type_syntax->kind != type_syntax_function)
+		return parse_external_type_declaration(parser, type_syntax, beginning, name);
 	declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
 	if (!declaration) {
 		allocation_error(parser, beginning.location);

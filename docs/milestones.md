@@ -1970,3 +1970,39 @@ hosts without the actual C23 keywords are not counted as native agreements.
 Bounded sanitized fuzz passed 10,946 lexer / 45,467 pipeline inputs in 26/26
 seconds. No generated C or invalid curated source executed. Public CI for this
 correction remains pending; the preceding 6893ce3 failure is not erased.
+
+## M14k2 query-derived file-scope function declarations
+
+A separate concrete ast_external_type_declaration retains a query-root type
+syntax, its source name and checked type/symbol annotations. Parsing only accepts
+a semicolon-terminated declaration and does not resolve the query or manufacture
+function syntax, parameter lists, names or a definition. Sema resolves the query
+in source order and currently accepts only a function type. Query-derived object,
+pointer, array and void declarations retain the explicit file-scope-object subset
+diagnostic; query-derived bare definitions, comma lists and initializers remain
+unsupported. Block function declarations, typedef/storage/variadic/VM work remain
+separate. This does not make typeof a symbol-alias facility.
+
+Both ordinary function declarators and query-root declarations use one shared
+registration helper for main checks, symbol bounds, compatibility, immutable
+composite types and redefinition checks. Query caches remain immutable snapshots:
+a later prototype can strengthen a symbol's incomplete array bound without
+rewriting an earlier query's cached type. Definition parameter nodes/bindings and
+recursion installation retain their existing path. Queried declarations add no
+parameters, locals, data, function definitions, runtime query operations or QBE
+alias instructions. Calls/addresses use the existing shared symbol and ABI.
+The existing 256 unique-function / 512 external-declaration bounds still apply;
+repeated compatible queries do not consume additional function-symbol slots.
+
+M14k2 final validation: complete normal/QBE regression passed, as did a separate
+complete normal regression using original-source native Clang 18.1.8 oracles.
+Both GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema, query/nullptr/control and
+compound suites passed. Focused Clang 18: 34/34 original native agreements,
+12/12 strict native constraints; all three hosts passed 24 mixed-stack primitive
+ABI arrangements, declaration-only IL, immutable query/composite annotations and
+256/257 function / 512/513 external-declaration boundaries. Legacy hosts lack
+actual C23 keywords and are not counted as native query agreements. Sanitized
+bounded fuzz passed 17,747 lexer / 76,739 pipeline inputs in 26/26 seconds.
+No generated C or invalid curated source executed. SHA-256 verified exact frozen
+source/test bytes before and after integration from /data/next-m14k2. Public CI
+for this increment remains pending; no isolated full sanitizer-matrix claim.

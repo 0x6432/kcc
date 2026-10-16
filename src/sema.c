@@ -1905,52 +1905,48 @@ done:
 	return success;
 }
 
-static bool sema_function_declaration(struct sema *sema,
-	struct ast_function_declaration *declaration, struct ast_function *definition)
+/* Shared registration preserves one compatibility/composite policy for both
+ * written function declarators and query-derived function declarations.
+ */
+static struct function_symbol *register_function(struct sema *sema, struct token name,
+	const struct function_type *type, struct ast_function *definition)
 {
-	struct function_symbol *symbol = find_function(sema, declaration->name);
-	const struct function_type *type;
-	struct token main_name = declaration->name;
+	struct function_symbol *symbol = find_function(sema, name);
 	const struct type *return_type;
-	const struct type *resolved;
-	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
-	if (!resolved)
-		return false;
-	assert(resolved->kind == type_kind_function);
-	type = (const struct function_type *)resolved;
-	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
-		main_name.spelling_location.offset, "main", 4) == 0 && type->parameter_count) {
-		diagnostic_error(sema->diagnostics, main_name.location,
+
+	if (name.length == 4 && memcmp(name.spelling_location.source->data +
+		name.spelling_location.offset, "main", 4) == 0 && type->parameter_count) {
+		diagnostic_error(sema->diagnostics, name.location,
 			"only zero-parameter main is supported yet");
-		return false;
+		return NULL;
 	}
 	return_type = type->return_type;
-	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
-		main_name.spelling_location.offset, "main", 4) == 0 &&
+	if (name.length == 4 && memcmp(name.spelling_location.source->data +
+		name.spelling_location.offset, "main", 4) == 0 &&
 		!type_compatible(return_type, &type_int)) {
-		diagnostic_error(sema->diagnostics, main_name.location, "main must return int");
-		return false;
+		diagnostic_error(sema->diagnostics, name.location, "main must return int");
+		return NULL;
 	}
 	if (symbol && !type_compatible(&symbol->type->type, &type->type)) {
-		diagnostic_error(sema->diagnostics, declaration->name.location,
+		diagnostic_error(sema->diagnostics, name.location,
 			"incompatible function declaration");
-		return false;
+		return NULL;
 	}
 
 	if (!symbol) {
 		if (sema->function_count == ast_max_functions) {
-			diagnostic_error(sema->diagnostics, declaration->name.location,
+			diagnostic_error(sema->diagnostics, name.location,
 				"translation unit exceeds function limit (256)");
-			return false;
+			return NULL;
 		}
 		symbol = arena_alloc(sema->arena, sizeof(*symbol));
 		if (!symbol) {
-			diagnostic_error(sema->diagnostics, declaration->name.location,
+			diagnostic_error(sema->diagnostics, name.location,
 				"out of memory creating function symbol");
-			return false;
+			return NULL;
 		}
 		*symbol = (struct function_symbol) {
-			.name = declaration->name,
+			.name = name,
 			.type = type,
 			.next = sema->functions,
 		};
@@ -1958,9 +1954,9 @@ static bool sema_function_declaration(struct sema *sema,
 		sema->function_count++;
 	}
 	if (definition && symbol->definition) {
-		diagnostic_error(sema->diagnostics, declaration->name.location,
+		diagnostic_error(sema->diagnostics, name.location,
 			"redefinition of function");
-		return false;
+		return NULL;
 	}
 	/* Compatibility alone is not transitive for unknown array bounds. Retain
 	 * known bounds in the visible composite without rewriting syntax caches.
@@ -1969,12 +1965,48 @@ static bool sema_function_declaration(struct sema *sema,
 		const struct type *composite = type_composite(sema->arena, &symbol->type->type, &type->type);
 
 		if (!composite) {
-			diagnostic_error(sema->diagnostics, declaration->name.location,
+			diagnostic_error(sema->diagnostics, name.location,
 				"out of memory creating composite function type");
-			return false;
+			return NULL;
 		}
 		symbol->type = (const struct function_type *)composite;
 	}
+	return symbol;
+}
+
+static bool sema_external_type_declaration(struct sema *sema,
+	struct ast_external_type_declaration *declaration)
+{
+	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
+
+	if (!type)
+		return false;
+	if (type->kind != type_kind_function) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"file-scope object declarations are not supported yet");
+		return false;
+	}
+	declaration->symbol = register_function(sema, declaration->name,
+		(const struct function_type *)type, NULL);
+	if (!declaration->symbol)
+		return false;
+	declaration->type = type;
+	return true;
+}
+
+static bool sema_function_declaration(struct sema *sema,
+	struct ast_function_declaration *declaration, struct ast_function *definition)
+{
+	const struct type *resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
+	struct function_symbol *symbol;
+
+	if (!resolved)
+		return false;
+	assert(resolved->kind == type_kind_function);
+	symbol = register_function(sema, declaration->name,
+		(const struct function_type *)resolved, definition);
+	if (!symbol)
+		return false;
 	declaration->symbol = symbol;
 	if (!definition)
 		return true;
@@ -2001,6 +2033,13 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		if (external->kind == external_static_assertion) {
 			if (!sema_static_assertion(&sema,
 				((struct ast_external_static_assertion *)external)->declaration))
+				return false;
+			external = external->next;
+			continue;
+		}
+		if (external->kind == external_type_declaration) {
+			if (!sema_external_type_declaration(&sema,
+				(struct ast_external_type_declaration *)external))
 				return false;
 			external = external->next;
 			continue;

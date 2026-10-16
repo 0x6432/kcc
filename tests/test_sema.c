@@ -3439,8 +3439,65 @@ static void test_nullptr_assignment_conversion_tree(void)
 	source_destroy(&source);
 }
 
+static void test_queried_function_declaration_tree(void)
+{
+	const char *text = "int seed(int (*p)[]); typeof(seed) alias; int alias(int (*p)[2]) { return (*p)[1]; } typeof(alias) again; int again(int (*p)[2]) { return alias(p); } int main(void) { int a[2]; a[1]=42; return again(&a); }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *seed;
+	struct ast_external_type_declaration *alias;
+	struct ast_external_type_declaration *again;
+	struct ast_function *definition;
+	struct ast_function *again_definition;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_type_syntax *written;
+	const struct function_type *cached;
+	const struct array_type *array;
+
+	assert(source_from_bytes(&source, "queried-function.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	seed = (struct ast_function_declaration *)unit->declarations;
+	alias = (struct ast_external_type_declaration *)seed->external.next;
+	assert(alias->external.kind == external_type_declaration && !alias->type && !alias->symbol);
+	written = alias->type_syntax;
+	query = (struct ast_typeof_expression_syntax *)written;
+	assert(written->kind == type_syntax_typeof_expression && !written->type);
+	assert(query->operand->kind == expression_name && !query->operand->type);
+	definition = (struct ast_function *)alias->external.next;
+	again = (struct ast_external_type_declaration *)definition->external.next;
+	again_definition = (struct ast_function *)again->external.next;
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(alias->type_syntax == written && alias->type == written->type);
+	assert(query->operand->kind == expression_function_designator && !query->operand->is_lvalue);
+	assert(((struct ast_function_designator_expression *)query->operand)->function == seed->symbol);
+	assert(query->operand->type == alias->type && alias->type == &seed->symbol->type->type);
+	assert(alias->symbol != seed->symbol && alias->symbol == definition->declaration->symbol);
+	assert(alias->symbol->definition == definition && !seed->symbol->definition);
+	cached = (const struct function_type *)alias->type;
+	array = (const struct array_type *)((const struct pointer_type *)cached->parameters->type)->referent;
+	assert(array->type.kind == type_kind_array && !array->count);
+	array = (const struct array_type *)((const struct pointer_type *)alias->symbol->type->parameters->type)->referent;
+	assert(array->count == 2 && &alias->symbol->type->type != alias->type);
+	assert(again->external.kind == external_type_declaration && again->type == &alias->symbol->type->type);
+	assert(again->symbol != alias->symbol && again->symbol == again_definition->declaration->symbol);
+	assert(again->symbol->definition == again_definition && again->type_syntax->type == again->type);
+	assert(definition->locals == definition->declaration->parameters->local);
+	assert(definition->locals && !definition->locals->next_local && definition->locals->slot == 0);
+	assert(!unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_queried_function_declaration_tree();
 	test_nullptr_assignment_conversion_tree();
 	test_void_parameter_query_tree();
 	test_typeof_expression_tree();
