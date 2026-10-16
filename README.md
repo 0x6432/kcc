@@ -6,9 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14j1: immutable semantic qualifier operations, C23 array qualification and
-strict versus root-unqualified compatibility are implemented and unit-tested.
-Const source syntax/enforcement is the next increment, not yet claimed.
+M14j2: const syntax and modification/conversion constraints preserve qualified
+objects and pointees, strip only value-level qualifiers, and normalize function
+signatures without making const parameter locals mutable. Immutable type graphs,
+C23 array qualification and explicit common pointer conversions are tested.
 M19a sequenced comma expressions preserve scalar/void/pointer results without
 confusing call arguments or declaration separators. M14i explicit object/object and function/function pointer casts preserve
 addresses without granting implicit compatibility or adapting call ABIs. Object/void pointer conversions and mixed equality preserve real types
@@ -25,7 +26,7 @@ Compatible pointers to unknown-bound arrays preserve incomplete referents
 without inventing a stride. Composite redeclarations retain known bounds.
 Parenthesized local/parameter object declarators and abstract cast types
 preserve pointer/array precedence, including int (*p)[3] and int (*p[2])[3].
-Integer/pointer casts, typedef names and qualifiers remain later increments.
+Integer/pointer casts, typedef names and other qualifiers remain later increments.
 Array parameters permit an omitted outer bound, including int a[][3].
 Declared incomplete shape remains distinct from the effective pointer.
 Literal-bound array parameters retain their declared shape but adjust once

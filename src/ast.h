@@ -242,6 +242,7 @@ enum integer_specifier {
 
 enum type_syntax_kind {
 	type_syntax_void,
+	type_syntax_qualified,
 	type_syntax_integer,
 	type_syntax_pointer,
 	type_syntax_array,
@@ -252,6 +253,12 @@ struct ast_type_syntax {
 	enum type_syntax_kind kind;
 	struct source_location location;
 	const struct type *type;
+};
+
+struct ast_qualified_type_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_type_syntax *base;
+	unsigned qualifiers;
 };
 
 struct ast_void_type_syntax {
@@ -433,6 +440,8 @@ struct ast_translation_unit {
 	struct ast_string_expression *strings;
 };
 
+struct ast_qualified_type_syntax *ast_new_qualified_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *base, unsigned qualifiers);
 struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,
 	struct source_location location);
 struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,

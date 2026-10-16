@@ -272,8 +272,18 @@ static void test_character_spellings(void)
 	}
 }
 
+static void test_const_tokens(void)
+{
+	const enum token_kind kinds[] = { token_const, token_identifier, token_const };
+
+	check_tokens("#define READONLY const\nconst constness READONLY", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_const), "const") == 0);
+}
+
 int main(void)
 {
+	test_const_tokens();
 	test_character_spellings();
 	test_integer_spellings();
 	{

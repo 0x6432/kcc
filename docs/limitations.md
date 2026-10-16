@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14j1. Read the latest entries together with README.md and
+Current milestone: M14j2. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1148,3 +1148,28 @@ unchanged language paths, not new qualified source semantics. Dedicated both-hos
 normal/sanitized units exercise qualified graphs directly. M14j2 adds the planned
 language integration before claiming source-level const support. Volatile,
 restrict, atomic, bracket qualifiers, typedefs and full C23 remain later work.
+
+## M14j2
+
+Const is accepted in builtin specifier permutations and after pointer stars,
+including grouped/abstract forms. Repeats are idempotent; no implicit int is
+introduced. Ordinary loads and cast results drop only top-level qualifiers;
+declared objects, pointees and syntax caches retain them. Assigning through a
+const lvalue is a constraint. Initialization is allowed without changing the
+binding's qualified storage type. Function signatures normalize return/top-level
+parameter qualification while definition parameter locals stay qualified.
+
+Implicit pointer conversion can add immediate pointee qualifiers, not remove
+or recursively add them. Mixed comparisons construct explicitly typed common
+pointers; differences require compatible unqualified referents and both complete
+objects. Explicit casts may remove const, but modifying actually const-defined
+objects remains undefined and is never executed by tests. No automatic storage
+is falsely advertised as read-only QBE memory.
+
+Bracket parameter qualifiers, volatile/restrict/atomic, typedefs, general array
+bounds/initializers, integer null constants and full C23 remain unfinished.
+Clang 15 rejects three exact C23 top-level-return-qualification redeclarations.
+Those original kcc programs run with QBE; tests count the native host gaps rather
+than changing their source or claiming agreement. GCC 11 accepts all 39 new
+runtime programs. Bring forward M23a1 bool/true/false spellings next, using the
+existing _Bool model; other M14 and M23a work stays incomplete.

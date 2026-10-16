@@ -1230,3 +1230,21 @@ array qualifiers. Composite reconstruction preserves root pointer qualification
 and known-bound array shapes. Consumers must distinguish representation-neutral
 qualifiers from source constraints; parser/sema integration is M14j2, not present
 in this checkpoint. New type units run under the standard CI sanitizer matrices.
+
+## M14j2 qualified syntax and ordinary values
+
+ast_qualified_type_syntax owns a base syntax and qualifier bits; underlying
+pointer referent holes remain in actual pointer syntax. Builtin/star repetitions
+share one wrapper per level. Syntax caches retain written qualification. Sema
+normalizes function return/signature parameter types, but ast_parameter.type and
+its definition local retain adjusted object qualification. Lvalue conversion and
+casts strip root qualifiers without altering pointees; initializers target an
+unqualified value type, not an unqualified binding. Const lvalue writes reject.
+
+Assignment-like pointer conversion checks immediate qualifier inclusion and
+root-unqualified referent compatibility or the object/void rule. Deeper pointer
+levels remain strict. Comparisons build real common referent/composite types and
+conversion nodes with checked depth. Pointer difference ignores immediate
+qualification but checks both referents complete before layout. QBE remains
+kind/width-driven; no invalid loads, read-only automatic-storage promise or
+function adapters are introduced. Other qualifier bits are not implemented yet.

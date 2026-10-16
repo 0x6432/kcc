@@ -101,6 +101,7 @@ test-codegen: build/kcc build/pp_oracle
 	QBE="$(QBE)" python3 tests/test_object_void_conversions.py
 	QBE="$(QBE)" python3 tests/test_explicit_pointer_casts.py
 	QBE="$(QBE)" python3 tests/test_comma_expressions.py
+	QBE="$(QBE)" python3 tests/test_const_qualification.py
 
 build/test_type: tests/test_type.c src/type.c src/arena.c src/type.h src/arena.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_type.c src/type.c src/arena.c $(LDFLAGS) $(LDLIBS) -o $@
@@ -167,6 +168,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_object_void_conversions.py
 	python3 tests/test_explicit_pointer_casts.py
 	python3 tests/test_comma_expressions.py
+	python3 tests/test_const_qualification.py
 
 clean:
 	rm -rf build

@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "type.h"
 
 #include <assert.h>
 
@@ -43,135 +44,165 @@ static bool begins_integer_type(enum token_kind kind)
 
 static bool begins_declaration_specifier(enum token_kind kind)
 {
-	return kind == token_void || begins_integer_type(kind);
+	return kind == token_void || kind == token_const || begins_integer_type(kind);
 }
 
-/* integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
- *                | permutation of ['signed' | 'unsigned'] 'char'
- *                | permutation of ['signed' | 'unsigned'] 'short' ['int']
- *                | '_Bool'
- * At least one specifier is required, at most two long specifiers,
- * and no other repeats or conflicting signs.
+/* type-qualifier-list ::= "const" { "const" }
+ * Repeats are idempotent; one concrete wrapper preserves this type level.
  */
-static bool parse_integer_type(struct parser *parser, enum integer_specifier *specifier,
+static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
+	struct ast_type_syntax *base, unsigned qualifiers, struct source_location location)
+{
+	struct ast_qualified_type_syntax *qualified;
+
+	if (!qualifiers)
+		return base;
+	qualified = ast_new_qualified_type_syntax(parser->arena, location, base, qualifiers);
+	if (!qualified)
+		allocation_error(parser, location);
+	return qualified ? &qualified->syntax : NULL;
+}
+
+/* declaration-specifiers ::= permutation of type-qualifier-list and builtin-type
+ * builtin-type ::= integer-type | "void"
+ * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
+ *                | permutation of ['signed' | 'unsigned'] 'char'
+ *                | permutation of ['signed' | 'unsigned'] 'short' ['int'] | '_Bool'
+ * At least one actual type specifier is required; void cannot combine with
+ * integer specifiers. Qualifiers do not hide duplicate/conflicting specifiers.
+ */
+static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser,
 	struct token *beginning)
 {
 	bool seen_int = false;
+	bool seen_void = false;
 	bool seen_char = false;
 	bool seen_short = false;
 	bool seen_bool = false;
 	bool seen_sign = false;
-	unsigned long_count = 0;
 	bool unsigned_type = false;
+	unsigned long_count = 0;
+	unsigned qualifiers = 0;
+	enum integer_specifier specifier;
+	struct ast_type_syntax *base;
+	struct ast_integer_type_syntax *integer;
+	struct token qualifier = { 0 };
 
 	*beginning = preprocess_peek(parser->preprocessor);
-	if (!begins_integer_type(beginning->kind)) {
+	if (!begins_declaration_specifier(beginning->kind)) {
 		if (beginning->kind != token_invalid)
 			diagnostic_error(parser->diagnostics, beginning->location, "expected integer type specifier");
-		return false;
+		return NULL;
 	}
-	while (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+	while (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
 		struct token token = preprocess_next(parser->preprocessor);
 
+		if (token.kind == token_const) {
+			if (!qualifiers)
+				qualifier = token;
+			qualifiers |= type_qualifier_const;
+			continue;
+		}
+		if (token.kind == token_void) {
+			if (seen_void) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate void type specifier");
+				return NULL;
+			}
+			seen_void = true;
+			continue;
+		}
 		if (token.kind == token_bool) {
 			if (seen_bool) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate _Bool type specifier");
-				return false;
+				return NULL;
 			}
 			seen_bool = true;
 		} else if (token.kind == token_char) {
 			if (seen_char) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate char type specifier");
-				return false;
+				return NULL;
 			}
 			seen_char = true;
 		} else if (token.kind == token_short) {
 			if (seen_short) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate short type specifier");
-				return false;
+				return NULL;
 			}
 			seen_short = true;
 		} else if (token.kind == token_long) {
 			if (long_count == 2) {
 				diagnostic_error(parser->diagnostics, token.location, "too many long type specifiers");
-				return false;
+				return NULL;
 			}
 			long_count++;
 		} else if (token.kind == token_int) {
 			if (seen_int) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
-				return false;
+				return NULL;
 			}
 			seen_int = true;
 		} else {
 			if (seen_sign) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting integer type specifier");
-				return false;
+				return NULL;
 			}
 			seen_sign = true;
 			unsigned_type = token.kind == token_unsigned;
 		}
 	}
-	if (seen_bool && (seen_sign || seen_char || seen_short || seen_int || long_count)) {
-		diagnostic_error(parser->diagnostics, beginning->location, "_Bool cannot combine with other type specifiers");
-		return false;
-	}
-	if (seen_bool) {
-		*specifier = integer_specifier_bool;
-		return true;
-	}
-	if (seen_char && (seen_int || long_count || seen_short)) {
-		diagnostic_error(parser->diagnostics, beginning->location, "char cannot combine with int, short or long");
-		return false;
-	}
-	if (seen_short && long_count) {
-		diagnostic_error(parser->diagnostics, beginning->location, "short cannot combine with long");
-		return false;
-	}
-	if (seen_char) {
-		if (!seen_sign)
-			*specifier = integer_specifier_char;
-		else
-			*specifier = unsigned_type ? integer_specifier_unsigned_char : integer_specifier_signed_char;
-	} else if (seen_short) {
-		*specifier = unsigned_type ? integer_specifier_unsigned_short : integer_specifier_short;
-	} else if (long_count == 2)
-		*specifier = unsigned_type ? integer_specifier_unsigned_long_long : integer_specifier_long_long;
-	else if (long_count == 1)
-		*specifier = unsigned_type ? integer_specifier_unsigned_long : integer_specifier_long;
-	else
-		*specifier = unsigned_type ? integer_specifier_unsigned : integer_specifier_int;
-	return true;
-}
-
-/* declaration-specifiers ::= integer-type | "void" */
-static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser,
-	struct token *beginning)
-{
-	enum integer_specifier specifier;
-	struct ast_integer_type_syntax *base;
-
-	if (preprocess_peek(parser->preprocessor).kind == token_void) {
+	if (seen_void) {
 		struct ast_void_type_syntax *node;
 
-		*beginning = preprocess_next(parser->preprocessor);
-		if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
+		if (seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 			diagnostic_error(parser->diagnostics, beginning->location, "void cannot combine with other type specifiers");
 			return NULL;
 		}
 		node = ast_new_void_type_syntax(parser->arena, beginning->location);
-		if (!node)
+		if (!node) {
 			allocation_error(parser, beginning->location);
-		return node ? &node->syntax : NULL;
+			return NULL;
+		}
+		base = &node->syntax;
+		return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
 	}
-	if (!parse_integer_type(parser, &specifier, beginning))
+	if (!seen_int && !seen_char && !seen_short && !seen_bool && !seen_sign && !long_count) {
+		diagnostic_error(parser->diagnostics, beginning->location, "expected type specifier with qualifier");
 		return NULL;
-	base = ast_new_integer_type_syntax(parser->arena, beginning->location, specifier);
-	if (!base) {
+	}
+	if (seen_bool && (seen_sign || seen_char || seen_short || seen_int || long_count)) {
+		diagnostic_error(parser->diagnostics, beginning->location, "_Bool cannot combine with other type specifiers");
+		return NULL;
+	}
+	if (seen_char && (seen_int || long_count || seen_short)) {
+		diagnostic_error(parser->diagnostics, beginning->location, "char cannot combine with int, short or long");
+		return NULL;
+	}
+	if (seen_short && long_count) {
+		diagnostic_error(parser->diagnostics, beginning->location, "short cannot combine with long");
+		return NULL;
+	}
+	if (seen_bool)
+		specifier = integer_specifier_bool;
+	else if (seen_char) {
+		if (!seen_sign)
+			specifier = integer_specifier_char;
+		else
+			specifier = unsigned_type ? integer_specifier_unsigned_char : integer_specifier_signed_char;
+	} else if (seen_short) {
+		specifier = unsigned_type ? integer_specifier_unsigned_short : integer_specifier_short;
+	} else if (long_count == 2)
+		specifier = unsigned_type ? integer_specifier_unsigned_long_long : integer_specifier_long_long;
+	else if (long_count == 1)
+		specifier = unsigned_type ? integer_specifier_unsigned_long : integer_specifier_long;
+	else
+		specifier = unsigned_type ? integer_specifier_unsigned : integer_specifier_int;
+	integer = ast_new_integer_type_syntax(parser->arena, beginning->location, specifier);
+	if (!integer) {
 		allocation_error(parser, beginning->location);
 		return NULL;
 	}
-	return &base->syntax;
+	base = &integer->syntax;
+	return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
 }
 
 enum declarator_context {
@@ -256,7 +287,7 @@ static bool parse_object_array_suffixes(struct parser *parser,
 static bool parse_declarator(struct parser *parser,
 	struct parsed_declarator *declarator, enum declarator_context context);
 
-/* declarator ::= { "*" } direct-declarator { array-suffix | function-suffix }
+/* declarator ::= { "*" [ type-qualifier-list ] } direct-declarator { array-suffix | function-suffix }
  * direct-declarator ::= identifier | "(" declarator ")"
  * Abstract forms omit the identifier. At an abstract opening parenthesis,
  * a specifier/void/closing parenthesis starts a function suffix, not grouping.
@@ -271,6 +302,8 @@ static bool parse_declarator_contents(struct parser *parser,
 	while (preprocess_peek(parser->preprocessor).kind == token_star) {
 		struct token star = preprocess_next(parser->preprocessor);
 		struct ast_pointer_type_syntax *pointer;
+		unsigned qualifiers = 0;
+		struct source_location qualifier_location = star.location;
 
 		if (declarator->pointers == ast_max_pointer_depth) {
 			diagnostic_error(parser->diagnostics, star.location, "pointer type exceeds depth limit (64)");
@@ -283,7 +316,16 @@ static bool parse_declarator_contents(struct parser *parser,
 		}
 		if (!prefix)
 			prefix_base = &pointer->referent;
-		prefix = &pointer->syntax;
+		while (preprocess_peek(parser->preprocessor).kind == token_const) {
+			struct token qualifier = preprocess_next(parser->preprocessor);
+
+			if (!qualifiers)
+				qualifier_location = qualifier.location;
+			qualifiers |= type_qualifier_const;
+		}
+		prefix = qualify_type_syntax(parser, &pointer->syntax, qualifiers, qualifier_location);
+		if (!prefix)
+			return false;
 		declarator->pointers++;
 	}
 	token = preprocess_peek(parser->preprocessor);
@@ -641,9 +683,9 @@ static struct ast_expression *parse_call_suffix(struct parser *parser,
 	return &node->expression;
 }
 
-/* subscript-suffix ::= "[" assignment-expression "]"
- * The comma operator remains unsupported; parse_expression enters the shared
- * recursive nesting budget for each index expression.
+/* subscript-suffix ::= "[" expression "]"
+ * Full expressions include comma; parse_expression shares the recursive
+ * nesting budget for each index expression.
  */
 static struct ast_expression *parse_subscript_suffix(struct parser *parser,
 	struct ast_expression *left)

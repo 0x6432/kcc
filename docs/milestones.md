@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1 type-model foundation; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1167,3 +1167,41 @@ next. Exact-source remote and full isolated checks for M14j1 remain pending.
 
 The independent M14g full GCC/Clang normal + ASan/UBSan matrix now passed both
 halves. Other queued matrices remain separate; do not infer newer-source results.
+
+## M14j2 tested source checkpoint
+
+Const builtin/star syntax uses a separate concrete qualified syntax node and
+immutable semantic caches. Value loads, initializers, casts and function return/
+parameter signatures unqualify only the required level; local parameter objects
+retain const. Pointer conversions add only immediate qualifiers; comparison
+common types preserve qualification, arrays and depth, while pointer differences
+keep both completeness guards. QBE representation needs no qualifier shortcut.
+
+Full normal GCC regression and QBE suites passed. Targeted GCC/Clang tests cover
+39 original kcc full-value programs, 48 primitive/object ABI arrangements, mixed
+register/stack, callbacks and native-null ABI in both directions, nested array
+shapes, defined explicit qualification removal, once-only effects, 64/65 pointer
+and exact typed conversion/promotion depth boundaries, and 40 constraints.
+GCC gives 39 native runtime agreements. Clang 15 gives 36 and three narrowly
+recorded C23 6.7.6.3p4 return-qualification diagnostic gaps; all 39 original kcc
+programs still execute with QBE. Semantic units inspect concrete syntax/cache,
+qualified parameter locals versus unqualified signatures, const pointee loads,
+explicit conversions and unknown array parameter shapes. Both GCC and Clang
+ASan/UBSan semantic-unit executables passed.
+
+Bounded sanitized fuzz completed 23,480 lexer and 62,518 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+One old int *const function-prototype rejection is now a real const parameter
+assignment constraint. Full regression restarted after that fixture migration.
+A test-construction insertion/field-name mistake was corrected before the full
+validation; it was not a compiler finding. Exact-source remote/full isolated
+checks for this source remain pending.
+
+Exact-source CI now passed M19a 95a99d7 run 38861248497, M14i 1ed1cc8 run
+38860337750 and M14h 274d966 run 38859812046. M14j1 6e7ff50 run 38861821792
+was still running at the latest check. M14g's full isolated GCC/Clang normal and
+ASan/UBSan matrix passed. Do not infer other queued-source outcomes.
+
+Next independent M23a1 bool/true/false keywords and typed boolean constants are
+designed in m23-boolean-keywords.md, retaining the existing C23 pp true rule.
+This does not finish M14 other qualifiers/typedefs or M23a's remaining keywords.

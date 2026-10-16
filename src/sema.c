@@ -134,12 +134,36 @@ static bool sema_parameter_names(struct sema *sema,
 static const struct type *adjust_parameter_type(struct sema *sema,
 	const struct type *declared, struct source_location location);
 
+/* Preserve the written type graph while obtaining an ordinary value type. */
+static const struct type *unqualified_type(struct sema *sema, const struct type *type,
+	struct source_location location)
+{
+	const struct type *result = type_unqualified(sema->arena, type);
+
+	if (!result)
+		diagnostic_error(sema->diagnostics, location, "out of memory unqualifying type");
+	return result;
+}
+
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
 {
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_qualified: {
+		struct ast_qualified_type_syntax *qualified = (struct ast_qualified_type_syntax *)syntax;
+		const struct type *base = resolve_type_syntax(sema, qualified->base);
+
+		if (!base)
+			return NULL;
+		syntax->type = type_qualified(sema->arena, base, qualified->qualifiers);
+		if (!syntax->type) {
+			diagnostic_error(sema->diagnostics, syntax->location, "out of memory qualifying type");
+			return NULL;
+		}
+		break;
+	}
 	case type_syntax_void:
 		syntax->type = &type_void;
 		break;
@@ -193,9 +217,15 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			parameter->type = adjust_parameter_type(sema, declared, parameter->location);
 			if (!parameter->type)
 				return NULL;
-			parameters[count++] = parameter->type;
+			parameters[count] = unqualified_type(sema, parameter->type, parameter->location);
+			if (!parameters[count])
+				return NULL;
+			count++;
 		}
 		assert(count == function->parameter_count && count <= ast_max_parameters);
+		return_type = unqualified_type(sema, return_type, function->return_syntax->location);
+		if (!return_type)
+			return NULL;
 		type = type_new_function(sema->arena, return_type, parameters, count);
 		if (!type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating function type");
@@ -276,6 +306,22 @@ static bool object_void_pointer_conversion(const struct type *source,
 		(target_referent->kind == type_kind_void && type_is_object(source_referent));
 }
 
+/* Assignment-like pointer conversion may add immediate referent qualifiers,
+ * never remove them or covariantly qualify deeper pointer referents. */
+static bool implicit_pointer_conversion(const struct type *source, const struct type *target)
+{
+	const struct type *a;
+	const struct type *b;
+
+	if (source->kind != type_kind_pointer || target->kind != type_kind_pointer)
+		return false;
+	a = ((const struct pointer_type *)source)->referent;
+	b = ((const struct pointer_type *)target)->referent;
+	if (a->qualifiers & ~b->qualifiers)
+		return false;
+	return type_unqualified_compatible(a, b) || object_void_pointer_conversion(source, target);
+}
+
 static bool check_conversion(struct sema *sema, const struct type *source,
 	const struct type *target, struct source_location location)
 {
@@ -283,7 +329,7 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 		diagnostic_error(sema->diagnostics, location, "conversion requires a scalar value and target");
 		return false;
 	}
-	if (type_compatible(source, target) || object_void_pointer_conversion(source, target) ||
+	if (type_compatible(source, target) || implicit_pointer_conversion(source, target) ||
 		(type_is_integer(source) && type_is_integer(target)) ||
 		(source->kind == type_kind_pointer && target->kind == type_kind_bool))
 		return true;
@@ -326,6 +372,53 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 		return false;
 	*slot = &conversion->expression;
 	return true;
+}
+
+/* Form a real common pointer type for permitted qualifier differences.
+ * Equal qualifiers keep existing compatible types/snapshots unchanged. */
+static bool convert_comparison_pointers(struct sema *sema, struct ast_binary_expression *node)
+{
+	const struct type *left = node->left->type;
+	const struct type *right = node->right->type;
+	const struct type *a;
+	const struct type *b;
+	const struct type *common;
+	struct pointer_type *pointer;
+	bool equality = node->operation == binary_equal || node->operation == binary_not_equal;
+
+	if (left->kind != type_kind_pointer || right->kind != type_kind_pointer ||
+		type_compatible(left, right))
+		return true;
+	a = ((const struct pointer_type *)left)->referent;
+	b = ((const struct pointer_type *)right)->referent;
+	if (type_unqualified_compatible(a, b)) {
+		const struct type *plain_a = unqualified_type(sema, a, node->left->location);
+		const struct type *plain_b = unqualified_type(sema, b, node->right->location);
+
+		if (!plain_a || !plain_b)
+			return false;
+		common = type_composite(sema->arena, plain_a, plain_b);
+	} else if (equality && object_void_pointer_conversion(left, right)) {
+		common = &type_void;
+	} else {
+		return true; /* The caller diagnoses incompatible pointer comparisons. */
+	}
+	if (!common) {
+		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory creating comparison type");
+		return false;
+	}
+	common = type_qualified(sema->arena, common, a->qualifiers | b->qualifiers);
+	if (!common) {
+		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory qualifying comparison type");
+		return false;
+	}
+	pointer = type_new_pointer(sema->arena, common);
+	if (!pointer) {
+		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory creating comparison pointer");
+		return false;
+	}
+	return convert_expression(sema, &node->left, &pointer->type) &&
+		convert_expression(sema, &node->right, &pointer->type);
 }
 
 static bool comparison_operator(enum binary_operator operation)
@@ -397,7 +490,8 @@ static bool lower_pointer_arithmetic(struct sema *sema,
 		const struct pointer_type *pointer = (const struct pointer_type *)left->type;
 		struct ast_pointer_difference_expression *difference;
 
-		if (!type_compatible(left->type, right->type)) {
+		if (!type_unqualified_compatible(pointer->referent,
+			((const struct pointer_type *)right->type)->referent)) {
 			diagnostic_error(sema->diagnostics, binary->expression.location,
 				"pointer subtraction requires compatible pointer operands");
 			return false;
@@ -616,6 +710,9 @@ static bool sema_expression(struct sema *sema,
 		result_type = resolve_type_syntax(sema, node->type_syntax);
 		if (!result_type)
 			return false;
+		result_type = unqualified_type(sema, result_type, node->type_syntax->location);
+		if (!result_type)
+			return false;
 		if (result_type->kind == type_kind_void) {
 			expression->depth = node->operand->depth + 1;
 			break;
@@ -674,18 +771,8 @@ static bool sema_expression(struct sema *sema,
 				diagnostic_error(sema->diagnostics, expression->location, "invalid pointer binary operator");
 				return false;
 			}
-			if ((node->operation == binary_equal || node->operation == binary_not_equal) &&
-				object_void_pointer_conversion(node->left->type, node->right->type)) {
-				const struct type *left_referent = ((const struct pointer_type *)node->left->type)->referent;
-
-				/* Equality converts the object pointer to the void pointer, not vice versa. */
-				if (left_referent->kind == type_kind_void) {
-					if (!convert_expression(sema, &node->right, node->left->type))
-						return false;
-				} else if (!convert_expression(sema, &node->left, node->right->type)) {
-					return false;
-				}
-			}
+			if (!convert_comparison_pointers(sema, node))
+				return false;
 			if (node->left->type->kind != type_kind_pointer || node->right->type->kind != type_kind_pointer ||
 				!type_compatible(node->left->type, node->right->type)) {
 				diagnostic_error(sema->diagnostics, expression->location,
@@ -757,7 +844,8 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->left, false))
 			return false;
-		if (!node->left->is_lvalue || node->left->type->kind == type_kind_array) {
+		if (!node->left->is_lvalue || node->left->type->kind == type_kind_array ||
+			(node->left->type->qualifiers & type_qualifier_const)) {
 			diagnostic_error(sema->diagnostics, node->left->location,
 				"assignment requires a modifiable lvalue");
 			return false;
@@ -827,7 +915,9 @@ static bool sema_expression(struct sema *sema,
 				"out of memory inserting lvalue conversion");
 			return false;
 		}
-		load->expression.type = expression->type;
+		load->expression.type = unqualified_type(sema, expression->type, expression->location);
+		if (!load->expression.type)
+			return false;
 		if (!check_expression_depth(sema, &load->expression))
 			return false;
 		*expression_slot = &load->expression;
@@ -889,9 +979,12 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
-	if (local->initializer)
-		return sema_expression(sema, &local->initializer, true) &&
-			convert_expression(sema, &local->initializer, local->type);
+	if (local->initializer) {
+		const struct type *target = unqualified_type(sema, local->type, local->name.location);
+
+		return target && sema_expression(sema, &local->initializer, true) &&
+			convert_expression(sema, &local->initializer, target);
+	}
 	return true;
 }
 

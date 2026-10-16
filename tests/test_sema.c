@@ -2062,8 +2062,130 @@ static void test_comma_expression_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_const_qualification_tree(void)
+{
+	const char *text = "const int f(const int x) { const int a=x; "
+		"const int *const p=&a; int y=(const int)a; (const int *const)p; return *p; } "
+		"int f(int); int compare(int *p,const int *q,void *v) { p==q; v==q; q-p; return 0; } "
+		"int read(const int a[][3]) { return a[0][0]; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *f;
+	struct ast_function *compare;
+	struct ast_function *read;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *p;
+	struct ast_local_declaration *y;
+	struct ast_qualified_type_syntax *qualified;
+	struct ast_pointer_type_syntax *pointer_syntax;
+	struct ast_cast_expression *cast;
+	struct ast_load_expression *load;
+	struct ast_statement_item *item;
+	struct ast_binary_expression *comparison;
+	struct ast_pointer_difference_expression *difference;
+	const struct function_type *signature;
+	const struct pointer_type *pointer;
+	const struct array_type *array;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && sema_translation_unit(unit, &arena, &diagnostics));
+	f = first_function(unit);
+	compare = (struct ast_function *)f->external.next->next;
+	read = (struct ast_function *)compare->external.next;
+	signature = (const struct function_type *)f->declaration->type_syntax->syntax.type;
+	assert(!signature->return_type->qualifiers && !signature->parameters->type->qualifiers);
+	assert(type_compatible(signature->return_type, &type_int));
+	assert(f->declaration->return_syntax->kind == type_syntax_qualified);
+	assert(f->declaration->return_syntax->type->qualifiers == type_qualifier_const);
+	assert(f->declaration->parameters->type->qualifiers == type_qualifier_const);
+	assert(f->declaration->parameters->local->type == f->declaration->parameters->type);
+	assert(!f->return_type->qualifiers);
+	a = (struct ast_local_declaration *)f->body->items;
+	p = (struct ast_local_declaration *)a->item.next;
+	y = (struct ast_local_declaration *)p->item.next;
+	assert(a->type->qualifiers == type_qualifier_const);
+	qualified = (struct ast_qualified_type_syntax *)a->type_syntax;
+	assert(qualified->syntax.kind == type_syntax_qualified && qualified->syntax.type == a->type);
+	assert(qualified->qualifiers == type_qualifier_const && qualified->base->kind == type_syntax_integer);
+	assert(!qualified->base->type->qualifiers && qualified->base->type == &type_int);
+	load = (struct ast_load_expression *)a->initializer;
+	assert(load->expression.kind == expression_load && !load->expression.type->qualifiers);
+	assert(load->operand->type->qualifiers == type_qualifier_const && load->operand->is_lvalue);
+	assert(load->expression.depth == 2 && !load->expression.is_lvalue);
+	assert(p->type->qualifiers == type_qualifier_const && p->type->kind == type_kind_pointer);
+	pointer = (const struct pointer_type *)p->type;
+	assert(pointer->referent->qualifiers == type_qualifier_const);
+	qualified = (struct ast_qualified_type_syntax *)p->type_syntax;
+	assert(qualified->syntax.kind == type_syntax_qualified && qualified->base->kind == type_syntax_pointer);
+	pointer_syntax = (struct ast_pointer_type_syntax *)qualified->base;
+	assert(!pointer_syntax->syntax.type->qualifiers);
+	assert(pointer_syntax->referent->kind == type_syntax_qualified);
+	assert(!p->initializer->type->qualifiers && type_compatible(p->initializer->type, pointer_syntax->syntax.type));
+	cast = (struct ast_cast_expression *)y->initializer;
+	assert(cast->expression.kind == expression_cast && !cast->expression.type->qualifiers);
+	assert(cast->type_syntax->type->qualifiers == type_qualifier_const);
+	assert(cast->operand->kind == expression_load && !cast->operand->type->qualifiers);
+	assert(cast->expression.depth == 3);
+	item = (struct ast_statement_item *)y->item.next;
+	cast = (struct ast_cast_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(cast->expression.kind == expression_cast && !cast->expression.type->qualifiers);
+	assert(cast->type_syntax->type->qualifiers == type_qualifier_const);
+	assert(((const struct pointer_type *)cast->expression.type)->referent->qualifiers == type_qualifier_const);
+	load = (struct ast_load_expression *)cast->operand;
+	assert(load->expression.kind == expression_load && !load->expression.type->qualifiers);
+	assert(load->operand->type == p->type && load->expression.depth == 2);
+	item = (struct ast_statement_item *)item->item.next;
+	load = (struct ast_load_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(load->expression.kind == expression_load && !load->expression.type->qualifiers);
+	assert(load->operand->kind == expression_indirection && load->operand->is_lvalue);
+	assert(load->operand->type->qualifiers == type_qualifier_const && load->expression.depth == 4);
+
+	item = (struct ast_statement_item *)compare->body->items;
+	comparison = (struct ast_binary_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(comparison->expression.kind == expression_binary && comparison->left->kind == expression_conversion);
+	assert(comparison->right->kind == expression_load && comparison->expression.depth == 4);
+	assert(type_compatible(comparison->left->type, comparison->right->type));
+	pointer = (const struct pointer_type *)comparison->left->type;
+	assert(pointer->referent->qualifiers == type_qualifier_const && pointer->referent->kind == type_kind_int);
+	item = (struct ast_statement_item *)item->item.next;
+	comparison = (struct ast_binary_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(comparison->left->kind == expression_conversion && comparison->right->kind == expression_conversion);
+	assert(type_compatible(comparison->left->type, comparison->right->type));
+	pointer = (const struct pointer_type *)comparison->left->type;
+	assert(pointer->referent->kind == type_kind_void && pointer->referent->qualifiers == type_qualifier_const);
+	assert(comparison->expression.depth == 4);
+	item = (struct ast_statement_item *)item->item.next;
+	difference = (struct ast_pointer_difference_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(difference->expression.kind == expression_pointer_difference && difference->expression.type == &type_long);
+	assert(difference->expression.depth == 3 && difference->element_size == 4);
+
+	assert(read->declaration->parameters->type_syntax->kind == type_syntax_array);
+	array = (const struct array_type *)read->declaration->parameters->type_syntax->type;
+	assert(!array->count && array->type.qualifiers == type_qualifier_const);
+	assert(array->element->kind == type_kind_array && array->element->qualifiers == type_qualifier_const);
+	assert(((const struct array_type *)array->element)->element->qualifiers == type_qualifier_const);
+	pointer = (const struct pointer_type *)read->declaration->parameters->type;
+	assert(pointer->type.kind == type_kind_pointer && !pointer->type.qualifiers);
+	assert(pointer->referent == array->element);
+	assert(!type_int.qualifiers && !type_void.qualifiers && !diagnostics.errors);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+
 int main(void)
 {
+	test_const_qualification_tree();
 	test_comma_expression_tree();
 	test_explicit_pointer_cast_tree();
 	test_object_void_conversion_tree();

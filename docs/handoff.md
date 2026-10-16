@@ -2,8 +2,8 @@
 
 ## Current checkpoint
 
-M14j1 implementation: immutable semantic qualifier model and operations,
-without const source syntax yet; prior M19a sequenced comma values/discards with separate argument and
+M14j2 implementation: const syntax/enforcement, immutable qualified types,
+value/signature normalization and qualified pointer conversions; prior M19a sequenced comma values/discards with separate argument and
 declaration separator floors; M14i explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
 casts/discards; prior explicit function designators/decay, callback values and
 indirect fixed calls; concrete fixed-function declarator syntax/array-pointer returns,
@@ -24,15 +24,16 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M14g 592b551 run 38859101528 passed;
-M14f 6586319 runs 38836315858/38846879414 passed. M14h 274d966 and
-M14i 1ed1cc8 exact runs were still running at the latest check. New M19a
-isolated/remote checks remain pending. Immutable M14g full GCC/Clang normal/ASan/UBSan passed; queued newer snapshots
-remain pending until their actual logs confirm completion.
+Latest confirmed exact-source CI: M19a 95a99d7 run 38861248497, M14i
+1ed1cc8 run 38860337750 and M14h 274d966 run 38859812046 passed.
+M14j1 6e7ff50 run 38861821792 was still running at the latest check; M14j2
+remote/full isolated checks remain pending. M14g full GCC/Clang normal and
+ASan/UBSan matrix passed; queued newer snapshots need actual log confirmation.
 Logs/snapshots live in /data/tools and /data/validation-* outside the repo.
 
-Next: M14j2 const language support, designed before implementation in m14-const-qualification.md; then
-unfinished M14 other qualifiers/typedef work.
+Next: M23a1 bool/true/false spellings and real boolean constant ASTs, designed
+before implementation in m23-boolean-keywords.md; then remaining M14 qualifier/
+typedef and M23a keyword work. Const design is m14-const-qualification.md.
 Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1641,3 +1642,41 @@ next. Exact-source remote and full isolated checks for M14j1 remain pending.
 
 The independent M14g full GCC/Clang normal + ASan/UBSan matrix now passed both
 halves. Other queued matrices remain separate; do not infer newer-source results.
+
+## M14j2 tested source checkpoint
+
+Const builtin/star syntax uses a separate concrete qualified syntax node and
+immutable semantic caches. Value loads, initializers, casts and function return/
+parameter signatures unqualify only the required level; local parameter objects
+retain const. Pointer conversions add only immediate qualifiers; comparison
+common types preserve qualification, arrays and depth, while pointer differences
+keep both completeness guards. QBE representation needs no qualifier shortcut.
+
+Full normal GCC regression and QBE suites passed. Targeted GCC/Clang tests cover
+39 original kcc full-value programs, 48 primitive/object ABI arrangements, mixed
+register/stack, callbacks and native-null ABI in both directions, nested array
+shapes, defined explicit qualification removal, once-only effects, 64/65 pointer
+and exact typed conversion/promotion depth boundaries, and 40 constraints.
+GCC gives 39 native runtime agreements. Clang 15 gives 36 and three narrowly
+recorded C23 6.7.6.3p4 return-qualification diagnostic gaps; all 39 original kcc
+programs still execute with QBE. Semantic units inspect concrete syntax/cache,
+qualified parameter locals versus unqualified signatures, const pointee loads,
+explicit conversions and unknown array parameter shapes. Both GCC and Clang
+ASan/UBSan semantic-unit executables passed.
+
+Bounded sanitized fuzz completed 23,480 lexer and 62,518 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.
+One old int *const function-prototype rejection is now a real const parameter
+assignment constraint. Full regression restarted after that fixture migration.
+A test-construction insertion/field-name mistake was corrected before the full
+validation; it was not a compiler finding. Exact-source remote/full isolated
+checks for this source remain pending.
+
+Exact-source CI now passed M19a 95a99d7 run 38861248497, M14i 1ed1cc8 run
+38860337750 and M14h 274d966 run 38859812046. M14j1 6e7ff50 run 38861821792
+was still running at the latest check. M14g's full isolated GCC/Clang normal and
+ASan/UBSan matrix passed. Do not infer other queued-source outcomes.
+
+Next independent M23a1 bool/true/false keywords and typed boolean constants are
+designed in m23-boolean-keywords.md, retaining the existing C23 pp true rule.
+This does not finish M14 other qualifiers/typedefs or M23a's remaining keywords.

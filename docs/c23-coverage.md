@@ -9,8 +9,8 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e) | M03, M08, M12-M18, M23-M24 |
-| Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d) | M03-M08, M13, M19 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e, callbacks/void M14f-g and const qualification M14j2) | M03, M08, M12-M18, M23-M24 |
+| Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d; sequenced scalar/void comma expressions M19a) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
@@ -293,3 +293,13 @@ Immutable qualifier operations, strict/root-only compatibility and C23 matching
 array/element qualification are unit-tested. Const language syntax, qualification
 conversions and modification constraints are not implemented until M14j2. No
 source-level const support or general qualifier conformance is claimed here.
+
+### M14j2 const language integration
+
+Concrete qualified syntax, immutable type graphs, const modification constraints,
+ordinary value/cast normalization, function return/parameter signature rules,
+qualified pointer/void conversions and array qualification are implemented within
+the current declarator/type subset. Dedicated typed units and 39 QBE programs
+cover this increment. Clang 15 has three exact C23 return-qualification diagnostic
+gaps (not claimed as native agreements). Other qualifiers, typedefs and full C23
+remain later work. bool/true/false source spellings are the next independent step.

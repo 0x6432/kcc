@@ -22,6 +22,7 @@ enum token_kind {
 	token_short,
 	token_bool,
 	token_void,
+	token_const,
 	token_return,
 	token_if,
 	token_else,

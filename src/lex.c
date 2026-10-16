@@ -352,7 +352,7 @@ static const struct keyword keywords[] = {
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
-	{ "continue", token_continue },
+	{ "continue", token_continue }, { "const", token_const },
 };
 
 static struct token convert_identifier(struct token token)
@@ -730,6 +730,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_short: return "short";
 	case token_bool: return "_Bool";
 	case token_void: return "void";
+	case token_const: return "const";
 	case token_return: return "return";
 	case token_if: return "if";
 	case token_else: return "else";

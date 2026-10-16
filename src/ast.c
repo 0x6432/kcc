@@ -2,6 +2,20 @@
 
 #include <assert.h>
 
+struct ast_qualified_type_syntax *ast_new_qualified_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *base, unsigned qualifiers)
+{
+	struct ast_qualified_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_qualified_type_syntax) {
+			.syntax = { .kind = type_syntax_qualified, .location = location },
+			.base = base,
+			.qualifiers = qualifiers,
+		};
+	return node;
+}
+
 struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
 	struct source_location location, enum integer_specifier specifier)
 {
