@@ -2,6 +2,36 @@
 
 ## Current checkpoint
 
+M15a2 explicit-type auto objects is implemented and locally validated. Read
+m15-auto-explicit.md and the latest ledger/contracts/coverage/limits. Explicit
+auto block/for objects use the ordinary path: same addressability/slots/ABI,
+shared bases, complete-declarator publication and no extra storage/type flag.
+Missing explicit types/inferred auto, file scope and auto/register combinations
+remain explicit refusals. Parameter/type-name auto is forbidden. Register scalar
+and non-decaying fixed-array support remains; register parameters, globals, VM
+types, array initializers and other storage classes remain unsupported.
+
+Full normal GCC 11/GCC 14/Clang 18, full QBE with both modern hosts, four-host
+focused/ABI and both-host ASan/UBSan lexer/sema plus 19 suites passed. Bounded
+compile-only fuzz: 9,919 lexer / 28,732 pipeline inputs in 26 seconds
+each; no invalid/generated C executed. Serial helpers before parallel runs;
+frozen primary/isolated manifests matched. Logs /data/tools/m15a2-*, isolated
+trees /data/validation-m15a2/. Read ledger for exact source diagnostic classifiers,
+strict C23 agreements versus separate C11 corroborations and boundary evidence.
+Do not rewrite valid originals to work around native auto/for-typedef gaps.
+
+M15a1 CI run 38972442575 completed/success, all three jobs green.
+M15b1 CI run 38974794979 remains pending; no remote pass is claimed.
+New M15a2 exact-commit CI is pending until checked after push, not implied by
+local passes. User authorizes continuous work and supersedes historical STOP.
+No stashes discarded; preserve historical named stashes if restored. No historical
+snapshot generators rerun, and no subagents used. Current /data/tools scripts
+were applied once; do not rerun. Next milestone needs a fresh pre-implementation
+design; inferred auto has different initializer/name lifetimes. Verify tools
+and source/remote state after resets.
+
+## Earlier M15b1 checkpoint (historical)
+
 M15b1 non-decaying fixed register arrays is implemented and locally validated.
 Read m15-register-arrays.md and the latest ledger/contracts/coverage/limits.
 Complete fixed register arrays use ordinary local slots and support direct

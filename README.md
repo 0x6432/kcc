@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15A2: Traditional `auto` objects with explicit types are supported at block/for
+scope in any declaration-specifier position, including aliases and query bases.
+They are ordinary addressable automatic objects with unchanged slots and ABI;
+no new AST storage/type/backend flag is needed. C23 inferred `auto`, file scope
+and storage-class combinations remain explicit subset limits. Read
+docs/m15-auto-explicit.md. Native Clang 18 C23 parser gaps are counted separately
+on unchanged originals; C11 corroboration is never counted as C23 agreement.
+
 M15B1: Complete fixed `register` arrays may be declared and used in direct
 `sizeof`/`typeof` queries without decay. They use ordinary bounded local storage;
 `typeof` copies are ordinary arrays unless separately declared register. Taking
@@ -20,7 +28,8 @@ address is rejected, even in unevaluated queries. Pointee addresses through
 register pointers remain valid. Storage class is not a type qualifier and does
 not propagate through `typeof`. Register parameters remain an explicit subset
 limit; arrays are extended by M15b1. Read docs/m15-register-scalars.md and the latest ledger/contracts.
-Other storage classes, globals and full C23 remain unsupported.
+Beyond these explicit auto/register subsets, other storage classes, globals and
+full C23 remain unsupported.
 
 M14L4: The typedef storage class may appear anywhere among declaration
 specifiers at file, block and C23 for scope, including alias/query-derived bases.
@@ -28,8 +37,8 @@ Declarations still use the existing concrete ASTs and shared comma-list bases;
 parameters/type names reject typedef, and aliases allocate no runtime storage.
 Read docs/m14-typedef-specifier-placement.md and the latest ledger/limitations.
 Earlier ordinary-name shadowing, including parameter/prototype lifetimes, remains
-supported. Beyond the M15a1 scalar register subset, other storage classes, VM
-types and full C23 remain unsupported.
+supported. Beyond the M15a1/M15b1 register and M15a2 explicit-auto subsets, other
+storage classes, VM types and full C23 remain unsupported.
 Native for-typedef grammar gaps remain separately classified on unchanged source.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now

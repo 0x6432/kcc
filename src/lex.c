@@ -324,7 +324,7 @@ static bool spelling_is(struct token token, const char *spelling)
 static bool is_unsupported_keyword(struct token token)
 {
 	static const char *const keywords[] = {
-		"auto", "break", "case", "const", "continue", "default",
+		"break", "case", "const", "continue", "default",
 		"do", "double", "else", "enum", "extern", "float", "for", "goto",
 		"if", "inline", "restrict",
 		"sizeof", "static", "struct", "switch", "union",
@@ -354,7 +354,8 @@ static const struct keyword keywords[] = {
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
-	{ "register", token_register }, { "typedef", token_typedef }, { "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
+	{ "auto", token_auto }, { "register", token_register }, { "typedef", token_typedef },
+	{ "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
 	{ "sizeof", token_sizeof }, { "alignof", token_alignof },
 	{ "_Alignof", token_legacy_alignof },
 	{ "static_assert", token_static_assert }, { "_Static_assert", token_legacy_static_assert },
@@ -753,6 +754,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_const: return "const";
 	case token_typedef: return "typedef";
 	case token_register: return "register";
+	case token_auto: return "auto";
 	case token_typeof: return "typeof";
 	case token_typeof_unqual: return "typeof_unqual";
 	case token_sizeof: return "sizeof";

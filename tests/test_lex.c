@@ -448,8 +448,17 @@ static void test_register_keyword(void)
 	assert(strcmp(token_kind_name(token_register), "register") == 0);
 }
 
+static void test_auto_keyword(void)
+{
+	const enum token_kind kinds[] = { token_auto, token_identifier, token_int };
+
+	check_tokens("#define STORE auto\nSTORE name\n#define auto int\nauto", kinds, 3, 0);
+	assert(strcmp(token_kind_name(token_auto), "auto") == 0);
+}
+
 int main(void)
 {
+	test_auto_keyword();
 	test_register_keyword();
 	test_typedef_keyword();
 	test_typeof_keywords();

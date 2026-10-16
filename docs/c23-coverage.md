@@ -9,7 +9,7 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e, callbacks/void M14f-g and const qualification M14j2; query-derived types and scoped typedef lists through C23 for initializers M14l2b and ordinary-name shadowing through parameter/prototype scopes M14l3b and typedef specifier placement M14l4 and scalar block/for register objects M15a1 and non-decaying fixed register arrays M15b1) | M03, M08, M12-M18, M23-M24 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e, callbacks/void M14f-g and const qualification M14j2; query-derived types and scoped typedef lists through C23 for initializers M14l2b and ordinary-name shadowing through parameter/prototype scopes M14l3b and typedef specifier placement M14l4 and scalar block/for register objects M15a1 and non-decaying fixed register arrays M15b1 and explicit-type auto objects M15a2) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d; sequenced comma/conditional expressions, integer compound assignments and updates; direct goto and integer switch/case/default through M19f2) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
@@ -918,3 +918,15 @@ queries. Evaluated conversion has undefined behavior and is never executed or
 presented as a native constraint test. Register parameters, VM/incomplete arrays
 and array initializers remain unsupported. No parser/type/QBE interface changes
 or full C23 claim; exact original/native/ABI and frozen validation in the ledger.
+
+## M15a2 explicit auto storage (N3096 6.7.1)
+
+Validated subset: explicit-type block/for auto objects retain ordinary storage,
+addressability, scope, shared bases and ABI for implemented object types. No
+inferred type or storage propagation through typeof. Type-name/parameter auto is
+rejected; inferred C23 auto, file scope and auto/register combinations remain
+explicit subset limits requiring a separate 6.7.9 design. Exact native Clang 18
+C23 grammar gaps and unchanged-source C11 corroborations are separately counted,
+never conflated with strict C23 agreement. Register parameters, other storage/
+linkage/globals, VM types and full C23 remain absent. Read the ledger for frozen
+full/QBE/sanitizer/fuzz/boundary evidence and independent CI state.

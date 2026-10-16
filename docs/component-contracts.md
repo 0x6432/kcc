@@ -1897,3 +1897,21 @@ continues to reject explicit address-taking. Inner decay in otherwise unevaluate
 queries remains explicitly unsupported rather than adding context-sensitive
 exception machinery. QBE still allocates ordinary array slots; no backend or ABI
 change, no alias storage, and all existing resource/scope invariants remain.
+
+## M15a2 explicit-type auto storage
+
+Raw pp identifiers/macros remain unchanged; demand language conversion adds
+token_auto. The shared nullable storage-token scanner accepts one explicit auto,
+retains duplicate/typedef/register diagnostics, rejects auto in NULL type-name/
+parameter contexts, and labels missing explicit types/auto-register combinations
+as unsupported inference syntax. External auto is refused. The local tail now
+receives the actual token instead of a derived bool so direct auto function
+syntax is rejected before publication; is_register is still set only for the
+register token. Consumed alias starts and comma bases use the same path.
+
+No AST/type/sema/QBE interface change: explicit auto object semantics are exactly
+the ordinary automatic path. No extra flag, alias runtime storage, inferred type,
+new scope policy or initializer visibility rule was introduced. Arrays remain
+addressable/decaying normally; register flags/restrictions remain distinct and
+never propagate through queries. Existing resource and immutable-cache contracts
+remain, with exact original/native/ABI and AST assertions in the new suite.

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15B1 non-decaying fixed register arrays. Read the latest entries together with README.md and
+Current milestone: M15A2 explicit-type auto objects. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1988,3 +1988,29 @@ constraint agreements or executed. Direct sizeof(a)/typeof(a) need no decay.
 Storage class never travels through a type query: ordinary copies may decay and
 be indexed/addressed normally. Ordinary array referents through register pointers
 remain unaffected. Read the ledger for frozen validation and remote CI status.
+
+## M15a2 explicit-type auto objects
+
+Traditional explicit auto storage supports implemented complete block/for object
+types, including arrays, pointers/function pointers, const, aliases and typeof
+bases in any specifier position. Their semantics match unadorned automatic
+objects, including addressability, ordinary slots/ABI and existing budgets.
+Shared comma bases and complete-declarator/initializer publication remain.
+Explicit direct function declarators with auto are rejected before publication;
+alias-derived function types still use the existing semantic block-function
+refusal rather than promising improved diagnostics for unsupported declarations.
+
+C23 inferred auto (with no explicit type), auto/register combinations, globals,
+VM types and array initializers remain unsupported; valid inferred forms are
+subset refusals, not native constraint tests. Type names and parameters forbid
+auto. File-scope explicit auto, duplicate auto and typedef mixtures are rejected.
+Register parameter semantics remain outside this increment. Not full C23.
+
+Clang 18 in C23 mode has exact original-source auto grammar diagnostics for
+certain valid specifier positions, alias/query bases and qualified long. Only
+eligible exact sources, ordinary failure status 1 and full exact diagnostic
+records are classified; unexpected diagnostics/notes, signals and other sources
+fail. The same 16 affected traditional-C originals pass unchanged under strict
+C11, recorded as corroboration, NOT C23 agreement. A separate header-free
+keyword-auto macro triggers Clang's exact strict warning-as-error. Read the
+ledger for precise native counts and frozen/CI evidence.

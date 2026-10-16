@@ -4342,8 +4342,60 @@ static void test_register_array_tree(void)
 	fclose(stream);
 }
 
+static void test_explicit_auto_tree(void)
+{
+	const char *text = "int f(void) { auto int a[2],*p=a; int auto x=40,y=x+2; return y; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *p;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *y;
+	struct ast_binary_expression *sum;
+	struct ast_array_decay_expression *decay;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = (struct ast_function *)unit->declarations;
+	a = (struct ast_local_declaration *)function->body->items;
+	p = (struct ast_local_declaration *)a->item.next;
+	x = (struct ast_local_declaration *)p->item.next;
+	y = (struct ast_local_declaration *)x->item.next;
+	assert(!a->is_register && !p->is_register && !x->is_register && !y->is_register);
+	assert(((struct ast_array_type_syntax *)a->type_syntax)->element ==
+		((struct ast_pointer_type_syntax *)p->type_syntax)->referent);
+	assert(x->type_syntax == y->type_syntax);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(a->type->kind == type_kind_array && x->type == &type_int && y->type == &type_int);
+	assert(a->slot == 0 && p->slot == 1 && x->slot == 2 && y->slot == 3);
+	assert(function->locals == y && y->next_local == x && x->next_local == p);
+	assert(p->next_local == a && !a->next_local);
+	assert(p->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)p->initializer;
+	assert(decay->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)decay->operand)->declaration == a);
+	sum = (struct ast_binary_expression *)y->initializer;
+	assert(sum->left->kind == expression_load);
+	assert(((struct ast_load_expression *)sum->left)->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)((struct ast_load_expression *)sum->left)->operand)->declaration == x);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_explicit_auto_tree();
 	test_register_array_tree();
 	test_register_scalar_tree();
 	test_typedef_specifier_placement_tree();

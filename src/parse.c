@@ -95,7 +95,8 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 {
 	enum token_kind kind = token.kind;
 
-	return kind == token_typedef || kind == token_register || kind == token_void || kind == token_const ||
+	return kind == token_typedef || kind == token_register || kind == token_auto ||
+		kind == token_void || kind == token_const ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
@@ -117,7 +118,7 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
 
-/* declaration-specifiers ::= permutation of [ "typedef" | "register" ], type-qualifier-list and builtin-type
+/* declaration-specifiers ::= permutation of [ "typedef" | "register" | "auto" ], type-qualifier-list and builtin-type
  * builtin-type ::= integer-type | "void" | typeof-specifier | typedef-name
  * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
@@ -146,20 +147,31 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		struct token token = preprocess_peek(parser->preprocessor);
 
-		if (token.kind == token_typedef || token.kind == token_register) {
+		if (token.kind == token_typedef || token.kind == token_register || token.kind == token_auto) {
 			if (!storage_keyword) {
-				diagnostic_error(parser->diagnostics, token.location, token.kind == token_typedef ?
-					"typedef is not permitted in a type name or parameter declaration" :
-					"register storage is not supported in this context");
+				const char *message = "register storage is not supported in this context";
+
+				if (token.kind == token_typedef)
+					message = "typedef is not permitted in a type name or parameter declaration";
+				else if (token.kind == token_auto)
+					message = "auto is not permitted in a type name or parameter declaration";
+				diagnostic_error(parser->diagnostics, token.location, message);
 				return NULL;
 			}
-			if (storage_keyword->kind == token_typedef || storage_keyword->kind == token_register) {
+			if (storage_keyword->kind == token_typedef || storage_keyword->kind == token_register ||
+				storage_keyword->kind == token_auto) {
 				const char *message = "multiple storage-class specifiers in one declaration";
 
-				if (storage_keyword->kind == token.kind)
-					message = token.kind == token_typedef ?
-						"duplicate typedef storage-class specifier" :
-						"duplicate register storage-class specifier";
+				if (storage_keyword->kind == token.kind) {
+					if (token.kind == token_typedef)
+						message = "duplicate typedef storage-class specifier";
+					else if (token.kind == token_register)
+						message = "duplicate register storage-class specifier";
+					else
+						message = "duplicate auto storage-class specifier";
+				} else if ((storage_keyword->kind == token_auto && token.kind == token_register) ||
+					(storage_keyword->kind == token_register && token.kind == token_auto))
+					message = "combined auto storage classes are not supported yet";
 				diagnostic_error(parser->diagnostics, token.location, message);
 				return NULL;
 			}
@@ -270,7 +282,9 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
 	}
 	if (!seen_int && !seen_char && !seen_short && !seen_bool && !seen_sign && !long_count) {
-		diagnostic_error(parser->diagnostics, beginning->location, "expected type specifier with qualifier");
+		diagnostic_error(parser->diagnostics, beginning->location,
+			storage_keyword && storage_keyword->kind == token_auto ?
+			"auto type inference is not supported yet" : "expected type specifier with qualifier");
 		return NULL;
 	}
 	if (seen_bool && (seen_sign || seen_char || seen_short || seen_int || long_count)) {
@@ -309,7 +323,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
 }
 
-/* declaration-specifiers ::= permutation of [ "typedef" | "register" ], qualifiers and type-specifiers
+/* declaration-specifiers ::= permutation of [ "typedef" | "register" | "auto" ], qualifiers and type-specifiers
  * A NULL storage output disallows storage classes in type-name/parameter contexts.
  */
 static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser,
@@ -2002,7 +2016,7 @@ static bool count_block_item(struct parser *parser, struct source_location locat
  * Assignment expressions stop before a declarator comma, not call-argument commas.
  */
 static struct ast_block_item *parse_local_declaration_tail(struct parser *parser,
-	struct token beginning, struct ast_type_syntax *base, bool is_register)
+	struct token beginning, struct ast_type_syntax *base, struct token storage_keyword)
 {
 	struct ast_block_item *items = NULL;
 	struct ast_block_item **tail = &items;
@@ -2020,6 +2034,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 		if (!type_syntax)
 			return NULL;
+		if (storage_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"auto storage requires an object type");
+			return NULL;
+		}
 		if (!publish_parser_name(parser, name, parser_name_object))
 			return NULL;
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
@@ -2034,7 +2053,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		}
 		node->type_syntax = type_syntax;
-		node->is_register = is_register;
+		node->is_register = storage_keyword.kind == token_register;
 		*tail = &node->item;
 		tail = &node->item.next;
 		if (preprocess_peek(parser->preprocessor).kind != token_comma)
@@ -2059,7 +2078,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 		return NULL;
 	if (storage_keyword.kind == token_typedef)
 		return parse_block_typedef_declaration_tail(parser, storage_keyword, base);
-	return parse_local_declaration_tail(parser, beginning, base, storage_keyword.kind == token_register);
+	return parse_local_declaration_tail(parser, beginning, base, storage_keyword);
 }
 
 static bool begins_static_assertion(enum token_kind kind)
@@ -2235,7 +2254,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 				return NULL;
 			if (storage_keyword.kind == token_typedef)
 				return parse_block_typedef_declaration_tail(parser, storage_keyword, base);
-			return parse_local_declaration_tail(parser, token, base, storage_keyword.kind == token_register);
+			return parse_local_declaration_tail(parser, token, base, storage_keyword);
 		}
 		statement = parse_identifier_expression_statement(parser, token);
 	} else if (begins_static_assertion(token.kind)) {
@@ -2496,6 +2515,11 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	if (storage_keyword.kind == token_register) {
 		diagnostic_error(parser->diagnostics, storage_keyword.location,
 			"register storage class requires block scope");
+		return NULL;
+	}
+	if (storage_keyword.kind == token_auto) {
+		diagnostic_error(parser->diagnostics, storage_keyword.location,
+			"file-scope auto declarations are not supported yet");
 		return NULL;
 	}
 	if (storage_keyword.kind == token_typedef)

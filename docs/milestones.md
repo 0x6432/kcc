@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects and M15b1 non-decaying fixed register arrays; parameters, other storage classes/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inference/parameters/other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -2566,3 +2566,52 @@ no compiler behavior was weakened and no intermediate failure counted as a pass.
 M15a1 CI run 38972442575 is still pending; no remote pass is claimed.
 New M15b1 exact-commit CI is pending until checked after push; local passes are
 not remote evidence. Not full C23.
+
+## M15a2 explicit-type auto objects
+
+Design recorded before implementation in m15-auto-explicit.md after pushed
+8e1c641. Extend demand conversion and the shared optional storage-token scanner
+with traditional explicit auto. Block/for comma lists, aliases/query bases and
+specifier positions use ordinary automatic semantics with no AST/type/sema/QBE
+interface change. The local parser tail receives the actual storage token and
+rejects direct auto function syntax before publication; aliases resolving to
+function types remain rejected by existing semantic block-function policy. No
+new storage flag/inference/type/name-scope mechanism. Missing explicit types,
+auto/register combinations and file scope remain explicit refusals; type names/
+parameters, duplicates and typedef mixtures remain rejected. Not full C23.
+
+Frozen validation passed: full make test with GCC 11.5/GCC 14.2.1/Clang 18.1.8;
+full make test-codegen with pinned QBE 1.2 and both modern hosts; both GCC 11 and
+Clang 15 ASan/UBSan lexer/sema plus 19 focused suites, with explicit auto also
+checked against Clang 18. Serial normal helpers preceded parallel runs. Primary
+and both isolated source/test/Makefile manifests matched before/after. Bounded
+compile-only sanitized fuzz passed 9,919 lexer / 28,732 pipeline
+inputs in 26 seconds each. No invalid curated or fuzz-generated C executed.
+Logs/manifests /data/tools/m15a2-*, isolated trees /data/validation-m15a2/{gcc,clang}.
+
+Focused auto originals: 40 standard + 6 C23, all passed through kcc/QBE. GCC 14
+strictly agrees on all 46. GCC 11 agrees on 40; Clang 15 on 39 with one exact
+header-free keyword-macro strict diagnostic gap; legacy keyword absence excludes
+six comparisons, not agreements. Clang 18 has 24 strict C23 agreements and 22
+exact diagnostic gaps: 16 affected traditional-C originals also pass unchanged
+under strict C11, independently corroborating their grammar but NEVER counted as
+C23 agreements. Five C23 query forms and the strict keyword-macro diagnostic
+account for the other six gaps. Exact source/status/full-record classifiers have
+negative tests for wrong originals, signals/statuses, extra notes and duplicate
+diagnostics. Unexpected errors remain failures. Thirteen native constraint
+rejections and six subset refusals remain compile-only. Twenty-four both-direction
+mixed-stack primitive ABI arrangements per host passed; both register suites
+rerun on all four hosts. AST asserts ordinary flags, shared bases, array-decay
+identity, initializer binding and four ordinary local slots. Exact 256/257 locals,
+4096/4097 items, 1 MiB/overflow storage and 128/129 expanded-typedef depth pass.
+
+Pre-freeze native checks exposed two more exact Clang 18 diagnostics on valid
+originals (qualified long and auto typeof(array)); their complete records were
+added to the eligible-source map and negative-tested, without source rewriting
+or compiler changes to mimic the native gap. All four focused hosts then passed
+on the final frozen snapshot; no intermediate failure counted as a pass.
+M15a1 CI run 38972442575 completed/success, all three jobs green.
+M15b1 CI run 38974794979 remains pending; no remote pass is claimed.
+New M15a2 exact-commit CI is pending until queried after push. Local validation
+never implies remote success. Inferred auto/combination lifetimes still need a
+separate design before coding; register parameters remain unsupported.
