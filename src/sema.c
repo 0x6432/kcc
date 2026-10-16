@@ -374,8 +374,37 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 	return true;
 }
 
-/* Form a real common pointer type for permitted qualifier differences.
- * Equal qualifiers keep existing compatible types/snapshots unchanged. */
+/* Callers first validate compatible immediate referents or the object/void rule.
+ * Composite construction preserves known array bounds even for compatible types.
+ */
+static const struct type *common_pointer_type(struct sema *sema,
+	const struct type *left, const struct type *right, struct source_location location)
+{
+	const struct type *a = ((const struct pointer_type *)left)->referent;
+	const struct type *b = ((const struct pointer_type *)right)->referent;
+	const struct type *common;
+	struct pointer_type *pointer;
+
+	if (type_unqualified_compatible(a, b)) {
+		const struct type *plain_a = unqualified_type(sema, a, location);
+		const struct type *plain_b = unqualified_type(sema, b, location);
+
+		if (!plain_a || !plain_b)
+			return NULL;
+		common = type_composite(sema->arena, plain_a, plain_b);
+	} else {
+		assert(object_void_pointer_conversion(left, right));
+		common = &type_void;
+	}
+	if (common)
+		common = type_qualified(sema->arena, common, a->qualifiers | b->qualifiers);
+	pointer = common ? type_new_pointer(sema->arena, common) : NULL;
+	if (!pointer)
+		diagnostic_error(sema->diagnostics, location, "out of memory creating common pointer type");
+	return pointer ? &pointer->type : NULL;
+}
+
+/* Equal qualifiers keep existing comparison snapshots unchanged. */
 static bool convert_comparison_pointers(struct sema *sema, struct ast_binary_expression *node)
 {
 	const struct type *left = node->left->type;
@@ -383,7 +412,6 @@ static bool convert_comparison_pointers(struct sema *sema, struct ast_binary_exp
 	const struct type *a;
 	const struct type *b;
 	const struct type *common;
-	struct pointer_type *pointer;
 	bool equality = node->operation == binary_equal || node->operation == binary_not_equal;
 
 	if (left->kind != type_kind_pointer || right->kind != type_kind_pointer ||
@@ -391,34 +419,11 @@ static bool convert_comparison_pointers(struct sema *sema, struct ast_binary_exp
 		return true;
 	a = ((const struct pointer_type *)left)->referent;
 	b = ((const struct pointer_type *)right)->referent;
-	if (type_unqualified_compatible(a, b)) {
-		const struct type *plain_a = unqualified_type(sema, a, node->left->location);
-		const struct type *plain_b = unqualified_type(sema, b, node->right->location);
-
-		if (!plain_a || !plain_b)
-			return false;
-		common = type_composite(sema->arena, plain_a, plain_b);
-	} else if (equality && object_void_pointer_conversion(left, right)) {
-		common = &type_void;
-	} else {
+	if (!type_unqualified_compatible(a, b) && !(equality && object_void_pointer_conversion(left, right)))
 		return true; /* The caller diagnoses incompatible pointer comparisons. */
-	}
-	if (!common) {
-		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory creating comparison type");
-		return false;
-	}
-	common = type_qualified(sema->arena, common, a->qualifiers | b->qualifiers);
-	if (!common) {
-		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory qualifying comparison type");
-		return false;
-	}
-	pointer = type_new_pointer(sema->arena, common);
-	if (!pointer) {
-		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory creating comparison pointer");
-		return false;
-	}
-	return convert_expression(sema, &node->left, &pointer->type) &&
-		convert_expression(sema, &node->right, &pointer->type);
+	common = common_pointer_type(sema, left, right, node->expression.location);
+	return common && convert_expression(sema, &node->left, common) &&
+		convert_expression(sema, &node->right, common);
 }
 
 static bool comparison_operator(enum binary_operator operation)
@@ -806,6 +811,49 @@ static bool sema_expression(struct sema *sema,
 		}
 		depth = node->left->depth > node->right->depth ?
 			node->left->depth : node->right->depth;
+		expression->depth = depth + 1;
+		break;
+	}
+	case expression_conditional: {
+		struct ast_conditional_expression *node = (struct ast_conditional_expression *)expression;
+		const struct type *a;
+		const struct type *b;
+		unsigned depth;
+
+		/* Skipped arms must satisfy constraints, but only one executes. */
+		if (!sema_expression(sema, &node->condition, true) ||
+			!sema_expression(sema, &node->then_value, true) || !sema_expression(sema, &node->else_value, true))
+			return false;
+		if (!type_is_scalar(node->condition->type)) {
+			diagnostic_error(sema->diagnostics, node->condition->location,
+				"conditional expression requires a scalar condition");
+			return false;
+		}
+		a = node->then_value->type;
+		b = node->else_value->type;
+		if (type_is_integer(a) && type_is_integer(b)) {
+			result_type = type_usual_arithmetic(a, b);
+		} else if (a->kind == type_kind_void && b->kind == type_kind_void) {
+			result_type = &type_void;
+		} else if (a->kind == type_kind_pointer && b->kind == type_kind_pointer &&
+			(type_unqualified_compatible(((const struct pointer_type *)a)->referent,
+				((const struct pointer_type *)b)->referent) || object_void_pointer_conversion(a, b))) {
+			result_type = common_pointer_type(sema, a, b, expression->location);
+			if (!result_type)
+				return false;
+		} else {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"incompatible conditional operands (null pointer constants are not implemented yet)");
+			return false;
+		}
+		if (result_type->kind != type_kind_void &&
+			(!convert_expression(sema, &node->then_value, result_type) ||
+			 !convert_expression(sema, &node->else_value, result_type)))
+			return false;
+		depth = node->then_value->depth > node->else_value->depth ?
+			node->then_value->depth : node->else_value->depth;
+		if (node->condition->depth > depth)
+			depth = node->condition->depth;
 		expression->depth = depth + 1;
 		break;
 	}

@@ -42,6 +42,8 @@ enum token_kind {
 	token_right_brace,
 	token_semicolon,
 	token_comma,
+	token_question,
+	token_colon,
 	token_plus,
 	token_minus,
 	token_star,

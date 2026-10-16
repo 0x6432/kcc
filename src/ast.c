@@ -203,6 +203,29 @@ struct ast_unary_expression *ast_new_unary(struct arena *arena,
 	return node;
 }
 
+struct ast_conditional_expression *ast_new_conditional(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_expression *then_value, struct ast_expression *else_value)
+{
+	struct ast_conditional_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = then_value->depth > else_value->depth ? then_value->depth : else_value->depth;
+
+	if (condition->depth > depth)
+		depth = condition->depth;
+	if (node)
+		*node = (struct ast_conditional_expression) {
+			.expression = {
+				.kind = expression_conditional,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.condition = condition,
+			.then_value = then_value,
+			.else_value = else_value,
+		};
+	return node;
+}
+
 struct ast_comma_expression *ast_new_comma(struct arena *arena,
 	struct source_location location, struct ast_expression *left, struct ast_expression *right)
 {

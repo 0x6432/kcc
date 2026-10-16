@@ -2239,8 +2239,112 @@ static void test_boolean_constant_tree(void)
 }
 
 
+static void test_conditional_expression_tree(void)
+{
+	const char *text = "int f(void) { 1?true:false; return 0; } "
+		"const int *g(int *p,const int *q) { return 1?p:q; } "
+		"int (*h(int (*a)[],int (*b)[3]))[3] { return 0?a:b; } "
+		"void v(int *p) { 1?(void)(*p=1):(void)(*p=2); return; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_statement_item *item;
+	struct ast_conditional_expression *conditional;
+	const struct pointer_type *pointer;
+	const struct array_type *array;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "conditional.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	function = first_function(unit);
+	item = (struct ast_statement_item *)function->body->items;
+	conditional = (struct ast_conditional_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(conditional->expression.kind == expression_conditional);
+	assert(conditional->expression.type == &type_int && conditional->expression.depth == 3);
+	assert(!conditional->expression.is_lvalue && conditional->condition->type == &type_int);
+	require_conversion(conditional->then_value, &type_int, &type_bool);
+	require_conversion(conditional->else_value, &type_int, &type_bool);
+	assert(((struct ast_conversion_expression *)conditional->then_value)->operand->kind == expression_boolean);
+	function = (struct ast_function *)function->external.next;
+	item = (struct ast_statement_item *)function->body->items;
+	conditional = (struct ast_conditional_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(conditional->expression.kind == expression_conditional && !conditional->expression.is_lvalue);
+	pointer = (const struct pointer_type *)conditional->expression.type;
+	assert(pointer->type.kind == type_kind_pointer && !pointer->type.qualifiers);
+	assert(pointer->referent->kind == type_kind_int && pointer->referent->qualifiers == type_qualifier_const);
+	assert(conditional->then_value->kind == expression_conversion);
+	assert(conditional->else_value->kind == expression_load);
+	function = (struct ast_function *)function->external.next;
+	item = (struct ast_statement_item *)function->body->items;
+	conditional = (struct ast_conditional_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(conditional->expression.kind == expression_conditional);
+	pointer = (const struct pointer_type *)conditional->expression.type;
+	array = (const struct array_type *)pointer->referent;
+	assert(array->type.kind == type_kind_array && array->count == 3 && array->element == &type_int);
+	/* Composite result must not rewrite the earlier parameter's incomplete type. */
+	pointer = (const struct pointer_type *)function->declaration->parameters->type;
+	assert(((const struct array_type *)pointer->referent)->count == 0);
+	function = (struct ast_function *)function->external.next;
+	item = (struct ast_statement_item *)function->body->items;
+	conditional = (struct ast_conditional_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(conditional->expression.kind == expression_conditional);
+	assert(conditional->expression.type == &type_void && !conditional->expression.is_lvalue);
+	assert(conditional->then_value->type == &type_void && conditional->else_value->type == &type_void);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+static void test_conditional_integer_types(void)
+{
+	const struct type *types[] = { &type_bool, &type_char, &type_schar, &type_uchar,
+		&type_short, &type_ushort, &type_int, &type_uint, &type_long, &type_ulong,
+		&type_long_long, &type_ulong_long };
+	const char *names[] = { "_Bool", "char", "signed char", "unsigned char", "short",
+		"unsigned short", "int", "unsigned", "long", "unsigned long", "long long", "unsigned long long" };
+
+	for (size_t a = 0; a < sizeof(types) / sizeof(types[0]); a++)
+		for (size_t b = 0; b < sizeof(types) / sizeof(types[0]); b++) {
+			char text[256];
+			struct source source;
+			struct arena arena = { 0 };
+			struct diagnostics diagnostics = { 0 };
+			struct preprocessor preprocessor;
+			struct ast_translation_unit *unit;
+			struct ast_statement_item *item;
+			struct ast_conditional_expression *conditional;
+			const struct type *expected = type_usual_arithmetic(types[a], types[b]);
+
+			assert(snprintf(text, sizeof(text), "int main(void) { 1?(%s)0:(%s)0; return 0; }", names[a], names[b]) > 0);
+			assert(source_from_bytes(&source, "conditional-types.c", (const unsigned char *)text, strlen(text)));
+			assert(source_prepare(&source));
+			preprocess_init(&preprocessor, &source, &diagnostics);
+			unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+			assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+			item = (struct ast_statement_item *)first_function(unit)->body->items;
+			conditional = (struct ast_conditional_expression *)((struct ast_expression_statement *)item->statement)->value;
+			assert(conditional->expression.kind == expression_conditional && !conditional->expression.is_lvalue);
+			assert(conditional->expression.type == expected);
+			assert(conditional->then_value->type == expected && conditional->else_value->type == expected);
+			arena_destroy(&arena);
+			preprocess_destroy(&preprocessor);
+			source_destroy(&source);
+		}
+}
+
+
 int main(void)
 {
+	test_conditional_expression_tree();
+	test_conditional_integer_types();
 	test_boolean_constant_tree();
 	test_const_qualification_tree();
 	test_comma_expression_tree();

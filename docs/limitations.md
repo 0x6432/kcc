@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M23a1. Read the latest entries together with README.md and
+Current milestone: M19b. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1195,3 +1195,22 @@ Full normal regression/QBE and both-host sanitized semantic units passed.
 
 M23a1 bounded sanitized fuzz: 23,176 lexer and 68,839 pipeline inputs in
 26 seconds each, without reported failures. Generated C was never executed.
+
+## M19b conditional expressions
+
+?: supports implemented integer types, compatible/qualified/composite pointers,
+object/void pointer pairs and two void arms. Both arms satisfy constraints even
+when skipped. Result is never an lvalue. Integer arms use usual conversions
+(including bool/bool to int). Pointer composites retain known array bounds and
+immediate qualifier union without changing earlier types. Only the selected arm
+executes, after the condition, including when the result is discarded. Nested
+branch predecessors are recorded for scalar QBE phi; void uses no result phi.
+
+Pointer/integer null constants remain unimplemented (even literal 0); floating,
+aggregate and nullptr_t cases depend on future types. Other remaining operators,
+switch, labels and goto stay separate M19 increments. Clang 15 rejects exactly
+two C23 array-qualification conditional programs (6.7.3p10); kcc/QBE runs the
+unchanged originals, and no fake native host agreements are counted.
+
+M19b bounded sanitized fuzz: 23,373 lexer and 68,010 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.

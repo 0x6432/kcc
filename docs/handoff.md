@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M23a1 implementation: C23 bool/true/false typed constants and raw macro separation;
+M19b implementation: conditional scalar/void values and immutable pointer composites;
+prior M23a1 C23 bool/true/false typed constants and raw macro separation;
 prior M14j2 const syntax/enforcement, immutable qualified types,
 value/signature normalization and qualified pointer conversions; prior M19a sequenced comma values/discards with separate argument and
 declaration separator floors; M14i explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
@@ -28,12 +29,13 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 Latest confirmed exact-source CI: M19a 95a99d7 run 38861248497, M14i
 1ed1cc8 run 38860337750 and M14h 274d966 run 38859812046 passed.
 M14j1 6e7ff50 run 38861821792 passed. M14j2 b26ff3b run 38863255999
-was still running; M23a1 remote/full isolated checks remain pending. M14g full GCC/Clang normal and
+and M23a1 fe26eb4 run 38864340577 were still running;
+M19b remote/full isolated checks remain pending. M14g full GCC/Clang normal and
 ASan/UBSan matrix passed; queued newer snapshots need actual log confirmation.
 Logs/snapshots live in /data/tools and /data/validation-* outside the repo.
 
-Next: M19b conditional expressions, designed in m19-conditional-expressions.md;
-then remaining M14 qualifiers/typedefs and M23a keyword work.
+Next: M18a fixed sizeof/alignof, designed in m18-sizeof-alignment.md;
+then remaining qualifier/typedef, constant evaluation and keyword work.
 Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1702,3 +1704,30 @@ M14 remaining qualifiers/typedefs and M23a remaining keywords stay unfinished.
 
 M23a1 bounded sanitized fuzz: 23,176 lexer and 68,839 pipeline inputs in
 26 seconds each, without reported failures. Generated C was never executed.
+
+## M19b tested source checkpoint
+
+Concrete conditional AST/parser/sema/codegen now implement selected scalar/void
+branches and qualified/composite pointer results. The Pratt table keeps comma,
+assignment and conditional contexts distinct; the middle accepts full expressions
+and the final operand associates right. All operands are checked semantically.
+Known/unknown array bounds compose without changing parameter type snapshots.
+Comparison and conditional common-pointer construction share one checked helper.
+
+Full normal GCC regression and QBE suites passed. Targeted both-host tests cover
+50 original programs, 288 pairwise sign/rank checks, typed units for all 144
+integer pairs, 17 constraints, exact syntax and inserted-conversion depths,
+24 primitive ABI arrangements, host-native null pointer conditions and dirty
+narrow returns. GCC gives 50 native runtime agreements; Clang 15 gives 48 and
+two exact C23 array-qualification diagnostic gaps. Every original kcc program
+still executes with QBE. Both GCC/Clang ASan/UBSan semantic units passed.
+A test expectation initially missed the existing explicit cast's depth; the
+final exact typed boundary uses a real bool leaf and promotion. No compiler
+failure was hidden by a host-source rewrite. Bounded sanitized fuzz totals follow;
+no generated C was executed. Remote/full isolated checks remain pending.
+
+Next independent M18a fixed sizeof/alignof is designed in m18-sizeof-alignment.md.
+No VLA/constant evaluator, null constant or full M18/M19 conformance is implied.
+
+M19b bounded sanitized fuzz: 23,373 lexer and 68,010 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.

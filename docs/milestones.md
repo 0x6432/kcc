@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | planned |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a sequenced comma implemented; rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma and M19b conditional expressions implemented; rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1227,3 +1227,30 @@ M14 remaining qualifiers/typedefs and M23a remaining keywords stay unfinished.
 
 M23a1 bounded sanitized fuzz: 23,176 lexer and 68,839 pipeline inputs in
 26 seconds each, without reported failures. Generated C was never executed.
+
+## M19b tested source checkpoint
+
+Concrete conditional AST/parser/sema/codegen now implement selected scalar/void
+branches and qualified/composite pointer results. The Pratt table keeps comma,
+assignment and conditional contexts distinct; the middle accepts full expressions
+and the final operand associates right. All operands are checked semantically.
+Known/unknown array bounds compose without changing parameter type snapshots.
+Comparison and conditional common-pointer construction share one checked helper.
+
+Full normal GCC regression and QBE suites passed. Targeted both-host tests cover
+50 original programs, 288 pairwise sign/rank checks, typed units for all 144
+integer pairs, 17 constraints, exact syntax and inserted-conversion depths,
+24 primitive ABI arrangements, host-native null pointer conditions and dirty
+narrow returns. GCC gives 50 native runtime agreements; Clang 15 gives 48 and
+two exact C23 array-qualification diagnostic gaps. Every original kcc program
+still executes with QBE. Both GCC/Clang ASan/UBSan semantic units passed.
+A test expectation initially missed the existing explicit cast's depth; the
+final exact typed boundary uses a real bool leaf and promotion. No compiler
+failure was hidden by a host-source rewrite. Bounded sanitized fuzz totals follow;
+no generated C was executed. Remote/full isolated checks remain pending.
+
+Next independent M18a fixed sizeof/alignof is designed in m18-sizeof-alignment.md.
+No VLA/constant evaluator, null constant or full M18/M19 conformance is implied.
+
+M19b bounded sanitized fuzz: 23,373 lexer and 68,010 pipeline inputs in
+26 seconds each without reported failures; generated C was never executed.

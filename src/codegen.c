@@ -278,6 +278,35 @@ static size_t codegen_logical(struct codegen *codegen,
 	return result;
 }
 
+static size_t codegen_conditional(struct codegen *codegen,
+	const struct ast_conditional_expression *node)
+{
+	size_t condition = codegen_truth(codegen, node->condition);
+	size_t then_label = new_label(codegen);
+	size_t else_label = new_label(codegen);
+	size_t merge_label = new_label(codegen);
+	size_t then_value;
+	size_t else_value;
+	size_t then_predecessor;
+	size_t else_predecessor;
+	size_t result;
+
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", condition, then_label, else_label);
+	emit_label(codegen, then_label);
+	then_value = codegen_expression(codegen, node->then_value);
+	then_predecessor = codegen->current_label;
+	emit(codegen, "\tjmp @b%zu\n", merge_label);
+	emit_label(codegen, else_label);
+	else_value = codegen_expression(codegen, node->else_value);
+	else_predecessor = codegen->current_label;
+	emit(codegen, "\tjmp @b%zu\n", merge_label);
+	emit_label(codegen, merge_label);
+	result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c phi @b%zu %%t%zu, @b%zu %%t%zu\n", result,
+		qbe_type(node->expression.type), then_predecessor, then_value, else_predecessor, else_value);
+	return result;
+}
+
 /* A NULL output emits a void call; no result temporary is manufactured. */
 static void emit_call(struct codegen *codegen, const struct ast_call_expression *node,
 	size_t *value)
@@ -452,6 +481,8 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		return codegen_conversion(codegen, node->operand, expression->type);
 	}
+	case expression_conditional:
+		return codegen_conditional(codegen, (const struct ast_conditional_expression *)expression);
 	case expression_logical:
 		return codegen_logical(codegen,
 			(const struct ast_logical_expression *)expression);
@@ -507,6 +538,23 @@ static void codegen_discard_expression(struct codegen *codegen,
 		return;
 	}
 	switch (expression->kind) {
+	case expression_conditional: {
+		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+		size_t condition = codegen_truth(codegen, node->condition);
+		size_t then_label = new_label(codegen);
+		size_t else_label = new_label(codegen);
+		size_t merge_label = new_label(codegen);
+
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", condition, then_label, else_label);
+		emit_label(codegen, then_label);
+		codegen_discard_expression(codegen, node->then_value);
+		emit(codegen, "\tjmp @b%zu\n", merge_label);
+		emit_label(codegen, else_label);
+		codegen_discard_expression(codegen, node->else_value);
+		emit(codegen, "\tjmp @b%zu\n", merge_label);
+		emit_label(codegen, merge_label);
+		return;
+	}
 	case expression_comma: {
 		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
 

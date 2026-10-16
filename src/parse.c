@@ -570,27 +570,29 @@ struct infix_operator {
  * associativity: a-b-c is (a-b)-c, because the RHS does not consume another
  * operator of equal precedence. Assignment uses equal left/right powers,
  * making a=b=c associate as a=(b=c). Comma binds below assignment at 0/1.
+ * Conditional ?: uses power 2 and its own three-operand helper; logical-or is 3.
  * Assignment-expression contexts use floor 1; full expressions use floor 0.
  * Prefix operators bind at 30.
  */
 static const struct infix_operator infix_operators[] = {
 	{ token_comma, 0, 1 },
 	{ token_equal, 1, 1 },
-	{ token_or_or, 2, 3 },
-	{ token_and_and, 3, 4 },
-	{ token_pipe, 4, 5 },
-	{ token_caret, 5, 6 },
-	{ token_ampersand, 6, 7 },
-	{ token_equal_equal, 7, 8 },
-	{ token_not_equal, 7, 8 },
-	{ token_less, 8, 9 },
-	{ token_less_equal, 8, 9 },
-	{ token_greater, 8, 9 },
-	{ token_greater_equal, 8, 9 },
-	{ token_shift_left, 9, 10 },
-	{ token_shift_right, 9, 10 },
-	{ token_plus, 10, 11 },
-	{ token_minus, 10, 11 },
+	{ token_question, 2, 2 },
+	{ token_or_or, 3, 4 },
+	{ token_and_and, 4, 5 },
+	{ token_pipe, 5, 6 },
+	{ token_caret, 6, 7 },
+	{ token_ampersand, 7, 8 },
+	{ token_equal_equal, 8, 9 },
+	{ token_not_equal, 8, 9 },
+	{ token_less, 9, 10 },
+	{ token_less_equal, 9, 10 },
+	{ token_greater, 9, 10 },
+	{ token_greater_equal, 9, 10 },
+	{ token_shift_left, 10, 11 },
+	{ token_shift_right, 10, 11 },
+	{ token_plus, 11, 12 },
+	{ token_minus, 11, 12 },
 	{ token_star, 20, 21 },
 	{ token_slash, 20, 21 },
 	{ token_percent, 20, 21 },
@@ -927,13 +929,51 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 	return NULL;
 }
 
+/* conditional-expression ::= logical-OR-expression
+ *                          | logical-OR-expression "?" expression ":" conditional-expression
+ * The condition and question mark have already been consumed by Pratt parsing.
+ * Only the middle operand admits an unparenthesized comma or assignment.
+ */
+static struct ast_expression *parse_conditional_expression(struct parser *parser,
+	struct token question, struct ast_expression *condition)
+{
+	struct ast_expression *then_value = parse_expression(parser, 0);
+	struct ast_expression *else_value;
+	struct ast_conditional_expression *node;
+
+	if (!then_value || !expect_token(parser, token_colon, "expected ':' in conditional expression", NULL))
+		return NULL;
+	else_value = parse_expression(parser, 2);
+	if (!else_value)
+		return NULL;
+	if (condition->depth >= ast_max_expression_depth ||
+		then_value->depth >= ast_max_expression_depth || else_value->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, question.location,
+			"expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node = ast_new_conditional(parser->arena, question.location, condition, then_value, else_value);
+	if (!node)
+		allocation_error(parser, question.location);
+	return node ? &node->expression : NULL;
+}
+
 /* expression ::= assignment-expression { "," assignment-expression }
- * assignment-expression ::= prefix-expression { binary-operator prefix-expression }
- * binary-operator ::= "=" | "+" | "-" | "*" | "/" | "%"
- *                   | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
- *                   | "&" | "^" | "|" | "<<" | ">>"
- * Pratt parsing groups this flat grammar using the binding-power table.
- * Recursive calls parse RHS operators only at or above the requested power.
+ * assignment-expression ::= conditional-expression | unary-expression "=" assignment-expression
+ * conditional-expression ::= logical-OR-expression [ "?" expression ":" conditional-expression ]
+ * logical-OR-expression ::= logical-AND-expression { "||" logical-AND-expression }
+ * logical-AND-expression ::= bitwise-OR-expression { "&&" bitwise-OR-expression }
+ * bitwise-OR-expression ::= bitwise-XOR-expression { "|" bitwise-XOR-expression }
+ * bitwise-XOR-expression ::= bitwise-AND-expression { "^" bitwise-AND-expression }
+ * bitwise-AND-expression ::= equality-expression { "&" equality-expression }
+ * equality-expression ::= relational-expression { ("==" | "!=") relational-expression }
+ * relational-expression ::= shift-expression { ("<" | "<=" | ">" | ">=") shift-expression }
+ * shift-expression ::= additive-expression { ("<<" | ">>") additive-expression }
+ * additive-expression ::= multiplicative-expression { ("+" | "-") multiplicative-expression }
+ * multiplicative-expression ::= cast-expression { ("*" | "/" | "%") cast-expression }
+ * Pratt powers implement these precedence levels. Assignment's unary-expression
+ * left constraint is checked as a modifiable lvalue by sema. Other recursive
+ * calls consume RHS operators only at or above the requested binding power.
  */
 static struct ast_expression *parse_expression(struct parser *parser,
 	unsigned minimum_binding_power)
@@ -960,6 +1000,13 @@ static struct ast_expression *parse_expression(struct parser *parser,
 		if (!operator || operator->left_binding_power < minimum_binding_power)
 			break;
 		preprocess_next(parser->preprocessor);
+		if (token.kind == token_question) {
+			node = parse_conditional_expression(parser, token, left);
+			if (!node)
+				goto failure;
+			left = node;
+			continue;
+		}
 		right = parse_expression(parser, operator->right_binding_power);
 		if (!right)
 			goto failure;

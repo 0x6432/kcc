@@ -1257,3 +1257,14 @@ location and depth 1. Sema annotates type_bool without integer literal ranking;
 ordinary promotions insert explicit conversions as usual. QBE emits canonical
 word 0/1, then existing scalar/ABI width rules apply. pp identifiers are not
 keywords; defined tests macros, and #if remaining true is handled independently.
+
+## M19b conditional control flow
+
+ast_conditional_expression owns condition/then_value/else_value. Pratt power 2
+is below logical-or 3 and above assignment 1; middle floor 0, final floor 2.
+Sema checks all operands, ordinary-converts each, computes a real common type,
+inserts conversions and recomputes max typed depth. common_pointer_type builds
+composite immediate referents with qualifier union after callers validate allowed
+categories; no fabricated binary node or deeper pointer covariance. Compatible
+comparison snapshots stay unchanged. Scalar QBE uses actual end labels for each
+phi arm; void discard branches evaluate exactly one arm without a dummy result.

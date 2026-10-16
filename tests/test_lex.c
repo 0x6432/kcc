@@ -295,8 +295,21 @@ static void test_boolean_keywords(void)
 }
 
 
+static void test_conditional_punctuation(void)
+{
+	const enum token_kind kinds[] = { token_question, token_colon,
+		token_question, token_colon };
+
+	check_tokens("#define Q ?\n#define C :\n?: Q C", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_question), "?") == 0);
+	assert(strcmp(token_kind_name(token_colon), ":") == 0);
+}
+
+
 int main(void)
 {
+	test_conditional_punctuation();
 	test_boolean_keywords();
 	test_const_tokens();
 	test_character_spellings();

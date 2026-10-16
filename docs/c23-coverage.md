@@ -310,3 +310,11 @@ bool is an alternate spelling of _Bool; true/false have bool type and concrete
 boolean ASTs. Raw macros and preprocessing conditions keep their phase-specific
 rules. Runtime/type/ABI/boundary tests cover this subset; other keyword changes,
 nullptr, standard headers and full integer constant evaluation remain later work.
+
+### M19b conditional operator
+
+Integer, qualified compatible/composite pointer, object/void pointer and void
+arms implement C23 conditional constraints/type rules and selected evaluation.
+Result is not an lvalue. Null pointer constant, nullptr_t, floating and aggregate
+cases await their own type/evaluation milestones. Two exact legacy Clang 15 C23
+array-qualification diagnostic gaps are tracked, not counted as native passes.

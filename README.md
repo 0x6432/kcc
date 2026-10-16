@@ -6,6 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M19b: conditional expressions use right-associative Pratt parsing, explicit
+arithmetic/pointer common types and selected QBE branches with correct nested
+phi predecessors. Void conditionals have effects without dummy values.
+
 M23a1: C23 bool/true/false language keywords use the existing _Bool model
 and distinct typed boolean constant ASTs. Preprocessing identifiers remain raw
 until expansion; #if true/false and actual macro defined/undef rules stay separate.
