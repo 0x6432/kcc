@@ -641,7 +641,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(int x) { return x; }",
         "int f(int f) { return f(0); }",
         "int f(int x) { return x; } int main(void) { return x; }",
-        "int f(int x) { return x; } int main(void) { return f((1,2)); }",
+        "int f(int x,int y) { return x+y; } int main(void) { return f((1,2)); }",
         "int f(" + ",".join("int a"+str(i) for i in range(129)) + ");",
         "int f(void); int main(void) { return f(" + ",".join("0" for _ in range(129)) + "); }",
         "int f(" + parameters + ") { " + "".join(f"int x{i};" for i in range(129)) + "}",

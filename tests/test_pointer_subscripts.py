@@ -129,7 +129,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer subscripts ') as directory:
         ('int f(int *p) { return p[p]; }', 'one pointer and one integer'),
         ('int f(void) { return 1[2]; }', 'one pointer and one integer'),
         ('int f(int *p) { return p[0; }', "expected ']'"),
-        ('int f(int *p) { return p[0,1]; }', "expected ']'"),
+        ('int f(int *p) { return p[0,]; }', 'expected integer literal'),
         ('int f(int *p) { return p[]; }', 'expected integer literal'),
         ('int f(int *p) { return p[0](); }', 'not a function pointer'),
         ('int f(int *p) { return p[1.0]; }', ''),

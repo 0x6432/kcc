@@ -321,6 +321,9 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 		*value = codegen_canonicalize(codegen, *value, node->expression.type);
 }
 
+static void codegen_discard_expression(struct codegen *codegen,
+	const struct ast_expression *expression);
+
 /* Return the temporary containing the value; operands are emitted first. */
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression)
@@ -329,6 +332,12 @@ static size_t codegen_expression(struct codegen *codegen,
 
 	assert(type_is_scalar(expression->type));
 	switch (expression->kind) {
+	case expression_comma: {
+		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
+
+		codegen_discard_expression(codegen, node->left);
+		return codegen_expression(codegen, node->right);
+	}
 	case expression_call: {
 		size_t value;
 
@@ -491,6 +500,13 @@ static void codegen_discard_expression(struct codegen *codegen,
 		return;
 	}
 	switch (expression->kind) {
+	case expression_comma: {
+		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
+
+		codegen_discard_expression(codegen, node->left);
+		codegen_discard_expression(codegen, node->right);
+		return;
+	}
 	case expression_call:
 		emit_call(codegen, (const struct ast_call_expression *)expression, NULL);
 		return;

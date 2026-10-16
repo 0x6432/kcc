@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | planned |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | planned |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a sequenced comma implemented; rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1122,3 +1122,28 @@ and exact-source remote checks remain pending for this source. M19a comma
 expressions are designed before implementation and brought forward because
 they exercise M14g discard paths and declaration/call separator boundaries.
 M14 qualifiers/typedefs and the rest of M19 remain incomplete.
+
+## M19a tested source checkpoint
+
+Full GCC normal regression and QBE suites passed. Targeted GCC and Clang checks
+cover 35 full-value programs, scalar/void/pointer/function result sequencing,
+short-circuit branch merges, loop/return/subscript full expressions, call and
+declaration separator ownership, 28 primitive/pointer ABI combinations in both
+linkage directions, exact typed-depth limits and 16 invalid constraints.
+Typed units inspect concrete comma children, loads/decay, void/no-lvalue results,
+left association and unchanged call argument count. Three obsolete now-valid
+negative fixtures were migrated to real arity, missing-operand and void-scalar
+constraints; their original valid shapes also have positive coverage.
+
+Bounded ASan/UBSan fuzz completed 23,675 lexer and 71,371 pipeline inputs in
+26 seconds per harness without reported failures; generated C was not executed.
+Full isolated and exact-source remote checks for this source remain pending.
+Exact-source M14g 592b551 CI run 38859101528 passed; M14h 274d966 run
+38859812046 and M14i 1ed1cc8 run 38860337750 were still running when checked.
+The immutable M14g GCC normal/ASan/UBSan matrix passed; its Clang half and other
+queued matrices remain separate checks, not inferred successes.
+
+Next M14j const is designed in m14-const-qualification.md. Implement immutable
+qualification, strict versus root-unqualified compatibility and qualified
+composites as M14j1, then parsing/value conversions and enforcement as M14j2.
+No const syntax is claimed until the latter passes its language tests.

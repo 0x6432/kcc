@@ -6,7 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14i: explicit object/object and function/function pointer casts preserve
+M19a: sequenced comma expressions preserve scalar/void/pointer results without
+confusing call arguments or declaration separators. M14i explicit object/object and function/function pointer casts preserve
 addresses without granting implicit compatibility or adapting call ABIs. Object/void pointer conversions and mixed equality preserve real types
 and explicit conversion nodes, including arrays and pointer objects. Real void types, void-returning functions/callbacks, bare returns and
 effect-only casts/discards emit no dummy QBE result. Function designators decay explicitly to function pointers; compatible

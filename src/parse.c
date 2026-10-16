@@ -514,9 +514,12 @@ struct infix_operator {
 /* A higher binding power binds more tightly. Right = left + 1 gives left
  * associativity: a-b-c is (a-b)-c, because the RHS does not consume another
  * operator of equal precedence. Assignment uses equal left/right powers,
- * making a=b=c associate as a=(b=c). Prefix operators bind at 30.
+ * making a=b=c associate as a=(b=c). Comma binds below assignment at 0/1.
+ * Assignment-expression contexts use floor 1; full expressions use floor 0.
+ * Prefix operators bind at 30.
  */
 static const struct infix_operator infix_operators[] = {
+	{ token_comma, 0, 1 },
 	{ token_equal, 1, 1 },
 	{ token_or_or, 2, 3 },
 	{ token_and_and, 3, 4 },
@@ -581,7 +584,7 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 
 /* argument-expression-list ::= assignment-expression
  *                              { "," assignment-expression }
- * The comma operator is not implemented; it is not part of this production.
+ * Separator commas stay here; grouped comma expressions are parsed inside parentheses.
  */
 static bool parse_call_arguments(struct parser *parser,
 	struct ast_argument **arguments, size_t *count)
@@ -600,7 +603,7 @@ static bool parse_call_arguments(struct parser *parser,
 				"call exceeds argument limit (128)");
 			return false;
 		}
-		value = parse_expression(parser, 0);
+		value = parse_expression(parser, 1);
 		if (!value)
 			return false;
 		argument = ast_new_argument(parser->arena, value);
@@ -836,7 +839,13 @@ static enum binary_operator binary_operator_for_token(enum token_kind kind)
 static struct ast_expression *new_infix_expression(struct parser *parser,
 	struct token token, struct ast_expression *left, struct ast_expression *right)
 {
-	if (token.kind == token_equal) {
+	if (token.kind == token_comma) {
+		struct ast_comma_expression *node = ast_new_comma(parser->arena,
+			token.location, left, right);
+
+		if (node)
+			return &node->expression;
+	} else if (token.kind == token_equal) {
 		struct ast_assignment_expression *node = ast_new_assignment(
 			parser->arena, token.location, left, right);
 
@@ -861,7 +870,8 @@ static struct ast_expression *new_infix_expression(struct parser *parser,
 	return NULL;
 }
 
-/* expression ::= prefix-expression { binary-operator prefix-expression }
+/* expression ::= assignment-expression { "," assignment-expression }
+ * assignment-expression ::= prefix-expression { binary-operator prefix-expression }
  * binary-operator ::= "=" | "+" | "-" | "*" | "/" | "%"
  *                   | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
  *                   | "&" | "^" | "|" | "<<" | ">>"
@@ -1324,7 +1334,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 			return NULL;
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 			preprocess_next(parser->preprocessor);
-			initializer = parse_expression(parser, 0);
+			initializer = parse_expression(parser, 1);
 			if (!initializer)
 				return NULL;
 		}

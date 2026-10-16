@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14i. Read the latest entries together with README.md and
+Current milestone: M19a. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1120,3 +1120,15 @@ through an incompatible function type has undefined behavior and is never used
 in curated runtime tests. Qualifiers, typedefs and full declarators remain work.
 Next bring forward M19a sequenced comma expressions, using the new effect-only
 path and explicit argument/declaration separator floors; M14 stays incomplete.
+
+## M19a
+
+Comma is a real left-associative sequenced expression, including void results.
+Arguments and unparenthesized initializers use assignment-expression floors;
+parentheses, subscripts, returns and loop/condition expressions accept commas.
+The result is never an lvalue. This brings forward one independent M19 operator,
+not switch, labels, goto, conditional expressions or constant-expression support.
+Typed depth stays 128. M14 const/other qualifiers, typedefs and the remaining
+C23 features are not implied. Next split const into an immutable type-model
+increment (M14j1), then syntax and semantic enforcement (M14j2), with tests at
+both boundaries; see m14-const-qualification.md before changing the type graph.

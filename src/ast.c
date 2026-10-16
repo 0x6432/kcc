@@ -172,6 +172,25 @@ struct ast_unary_expression *ast_new_unary(struct arena *arena,
 	return node;
 }
 
+struct ast_comma_expression *ast_new_comma(struct arena *arena,
+	struct source_location location, struct ast_expression *left, struct ast_expression *right)
+{
+	struct ast_comma_expression *node = arena_alloc(arena, sizeof(*node));
+	unsigned depth = left->depth > right->depth ? left->depth : right->depth;
+
+	if (node)
+		*node = (struct ast_comma_expression) {
+			.expression = {
+				.kind = expression_comma,
+				.location = location,
+				.depth = depth + 1,
+			},
+			.left = left,
+			.right = right,
+		};
+	return node;
+}
+
 struct ast_binary_expression *ast_new_binary(struct arena *arena,
 	struct source_location location, enum binary_operator operation,
 	struct ast_expression *left, struct ast_expression *right)

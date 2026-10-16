@@ -1996,8 +1996,75 @@ static void test_explicit_pointer_cast_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_comma_expression_tree(void)
+{
+	const char *text = "int f(int x) { int y=(x,2),z=3; x=1,x=2,x+y; return (void)x,z; } "
+		"void g(void) { (void)1,(void)2; } int add(int a,int b) { return a+b; } "
+		"int call(void) { return add((1,2),3); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *f;
+	struct ast_function *g;
+	struct ast_function *add;
+	struct ast_function *call_function;
+	struct ast_local_declaration *y;
+	struct ast_local_declaration *z;
+	struct ast_statement_item *item;
+	struct ast_comma_expression *comma;
+	struct ast_call_expression *call;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && sema_translation_unit(unit, &arena, &diagnostics));
+	f = first_function(unit);
+	g = (struct ast_function *)f->external.next;
+	add = (struct ast_function *)g->external.next;
+	call_function = (struct ast_function *)add->external.next;
+	y = (struct ast_local_declaration *)f->body->items;
+	z = (struct ast_local_declaration *)y->item.next;
+	assert(y->item.kind == block_item_declaration && z->item.kind == block_item_declaration);
+	comma = (struct ast_comma_expression *)y->initializer;
+	assert(comma->expression.kind == expression_comma && comma->expression.type == &type_int);
+	assert(comma->left->kind == expression_load && comma->right->kind == expression_integer);
+	assert(comma->expression.depth == 3 && !comma->expression.is_lvalue);
+	item = (struct ast_statement_item *)z->item.next;
+	comma = (struct ast_comma_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(comma->expression.kind == expression_comma && comma->left->kind == expression_comma);
+	assert(comma->right->kind == expression_binary && comma->expression.depth == 4);
+	assert(((struct ast_comma_expression *)comma->left)->left->kind == expression_assignment);
+	assert(((struct ast_comma_expression *)comma->left)->right->kind == expression_assignment);
+	item = (struct ast_statement_item *)item->item.next;
+	comma = (struct ast_comma_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(comma->expression.kind == expression_comma && comma->expression.type == &type_int);
+	assert(comma->left->type == &type_void && comma->right->kind == expression_load);
+	assert(comma->expression.depth == 4 && !comma->expression.is_lvalue);
+	item = (struct ast_statement_item *)g->body->items;
+	comma = (struct ast_comma_expression *)((struct ast_expression_statement *)item->statement)->value;
+	assert(comma->expression.kind == expression_comma && comma->expression.type == &type_void);
+	assert(comma->left->type == &type_void && comma->right->type == &type_void);
+	assert(comma->expression.depth == 3 && !comma->expression.is_lvalue);
+	item = (struct ast_statement_item *)call_function->body->items;
+	call = (struct ast_call_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(call->expression.kind == expression_call && call->argument_count == 2);
+	assert(call->arguments->value->kind == expression_comma);
+	assert(call->arguments->next->value->kind == expression_integer && !call->arguments->next->next);
+	assert(!diagnostics.errors);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_comma_expression_tree();
 	test_explicit_pointer_cast_tree();
 	test_object_void_conversion_tree();
 	test_void_type_and_effect_tree();

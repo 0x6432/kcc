@@ -2,9 +2,10 @@
 
 ## Current checkpoint
 
-M14i implementation: explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
+M19a implementation: sequenced comma values/discards with separate argument and
+declaration separator floors; M14i explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
 casts/discards; prior explicit function designators/decay, callback values and
-indirect fixed calls; concrete concrete fixed-function declarator syntax/array-pointer returns,
+indirect fixed calls; concrete fixed-function declarator syntax/array-pointer returns,
 C23 unnamed definitions with positional ABI and no fake spills,
 grouped local/for-header declarators,
 incomplete array referent pointers and composite declarations,
@@ -22,19 +23,16 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M14f 6586319, runs 38836315858 and
-38846879414 passed; M14e c271d3f run 38835100462 passed. Earlier M14a-d and
-M13e-k exact-source runs passed. M14g 592b551 run 38859101528 was still running
-at this checkpoint; check actual status, not an older passing source.
-M14e full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
-passed; full isolated/remote status is recorded chronologically below. Existing
-M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
-external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
-Check actual logs before claiming completion; older-source passing runs do not
-prove a newer source. Lower CPU priority/serial queues do not omit checks.
+Latest confirmed exact-source CI: M14g 592b551 run 38859101528 passed;
+M14f 6586319 runs 38836315858/38846879414 passed. M14h 274d966 and
+M14i 1ed1cc8 exact runs were still running at the latest check. New M19a
+isolated/remote checks remain pending. Immutable M14g GCC normal/ASan/UBSan
+passed; check its Clang and queued snapshots before claiming full matrices.
+Logs/snapshots live in /data/tools and /data/validation-* outside the repo.
 
-Next: bring forward M19a sequenced comma expressions, designed in
-m19-comma-expressions.md; then return to unfinished M14 qualifier/typedef work.
+Next: M14j1 immutable const type-model operations, then M14j2 const language
+support, designed before implementation in m14-const-qualification.md; then
+unfinished M14 other qualifiers/typedef work.
 Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1598,3 +1596,28 @@ and exact-source remote checks remain pending for this source. M19a comma
 expressions are designed before implementation and brought forward because
 they exercise M14g discard paths and declaration/call separator boundaries.
 M14 qualifiers/typedefs and the rest of M19 remain incomplete.
+
+## M19a tested source checkpoint
+
+Full GCC normal regression and QBE suites passed. Targeted GCC and Clang checks
+cover 35 full-value programs, scalar/void/pointer/function result sequencing,
+short-circuit branch merges, loop/return/subscript full expressions, call and
+declaration separator ownership, 28 primitive/pointer ABI combinations in both
+linkage directions, exact typed-depth limits and 16 invalid constraints.
+Typed units inspect concrete comma children, loads/decay, void/no-lvalue results,
+left association and unchanged call argument count. Three obsolete now-valid
+negative fixtures were migrated to real arity, missing-operand and void-scalar
+constraints; their original valid shapes also have positive coverage.
+
+Bounded ASan/UBSan fuzz completed 23,675 lexer and 71,371 pipeline inputs in
+26 seconds per harness without reported failures; generated C was not executed.
+Full isolated and exact-source remote checks for this source remain pending.
+Exact-source M14g 592b551 CI run 38859101528 passed; M14h 274d966 run
+38859812046 and M14i 1ed1cc8 run 38860337750 were still running when checked.
+The immutable M14g GCC normal/ASan/UBSan matrix passed; its Clang half and other
+queued matrices remain separate checks, not inferred successes.
+
+Next M14j const is designed in m14-const-qualification.md. Implement immutable
+qualification, strict versus root-unqualified compatibility and qualified
+composites as M14j1, then parsing/value conversions and enforcement as M14j2.
+No const syntax is claimed until the latter passes its language tests.

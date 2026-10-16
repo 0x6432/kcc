@@ -28,6 +28,7 @@ enum expression_kind {
 	expression_conversion,
 	expression_cast,
 	expression_logical,
+	expression_comma,
 	expression_call,
 };
 
@@ -157,6 +158,12 @@ enum binary_operator {
 	binary_less_equal,
 	binary_greater,
 	binary_greater_equal,
+};
+
+struct ast_comma_expression {
+	struct ast_expression expression;
+	struct ast_expression *left;
+	struct ast_expression *right;
 };
 
 struct ast_binary_expression {
@@ -466,6 +473,8 @@ struct ast_name_expression *ast_new_name(struct arena *arena, struct token name)
 struct ast_unary_expression *ast_new_unary(struct arena *arena,
 	struct source_location location, enum unary_operator operation,
 	struct ast_expression *operand);
+struct ast_comma_expression *ast_new_comma(struct arena *arena,
+	struct source_location location, struct ast_expression *left, struct ast_expression *right);
 struct ast_binary_expression *ast_new_binary(struct arena *arena,
 	struct source_location location, enum binary_operator operation,
 	struct ast_expression *left, struct ast_expression *right);

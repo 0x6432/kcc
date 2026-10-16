@@ -719,6 +719,18 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_comma: {
+		struct ast_comma_expression *node = (struct ast_comma_expression *)expression;
+		unsigned depth;
+
+		if (!sema_expression(sema, &node->left, true) || !sema_expression(sema, &node->right, true))
+			return false;
+		result_type = node->right->type;
+		depth = node->left->depth > node->right->depth ? node->left->depth : node->right->depth;
+		expression->depth = depth + 1;
+		/* C's comma result is not an lvalue, even when its right operand was one. */
+		break;
+	}
 	case expression_logical: {
 		struct ast_logical_expression *node =
 			(struct ast_logical_expression *)expression;

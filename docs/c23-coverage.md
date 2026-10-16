@@ -278,3 +278,11 @@ Object/object and function/function explicit pointer casts are supported,
 separately from implicit conversion. Runtime alignment, effective type and
 compatible indirect target requirements remain C program obligations. No
 object/function bridges or integer/pointer conversions are implied.
+
+### M19a comma operator (brought forward)
+
+Sequenced, left-associative comma expressions, including void and pointer
+results, are implemented independently of list separators. Full expressions
+and assignment-expressions have distinct Pratt entry floors. Switch/labels/goto,
+conditional and other remaining operators are still later work. Const remains
+a designed next increment, not an implemented syntax feature at this checkpoint.

@@ -1206,3 +1206,14 @@ weakened. Cast operands and concrete syntax caches preserve actual source/target
 types and exact typed depth. QBE keeps pointer-width copies with no invented
 loads or function adapters. Runtime targets are called only through compatible
 function signatures in tests, including both narrow and mixed stack ABIs.
+
+## M19a full expressions versus separator lists
+
+Pratt comma uses powers 0/1; assignment remains 1/1. Calls and scalar
+initializers parse at floor 1, while grouped/full expressions use floor 0.
+A distinct ast_comma_expression retains both children; sema applies ordinary
+value conversion to each, preserves the right type and rejects lvalue use.
+Both parse and typed depth use max(children)+1. Scalar codegen discards left,
+then evaluates right; void discard recursively discards both, with branch
+merges and no fabricated result. Lists still own separator tokens. There is
+no TU token buffer, AST flattening or unsequenced argument lowering.
