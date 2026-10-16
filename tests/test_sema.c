@@ -3187,8 +3187,66 @@ static void test_switch_case_tree(void)
 }
 
 
+static void test_typeof_type_tree(void)
+{
+	const char *text = "int f(void) { typeof(const int) x=1; typeof_unqual(const int) y=2; typeof_unqual(const int * const) p=&x; typeof_unqual(const int[2]) a; return y; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *y;
+	struct ast_local_declaration *p;
+	struct ast_local_declaration *a;
+	struct ast_typeof_type_syntax *query;
+	const struct type *operand;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	x = (struct ast_local_declaration *)first_function(unit)->body->items;
+	y = (struct ast_local_declaration *)x->item.next;
+	p = (struct ast_local_declaration *)y->item.next;
+	a = (struct ast_local_declaration *)p->item.next;
+	query = (struct ast_typeof_type_syntax *)x->type_syntax;
+	assert(query->syntax.kind == type_syntax_typeof_type && !query->unqualify);
+	assert(query->syntax.location.offset == (size_t)(strstr(text, "typeof(") - text));
+	assert(!query->syntax.type && query->operand->kind == type_syntax_qualified);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(query->syntax.type == query->operand->type && x->type == query->syntax.type);
+	assert(x->type->kind == type_kind_int && x->type->qualifiers == type_qualifier_const);
+	query = (struct ast_typeof_type_syntax *)y->type_syntax;
+	assert(query->unqualify && !y->type->qualifiers && y->type->kind == type_kind_int);
+	assert(query->operand->type->qualifiers == type_qualifier_const);
+	query = (struct ast_typeof_type_syntax *)p->type_syntax;
+	operand = query->operand->type;
+	assert(operand->kind == type_kind_pointer && operand->qualifiers == type_qualifier_const);
+	assert(p->type->kind == type_kind_pointer && !p->type->qualifiers);
+	assert(((const struct pointer_type *)p->type)->referent == ((const struct pointer_type *)operand)->referent);
+	assert(((const struct pointer_type *)p->type)->referent->qualifiers == type_qualifier_const);
+	query = (struct ast_typeof_type_syntax *)a->type_syntax;
+	operand = query->operand->type;
+	assert(operand->kind == type_kind_array && operand->qualifiers == type_qualifier_const);
+	assert(a->type->kind == type_kind_array && !a->type->qualifiers);
+	assert(!((const struct array_type *)a->type)->element->qualifiers);
+	assert(((const struct array_type *)operand)->element->qualifiers == type_qualifier_const);
+	assert(!unit->strings);
+
+	fclose(stream);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
+
 int main(void)
 {
+	test_typeof_type_tree();
 	test_switch_case_tree();
 	test_switch_foundation_tree();
 	test_goto_tree();

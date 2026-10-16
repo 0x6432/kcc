@@ -32,7 +32,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false and M23a2 nullptr constant implemented; other changes planned) |
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
-| M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | planned |
+| M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name operands; expression operands and declarator normalization remain) |
 | M23e | auto inference | Valid initializers and forbidden declarations | planned |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
@@ -1773,3 +1773,43 @@ GCC agrees, Clang 15 has three exact labelled grammar gaps, not agreements.
 1024/1025 switch and 4096/4097 function-label boundaries pass through QBE when
 valid, never execute. No generated fuzz C was executed.
 Sanitized bounded fuzz: 14,777 lexer and 52,498 pipeline inputs in 26/26 seconds, no reported failure.
+
+## M23d1 typeof type-name operands
+
+Demand keyword conversion recognizes typeof/typeof_unqual only after macro
+expansion. A concrete ast_typeof_type_syntax owns its type-name operand; RDP
+parses the documented subset BNF with a separate restored 64-query nesting guard.
+Sema caches immutable resolved types: typeof preserves the operand identity,
+typeof_unqual removes root qualification (including C23 array element qualifiers
+until a pointer) without stripping referent qualifiers. Function qualification
+is diagnosed before the old qualifier-helper assertion. Declarations, casts,
+sizeof/alignof, static assertions, fixed bounds, adjusted parameters and callbacks
+reuse their existing checks and backend; queries introduce no runtime operation.
+
+Expression operands, GNU aliases, typedef/atomic/VLA/bit-field cases and
+alias-derived bare function declarations remain unsupported. A sole typeof(void)
+parameter is not yet normalized to an empty signature; existing literal void
+syntax remains supported. These are documented subset gaps, not C constraints.
+The current file-scope bare-function alias path reports the existing unsupported
+file-scope-object diagnostic; it does not guess a function AST.
+
+M23d1 focused validation: 48 original curated C23 programs and 24 both-direction
+mixed-stack primitive-result ABI arrangements passed through kcc/QBE with GCC
+and Clang linkers. The installed GCC 11/Clang 15 lack the actual C23 typeof
+keywords, confirmed by exact diagnostics; zero original native agreements or
+native constraint rejections are claimed on these hosts. Modern CI uses the same
+original sources when keyword probes pass. Ten kcc constraints, syntax/subset
+rejections and 64/65 nesting boundaries passed. VLA rejection is a subset gap,
+not a native C constraint; function qualification is also excluded from the
+strict native oracle. Initial fixtures were corrected for GCC's typographic
+quotes and existing complete-object/file-scope-object/variable-length diagnostics;
+no acceptance checks or compiler constraints were relaxed.
+
+M23d1 final local validation: full normal and QBE regression passed. GCC/Clang
+ASan/UBSan lexer/sema units and typeof-type-name, switch-case/foundation, goto,
+named-label and integer-compound runtime/ABI suites passed. Bounded sanitized
+fuzz ran 15,037 lexer / 52,225 pipeline inputs in 26/26 seconds without reported
+failure; generated C was never executed. M19f1 cff28ab public CI 38904988323
+completed success; M19f2 84797f7 run 38907237071 remains in progress at this
+checkpoint. Isolated full matrices and this commit's CI are separately pending.
+Next expression-operand design is m23-typeof-expressions.md.

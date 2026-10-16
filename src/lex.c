@@ -354,6 +354,7 @@ static const struct keyword keywords[] = {
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
+	{ "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
 	{ "sizeof", token_sizeof }, { "alignof", token_alignof },
 	{ "_Alignof", token_legacy_alignof },
 	{ "static_assert", token_static_assert }, { "_Static_assert", token_legacy_static_assert },
@@ -750,6 +751,8 @@ const char *token_kind_name(enum token_kind kind)
 	case token_nullptr: return "nullptr";
 	case token_void: return "void";
 	case token_const: return "const";
+	case token_typeof: return "typeof";
+	case token_typeof_unqual: return "typeof_unqual";
 	case token_sizeof: return "sizeof";
 	case token_alignof: return "alignof";
 	case token_legacy_alignof: return "_Alignof";

@@ -10,6 +10,7 @@ struct parser {
 	unsigned depth;
 	unsigned statement_nesting;
 	unsigned declarator_nesting;
+	unsigned type_query_nesting;
 	size_t block_items;
 	size_t string_bytes;
 	size_t string_count;
@@ -47,7 +48,8 @@ static bool begins_integer_type(enum token_kind kind)
 
 static bool begins_declaration_specifier(enum token_kind kind)
 {
-	return kind == token_void || kind == token_const || begins_integer_type(kind);
+	return kind == token_void || kind == token_const || kind == token_typeof ||
+		kind == token_typeof_unqual || begins_integer_type(kind);
 }
 
 /* type-qualifier-list ::= "const" { "const" }
@@ -66,8 +68,10 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 	return qualified ? &qualified->syntax : NULL;
 }
 
+static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
+
 /* declaration-specifiers ::= permutation of type-qualifier-list and builtin-type
- * builtin-type ::= integer-type | "void"
+ * builtin-type ::= integer-type | "void" | typeof-specifier
  * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
  *                | permutation of ['signed' | 'unsigned'] 'short' ['int'] | '_Bool' | 'bool'
@@ -89,6 +93,7 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 	enum integer_specifier specifier;
 	struct ast_type_syntax *base;
 	struct ast_integer_type_syntax *integer;
+	struct ast_type_syntax *query = NULL;
 	struct token qualifier = { 0 };
 
 	*beginning = preprocess_peek(parser->preprocessor);
@@ -100,6 +105,16 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 	while (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
 		struct token token = preprocess_next(parser->preprocessor);
 
+		if (token.kind == token_typeof || token.kind == token_typeof_unqual) {
+			if (query) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate typeof type specifier");
+				return NULL;
+			}
+			query = parse_typeof_specifier(parser, token);
+			if (!query)
+				return NULL;
+			continue;
+		}
 		if (token.kind == token_const) {
 			if (!qualifiers)
 				qualifier = token;
@@ -152,6 +167,13 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 			seen_sign = true;
 			unsigned_type = token.kind == token_unsigned;
 		}
+	}
+	if (query) {
+		if (seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+			diagnostic_error(parser->diagnostics, beginning->location, "typeof cannot combine with other type specifiers");
+			return NULL;
+		}
+		return qualify_type_syntax(parser, query, qualifiers, qualifier.location);
 	}
 	if (seen_void) {
 		struct ast_void_type_syntax *node;
@@ -434,6 +456,47 @@ static struct ast_type_syntax *parse_type_name(struct parser *parser,
 	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning);
 
 	return parse_derived_type(parser, base, name, has_name, context);
+}
+
+/* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" type-name ")"
+ * Expression operands are a separate increment, not guessed type-name syntax.
+ */
+static struct ast_type_syntax *parse_typeof_contents(struct parser *parser, struct token keyword)
+{
+	struct token beginning;
+	struct ast_type_syntax *operand;
+	struct ast_typeof_type_syntax *node;
+
+	if (!expect_token(parser, token_left_paren, "expected '(' after typeof operator", NULL))
+		return NULL;
+	if (!begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"typeof expression operands are not supported yet");
+		return NULL;
+	}
+	operand = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+	if (!operand || !expect_token(parser, token_right_paren, "expected ')' after typeof type name", NULL))
+		return NULL;
+	node = ast_new_typeof_type_syntax(parser->arena, keyword.location, operand,
+		keyword.kind == token_typeof_unqual);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node ? &node->syntax : NULL;
+}
+
+/* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" type-name ")"; bounded nesting. */
+static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword)
+{
+	struct ast_type_syntax *syntax;
+
+	if (parser->type_query_nesting == ast_max_type_queries) {
+		diagnostic_error(parser->diagnostics, keyword.location, "type query nesting exceeds limit (64)");
+		return NULL;
+	}
+	parser->type_query_nesting++;
+	syntax = parse_typeof_contents(parser, keyword);
+	parser->type_query_nesting--;
+	return syntax;
 }
 
 /* integer-expression ::= integer-token (decimal/octal/hex/binary, separators allowed) */

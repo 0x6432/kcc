@@ -178,11 +178,26 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!base)
 			return NULL;
+		if (base->kind == type_kind_function && qualified->qualifiers) {
+			diagnostic_error(sema->diagnostics, syntax->location, "function type cannot be qualified");
+			return NULL;
+		}
 		syntax->type = type_qualified(sema->arena, base, qualified->qualifiers);
 		if (!syntax->type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory qualifying type");
 			return NULL;
 		}
+		break;
+	}
+	case type_syntax_typeof_type: {
+		struct ast_typeof_type_syntax *query = (struct ast_typeof_type_syntax *)syntax;
+		const struct type *operand = resolve_type_syntax(sema, query->operand);
+
+		if (!operand)
+			return NULL;
+		syntax->type = query->unqualify ? unqualified_type(sema, operand, syntax->location) : operand;
+		if (!syntax->type)
+			return NULL;
 		break;
 	}
 	case type_syntax_void:

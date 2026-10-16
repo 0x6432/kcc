@@ -1002,6 +1002,20 @@ struct ast_function_decay_expression *ast_new_function_decay(struct arena *arena
 	return node;
 }
 
+struct ast_typeof_type_syntax *ast_new_typeof_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *operand, bool unqualify)
+{
+	struct ast_typeof_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_typeof_type_syntax) {
+			.syntax = { .kind = type_syntax_typeof_type, .location = location },
+			.operand = operand,
+			.unqualify = unqualify,
+		};
+	return node;
+}
+
 struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,
 	struct source_location location)
 {

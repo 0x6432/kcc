@@ -6,6 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23d1: C23 `typeof` and `typeof_unqual` accept type-name operands. Immutable
+qualifiers, arrays and function pointers compose with declarations, casts, layout
+queries and fixed signatures. Expression operands, alias-derived bare function
+declarations and sole query-derived void parameter normalization remain separate
+increments. This remains an explicitly incomplete C23 compiler.
+
 M19f2: switch supports case/default labels, converted integer constant values,
 duplicate checking and fallthrough. Linear QBE dispatch evaluates control once;
 nested branch/loop targets and C23 standalone labels are supported. Attributes,

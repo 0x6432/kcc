@@ -1448,3 +1448,22 @@ and 4096 per function, each including default. Linear equality dispatch evaluate
 control once; ordered label emission gives fallthrough without false edges after
 terminators. Current block IDs still track phi predecessors. Attributes, GNU case
 ranges, VLA jump constraints and jump-table optimization remain unsupported.
+
+## M23d1 typeof type-name operands
+
+Demand keyword conversion recognizes typeof/typeof_unqual only after macro
+expansion. A concrete ast_typeof_type_syntax owns its type-name operand; RDP
+parses the documented subset BNF with a separate restored 64-query nesting guard.
+Sema caches immutable resolved types: typeof preserves the operand identity,
+typeof_unqual removes root qualification (including C23 array element qualifiers
+until a pointer) without stripping referent qualifiers. Function qualification
+is diagnosed before the old qualifier-helper assertion. Declarations, casts,
+sizeof/alignof, static assertions, fixed bounds, adjusted parameters and callbacks
+reuse their existing checks and backend; queries introduce no runtime operation.
+
+Expression operands, GNU aliases, typedef/atomic/VLA/bit-field cases and
+alias-derived bare function declarations remain unsupported. A sole typeof(void)
+parameter is not yet normalized to an empty signature; existing literal void
+syntax remains supported. These are documented subset gaps, not C constraints.
+The current file-scope bare-function alias path reports the existing unsupported
+file-scope-object diagnostic; it does not guess a function AST.

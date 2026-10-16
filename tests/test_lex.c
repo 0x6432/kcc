@@ -423,8 +423,18 @@ static void test_case_keywords(void)
 	assert(strcmp(token_kind_name(token_default), "default") == 0);
 }
 
+static void test_typeof_keywords(void)
+{
+	const enum token_kind kinds[] = { token_typeof, token_typeof_unqual };
+
+	check_tokens("#define QUERY typeof\nQUERY typeof_unqual", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_typeof), "typeof") == 0);
+	assert(strcmp(token_kind_name(token_typeof_unqual), "typeof_unqual") == 0);
+}
+
 int main(void)
 {
+	test_typeof_keywords();
 	test_case_keywords();
 	test_switch_keyword();
 	test_goto_keyword();

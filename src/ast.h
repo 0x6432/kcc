@@ -44,6 +44,7 @@ enum expression_kind {
 enum {
 	ast_max_expression_depth = 128,
 	ast_max_statement_nesting = 128,
+	ast_max_type_queries = 64,
 	ast_max_labels = 512,
 	ast_max_switch_labels = 1024,
 	ast_max_function_switch_labels = 4096,
@@ -323,6 +324,7 @@ enum integer_specifier {
 enum type_syntax_kind {
 	type_syntax_void,
 	type_syntax_qualified,
+	type_syntax_typeof_type,
 	type_syntax_integer,
 	type_syntax_pointer,
 	type_syntax_array,
@@ -339,6 +341,12 @@ struct ast_qualified_type_syntax {
 	struct ast_type_syntax syntax;
 	struct ast_type_syntax *base;
 	unsigned qualifiers;
+};
+
+struct ast_typeof_type_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_type_syntax *operand;
+	bool unqualify;
 };
 
 struct ast_void_type_syntax {
@@ -626,6 +634,8 @@ struct ast_external_static_assertion *ast_new_external_static_assertion(struct a
 	struct ast_static_assertion *declaration);
 struct ast_qualified_type_syntax *ast_new_qualified_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *base, unsigned qualifiers);
+struct ast_typeof_type_syntax *ast_new_typeof_type_syntax(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *operand, bool unqualify);
 struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,
 	struct source_location location);
 struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
