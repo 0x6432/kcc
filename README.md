@@ -6,7 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13k: array parameters permit an omitted outer bound, including int a[][3].
+M14a: parenthesized local/parameter object declarators and abstract cast types
+preserve pointer/array precedence, including int (*p)[3] and int (*p[2])[3].
+Function suffixes, typedef names and qualifiers remain later increments.
+Array parameters permit an omitted outer bound, including int a[][3].
 Declared incomplete shape remains distinct from the effective pointer.
 Literal-bound array parameters retain their declared shape but adjust once
 to effective element pointers for signatures, calls and local parameter storage.

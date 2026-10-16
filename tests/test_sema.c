@@ -1443,8 +1443,79 @@ static void test_incomplete_array_parameter(void)
 	source_destroy(&source);
 }
 
+static void test_parenthesized_object_declarators(void)
+{
+	const char *text = "int f(int (*p)[3]) { int *a[2]; int (*b)[3]=(int (*)[3])p; "
+		"int *(*c[2])[3]; return b[0][1]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_parameter *parameter;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *b;
+	struct ast_local_declaration *c;
+	struct ast_array_type_syntax *array_syntax;
+	struct ast_pointer_type_syntax *pointer_syntax;
+	struct ast_cast_expression *cast;
+	const struct array_type *array;
+	const struct pointer_type *pointer;
+
+	assert(source_from_bytes(&source, "declarators.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	parameter = function->declaration->parameters;
+	a = (struct ast_local_declaration *)function->body->items;
+	b = (struct ast_local_declaration *)a->item.next;
+	c = (struct ast_local_declaration *)b->item.next;
+	assert(parameter->type_syntax->kind == type_syntax_pointer);
+	assert(a->type_syntax->kind == type_syntax_array && !a->type_syntax->type);
+	array_syntax = (struct ast_array_type_syntax *)a->type_syntax;
+	assert(array_syntax->has_bound && array_syntax->bound.integer == 2);
+	assert(array_syntax->element->kind == type_syntax_pointer);
+	pointer_syntax = (struct ast_pointer_type_syntax *)array_syntax->element;
+	assert(pointer_syntax->referent->kind == type_syntax_integer);
+	assert(b->type_syntax->kind == type_syntax_pointer && b->initializer->kind == expression_cast);
+	pointer_syntax = (struct ast_pointer_type_syntax *)b->type_syntax;
+	assert(pointer_syntax->referent->kind == type_syntax_array);
+	array_syntax = (struct ast_array_type_syntax *)pointer_syntax->referent;
+	assert(array_syntax->has_bound && array_syntax->bound.integer == 3);
+	assert(array_syntax->element->kind == type_syntax_integer);
+	cast = (struct ast_cast_expression *)b->initializer;
+	assert(cast->type_syntax->kind == type_syntax_pointer && !cast->type_syntax->type);
+	array_syntax = (struct ast_array_type_syntax *)c->type_syntax;
+	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->bound.integer == 2);
+	pointer_syntax = (struct ast_pointer_type_syntax *)array_syntax->element;
+	assert(pointer_syntax->syntax.kind == type_syntax_pointer);
+	array_syntax = (struct ast_array_type_syntax *)pointer_syntax->referent;
+	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->bound.integer == 3);
+	assert(array_syntax->element->kind == type_syntax_pointer);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(parameter->type == parameter->type_syntax->type && parameter->local->type == parameter->type);
+	assert(type_compatible(parameter->type, b->type) && type_compatible(cast->expression.type, b->type));
+	assert(type_object_size(a->type) == 16 && type_object_size(b->type) == 8);
+	assert(type_object_size(c->type) == 16 && type_object_alignment(c->type) == 8);
+	array = (const struct array_type *)c->type;
+	assert(array->type.kind == type_kind_array && array->count == 2);
+	pointer = (const struct pointer_type *)array->element;
+	assert(pointer->type.kind == type_kind_pointer);
+	array = (const struct array_type *)pointer->referent;
+	assert(array->type.kind == type_kind_array && array->count == 3 && type_object_size(&array->type) == 24);
+	pointer = (const struct pointer_type *)array->element;
+	assert(pointer->type.kind == type_kind_pointer && pointer->referent == &type_int);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_parenthesized_object_declarators();
 	test_incomplete_array_parameter();
 	test_array_parameter_adjustment();
 	test_concatenated_string_tree();

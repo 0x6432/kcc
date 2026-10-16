@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M13k implementation: omitted outer array parameter bounds and effective adjustment,
+M14a implementation: single-pass parenthesized object/abstract declarators,
+omitted outer array parameter bounds and effective adjustment,
 adjacent ordinary static byte strings, fixed multidimensional arrays
 and explicit decay/target layout, pointer
 subscripts, scaled offsets, signed-long differences and compatible
@@ -15,17 +16,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13h 6b209a6, run 38829878613, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f/g also passed their exact-source CI.
-M13k full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13i 5699450, run 38830826668, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f/g/h also passed their exact-source CI.
+M14a full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14a parenthesized object declarators, designed in
-m14-object-declarators.md.
+Next: M14b incomplete array object pointers and composite declarations, designed
+in m14-incomplete-object-pointers.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1401,3 +1402,25 @@ fuzz C or invalid/uninitialized curated accesses execute. Full isolated/remote
 verification remains pending. M14a single-pass object declarators are pre-designed.
 M13c dfd9742 completed its isolated GCC/Clang normal + ASan/UBSan matrix; prior
 exact-source CI 38825345451 passed. Later snapshots queue independently.
+
+## M14a tested source checkpoint
+
+Object declarations now separate integer specifiers from a single-pass derived
+syntax builder. A parser-local unfilled base slot preserves parenthesis, suffix
+and prefix precedence; complete concrete syntax is published once. Local/named/
+abstract parameter and cast forms share it. Total 64-star/64-dimension counts
+span groups, with a separate 64-group recursion bound. Codegen is unchanged.
+
+Full normal GCC regression/QBE/reference/ABI passed. 20 new full-value programs,
+both-direction all-primitive row ABI and mixed eight-argument shapes passed
+with GCC and Clang. Typed units inspect exact alternating syntax/cache/size/
+alignment and effective parameter graphs. A new invalid array-cast fixture first
+exposed the scalar conversion helper's target precondition; sema now diagnoses
+non-scalar targets before entering it. Targeted tests, units and the entire
+regression suite passed after this fix. Sanitized bounded fuzz passed 25036 lexer
++ 73397 pipeline inputs (98433 total), 26/26 seconds. No arbitrary fuzz C or
+undefined curated accesses execute. Full isolated/remote checks remain pending.
+M14b incomplete object pointers/composite declarations are pre-designed; a
+GCC/Clang pedantic probe confirmed unknown-array dereference and comparison
+constraints, not yet compiler support. M13i 5699450 passed exact-source CI
+38830826668. Later runs and isolated snapshots remain independent/pending.

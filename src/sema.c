@@ -131,6 +131,11 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!referent)
 			return NULL;
+		if (!type_is_complete_object(referent)) {
+			diagnostic_error(sema->diagnostics, syntax->location,
+				"pointer to incomplete object type is not supported yet");
+			return NULL;
+		}
 		type = type_new_pointer(sema->arena, referent);
 		if (!type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating pointer type");
@@ -481,7 +486,13 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->operand, true))
 			return false;
 		result_type = resolve_type_syntax(sema, node->type_syntax);
-		if (!result_type || !check_conversion(sema, node->operand->type, result_type, expression->location))
+		if (!result_type)
+			return false;
+		if (!type_is_scalar(result_type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "cast target must be a scalar type");
+			return false;
+		}
+		if (!check_conversion(sema, node->operand->type, result_type, expression->location))
 			return false;
 		expression->depth = node->operand->depth + 1;
 		break;

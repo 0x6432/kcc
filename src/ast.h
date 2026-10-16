@@ -41,6 +41,7 @@ enum {
 	ast_max_arguments = 128,
 	ast_max_pointer_depth = 64,
 	ast_max_array_dimensions = 64,
+	ast_max_declarator_nesting = 64,
 	ast_max_string_length = 1024 * 1024,
 	ast_max_string_storage = 8 * 1024 * 1024,
 	ast_max_string_literals = 4096,

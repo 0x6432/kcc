@@ -9,7 +9,7 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k) | M03, M08, M12-M18, M23-M24 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
@@ -187,3 +187,16 @@ pointer storage and verify unknown/known compatibility. Explicit zero, omitted
 inner/local bounds, exact 64/65 dimensions and pointer-spill storage limits pass.
 Earlier now-valid parameter [] negatives became omitted inner dimensions, while
 local [] and unsupported static-bound rejections remain.
+
+### M14a parenthesized object declarators
+
+20 both-host/QBE full-value programs cover all primitive leaves, named/abstract
+row pointers, arrays of row pointers, alternating shapes, one-level parameter
+adjustment, recursive/once-only access and compatible abstract casts. Both row
+ABI directions for all leaves and mixed eight-argument shapes pass. Units inspect
+syntax/cache graphs and target layouts, distinguishing equal-byte incompatible
+shapes. Exact grouped 64/65 nesting/star/dimension budgets pass compile-only.
+A new invalid array-cast fixture exposed a scalar-helper precondition; explicit
+target constraint checking now rejects it before that helper. The entire suite
+and sanitizer fuzz were then run on the corrected source. Function declarators,
+qualifiers, typedef names and incomplete object pointers remain future work.

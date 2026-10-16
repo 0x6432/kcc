@@ -1087,3 +1087,19 @@ alignment retain their complete-type preconditions. Declared syntax caches the
 incomplete type, then parameter adjustment removes exactly its outer array.
 Unknown/known array compatibility checks elements recursively; no fake storage
 or pointer referent completeness relaxation is introduced.
+
+## M14a object declarator construction
+
+Declaration specifiers build the integer base separately. A parser-local result
+holds the current syntax chain and its unfilled base slot. Direct grouping
+extends the same result, suffixes append in source order, and prefix stars append
+in reverse source order. Finally attach the base once; no unfilled node reaches
+sema. Pointer and array syntax retain concrete structs, locations and caches.
+The on-demand token stream is never rewound or materialized as a TU vector.
+
+Local/parameter/cast contexts control name and abstract-form legality. Grouping
+is bounded separately, while star/dimension counts cover the entire declarator.
+Sema checks scalar cast targets before the scalar conversion helper, and checks
+pointer referent completeness before its current constructor. Address/decay/
+stride/layout and QBE paths operate on the resulting graph without special
+parenthesized-expression or pointer-to-row backend nodes.

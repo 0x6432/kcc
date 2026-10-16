@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a parenthesized object declarators; function/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1009,3 +1009,11 @@ fuzz. Full isolated/remote checks remain pending. M14a parenthesized object
 declarators are designed; this does not mark remaining M13 null/void/general
 bound support complete. M13c dfd9742 completed its isolated GCC/Clang normal +
 ASan/UBSan matrix, with prior exact-source CI 38825345451.
+
+M14a source checkpoint: single-pass parenthesized object/abstract declarators
+passed full normal GCC suites, 20 both-host/QBE programs, all primitive row ABI
+directions, mixed eight-argument ABI, exact syntax/cache/shape and global
+declarator resource checks plus bounded sanitized fuzz. Full isolated/remote
+checks remain pending. M14b incomplete object pointers and recursive composite
+function redeclarations are designed before implementation. M13i 5699450 passed
+exact-source CI 38830826668; later source runs remain independent.

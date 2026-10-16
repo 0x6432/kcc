@@ -1,7 +1,7 @@
 # Implementation limitations
 
-Current milestone: M13k. The chronological entries below describe what each
-checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
+Current milestone: M14a. Read the latest entries together with README.md and
+c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
 
@@ -996,3 +996,19 @@ bounds, pointers to incomplete arrays, general expression/VLA/static/qualified
 bounds and full parenthesized declarators remain unsupported. Array compatibility
 accepts unknown/known counts only when their element types are compatible; this
 is not support for allocating incomplete objects.
+
+## M14a
+
+Local objects, parameters and abstract cast types share a single-pass object
+declarator parser. Parentheses distinguish pointer-to-array, array-of-pointers
+and alternating shapes, without rewinding tokens. Named/unnamed parameter forms
+retain one-level adjustment; casts still permit only implemented scalar target
+conversions. An array cast is diagnosed, not sent to scalar conversion assertions.
+
+Function suffixes/pointers, typedef names, qualifiers, comma-separated objects
+and general external declarators remain unsupported. Fixed external functions
+still use the restricted return-prefix/name form. Pointers to incomplete arrays
+are not yet exposed; only outer parameter array bounds may be omitted. Bounds
+remain positive integer tokens. Total pointer/array layers are each bounded to
+64 across grouping, plus a separate 64-group nesting limit; typed expression
+depth and local object storage limits remain unchanged.
