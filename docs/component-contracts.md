@@ -1360,3 +1360,13 @@ and bool compares the promoted result to zero. There is no assignment expansion
 or duplicated call/subscript address subtree. Consteval sees a nonconstant form;
 sizeof still validates the operand but never executes it. Runtime signed overflow
 and invalid pointer range remain C undefined behavior, never curated execution.
+
+## M19c2 old-value update contract
+
+Postfix has its own concrete node and suffix grammar; it is not a prefix mode.
+The shared semantic helper checks/updates the one operand slot and records
+calculation type/stride while the ordinary completion path checks result depth.
+The shared backend helper returns a local previous/current temporary pair after
+one address/load/store. Each concrete expression branch selects its own value.
+No source ordering guarantee beyond C sequencing is introduced. Both kinds are
+nonconstant evaluator forms; opaque sizeof skips all update code generation.

@@ -379,3 +379,9 @@ N3096 6.5.3.1 subset: integer and complete-object pointer modifiable lvalues,
 result type/no-lvalue behavior, promoted/back-converted narrow and boolean values
 and once-only operand addressing. Prefix updates are not constant expressions.
 Postfix, compound assignment, floating and atomic cases remain separate work.
+
+### M19c2 postfix ++/--
+
+N3096 6.5.2.4 subset adds the old-value result with stored new value for current
+integer and complete-object pointer types. Postfix precedence/loops/once-only
+addresses and both ABI directions are tested; no atomic/float semantics claimed.

@@ -2,13 +2,15 @@
 
 ## Current checkpoint
 
-M19c1 prefix updates implemented with one retained lvalue, explicit calculation
-type and pointer stride; QBE performs exactly one address/load/store. Narrow and
-bool back-conversion preserves stored result types. Local targeted both-host
-native/QBE/ABI, full normal/QBE/fuzz and both-host sanitizer checks passed; exact
-counts and remote/isolated status follow below. This M19c1 checkpoint is ready
-for commit/push. Then implement the already written M19c2 postfix design in
-m19-postfix-updates.md. Never execute generated fuzz C.
+M19c2 postfix updates are complete. Separate concrete ASTs and iterative
+postfix parsing share checked operand and QBE single-evaluation lowering with
+prefix updates, selecting old/new values respectively. Full normal/QBE suites
+passed, as did both-host ASan/UBSan semantic units and prefix/postfix runtime/ABI
+checks. Bounded sanitized fuzz completed 23,138 lexer and 50,219 pipeline inputs
+in 26 seconds each without reported failure. Never execute generated fuzz C.
+Continue the prewritten M19d1 +=/-= design in m19-additive-assignment.md.
+Get the exact checkpoint hash with git log -1; full isolated matrices and remote
+CI require their own final markers and are not implied by focused checks.
 
 ### Earlier foundation (chronological)
 

@@ -601,7 +601,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { for(;missing;) ; }",
         "int main(void) { for(;0;missing) ; }",
         "int main(void) { for(int i=0,j[];0;) ; }",
-        "int main(void) { for(int i=0;i<2;i++) ; }",
+        "int main(void) { for(int i=0;i<2;j++) ; }",
         "int main(void) { for(;0;) ; break; }",
         "int main(void) {" + "for(;0;) "*128 + ";}",
     ]

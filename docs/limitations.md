@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M19c1. Read the latest entries together with README.md and
+Current milestone: M19c2. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1438,3 +1438,11 @@ pointer object. Runtime signed overflow/null or out-of-array pointer arithmetic
 remains undefined C behavior, not a runtime bounds-checking feature. Bool updates
 use promoted arithmetic followed by truth conversion. VLA bounds containing an
 update are valid C23 syntax but remain our explicit runtime-bound subset limit.
+
+## M19c2 postfix boundary
+
+Postfix ++/-- now support the same integer/complete-object pointer subset as
+prefix. Compound assignment, float and atomic updates remain later work. C's
+unsequenced side-effect rules still apply: x++ + x, x=x++ and similar sources are
+not made defined by a chosen backend order. The compiler does not diagnose all
+such runtime undefined behavior. Tests only execute curated defined cases.

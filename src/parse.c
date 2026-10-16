@@ -744,7 +744,21 @@ static struct ast_expression *parse_subscript_suffix(struct parser *parser,
 	return &node->expression;
 }
 
-/* postfix-suffix ::= { call-suffix | subscript-suffix }
+/* postfix-update-suffix ::= "++" | "--" */
+static struct ast_expression *parse_postfix_update_suffix(struct parser *parser,
+	struct ast_expression *operand)
+{
+	struct token token = preprocess_next(parser->preprocessor);
+	enum update_operator operation = token.kind == token_increment ? update_increment : update_decrement;
+	struct ast_postfix_update_expression *node;
+
+	node = ast_new_postfix_update(parser->arena, token.location, operation, operand);
+	if (!node)
+		allocation_error(parser, token.location);
+	return node ? &node->expression : NULL;
+}
+
+/* postfix-suffix ::= { call-suffix | subscript-suffix | postfix-update-suffix }
  * Shared by atoms and parenthesized primary expressions. A suffix binds more
  * tightly than prefix/infix operators; chains associate left to right.
  */
@@ -758,6 +772,8 @@ static struct ast_expression *parse_postfix_suffix(struct parser *parser,
 			expression = parse_call_suffix(parser, expression);
 		else if (token.kind == token_left_bracket)
 			expression = parse_subscript_suffix(parser, expression);
+		else if (token.kind == token_increment || token.kind == token_decrement)
+			expression = parse_postfix_update_suffix(parser, expression);
 		else
 			break;
 		if (!expression)

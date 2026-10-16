@@ -25,7 +25,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
-| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional expressions and M19c1 prefix updates implemented; postfix/control-flow rest planned) |
+| M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates implemented; compound/control-flow rest planned) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
@@ -1548,3 +1548,31 @@ Prior M13l1 isolated GCC/Clang normal+ASan/UBSan full matrices passed. M13m
 e06a497 remote run 38879492736 also passed every job. The nullptr oracle fix
 f3df148 run 38881463571 is still running; GCC passed normal tests and reached QBE.
 M19c1 isolated/remote checks are queued/pending, not claimed passed.
+
+## M19c2 postfix update expressions
+
+Separate concrete postfix nodes use the existing ++/-- tokens and iterative
+call/subscript suffix parser. Shared semantic checking retains one operand
+lvalue, calculation type and complete-pointer stride; both result types are
+unqualified/non-lvalue. A backend-only previous/current pair shares the single
+address/load/arithmetic/back-conversion/store path: prefix selects current and
+postfix selects previous. No generic AST payload or assignment duplication was
+introduced. Existing prefix tests are rerun after this factoring.
+
+Both hosts pass 39 strict-native original postfix programs, 18 native constraint
+rejections, explicit nullptr/VLA-subset/compile-only-null-update checks, exact
+depth and 48 both-direction narrow/pointer-return/mixed-stack ABI arrangements.
+Tests distinguish *p++/(*p)++/p++[0]/a[i++]++, verify bool/narrow/unsigned wrap,
+short-circuit/conditional/comma/sizeof and loops. No unsequenced conflicting
+read/write or out-of-array/null update is executed. Concrete AST units retain
+operand identity, types, qualifiers, location, operation and depth. Both-host
+ASan/UBSan semantic units and prefix/postfix runtime/ABI passed. Full regression
+and fuzz results follow once complete. The obsolete i++ for-header negative is
+now an undefined-name j++ case, retaining loop diagnostic coverage.
+Next: M19d1 +=/-=, predesigned in m19-additive-assignment.md.
+
+M19c2 final local validation: complete normal regression and QBE suites passed.
+Both-host ASan/UBSan semantic units and prefix/postfix runtime/ABI passed.
+Sanitized bounded fuzz completed 23,138 lexer and 50,219 pipeline inputs in
+26 seconds each without reported failure. No generated C was executed.
+Full isolated matrix and remote CI are queued separately, not claimed passed.

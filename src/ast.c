@@ -246,6 +246,24 @@ struct ast_name_expression *ast_new_name(struct arena *arena, struct token name)
 	return node;
 }
 
+struct ast_postfix_update_expression *ast_new_postfix_update(struct arena *arena,
+	struct source_location location, enum update_operator operation, struct ast_expression *operand)
+{
+	struct ast_postfix_update_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_postfix_update_expression) {
+			.expression = {
+				.kind = expression_postfix_update,
+				.location = location,
+				.depth = operand->depth + 1,
+			},
+			.operation = operation,
+			.operand = operand,
+		};
+	return node;
+}
+
 struct ast_prefix_update_expression *ast_new_prefix_update(struct arena *arena,
 	struct source_location location, enum update_operator operation, struct ast_expression *operand)
 {

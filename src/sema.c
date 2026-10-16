@@ -644,6 +644,44 @@ static bool lower_pointer_arithmetic(struct sema *sema,
 /* Resolve/types are independent of parsing. Value contexts explicitly load
  * lvalues; assignment's left operand must remain an object, not a loaded value.
  */
+/* Both update forms keep one lvalue subtree, never a duplicated assignment. */
+static const struct type *sema_update_operand(struct sema *sema,
+	struct ast_expression *expression, struct ast_expression **operand,
+	const struct type **calculation_type, uint64_t *element_size)
+{
+	const struct type *operand_type;
+	const struct type *result_type;
+
+	if (!sema_expression(sema, operand, false))
+		return NULL;
+	operand_type = (*operand)->type;
+	if (!(*operand)->is_lvalue || (operand_type->qualifiers & type_qualifier_const) ||
+		(!type_is_integer(operand_type) && operand_type->kind != type_kind_pointer)) {
+		diagnostic_error(sema->diagnostics, expression->location,
+			"update requires a modifiable integer or pointer lvalue");
+		return NULL;
+	}
+	result_type = unqualified_type(sema, operand_type, expression->location);
+	if (!result_type)
+		return NULL;
+	if (operand_type->kind == type_kind_pointer) {
+		const struct type *referent = ((const struct pointer_type *)operand_type)->referent;
+
+		if (!type_is_complete_object(referent)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"pointer update requires a complete object referent");
+			return NULL;
+		}
+		*calculation_type = result_type;
+		*element_size = type_object_size(referent);
+	} else {
+		*calculation_type = type_integer_promotion(result_type);
+		*element_size = 0;
+	}
+	expression->depth = (*operand)->depth + 1;
+	return result_type;
+}
+
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required)
 {
@@ -891,37 +929,22 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = node->operand->depth + 1;
 		break;
 	}
-	case expression_prefix_update: {
-		struct ast_prefix_update_expression *node = (struct ast_prefix_update_expression *)expression;
-		const struct type *operand_type;
+	case expression_postfix_update: {
+		struct ast_postfix_update_expression *node = (struct ast_postfix_update_expression *)expression;
 
-		/* Keep one lvalue subtree; the backend obtains its address just once. */
-		if (!sema_expression(sema, &node->operand, false))
-			return false;
-		operand_type = node->operand->type;
-		if (!node->operand->is_lvalue || (operand_type->qualifiers & type_qualifier_const) ||
-			(!type_is_integer(operand_type) && operand_type->kind != type_kind_pointer)) {
-			diagnostic_error(sema->diagnostics, expression->location,
-				"prefix update requires a modifiable integer or pointer lvalue");
-			return false;
-		}
-		result_type = unqualified_type(sema, operand_type, expression->location);
+		result_type = sema_update_operand(sema, expression, &node->operand,
+			&node->calculation_type, &node->element_size);
 		if (!result_type)
 			return false;
-		if (operand_type->kind == type_kind_pointer) {
-			const struct type *referent = ((const struct pointer_type *)operand_type)->referent;
+		break;
+	}
+	case expression_prefix_update: {
+		struct ast_prefix_update_expression *node = (struct ast_prefix_update_expression *)expression;
 
-			if (!type_is_complete_object(referent)) {
-				diagnostic_error(sema->diagnostics, expression->location,
-					"pointer update requires a complete object referent");
-				return false;
-			}
-			node->calculation_type = result_type;
-			node->element_size = type_object_size(referent);
-		} else {
-			node->calculation_type = type_integer_promotion(result_type);
-		}
-		expression->depth = node->operand->depth + 1;
+		result_type = sema_update_operand(sema, expression, &node->operand,
+			&node->calculation_type, &node->element_size);
+		if (!result_type)
+			return false;
 		break;
 	}
 	case expression_unary: {

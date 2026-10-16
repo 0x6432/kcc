@@ -245,6 +245,34 @@ static size_t codegen_conversion(struct codegen *codegen, const struct ast_expre
 	return result;
 }
 
+struct update_values {
+	size_t previous;
+	size_t current;
+};
+
+/* Address, load and store each occur once; the caller selects old or new. */
+static struct update_values codegen_update(struct codegen *codegen,
+	const struct ast_expression *operand, enum update_operator operation,
+	const struct type *calculation_type, uint64_t element_size)
+{
+	size_t address = codegen_address(codegen, operand);
+	size_t previous = codegen->next_temporary++;
+	size_t value = codegen->next_temporary++;
+	uint64_t step = element_size ? element_size : 1;
+
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
+		qbe_load_instruction(operand->type), address);
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(calculation_type),
+		operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
+	/* _Bool conversion tests the promoted value, never its low bit. */
+	if (operand->type->kind == type_kind_bool)
+		value = codegen_truth_value(codegen, value, calculation_type);
+	else
+		value = codegen_canonicalize(codegen, value, operand->type);
+	emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(operand->type), value, address);
+	return (struct update_values) { .previous = previous, .current = value };
+}
+
 static size_t codegen_logical(struct codegen *codegen,
 	const struct ast_logical_expression *node)
 {
@@ -527,24 +555,19 @@ static size_t codegen_expression(struct codegen *codegen,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
 		return temporary;
 	}
+	case expression_postfix_update: {
+		const struct ast_postfix_update_expression *node = (const struct ast_postfix_update_expression *)expression;
+		struct update_values values = codegen_update(codegen, node->operand, node->operation,
+			node->calculation_type, node->element_size);
+
+		return values.previous;
+	}
 	case expression_prefix_update: {
 		const struct ast_prefix_update_expression *node = (const struct ast_prefix_update_expression *)expression;
-		size_t address = codegen_address(codegen, node->operand);
-		size_t previous = codegen->next_temporary++;
-		size_t value = codegen->next_temporary++;
-		uint64_t step = node->element_size ? node->element_size : 1;
+		struct update_values values = codegen_update(codegen, node->operand, node->operation,
+			node->calculation_type, node->element_size);
 
-		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(node->calculation_type),
-			qbe_load_instruction(node->operand->type), address);
-		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(node->calculation_type),
-			node->operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
-		/* _Bool conversion tests the promoted value, never its low bit. */
-		if (expression->type->kind == type_kind_bool)
-			value = codegen_truth_value(codegen, value, node->calculation_type);
-		else
-			value = codegen_canonicalize(codegen, value, expression->type);
-		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->operand->type), value, address);
-		return value;
+		return values.current;
 	}
 	case expression_assignment: {
 		const struct ast_assignment_expression *node =
