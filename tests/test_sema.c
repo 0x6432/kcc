@@ -1641,8 +1641,65 @@ static void test_local_declaration_list_tree(void)
 	source_destroy(&source);
 }
 
+static void test_unnamed_definition_parameter_tree(void)
+{
+	const char *text = "long long f(int,char x,int [],int (*)[3],short,int,long long,long long y) "
+		"{ int z=42; return x+y+z; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_parameter *parameter;
+	struct ast_local_declaration *x = NULL;
+	struct ast_local_declaration *y = NULL;
+	struct ast_local_declaration *z;
+	const struct function_parameter_type *signature_parameter;
+	size_t index = 0;
+
+	assert(source_from_bytes(&source, "unnamed-definition.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	assert(function->declaration->parameter_count == 8);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	signature_parameter = function->declaration->symbol->type->parameters;
+	for (parameter = function->declaration->parameters; parameter; parameter = parameter->next) {
+		assert(signature_parameter && type_compatible(parameter->type, signature_parameter->type));
+		if (index == 1 || index == 7) {
+			assert(parameter->has_name && parameter->local && parameter->local->type == parameter->type);
+			if (index == 1)
+				x = parameter->local;
+			else
+				y = parameter->local;
+		} else {
+			assert(!parameter->has_name && !parameter->local);
+		}
+		if (index == 2) {
+			assert(parameter->type_syntax->kind == type_syntax_array);
+			assert(!type_is_complete_object(parameter->type_syntax->type));
+			assert(parameter->type->kind == type_kind_pointer);
+			assert(((const struct pointer_type *)parameter->type)->referent == &type_int);
+		}
+		signature_parameter = signature_parameter->next;
+		index++;
+	}
+	assert(index == 8 && !signature_parameter && x && y && x->slot == 0 && y->slot == 1);
+	z = (struct ast_local_declaration *)function->body->items;
+	assert(z->slot == 2 && z->type == &type_int && function->locals == z);
+	assert(z->next_local == y && y->next_local == x && !x->next_local);
+	assert(function->return_type == &type_long_long);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_unnamed_definition_parameter_tree();
 	test_local_declaration_list_tree();
 	test_incomplete_object_pointer_composite();
 	test_parenthesized_object_declarators();

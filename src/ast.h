@@ -372,7 +372,7 @@ struct ast_parameter {
 	struct source_location location;
 	struct token name;
 	bool has_name;
-	struct ast_local_declaration *local;
+	struct ast_local_declaration *local; /* NULL for prototypes and unnamed parameters. */
 	struct ast_parameter *next;
 };
 

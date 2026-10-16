@@ -14,7 +14,7 @@ of complete ISO conformance.
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
-| C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals); C23 keyword/type additions absent | M10-M11, M23a-M23h, M24a-M24g |
+| C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); C23 keyword/type additions absent | M10-M11, M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |
 | Self-hosting | absent | M26 |
 
@@ -225,3 +225,16 @@ base, ordered binding slots and complete loop-header list ownership. Exact
 compile-only. Former now-valid ordinary/header comma-list rejections became
 repeated-specifier and incomplete-header-array constraints, preserving negative
 coverage while new positive tests cover the accepted syntax.
+
+### M14d C23 unnamed definition parameters
+
+17 both-host/QBE full-value programs cover every primitive and adjusted array
+form, recursion, caller side effects and partial/all-unnamed definitions. Both
+ABI directions cover all primitive register/stack positions and mixed full-width
+returns. IL/unit checks preserve original argument indices and omit only unused
+spills/bindings. Exact 128/129-parameter and named-versus-unnamed local/storage
+budgets pass; a 128-argument program executes with QBE. The ordinary regression
+now includes an unnamed definition. Both former now-valid rejection occurrences
+became invalid incomplete-inner-array declarators; duplicate/count/conversion
+constraints remain. Full regression was restarted after finding the second old
+negative fixture. Host runtime agreement is not an ISO conformance claim.

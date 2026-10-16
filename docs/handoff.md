@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14c implementation: grouped local/for-header declarators,
+M14d implementation: C23 unnamed definitions with positional ABI and no fake spills,
+grouped local/for-header declarators,
 incomplete array referent pointers and composite declarations,
 single-pass parenthesized object/abstract declarators,
 omitted outer array parameter bounds and effective adjustment,
@@ -18,17 +19,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13k 7fa1cf3, run 38832092805, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f/g/h/i/j also passed their exact-source CI.
-M14c full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M14a c10fa56, run 38832685806, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f/g/h/i/j/k also passed their exact-source CI.
+M14d full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14d unnamed C23 definition parameters, designed in
-m14-unnamed-definition-parameters.md.
+Next: M14e general fixed-function declarator syntax, designed in
+m14-function-declarators.md; function pointer values/indirect calls follow M14f.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1471,3 +1472,26 @@ checks remain pending. M14d C23 unnamed definition parameters are pre-designed;
 both installed hosts accepted a simple syntax/runtime compilation probe, not a
 claim of complete C23 support. M13k 7fa1cf3 passed exact-source CI 38832092805.
 Later source-specific and isolated checks remain independent.
+
+## M14d tested source checkpoint
+
+Unnamed C23 definition parameters retain declared/effective types and positional
+ABI arguments but create no fake name/binding/local spill. Codegen emits types
+from parameter.type and advances %pN across unnamed entries; only named entries
+are stored. Caller argument analysis/conversion/evaluation is unchanged.
+
+Full normal GCC regression/QBE/reference/ABI passed. 17 new full-value programs,
+both-direction all-primitive register/stack and mixed full-width ABI tests passed
+with GCC and Clang. Units/IL checks verify NULL locals and stable argument indices,
+including named positions 1/7. Exact 128/129 parameters and named-versus-unnamed
+actual local/storage budgets pass; a 128-argument program runs through QBE.
+The first full run found a second former unnamed-definition rejection not covered
+by the diagnostic tuple update. Both now-valid negative occurrences became invalid
+inner incomplete arrays, and a positive ordinary runtime regression was added.
+The entire suite restarted and passed; compiler behavior was not weakened.
+Sanitized bounded fuzz passed 22908 lexer + 73895 pipeline inputs (96803 total),
+26/26 seconds. No arbitrary fuzz C or undefined curated access executes. Full
+isolated/remote checks remain pending. M14e fixed function declarator syntax
+is pre-designed; function pointer values/decay/indirect calls remain M14f.
+M14a c10fa56 passed exact-source CI 38832685806. M13d 1435382 completed the
+isolated GCC/Clang normal + ASan/UBSan matrix; prior CI 38826152470 passed.

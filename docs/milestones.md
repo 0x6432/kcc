@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts, ordinary strings and array parameter adjustment implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-c object declarators/lists, incomplete referent pointers and composite declarations; function/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-d object declarators/lists, incomplete pointers/composites and unnamed definitions; function/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -1031,3 +1031,11 @@ base/independent-chain and scope units, exact item/local/storage budgets and
 bounded sanitizer fuzz. Full isolated/remote checks remain pending. M14d C23
 unnamed definition parameters are designed with unchanged positional ABI.
 M13k 7fa1cf3 passed exact-source CI 38832092805; later runs remain separate.
+
+M14d source checkpoint: C23 unnamed definition parameters passed full normal GCC
+suites, 17 both-host/QBE programs, both all-primitive register/stack and mixed
+full-width ABI directions, caller side effects, no-fake-binding/spill units and
+exact parameter/storage budgets plus bounded sanitizer fuzz. Full isolated/
+remote checks remain pending. M14e fixed-function declarator syntax is designed.
+M14a c10fa56 passed exact-source CI 38832685806. M13d 1435382 completed its
+isolated GCC/Clang normal + ASan/UBSan matrix, with prior CI 38826152470.

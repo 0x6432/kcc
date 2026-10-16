@@ -685,7 +685,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
 		emit(&codegen, "%s%s %%p%zu", parameter_index ? ", " : "",
-			qbe_abi_type(parameter->local->type), parameter_index);
+			qbe_abi_type(parameter->type), parameter_index);
 		parameter_index++;
 	}
 	emit(&codegen, ") {\n");
@@ -703,8 +703,9 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
-		emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
-			qbe_store_size(parameter->local->type), parameter_index, parameter->local->slot);
+		if (parameter->local)
+			emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
+				qbe_store_size(parameter->type), parameter_index, parameter->local->slot);
 		parameter_index++;
 	}
 	if (!codegen_block_items(&codegen, function->body->items))

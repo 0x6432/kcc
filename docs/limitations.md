@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14c. Read the latest entries together with README.md and
+Current milestone: M14d. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1044,3 +1044,17 @@ node. Every concrete local, including header declarations, counts toward the
 budgets remain separate. Comma expressions, braced/array initializers, global
 object groups, function/typedef/qualifier declarators and unnamed definition
 parameters remain later work. Commas nested in call arguments remain expressions.
+
+## M14d
+
+C23 function definitions accept unnamed parameters of the implemented types,
+including abstract/adjusted array forms. They remain part of the fixed signature
+and call argument count/evaluation, but have no invented name, binding or spill.
+Named duplicates and references to nonexistent identifiers remain constraints.
+ABI %pN positions advance for every parameter; only named positions are stored.
+
+The 128-parameter budget still counts unnamed entries. The actual 256-local and
+1 MiB storage budgets count named parameter spills and local objects, not unused
+ABI positions. Void remains only the existing sole empty-list marker. General
+function/void types, function pointers, variadics, typedefs, qualifiers and other
+C23 additions remain unsupported; this is not complete C23 conformance.

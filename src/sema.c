@@ -893,17 +893,12 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 }
 
 static bool sema_parameter_names(struct sema *sema,
-	struct ast_function_declaration *declaration, bool is_definition)
+	struct ast_function_declaration *declaration)
 {
 	for (struct ast_parameter *parameter = declaration->parameters; parameter;
 		parameter = parameter->next) {
-		if (!parameter->has_name) {
-			if (!is_definition)
-				continue;
-			diagnostic_error(sema->diagnostics, parameter->location,
-				"unnamed definition parameters are not supported yet");
-			return false;
-		}
+		if (!parameter->has_name)
+			continue;
 		for (struct ast_parameter *prior = declaration->parameters; prior != parameter;
 			prior = prior->next) {
 			if (prior->has_name && same_name(prior->name, parameter->name)) {
@@ -928,6 +923,9 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	sema->scope = &scope;
 	for (struct ast_parameter *parameter = definition->declaration->parameters; parameter;
 		parameter = parameter->next) {
+		/* Unnamed C23 parameters remain in the ABI, without a source binding. */
+		if (!parameter->has_name)
+			continue;
 		parameter->local = ast_new_local(sema->arena, parameter->location,
 			parameter->name, NULL);
 		if (!parameter->local) {
@@ -957,7 +955,7 @@ static bool sema_function_declaration(struct sema *sema,
 	const struct type *parameters[ast_max_parameters];
 	size_t parameter_count = 0;
 
-	if (!sema_parameter_names(sema, declaration, definition != NULL))
+	if (!sema_parameter_names(sema, declaration))
 		return false;
 	if (main_name.length == 4 && memcmp(main_name.spelling_location.source->data +
 		main_name.spelling_location.offset, "main", 4) == 0 && declaration->parameter_count) {

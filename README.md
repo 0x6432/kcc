@@ -6,7 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14c: comma-separated local declarations and for-header declaration lists keep
+M14d: C23 definitions may omit parameter names without removing ABI arguments
+or caller-side evaluation. Only named parameters receive local spills.
+Comma-separated local declarations and for-header declaration lists keep
 independent derived types, source-order bindings and initializer evaluation.
 Compatible pointers to unknown-bound arrays preserve incomplete referents
 without inventing a stride. Composite redeclarations retain known bounds.

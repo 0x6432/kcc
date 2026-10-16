@@ -26,6 +26,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     programs = [(f"int main(void) {{ return {expression}; }}\n", value)
                 for expression, value in cases]
     programs += [
+        ("int f(int) { return 42; } int main(void) { return f(7); }", 42),
         ("int main(void) { int x=3; int y=x*4; return y+2; }", 14),
         ("int main(void) { int x; x=42; return x; }", 42),
         ("int main(void) { int a; int b; a=b=7; return a+b; }", 14),
@@ -636,7 +637,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int f(int); int main(void) { return f(1 2); }",
         "int f(void,int x);", "int f(int x,void);", "int f(int x,);",
         "int f(int x int y);", "int f(int x=1);", "int f(int,...) ;",
-        "int f(int) { return 0; }",
+        "int f(int [2][]) { return 0; }",
         "int main(int x) { return x; }",
         "int f(int f) { return f(0); }",
         "int f(int x) { return x; } int main(void) { return x; }",
@@ -732,7 +733,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("int f(int x,int x);", "duplicate parameter name"),
         ("int f(int x) { int x; }", "redeclaration of local"),
         ("int f(int); int main(void) { return f(); }", "argument count"),
-        ("int f(int) { return 0; }", "unnamed definition parameters"),
+        ("int f(int [2][]) { return 0; }", "array element type must be complete"),
         ("int main(void) { return f(); }", "call to undeclared function"),
         ("int f(void); int main(void) { int f; f(); }", "not a function"),
         ("int f(void) {} int f(void) {}", "redefinition of function"),

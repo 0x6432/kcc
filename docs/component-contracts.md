@@ -1133,3 +1133,12 @@ Existing list sema/codegen handle all declarations without adding an extra scope
 Binding and initialization retain source order; codegen entry allocation order
 does not alter initializer sequencing. Original single-header typed tests were
 migrated to the explicit list field and retain their binding/loop assertions.
+
+## M14d unnamed definitions and positional ABI
+
+Each parameter always retains declared syntax and adjusted semantic type. Its
+local pointer is NULL for prototypes and unnamed definition parameters; only a
+named definition parameter is bound/spilled. Signature emission uses parameter.type,
+not the presence of a local. Stores are conditional on the local, but argument
+indices always advance. Caller conversion/evaluation still processes every
+argument, including arguments unused by an unnamed callee parameter.
