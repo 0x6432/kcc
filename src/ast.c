@@ -65,8 +65,8 @@ struct ast_character_expression *ast_new_character(struct arena *arena,
 	return node;
 }
 
-struct ast_string_expression *ast_new_string(struct arena *arena, struct token token,
-	const unsigned char *bytes)
+struct ast_string_expression *ast_new_string(struct arena *arena,
+	struct source_location location, const unsigned char *bytes, size_t length)
 {
 	struct ast_string_expression *node = arena_alloc(arena, sizeof(*node));
 
@@ -74,11 +74,11 @@ struct ast_string_expression *ast_new_string(struct arena *arena, struct token t
 		*node = (struct ast_string_expression) {
 			.expression = {
 				.kind = expression_string,
-				.location = token.location,
+				.location = location,
 				.depth = 1,
 			},
 			.bytes = bytes,
-			.length = token.string_length,
+			.length = length,
 		};
 	return node;
 }

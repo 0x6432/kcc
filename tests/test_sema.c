@@ -1310,8 +1310,42 @@ static void test_string_expression_tree(void)
 	source_destroy(&source);
 }
 
+static void test_concatenated_string_tree(void)
+{
+	const char *text = "char *f(void) { return \"a\" /*gap*/ \"\\0\" \"b\"; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_string_expression *string;
+	const struct array_type *array;
+
+	assert(source_from_bytes(&source, "concatenation.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && !unit->strings);
+	item = (struct ast_statement_item *)first_function(unit)->body->items;
+	string = (struct ast_string_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(string->expression.kind == expression_string && string->expression.depth == 1);
+	assert(string->expression.location.offset == (size_t)(strchr(text, '"') - text));
+	assert(string->length == 3 && string->bytes[0] == 'a' && string->bytes[1] == 0);
+	assert(string->bytes[2] == 'b' && string->bytes[3] == 0);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(unit->strings == string && string->object_id == 0 && !string->next_string);
+	array = (const struct array_type *)string->expression.type;
+	assert(array->type.kind == type_kind_array && array->element == &type_char && array->count == 4);
+	assert(((struct ast_return_statement *)item->statement)->value->kind == expression_array_decay);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_concatenated_string_tree();
 	test_string_expression_tree();
 	test_multidimensional_array_tree();
 	test_local_array_tree();

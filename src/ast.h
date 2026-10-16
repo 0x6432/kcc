@@ -44,6 +44,8 @@ enum {
 	ast_max_string_length = 1024 * 1024,
 	ast_max_string_storage = 8 * 1024 * 1024,
 	ast_max_string_literals = 4096,
+	ast_max_string_fragments = 4096,
+	ast_max_total_string_fragments = 16384,
 };
 
 struct ast_expression {
@@ -412,8 +414,8 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);
 struct ast_character_expression *ast_new_character(struct arena *arena,
 	struct token token);
-struct ast_string_expression *ast_new_string(struct arena *arena, struct token token,
-	const unsigned char *bytes);
+struct ast_string_expression *ast_new_string(struct arena *arena,
+	struct source_location location, const unsigned char *bytes, size_t length);
 struct ast_address_expression *ast_new_address(struct arena *arena,
 	struct source_location location, struct ast_expression *operand);
 struct ast_indirection_expression *ast_new_indirection(struct arena *arena,

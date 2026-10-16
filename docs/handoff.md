@@ -2,7 +2,7 @@
 
 ## Current checkpoint
 
-M13h implementation: static ordinary byte strings, fixed multidimensional arrays
+M13i implementation: adjacent ordinary static byte strings, fixed multidimensional arrays
 and explicit decay/target layout, pointer
 subscripts, scaled offsets, signed-long differences and compatible
 comparisons, plus concrete address/indirection ASTs and general object lvalue
@@ -16,16 +16,16 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 
 Latest confirmed exact-source CI: M13g e472687, run 38828318658, passed GCC/Clang
 normal/sanitizer and fuzz jobs; M13e/f also passed their exact-source CI.
-M13h full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+M13i full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13i adjacent ordinary strings, designed in m13-string-concatenation.md.
+Next: M13j array parameter adjustment, designed in m13-array-parameters.md.
 Null constants, void/functions/full declarators,
-general array bounds/initializers, string concatenation/encodings and remaining
+general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
 never executed. Read current limitations, not old checkpoint entries alone.
@@ -1334,3 +1334,28 @@ concatenation is pre-designed; prefixes/encodings/initializers are still later.
 M13e/f/g exact-source CI passed 38826762420/38827482501/38828318658. M13a b6ba02d
 completed both isolated compiler normal/sanitizer legs; M13b GCC leg passed,
 with later local legs/snapshots pending independently.
+
+## M13i tested source checkpoint
+
+String primaries collect at most a bounded adjacent sequence, decode fragments
+independently into one final buffer and append one NUL. The constructor accepts
+actual combined bytes/length plus first-fragment provenance, not a fake aggregate
+token. Sema/static data/decay need no special concatenation path. Empty fragments
+are explicitly bounded (4096 per sequence, 16384 per TU); result-object, decoded
+and total object-byte budgets retain their earlier meanings.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 15 new full-value programs
+and both-direction static-object ABI passed with GCC and Clang, covering greedy
+hex/octal boundaries, embedded/final NUL, empty fragments, macro stringizing,
+comments/directives/splicing, postfix binding and included literal tokens after
+child EOF. Typed units assert one array/object and first-fragment source location.
+Exact fragment/TU-fragment/decoded/storage limits pass compile-only, counting one
+final NUL per result rather than per fragment. The earlier adjacency rejection
+became an unsupported mixed ordinary/wide-prefixed sequence. No literal mutation,
+unrelated-literal subtraction/order or arbitrary generated C executes. Sanitized
+bounded fuzz passed 22880 lexer + 71927 pipeline inputs
+(94807 total), 26/26 seconds.
+Full isolated/remote checks remain pending. M13j array-parameter adjustment is
+pre-designed; incomplete/qualified/general bounds and full declarators are later.
+M13b 6f5e5ab completed both isolated compiler normal/sanitizer legs, with prior
+exact-source CI 38824691700. M13h CI remains pending independently.

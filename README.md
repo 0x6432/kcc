@@ -6,8 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13h: ordinary byte string literals have static array storage, implicit trailing
-NUL and explicit decay, emitted as private QBE byte data. Fixed multidimensional
+M13i: adjacent ordinary string fragments concatenate decoded bytes into one
+static array with one trailing NUL, explicit decay and private QBE byte data. Fixed multidimensional
 local arrays preserve shape, row strides and one-level decay. Bounds are positive integer literal tokens;
 array initializers and general constant-expression bounds remain later work.
 Pointer subscripts, scaled offsets, compatible differences/comparisons and
@@ -18,7 +18,7 @@ support loads, mutations, compatible values, fixed calls/returns/casts and
 scalar truth. Null cancellation &*p evaluates p once without touching its
 pointee. All baseline primitive integer types, ordinary byte characters,
 explicit promotions/conversions and canonical byte/halfword ABIs remain
-supported. String concatenation/encodings, null constants and full declarators
+supported. String encodings, null constants and full declarators
 remain later increments. C23 bool/true/false spelling and full C23 are
 unfinished. Includes retain bounded explicit search and direct/computed
 quoted/basic angle support.

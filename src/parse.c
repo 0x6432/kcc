@@ -11,6 +11,7 @@ struct parser {
 	size_t block_items;
 	size_t string_bytes;
 	size_t string_count;
+	size_t string_fragment_count;
 };
 
 static bool expect_token(struct parser *parser, enum token_kind kind,
@@ -208,46 +209,87 @@ static struct ast_expression *parse_character_expression(struct parser *parser)
 	return &node->expression;
 }
 
-/* string-expression ::= ordinary-string-token
- * Adjacent literal concatenation is a separate translation-phase increment.
+/* string-expression ::= ordinary-string-token { ordinary-string-token }
+ * Fragments decode independently: greedy escapes never cross closing quotes.
+ * Only this bounded sequence is buffered, not the translation unit's tokens.
  */
 static struct ast_expression *parse_string_expression(struct parser *parser)
 {
-	struct token token;
+	struct string_fragment {
+		struct token token;
+		struct string_fragment *next;
+	};
+	struct string_fragment *fragments = NULL;
+	struct string_fragment **tail = &fragments;
 	struct ast_string_expression *node;
 	unsigned char *bytes;
-	const unsigned char *spelling;
-	size_t decoded_length;
-	const char *error;
+	size_t length = 0;
+	size_t offset = 0;
+	size_t count = 0;
 
-	if (!expect_token(parser, token_string, "expected string literal", &token))
-		return NULL;
-	if (token.string_length > ast_max_string_length ||
-		token.string_length >= ast_max_string_storage - parser->string_bytes ||
-		parser->string_count == ast_max_string_literals) {
-		diagnostic_error(parser->diagnostics, token.location,
+	if (parser->string_count == ast_max_string_literals) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
 			"string literal storage/count limit exceeded");
 		return NULL;
 	}
-	bytes = arena_alloc(parser->arena, token.string_length + 1);
+	do {
+		struct token token = preprocess_peek(parser->preprocessor);
+		struct string_fragment *fragment;
+
+		if (count == ast_max_string_fragments ||
+			parser->string_fragment_count == ast_max_total_string_fragments) {
+			diagnostic_error(parser->diagnostics, token.location, "string fragment limit exceeded");
+			return NULL;
+		}
+		if (token.string_length > ast_max_string_length - length) {
+			diagnostic_error(parser->diagnostics, token.location, "string literal storage/count limit exceeded");
+			return NULL;
+		}
+		length += token.string_length;
+		if (length >= ast_max_string_storage - parser->string_bytes) {
+			diagnostic_error(parser->diagnostics, token.location, "string literal storage/count limit exceeded");
+			return NULL;
+		}
+		preprocess_next(parser->preprocessor);
+		fragment = arena_alloc(parser->arena, sizeof(*fragment));
+		if (!fragment) {
+			allocation_error(parser, token.location);
+			return NULL;
+		}
+		*fragment = (struct string_fragment) { .token = token };
+		*tail = fragment;
+		tail = &fragment->next;
+		count++;
+		parser->string_fragment_count++;
+	} while (preprocess_peek(parser->preprocessor).kind == token_string);
+
+	bytes = arena_alloc(parser->arena, length + 1);
 	if (!bytes) {
-		allocation_error(parser, token.location);
+		allocation_error(parser, fragments->token.location);
 		return NULL;
 	}
-	spelling = token.spelling_location.source->data + token.spelling_location.offset;
-	error = parse_string_spelling(spelling, token.length, bytes, token.string_length, &decoded_length);
-	if (error) {
-		diagnostic_error(parser->diagnostics, token.location, error);
-		return NULL;
+	for (struct string_fragment *fragment = fragments; fragment; fragment = fragment->next) {
+		struct token token = fragment->token;
+		const unsigned char *spelling = token.spelling_location.source->data + token.spelling_location.offset;
+		size_t decoded_length;
+		const char *error = parse_string_spelling(spelling, token.length,
+			bytes + offset, length - offset, &decoded_length);
+
+		if (error) {
+			diagnostic_error(parser->diagnostics, token.location, error);
+			return NULL;
+		}
+		assert(decoded_length == token.string_length);
+		offset += decoded_length;
 	}
-	assert(decoded_length == token.string_length);
-	bytes[decoded_length] = 0;
-	node = ast_new_string(parser->arena, token, bytes);
+	assert(offset == length);
+	bytes[length] = 0;
+	node = ast_new_string(parser->arena, fragments->token.location, bytes, length);
 	if (!node) {
-		allocation_error(parser, token.location);
+		allocation_error(parser, fragments->token.location);
 		return NULL;
 	}
-	parser->string_bytes += decoded_length + 1;
+	parser->string_bytes += length + 1;
 	parser->string_count++;
 	return &node->expression;
 }

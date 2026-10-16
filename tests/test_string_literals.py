@@ -142,7 +142,7 @@ with tempfile.TemporaryDirectory(prefix='kcc string literals ') as directory:
         ('int main(void) { char *p="\\q"; return 0; }', 'unsupported character escape'),
         ('int main(void) { char *p="\\x100"; return 0; }', 'exceeds one byte'),
         ('int main(void) { char *p="\\400"; return 0; }', 'exceeds one byte'),
-        ('int main(void) { char *p="a" "b"; return 0; }', "expected ';'"),
+        ('int main(void) { char *p="a" L"b"; return 0; }', 'prefixed string'),
         ('int main(void) { char a[2]="x"; return 0; }', 'array initializers'),
         ('int main(void) { return "x"; }', 'pointer conversion'),
         ('int main(void) { "x"="y"; return 0; }', 'modifiable lvalue'),

@@ -1052,3 +1052,15 @@ Lexer fuzzing checks arbitrary decoder slices, exact capacity guards, byte-octal
 roundtrips and cached length. Pipeline fuzzing asserts static object IDs/counts,
 array types, terminal NUL, size/alignment and total storage before IL emission.
 No generated fuzz program executes.
+
+## M13i adjacent decoded fragments
+
+Parser collects bounded fragment token records in source order, validates sum/
+fragment/object/storage budgets, then decodes directly into one arena buffer and
+appends one NUL. No intermediate decoded buffers or inter-fragment terminators
+exist. Individual lexer validation prevents greedy escapes crossing quotes.
+The AST constructor now accepts location/bytes/length, not a fabricated aggregate
+token; the first fragment supplies expression provenance. Sema/static-list/codegen
+and scalar array decay remain unchanged. Fragment counts are TU-wide and distinct
+from resulting object counts. Borrowed include/macro spelling views remain alive
+through final decoding, including after include EOF has restored the parent.

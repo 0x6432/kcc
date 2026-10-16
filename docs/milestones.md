@@ -19,7 +19,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-h pointers/arrays/subscripts and ordinary byte strings implemented; concatenation and later verification pending) |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-i pointers/arrays/subscripts and adjacent ordinary byte strings implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -986,3 +986,12 @@ suites, 12 both-host/QBE programs with 512 byte checks, both-direction/static
 multi-object ABI, pure decoder/typed tree/resource checks and bounded sanitizer
 fuzz with static object invariants. Full isolated/remote verification remains
 pending. M13i adjacent ordinary string concatenation is pre-designed.
+
+M13b 6f5e5ab completed the isolated GCC/Clang normal + ASan/UBSan matrix, with
+prior exact-source CI 38824691700. Later local snapshots remain independently queued.
+
+M13i source checkpoint: adjacent ordinary strings passed full normal GCC suites,
+15 both-host/QBE programs, both static ABI directions, include/macro provenance,
+escape boundaries, typed object and exact resource checks plus bounded sanitized
+fuzz. Full isolated/remote verification remains pending. M13j literal-bound
+array parameter adjustment is pre-designed with separate declared/effective types.

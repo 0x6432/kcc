@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13h. The chronological entries below describe what each
+Current milestone: M13i. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -954,3 +954,19 @@ Before decoded allocation, parser limits one literal to 1 MiB decoded bytes,
 all literal object bytes (including final NULs) to 8 MiB and objects to 4096 per
 TU. These static-object budgets are separate from local storage. Every decay
 counts in typed depth. Lexer measurement allocates no decoded token buffer.
+
+## M13i
+
+Adjacent ordinary string fragments concatenate after preprocessing, including
+macro/comment/directive/include-separated fragments. Escapes decode independently
+per token, embedded NULs remain and exactly one final NUL is appended. Postfix
+indexing applies to the combined literal. One expression creates one static array,
+not one per fragment; its location is the first fragment's invocation location.
+Prefixes/Unicode/mixed encodings, array initializers and null constants remain
+unsupported. No inter-occurrence pointer equality/order promise is introduced.
+
+Existing 1 MiB decoded-result, 8 MiB total object-byte and 4096 result-object
+budgets remain. Additionally, at most 4096 fragments per sequence and 16384 per TU
+bound temporary records, including empty fragments. Limits are checked before
+decoded allocation and apply across functions. Only a bounded sequence is buffered,
+not the translation unit; included/macro spelling views retain normal lifetimes.

@@ -155,3 +155,13 @@ Four former stringizing rejection fixtures now reject invalid pointer-to-int
 returns at the same invocation anchors; lexer/pp conversion fixtures now expect
 valid string tokens rather than dropping provenance checks. Concatenation,
 encodings and initializers remain later work.
+
+### M13i adjacent ordinary strings
+
+15 both-host/QBE full-value programs cover independent greedy escape boundaries,
+embedded NUL and empty fragments, macro/stringizing/comment/directive/splice and
+include-separated adjacency. Both static ABI directions, one resulting data
+object, typed first-fragment provenance and exact fragment/decoded/storage budgets
+pass. The prior now-valid adjacency rejection became an unsupported ordinary+
+wide-prefixed sequence; mixed/prefixed encoding constraints remain tested. This
+is ordinary byte concatenation, not general C23 encoded string support.
