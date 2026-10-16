@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14b implementation: incomplete array referent pointers and composite declarations,
+M14c implementation: grouped local/for-header declarators,
+incomplete array referent pointers and composite declarations,
 single-pass parenthesized object/abstract declarators,
 omitted outer array parameter bounds and effective adjustment,
 adjacent ordinary static byte strings, fixed multidimensional arrays
@@ -17,17 +18,17 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13j d0fc412, run 38831621684, passed GCC/Clang
-normal/sanitizer and fuzz jobs; M13e/f/g/h/i also passed their exact-source CI.
-M14b full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13k 7fa1cf3, run 38832092805, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f/g/h/i/j also passed their exact-source CI.
+M14c full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M14c comma-separated local declarations and for-header lists, designed
-in m14-local-declaration-lists.md.
+Next: M14d unnamed C23 definition parameters, designed in
+m14-unnamed-definition-parameters.md.
 Null constants, void/functions/full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1447,3 +1448,26 @@ lexer + 72222 pipeline inputs (96908 total), 26/26 seconds. No arbitrary fuzz C
 or undefined curated access executes. Full isolated/remote checks remain pending.
 M14c grouped local/for-header declarations are pre-designed. M13j d0fc412 passed
 exact-source CI 38831621684; later runs and isolated snapshots remain separate.
+
+## M14c tested source checkpoint
+
+Local groups parse specifiers once and construct each derived shape independently
+around the immutable base. Existing declaration nodes form source-order lists.
+Compound tails preserve all nodes; for statements explicitly own a header list.
+Common list sema/codegen preserve scope, binding order and one-time initialization.
+Each concrete local charges the function-wide item budget, including for headers.
+
+Full normal GCC regression/QBE/reference/ABI passed. 23 new full-value programs
+and both-direction all-primitive ABI tests passed with GCC and Clang, covering
+mixed pointer/array/scalar groups, scope/shadowing, nested call commas, sequencing
+and nested loop break/continue. Units check shared bases, independent chains,
+source-order slots and header list ownership. Exact 256/257-local, 4096/4097-item
+(including header locals) and storage limits pass compile-only. Earlier now-valid
+ordinary/header comma-list negatives now reject repeated specifiers/incomplete
+header arrays; accepted forms have positive coverage. Sanitized bounded fuzz
+passed 24754 lexer + 68593 pipeline inputs (93347 total), 26/26 seconds.
+No arbitrary fuzz C or undefined curated access executes. Full isolated/remote
+checks remain pending. M14d C23 unnamed definition parameters are pre-designed;
+both installed hosts accepted a simple syntax/runtime compilation probe, not a
+claim of complete C23 support. M13k 7fa1cf3 passed exact-source CI 38832092805.
+Later source-specific and isolated checks remain independent.

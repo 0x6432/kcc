@@ -304,14 +304,13 @@ static bool parse_object_declarator(struct parser *parser,
 	return true;
 }
 
-/* object-type ::= declaration-specifiers [ object-declarator ]
- * A local declarator is required; parameter/cast abstract forms may be absent.
+/* derived-object-type ::= object-declarator
+ * Each declarator gets its own derived chain around the shared specifier base.
  */
-static struct ast_type_syntax *parse_object_type(struct parser *parser,
-	struct token *beginning, struct token *name, bool *has_name,
+static struct ast_type_syntax *parse_derived_object_type(struct parser *parser,
+	struct ast_type_syntax *base, struct token *name, bool *has_name,
 	enum object_declarator_context context)
 {
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning);
 	struct object_declarator declarator = { 0 };
 
 	if (!base)
@@ -325,6 +324,18 @@ static struct ast_type_syntax *parse_object_type(struct parser *parser,
 	if (has_name)
 		*has_name = declarator.has_name;
 	return declarator.syntax;
+}
+
+/* object-type ::= declaration-specifiers [ object-declarator ]
+ * A local declarator is required; parameter/cast abstract forms may be absent.
+ */
+static struct ast_type_syntax *parse_object_type(struct parser *parser,
+	struct token *beginning, struct token *name, bool *has_name,
+	enum object_declarator_context context)
+{
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning);
+
+	return parse_derived_object_type(parser, base, name, has_name, context);
 }
 
 /* integer-expression ::= integer-token (decimal/octal/hex/binary, separators allowed) */
@@ -1063,7 +1074,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser);
 static struct ast_for_statement *parse_for_contents(struct parser *parser)
 {
 	struct token keyword;
-	struct ast_local_declaration *initializer_declaration = NULL;
+	struct ast_block_item *initializer_declarations = NULL;
 	struct ast_expression *initializer_expression = NULL;
 	struct ast_expression *condition = NULL;
 	struct ast_expression *step = NULL;
@@ -1075,12 +1086,9 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
 	if (begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
-		struct ast_block_item *item = parse_local_declaration(parser);
-
-		if (!item)
+		initializer_declarations = parse_local_declaration(parser);
+		if (!initializer_declarations)
 			return NULL;
-		assert(item->kind == block_item_declaration);
-		initializer_declaration = (struct ast_local_declaration *)item;
 	} else {
 		if (preprocess_peek(parser->preprocessor).kind != token_semicolon) {
 			initializer_expression = parse_expression(parser, 0);
@@ -1109,7 +1117,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 	body = parse_statement(parser);
 	if (!body)
 		return NULL;
-	node = ast_new_for(parser->arena, keyword.location, initializer_declaration,
+	node = ast_new_for(parser->arena, keyword.location, initializer_declarations,
 		initializer_expression, condition, step, body);
 	if (!node)
 		allocation_error(parser, keyword.location);
@@ -1226,37 +1234,63 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* local-declaration ::= declaration-specifiers object-declarator
- *                       [ "=" expression ] ";"
+static bool count_block_item(struct parser *parser, struct source_location location)
+{
+	if (parser->block_items == ast_max_block_items) {
+		diagnostic_error(parser->diagnostics, location, "function body exceeds item limit (4096)");
+		return false;
+	}
+	parser->block_items++;
+	return true;
+}
+
+/* local-declaration ::= declaration-specifiers init-declarator
+ *                       { "," init-declarator } ";"
+ * init-declarator ::= object-declarator [ "=" assignment-expression ]
  * Array initializers are diagnosed by sema (braced lists are not parsed yet).
+ * Assignment expressions stop before a declarator comma, not call-argument commas.
  */
 static struct ast_block_item *parse_local_declaration(struct parser *parser)
 {
-	struct ast_type_syntax *type_syntax;
 	struct token beginning;
-	struct token name;
-	struct ast_expression *initializer = NULL;
-	struct ast_local_declaration *node;
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
+	struct ast_block_item *items = NULL;
+	struct ast_block_item **tail = &items;
 
-	type_syntax = parse_object_type(parser, &beginning, &name, NULL, object_declarator_local);
-	if (!type_syntax)
+	if (!base)
 		return NULL;
-	if (preprocess_peek(parser->preprocessor).kind == token_equal) {
-		preprocess_next(parser->preprocessor);
-		initializer = parse_expression(parser, 0);
-		if (!initializer)
+	for (;;) {
+		struct token name;
+		struct ast_type_syntax *type_syntax;
+		struct ast_expression *initializer = NULL;
+		struct ast_local_declaration *node;
+
+		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
+		type_syntax = parse_derived_object_type(parser, base, &name, NULL, object_declarator_local);
+		if (!type_syntax)
+			return NULL;
+		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+			preprocess_next(parser->preprocessor);
+			initializer = parse_expression(parser, 0);
+			if (!initializer)
+				return NULL;
+		}
+		node = ast_new_local(parser->arena, beginning.location, name, initializer);
+		if (!node) {
+			allocation_error(parser, name.location);
+			return NULL;
+		}
+		node->type_syntax = type_syntax;
+		*tail = &node->item;
+		tail = &node->item.next;
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
 	}
-	if (!expect_token(parser, token_semicolon,
-		"expected ';' after declaration", NULL))
+	if (!expect_token(parser, token_semicolon, "expected ';' after declaration", NULL))
 		return NULL;
-	node = ast_new_local(parser->arena, beginning.location, name, initializer);
-	if (!node) {
-		allocation_error(parser, beginning.location);
-		return NULL;
-	}
-	node->type_syntax = type_syntax;
-	return &node->item;
+	return items;
 }
 
 /* block-item ::= local-declaration | statement */
@@ -1297,17 +1331,15 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 				"expected '}' before end of file");
 			return NULL;
 		}
-		if (parser->block_items == ast_max_block_items) {
-			diagnostic_error(parser->diagnostics, token.location,
-				"function body exceeds item limit (4096)");
+		/* Declaration groups charge each concrete declaration themselves. */
+		if (!begins_integer_type(token.kind) && !count_block_item(parser, token.location))
 			return NULL;
-		}
-		parser->block_items++;
 		item = parse_block_item(parser);
 		if (!item)
 			return NULL;
 		*tail = item;
-		tail = &item->next;
+		while (*tail)
+			tail = &(*tail)->next;
 	}
 	preprocess_next(parser->preprocessor);
 	node = ast_new_compound(parser->arena, opening.location, items);

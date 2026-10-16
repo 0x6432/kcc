@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14b. Read the latest entries together with README.md and
+Current milestone: M14c. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1029,3 +1029,18 @@ do not erase them; definition locals retain their own declared parameter shape.
 Void/function pointers, full function/external declarators, qualifiers, typedefs,
 general bounds and initializer lists remain unsupported. Existing local [] and
 inner incomplete array cases now reject in sema before layout, not only parsing.
+
+## M14c
+
+Local declarations and declaration-form for headers allow comma-separated
+init-declarators. Specifiers are parsed once but every pointer/array shape is
+independent. Each name binds before its initializer, in declaration order; later
+names are not prematurely visible. For-header names share one loop scope and
+are not visible afterward. Initializers execute once in source order.
+
+The for AST now owns an initializer-declarations list rather than one local
+node. Every concrete local, including header declarations, counts toward the
+4096 function-wide block-item budget. Actual 256-local and 1 MiB object-storage
+budgets remain separate. Comma expressions, braced/array initializers, global
+object groups, function/typedef/qualifier declarators and unnamed definition
+parameters remain later work. Commas nested in call arguments remain expressions.

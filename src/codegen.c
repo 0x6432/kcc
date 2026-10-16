@@ -555,8 +555,8 @@ static bool codegen_for(struct codegen *codegen, const struct ast_for_statement 
 	size_t exit_label = new_label(codegen);
 	bool body_terminated;
 
-	if (node->initializer_declaration)
-		codegen_local_initializer(codegen, node->initializer_declaration);
+	if (node->initializer_declarations)
+		codegen_block_items(codegen, node->initializer_declarations);
 	if (node->initializer_expression)
 		codegen_expression(codegen, node->initializer_expression);
 	emit(codegen, "\tjmp @b%zu\n", condition_label);

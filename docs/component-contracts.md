@@ -1119,3 +1119,17 @@ array counts survive later unknown declarations. Function symbols update their
 visible signature after a compatible redeclaration, while definition parameters
 retain independently resolved effective types. Prior call arguments remain typed
 as analyzed; compatible pointer signature merging does not change their ABI.
+
+## M14c shared specifiers and ordered declaration lists
+
+A declaration group parses one integer base; each derived parser result fills
+its own chain around that base. Only immutable specifier syntax/cache is shared.
+The parser returns existing local block items in source order, and compound
+appending advances through the whole new list. Every local charges an item;
+compound non-declaration items charge once, and for-header locals also charge.
+
+The for AST owns a mutually exclusive initializer-declarations list or expression.
+Existing list sema/codegen handle all declarations without adding an extra scope.
+Binding and initialization retain source order; codegen entry allocation order
+does not alter initializer sequencing. Original single-header typed tests were
+migrated to the explicit list field and retain their binding/loop assertions.

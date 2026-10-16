@@ -6,7 +6,9 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14b: compatible pointers to unknown-bound arrays preserve incomplete referents
+M14c: comma-separated local declarations and for-header declaration lists keep
+independent derived types, source-order bindings and initializer evaluation.
+Compatible pointers to unknown-bound arrays preserve incomplete referents
 without inventing a stride. Composite redeclarations retain known bounds.
 Parenthesized local/parameter object declarators and abstract cast types
 preserve pointer/array precedence, including int (*p)[3] and int (*p[2])[3].

@@ -417,17 +417,17 @@ struct ast_do_statement *ast_new_do(struct arena *arena,
 
 struct ast_for_statement *ast_new_for(struct arena *arena,
 	struct source_location location,
-	struct ast_local_declaration *initializer_declaration,
+	struct ast_block_item *initializer_declarations,
 	struct ast_expression *initializer_expression, struct ast_expression *condition,
 	struct ast_expression *step, struct ast_statement *body)
 {
 	struct ast_for_statement *node = arena_alloc(arena, sizeof(*node));
 
-	assert(!initializer_declaration || !initializer_expression);
+	assert(!initializer_declarations || !initializer_expression);
 	if (node)
 		*node = (struct ast_for_statement) {
 			.statement = { statement_for, location },
-			.initializer_declaration = initializer_declaration,
+			.initializer_declarations = initializer_declarations,
 			.initializer_expression = initializer_expression,
 			.condition = condition,
 			.step = step,

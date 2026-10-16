@@ -213,3 +213,15 @@ both mixed-completeness subtraction orders are checked. Zero-offset/subscript
 constraints and incomplete local/element diagnostics precede layout queries.
 Former now-valid unknown-pointer negatives became incomplete nested-array cases;
 local/inner omissions remain invalid with semantic completeness diagnostics.
+
+### M14c grouped local declarators
+
+23 both-host/QBE full-value programs cover all primitive leaves, mixed shapes,
+initializer order, shadowing, nested calls/short-circuit expressions and for-list
+scopes with nested break/continue. Both-direction ABI tests use grouped locals
+for each primitive leaf. Units verify independent derived chains around a shared
+base, ordered binding slots and complete loop-header list ownership. Exact
+256/257 locals, 4096/4097 items including header locals, and storage limits pass
+compile-only. Former now-valid ordinary/header comma-list rejections became
+repeated-specifier and incomplete-header-array constraints, preserving negative
+coverage while new positive tests cover the accepted syntax.

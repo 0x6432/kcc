@@ -526,7 +526,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { int x=0; (x=1)=2; return x; }",
         "int main(void) { int x=0; x+=1; return x; }",
 
-        "int main(void) { int x, y; return 0; }",
+        "int main(void) { int x, int y; return 0; }",
         "int main(void) { int x=; return 0; }",
         "int main(void) { int x=1 x=2; return x; }",
 
@@ -599,7 +599,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { for(int i=0; i<2; j=j+1) { int j=0; } }",
         "int main(void) { for(;missing;) ; }",
         "int main(void) { for(;0;missing) ; }",
-        "int main(void) { for(int i=0,j=0;0;) ; }",
+        "int main(void) { for(int i=0,j[];0;) ; }",
         "int main(void) { for(int i=0;i<2;i++) ; }",
         "int main(void) { for(;0;) ; break; }",
         "int main(void) {" + "for(;0;) "*128 + ";}",

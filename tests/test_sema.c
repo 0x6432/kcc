@@ -265,7 +265,7 @@ static void test_for_scope_and_target(void)
 	item = (struct ast_statement_item *)outer->item.next;
 	assert(item->statement->kind == statement_for);
 	loop = (struct ast_for_statement *)item->statement;
-	header = loop->initializer_declaration;
+	header = (struct ast_local_declaration *)loop->initializer_declarations;
 	assert(header && !loop->initializer_expression);
 	assert(loop->condition->kind == expression_binary);
 	condition = (struct ast_binary_expression *)loop->condition;
@@ -1578,8 +1578,72 @@ static void test_incomplete_object_pointer_composite(void)
 	source_destroy(&source);
 }
 
+static void test_local_declaration_list_tree(void)
+{
+	const char *text = "int f(void) { int x=13,*p=&x,y=*p+1; "
+		"for(int i=0,n=1;i<n;i=i+1) y=y+1; return x+y; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *p;
+	struct ast_local_declaration *y;
+	struct ast_local_declaration *i;
+	struct ast_local_declaration *n;
+	struct ast_statement_item *item;
+	struct ast_for_statement *loop;
+	struct ast_address_expression *address;
+	struct ast_name_expression *name;
+	struct ast_binary_expression *condition;
+	struct ast_load_expression *load;
+
+	assert(source_from_bytes(&source, "declaration-list.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	x = (struct ast_local_declaration *)first_function(unit)->body->items;
+	p = (struct ast_local_declaration *)x->item.next;
+	y = (struct ast_local_declaration *)p->item.next;
+	assert(x->item.kind == block_item_declaration && p->item.kind == block_item_declaration);
+	assert(y->item.kind == block_item_declaration && y->type_syntax == x->type_syntax);
+	assert(x->type_syntax->kind == type_syntax_integer && !x->type_syntax->type);
+	assert(p->type_syntax->kind == type_syntax_pointer);
+	assert(((struct ast_pointer_type_syntax *)p->type_syntax)->referent == x->type_syntax);
+	assert(x->name.location.offset < p->name.location.offset && p->name.location.offset < y->name.location.offset);
+	item = (struct ast_statement_item *)y->item.next;
+	assert(item->item.kind == block_item_statement && item->statement->kind == statement_for);
+	loop = (struct ast_for_statement *)item->statement;
+	i = (struct ast_local_declaration *)loop->initializer_declarations;
+	n = (struct ast_local_declaration *)i->item.next;
+	assert(i->item.kind == block_item_declaration && n->item.kind == block_item_declaration && !n->item.next);
+	assert(i->type_syntax == n->type_syntax && i->type_syntax != x->type_syntax);
+	assert(!loop->initializer_expression);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(x->type == &type_int && y->type == &type_int && p->type->kind == type_kind_pointer);
+	assert(x->slot == 0 && p->slot == 1 && y->slot == 2 && i->slot == 3 && n->slot == 4);
+	assert(x->type_syntax->type == &type_int && ((const struct pointer_type *)p->type)->referent == &type_int);
+	address = (struct ast_address_expression *)p->initializer;
+	assert(address->expression.kind == expression_address && address->operand->kind == expression_name);
+	name = (struct ast_name_expression *)address->operand;
+	assert(name->declaration == x);
+	condition = (struct ast_binary_expression *)loop->condition;
+	assert(condition->expression.kind == expression_binary);
+	load = (struct ast_load_expression *)condition->left;
+	assert(load->expression.kind == expression_load && ((struct ast_name_expression *)load->operand)->declaration == i);
+	load = (struct ast_load_expression *)condition->right;
+	assert(load->expression.kind == expression_load && ((struct ast_name_expression *)load->operand)->declaration == n);
+	assert(item->item.next && !item->item.next->next);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_local_declaration_list_tree();
 	test_incomplete_object_pointer_composite();
 	test_parenthesized_object_declarators();
 	test_incomplete_array_parameter();

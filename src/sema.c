@@ -782,14 +782,16 @@ static bool sema_do(struct sema *sema, struct ast_do_statement *node)
 	return success;
 }
 
+static bool sema_block_items(struct sema *sema, struct ast_block_item *item);
+
 static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 {
 	struct scope scope = { .parent = sema->scope };
 	bool success = true;
 
 	sema->scope = &scope;
-	if (node->initializer_declaration)
-		success = sema_local(sema, node->initializer_declaration);
+	if (node->initializer_declarations)
+		success = sema_block_items(sema, node->initializer_declarations);
 	if (success && node->initializer_expression)
 		success = sema_expression(sema, &node->initializer_expression, true);
 	if (success && node->condition)
