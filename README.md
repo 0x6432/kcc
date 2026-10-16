@@ -13,6 +13,9 @@ post-definition file scope restore the proper meanings. Existing semantic scopes
 and parameter ABI/storage are unchanged; duplicate and same-scope conflicts
 remain errors. Read docs/m14-parameter-typedef-shadowing.md and the latest
 coverage/limitations records. VM types and full C23 remain unsupported.
+A test-only follow-up recognizes the exact GCC and Clang native C23 for-typedef
+grammar-gap diagnostics without changing source or kcc acceptance; see
+docs/m14-parameter-native-diagnostics.md.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite

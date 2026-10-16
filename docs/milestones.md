@@ -2396,3 +2396,40 @@ Public GitHub CI for predecessor 966995b (run 38933785916) and 99bbdf0,
 2a65a40 and 543815c was verified completed/success at resume. This milestone's
 new exact-commit CI remains pending until queried after push; local passes are
 not remote CI evidence.
+
+## M14l3b native for-typedef diagnostic follow-up
+
+GitHub c3cc992 run 38945901266 passed Clang and fuzz but failed the GCC normal
+suite. The new parameter suite recognized only Clang's for-typedef diagnostic;
+GCC rejected the same valid original with its already-known grammar-gap spelling.
+This is a test-oracle omission, not a kcc compiler acceptance bug. The original
+source and C23 for-typedef acceptance remain unchanged. The correction recognizes
+the exact last C23 fixture and either single observed GCC/Clang error, only with
+compile status 1. Guards reject success, signals, launch failures, wrong source,
+wrong identifier and additional error/warning diagnostics. The actual failed-CI
+source/diagnostic tuple was extracted from the log and checked directly.
+
+Design was recorded before editing in m14-parameter-native-diagnostics.md.
+No compiler C/header, curated C program, Makefile, ABI or version changed. GCC's
+named-void warning stays independently classified; grammar gaps and warnings are
+never runtime agreements or strict native rejections. This does not restore a
+C17 restriction or count unsupported native syntax as agreement.
+
+Frozen local validation passed: full make test and make test-codegen/QBE 1.2
+with GCC 14.2.1 and Clang 18.1.8 native oracles; four-host focused originals,
+exact parameter/local boundaries and 24 both-direction mixed-stack ABI cases
+per host. GCC 11.5/Clang 15.0.7 agree on 48 standard originals, GCC 14 on all
+54, Clang 18 on 53 with one exact for-typedef gap. Both-host targeted ASan/UBSan
+lexer/sema and the parameter suite passed with both modern native oracles. The
+previously built sanitizer binaries were reused only after byte-comparing all
+compiler sources/headers and both C units with their isolated validated copies.
+Bounded sanitized fuzz passed 17,844 lexer / 57,918 pipeline inputs in 26 seconds
+each. No invalid curated C or generated C was executed. Source/test/Makefile
+manifests matched before and after; normal helpers were checked serially before
+parallel validation. Initial validation launches after the sandbox reset lacked
+system compiler/runtime packages; those interrupted runs are not passes. Hosts
+and runtimes were restored, versions verified, and complete checks restarted.
+
+The original failed GCC job is 117124816108; Clang 117124815832 and fuzz
+117124816333 passed. New exact-commit remote CI remains pending until queried
+after push. Local correction passes do not retroactively make c3cc992 CI green.

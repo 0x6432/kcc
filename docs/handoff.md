@@ -2,6 +2,29 @@
 
 ## Current checkpoint
 
+M14l3b's native for-typedef test-oracle correction is locally validated. Read
+m14-parameter-native-diagnostics.md and the latest ledger entry. c3cc992 remote
+CI failed GCC's normal suite on the valid C23 for-typedef fixture; Clang and fuzz
+passed. The exact GCC error spelling is now classified alongside Clang's exact
+spelling, only for the unchanged original and ordinary failure status 1. Wrong
+sources, signals and additional errors/warnings remain fatal. kcc acceptance,
+compiler sources/headers, curated C, Makefile and version are unchanged. Never
+rewrite that fixture or reintroduce a C17 for-initializer typedef restriction.
+
+Full normal/QBE with both modern oracles, four-host focused originals/ABI,
+verified both-host targeted sanitizers and bounded compile-only fuzz passed:
+17,844 lexer / 57,918 pipeline inputs in 26 seconds each. Frozen manifest and
+logs are /data/tools/m14l3b-native-* (completed reruns use native-final-*).
+System compiler/runtime packages had disappeared between turns; they were
+restored before complete validation reruns. New exact-commit CI is pending until
+checked after push; the failed predecessor run is not claimed green.
+
+The user continues to authorize development; the old historical STOP REQUEST
+remains superseded. No stashes were present or discarded. No subagents used.
+Next language increment still needs a separate pre-implementation design.
+
+## Earlier M14l3b checkpoint (historical)
+
 M14l3b is implemented and locally validated. Read
 m14-parameter-typedef-shadowing.md, then the latest coverage/limitations/contracts
 and ledger entries. The user's explicit resume request on 2026-10-16 superseded

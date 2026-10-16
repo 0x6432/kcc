@@ -873,3 +873,12 @@ rewritten to obtain native agreement. Both-direction ABI, AST identities,
 128/129 parameter and 256/257 local boundaries, complete regression/QBE,
 both-host targeted sanitizers and bounded compile-only fuzz passed. Read the
 M14l3b ledger for exact counts/tools and separate pending exact-commit CI status.
+
+## M14l3b native-oracle diagnostic follow-up
+
+The valid parameter/for-typedef restoration original remains accepted by kcc.
+Its exact GCC and Clang for-typedef grammar-gap diagnostics are classified
+separately from native agreements; only exact source, status 1 and a single
+observed error match. This test-only CI correction changes no language scope,
+resource budget or ABI. Read m14-parameter-native-diagnostics.md and the latest
+ledger entry for the failed predecessor CI and frozen local validation evidence.

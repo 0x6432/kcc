@@ -101,11 +101,14 @@ def native_named_void_warning(text, status, diagnostics):
 
 
 def native_for_typedef_gap(text, status, diagnostics):
-    if text != c23_programs[-1] or status == 0:
+    if text != c23_programs[-1] or status != 1:
         return False
     normalized = diagnostics.replace('‘', "'").replace('’', "'")
-    return re.findall(r'(fatal error|error|warning): ([^\n]+)', normalized) == [
-        ('error', "non-variable declaration in 'for' loop")]
+    messages = re.findall(r'(fatal error|error|warning): ([^\n]+)', normalized)
+    return messages in [
+        [('error', "non-variable declaration in 'for' loop")],
+        [('error', "declaration of non-variable 'T' in 'for' loop initial declaration")],
+    ]
 
 
 void_warning = "test.c:1:1: warning: parameter 1 ('T') has void type\n"
@@ -115,10 +118,17 @@ assert not native_named_void_warning('typedef int T; int f(void T);', 1, void_wa
 assert not native_named_void_warning('typedef int T; int f(void T);', 0, '')
 assert not native_named_void_warning('typedef int T; int f(void T);', 0, void_warning+void_warning)
 for_error = "test.c:1:1: error: non-variable declaration in 'for' loop\n"
-assert native_for_typedef_gap(c23_programs[-1], 1, for_error)
-assert not native_for_typedef_gap(programs[0], 1, for_error)
-assert not native_for_typedef_gap(c23_programs[-1], 0, for_error)
-assert not native_for_typedef_gap(c23_programs[-1], 1, for_error+for_error)
+gcc_for_error = "test.c:1:1: error: declaration of non-variable ‘T’ in ‘for’ loop initial declaration\n"
+for diagnostic in [for_error, gcc_for_error]:
+    assert native_for_typedef_gap(c23_programs[-1], 1, diagnostic)
+    assert not native_for_typedef_gap(programs[0], 1, diagnostic)
+    assert not native_for_typedef_gap(c23_programs[-1], 0, diagnostic)
+    assert not native_for_typedef_gap(c23_programs[-1], -11, diagnostic)
+    assert not native_for_typedef_gap(c23_programs[-1], 127, diagnostic)
+    assert not native_for_typedef_gap(c23_programs[-1], 1, '')
+    assert not native_for_typedef_gap(c23_programs[-1], 1, diagnostic+diagnostic)
+    assert not native_for_typedef_gap(c23_programs[-1], 1, diagnostic+'test.c:1:1: warning: unrelated\n')
+assert not native_for_typedef_gap(c23_programs[-1], 1, gcc_for_error.replace('‘T’', '‘U’'))
 
 
 with tempfile.TemporaryDirectory(prefix='kcc parameter typedef ') as directory:

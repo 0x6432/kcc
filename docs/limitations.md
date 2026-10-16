@@ -1924,3 +1924,12 @@ alias-derived definitions remain unsupported. This is not full C23. Read
 m14-parameter-typedef-shadowing.md and the M14l3b ledger for the lifetime design
 and exact validation/native gap counts; earlier parameter-shadowing limits above
 are historical and superseded by this increment.
+
+## M14l3b native-oracle diagnostic follow-up
+
+The valid parameter/for-typedef restoration original remains accepted by kcc.
+Its exact GCC and Clang for-typedef grammar-gap diagnostics are classified
+separately from native agreements; only exact source, status 1 and a single
+observed error match. This test-only CI correction changes no language scope,
+resource budget or ABI. Read m14-parameter-native-diagnostics.md and the latest
+ledger entry for the failed predecessor CI and frozen local validation evidence.
