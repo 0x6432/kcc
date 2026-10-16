@@ -127,6 +127,18 @@ with tempfile.TemporaryDirectory(prefix='kcc nullptr ') as directory:
     if not native_nullptr:
         assert 'nullptr' in probe.stderr and ('undeclared' in probe.stderr or 'undeclared identifier' in probe.stderr), probe.stderr
     native_count = 0
+    native_constraint_count = 0
+    native_extra_constant_forms = []
+    # N3096 6.6p8 excludes nullptr_t operands from integer ICEs. Paragraph
+    # 14 permits additional constant forms without making them integer ICEs.
+    # Some modern hosts nonetheless fold these exact forms in ICE/null-constant
+    # contexts, even under -pedantic-errors. Report this separately: neither
+    # accept it in kcc nor call it strict native rejection evidence.
+    extra_constant_forms = {
+        'int f(void) { int *p=nullptr?0:0; return 0; }',
+        '_Static_assert(!nullptr,"not ICE");',
+        '_Static_assert((_Bool)nullptr==0,"not ICE");',
+    }
     for text in programs:
         compile_source(text)
         if qbe:
@@ -144,7 +156,11 @@ with tempfile.TemporaryDirectory(prefix='kcc nullptr ') as directory:
             native.write_text(text+'\n')
             result = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-fsyntax-only', str(native)],
                                     capture_output=True, text=True, timeout=10)
-            assert result.returncode != 0, text
+            if text in extra_constant_forms and result.returncode == 0:
+                native_extra_constant_forms.append(text)
+            else:
+                assert result.returncode != 0, text
+                native_constraint_count += 1
     for text in pp_programs:
         compile_source(text)
         if qbe:
@@ -199,5 +215,6 @@ with tempfile.TemporaryDirectory(prefix='kcc nullptr ') as directory:
 
 print(f'nullptr passed: {len(programs)} original programs, {native_count} strict native agreements, '
       f'{len(constraints)} compile-only constraints, {len(pp_programs)} pp-phase programs, exact typed depths; {host}'
+      + (f'; {native_constraint_count} strict native constraint rejections, {len(native_extra_constant_forms)} labelled extra constant forms' if native_nullptr else '')
       + ('; native C23 keyword available' if native_nullptr else '; legacy host lacks C23 nullptr (no alias oracle)')
       + ('; QBE/runtime and 26 stack/callback pointer ABI arrangements passed' if qbe else ''))

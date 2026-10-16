@@ -1970,3 +1970,17 @@ ASan/UBSan type/lexer/sema units and final targeted runtime/ABI passed. Bounded
 sanitized fuzz ran 22,463 lexer and 54,705 pipeline inputs in
 26/26 seconds with no reported failures. No generated C was executed.
 Remote exact-source and full isolated matrix checks remain separate/pending.
+
+## M23a2 native constant-form oracle correction
+
+Exact-source addce68 CI run 38881054180 passed fuzz but failed the modern GCC
+native rejection oracle for `int *p=nullptr?0:0;`. Clang was cancelled by matrix
+fail-fast, not a compiler failure. N3096 6.6p8 only admits integer/arithmetic
+constant operands in integer ICEs; nullptr_t is neither. Paragraph 14 allows
+additional constant forms without making them integer ICEs. Preserve kcc's
+form rejection and record host acceptance separately for exactly three named
+nullptr-derived constant forms (that conditional and two static assertions).
+All other native constraints must still reject; all 26 kcc rejections remain
+mandatory. Do not change nullptr into arithmetic zero or relax general null
+constant classification to match host folding. Extra host forms are never
+counted as strict constraint agreements. Legacy hosts never run this branch.
