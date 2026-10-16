@@ -2,34 +2,33 @@
 
 ## Current checkpoint
 
-M23d1 typeof/typeof_unqual type-name operands are implemented. Native oracle
-correction passed local full normal/QBE, both-host targeted ASan/UBSan and
-bounded fuzz after 391fd01 CI 38909406525 failed both reference
-jobs on array unqualification; fuzz passed. See milestones.md for exact-source
-diagnostic evidence and N3096 6.2.5p31 / 6.7.2.5p5 example 2. kcc behavior is
-unchanged. M23d2 expression work is preserved in the newest named stash, not lost. Full normal/QBE and
-both-host targeted ASan/UBSan passed; bounded sanitized fuzz ran 15,037 lexer /
-52,225 pipeline inputs in 26 seconds each without reported failure.
-Focused tests passed 48 original kcc/QBE programs and 24 cross-object ABI cases
-per host, ten constraints and syntax/subset/64-query boundaries. GCC 11 and Clang
-15 lack the actual keywords: exact legacy diagnostic probes are labelled absence,
-not native agreement or a GNU-alias rewrite. Read m23-typeof-type-names.md.
-Implementation script implement-m23d1.py is already applied; do not reapply.
-After committing/pushing this oracle fix, restore only the M23d2 named stash.
-The M19f1 full GCC/Clang normal/ASan/UBSan isolated matrix now passed.
-Expression operands are designed separately in m23-typeof-expressions.md for
-M23d2; implement it after the M23d1 tested commit/push. Remote and isolated full
-M23d1 matrices are separate and not yet claimed passed.
+M23d2 expression queries are complete. Final full normal/QBE and both-host
+targeted ASan/UBSan passed; sanitized bounded fuzz completed 15,177 lexer /
+39,321 pipeline inputs in 26/26 seconds without reported failure. Focused tests
+passed 65 original kcc/QBE programs, 17 constraints, syntax/subset/mixed 64/65
+query boundaries, operand-erasure IL and 24 primitive cross-object ABI arrangements
+per host. GCC 11/Clang 15 lack actual C23 keywords: zero manufactured agreement.
+Provider interruption lost process handles, not logs; verified both complete
+regression passes, sanitizer completion marker and both fuzz completion records.
+Scripts implement-m23d1.py / implement-m23d2.py are applied: never reapply.
+Read m23-typeof-expressions.md for contracts, nullptr explicit-cast rule and limits.
+Next: M14k1 sole query-derived void parameter normalization, designed before coding
+in m14-void-parameter-normalization.md. Keep written parameter syntax distinct
+from semantic ABI count; do not invent parameter ASTs or names.
 
-M19f2 84797f7 and M19f1 cff28ab are committed/pushed. Full normal/QBE, both-host
-targeted ASan/UBSan and bounded sanitized fuzz passed for both. M19f2 fuzz ran
-14,777 lexer / 52,498 pipeline inputs in 26/26 seconds. Case/default owner/typed
-ICE/canonical duplicate and source-order target invariants are in their design.
-Both full isolated matrices remain separately running/queued. Latest observed
-public CI: cff28ab run 38904988323 and 867dd5c run 38887882846 completed success;
-84797f7 run 38907237071 was still in progress. Do not claim later CI completion
-without checking. Preserve both old stashes. User requests continuous tested
-milestone work with periodic commit/push; no arbitrary fuzz C execution.
+M23d1 391fd01 and independent oracle fix e77cd0a are committed/pushed. The original
+CI 38909406525 failed both native array-unqualification oracles, fuzz passed.
+Correction e77cd0a CI 38911835030 now passed every job. Only the exact observed
+original source/read-only diagnostics is a native gap, not agreement; no kcc
+semantic change. Full local normal/QBE, both-host targeted sanitizer and fresh
+fuzz for the fix passed. The M23d2 stash was restored and removed; two older reset
+stashes remain preserved. Full isolated M23d1 and current CI remain separate.
+
+M19f1 cff28ab public CI 38904988323 and full isolated GCC/Clang normal/ASan/UBSan
+matrix passed. M19f2 84797f7 public CI 38907237071 now passed every job; its local
+full normal/QBE, targeted both-host sanitizer/fuzz and isolated GCC matrix passed,
+isolated Clang pending. User requests continuous tested work with periodic
+commit/push, no arbitrary fuzz C execution and no subagents.
 
 ### Earlier foundation (chronological)
 

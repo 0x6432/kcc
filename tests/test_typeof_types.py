@@ -62,7 +62,6 @@ syntax_errors = ['int f(void) { typeof int x; }','int f(void) { typeof() x; }',
                  'int f(void) { typeof(int) typeof(int) x; }']
 subset_errors = [
     ('int f(int n) { typeof(int[n]) a; return 0; }','variable-length'),
-    ('int f(void) { int x=0; typeof(x) y; return 0; }','typeof expression operands are not supported yet'),
     ('typeof(int(void)) f;','file-scope object declarations are not supported yet'),
     ('int f(typeof(void));','parameter cannot have void type'),
 ]

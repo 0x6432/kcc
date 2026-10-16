@@ -1467,3 +1467,28 @@ parameter is not yet normalized to an empty signature; existing literal void
 syntax remains supported. These are documented subset gaps, not C constraints.
 The current file-scope bare-function alias path reports the existing unsupported
 file-scope-object diagnostic; it does not guess a function AST.
+
+## M23d2 typeof expression operands
+
+A distinct ast_typeof_expression_syntax keeps one Pratt floor-zero expression
+operand, source location and unqualification flag. One demand peek selects the
+existing type-name path; both forms share the restored 64-query bound. Sema checks
+the operand in its lexical/prototype scope with only root load/array/function
+decay suppressed. Child conversions and constraints remain checked. typeof
+shares its actual immutable type; typeof_unqual uses root unqualification.
+Previous prototype names remain type-only bindings; query operands allocate no
+extra runtime locals. The backend never visits query syntax, so calls, updates,
+assignments and comma/conditional effects in non-VM operands do not execute.
+Existing string registration may retain static data for an unevaluated literal.
+
+Query expressions now name the existing nullptr type, including objects, pointers,
+parameters and results. N3096 6.3.2.4 / 6.5.4 explicit casts to that type accept
+only null pointer constants or nullptr values. Assignment-like conversion still
+requires nullptr source type, so integer zero initialization/assignment/argument/
+return is rejected as required by 6.5.16.1. No implicit-zero rule was broadened.
+
+Typedef ambiguity, atomic/bit-field/variably modified operands, required VM
+evaluation, GNU aliases, alias-derived bare function declarations and sole
+query-derived void-parameter normalization remain separate work. sizeof(void)
+and void objects are still invalid; typeof of a void expression itself is valid.
+No stddef.h exposure or full C23 conformance is implied.

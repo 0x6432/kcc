@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23d2: `typeof` and `typeof_unqual` also accept expression operands, preserving
+root const/array/function types without operand evaluation. Children still have
+their normal constraints and conversions. Existing nullptr types become nameable;
+explicit casts obey the null-constant rule without allowing implicit integer-zero
+conversion to nullptr objects. VM/atomic/bit-field and alias normalization work
+remain unsupported.
+
 M23d1: C23 `typeof` and `typeof_unqual` accept type-name operands. Immutable
 qualifiers, arrays and function pointers compose with declarations, casts, layout
 queries and fixed signatures. Expression operands, alias-derived bare function

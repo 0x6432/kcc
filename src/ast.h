@@ -325,6 +325,7 @@ enum type_syntax_kind {
 	type_syntax_void,
 	type_syntax_qualified,
 	type_syntax_typeof_type,
+	type_syntax_typeof_expression,
 	type_syntax_integer,
 	type_syntax_pointer,
 	type_syntax_array,
@@ -346,6 +347,12 @@ struct ast_qualified_type_syntax {
 struct ast_typeof_type_syntax {
 	struct ast_type_syntax syntax;
 	struct ast_type_syntax *operand;
+	bool unqualify;
+};
+
+struct ast_typeof_expression_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_expression *operand;
 	bool unqualify;
 };
 
@@ -636,6 +643,8 @@ struct ast_qualified_type_syntax *ast_new_qualified_type_syntax(struct arena *ar
 	struct source_location location, struct ast_type_syntax *base, unsigned qualifiers);
 struct ast_typeof_type_syntax *ast_new_typeof_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *operand, bool unqualify);
+struct ast_typeof_expression_syntax *ast_new_typeof_expression_syntax(struct arena *arena,
+	struct source_location location, struct ast_expression *operand, bool unqualify);
 struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,
 	struct source_location location);
 struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,

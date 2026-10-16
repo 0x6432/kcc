@@ -1016,6 +1016,20 @@ struct ast_typeof_type_syntax *ast_new_typeof_type_syntax(struct arena *arena,
 	return node;
 }
 
+struct ast_typeof_expression_syntax *ast_new_typeof_expression_syntax(struct arena *arena,
+	struct source_location location, struct ast_expression *operand, bool unqualify)
+{
+	struct ast_typeof_expression_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_typeof_expression_syntax) {
+			.syntax = { .kind = type_syntax_typeof_expression, .location = location },
+			.operand = operand,
+			.unqualify = unqualify,
+		};
+	return node;
+}
+
 struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,
 	struct source_location location)
 {

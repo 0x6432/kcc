@@ -28,7 +28,13 @@ this is not operand execution. No new consteval/codegen expression case is neede
 query syntax is consumed by declaration/cast/sizeof/alignof resolution. Distinct
 nullptr types become directly nameable via typeof(nullptr); exercise object,
 pointer, function-result and parameter interactions through existing scalar ABI.
-Do not claim stddef.h exposure or VM evaluation/bit-field support.
+N3096 6.3.2.4/6.5.4 permit explicit casts of a null pointer constant or
+nullptr_t value to nullptr_t; the formerly unnameable target now requires this
+check. Keep this distinct from 6.5.16.1 assignment/initialization/argument/return
+constraints: integer zero must NOT implicitly convert to nullptr_t. Test literal
+and void-pointer constant casts, reject nonconstant zero/pointer objects, and
+retain ordinary same-type nullptr conversions. Do not claim stddef.h exposure
+or VM evaluation/bit-field support.
 
 Keep alias-derived bare function declarations and sole typeof(void) parameter
 normalization explicitly deferred, as in M23d1. Existing postfix/prefix and

@@ -32,7 +32,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false and M23a2 nullptr constant implemented; other changes planned) |
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
-| M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name operands; expression operands and declarator normalization remain) |
+| M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
 | M23e | auto inference | Valid initializers and forbidden declarations | planned |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
@@ -1837,3 +1837,51 @@ Bounded sanitized fuzz ran 14,800 lexer / 48,621 pipeline inputs in
 the observed source/diagnostics, rejecting unrelated source or extra errors.
 No compiler source or constraint changed. M19f1 cff28ab isolated full GCC/Clang
 normal and ASan/UBSan matrix now completed; later matrices/CI remain separate.
+
+## M23d2 typeof expression operands
+
+A distinct ast_typeof_expression_syntax keeps one Pratt floor-zero expression
+operand, source location and unqualification flag. One demand peek selects the
+existing type-name path; both forms share the restored 64-query bound. Sema checks
+the operand in its lexical/prototype scope with only root load/array/function
+decay suppressed. Child conversions and constraints remain checked. typeof
+shares its actual immutable type; typeof_unqual uses root unqualification.
+Previous prototype names remain type-only bindings; query operands allocate no
+extra runtime locals. The backend never visits query syntax, so calls, updates,
+assignments and comma/conditional effects in non-VM operands do not execute.
+Existing string registration may retain static data for an unevaluated literal.
+
+Query expressions now name the existing nullptr type, including objects, pointers,
+parameters and results. N3096 6.3.2.4 / 6.5.4 explicit casts to that type accept
+only null pointer constants or nullptr values. Assignment-like conversion still
+requires nullptr source type, so integer zero initialization/assignment/argument/
+return is rejected as required by 6.5.16.1. No implicit-zero rule was broadened.
+
+Typedef ambiguity, atomic/bit-field/variably modified operands, required VM
+evaluation, GNU aliases, alias-derived bare function declarations and sole
+query-derived void-parameter normalization remain separate work. sizeof(void)
+and void objects are still invalid; typeof of a void expression itself is valid.
+No stddef.h exposure or full C23 conformance is implied.
+
+Next independently designed increment: M14k1 semantic normalization of sole
+query-derived void parameter lists, m14-void-parameter-normalization.md. It is
+not implemented by the M23d2 expression-query checkpoint. Written parameter nodes
+must remain distinct from semantic ABI parameters; do not fake parameter ASTs.
+
+M23d2 final local validation: restored final tree completed full normal and QBE
+regression, both-host GCC/Clang targeted ASan/UBSan lexer/sema and typeof-expression/
+type-name, switch-case/foundation, goto, named-label and integer-compound suites.
+65 original expression-query programs, 17 constraints, syntax/subset/mixed 64/65
+query limits, operand-erasure IL and 24 both-direction primitive ABI arrangements
+passed per host. Installed hosts lack the actual C23 keywords, so zero original
+native agreements are claimed locally. Sanitized bounded fuzz completed 15,177
+lexer / 39,321 pipeline inputs in 26/26 seconds without reported failure.
+Provider interruption lost the old process handles, but retained complete normal/
+QBE, sanitizer completion and both fuzz completion logs were verified before
+commit. No partial run was substituted for a pass; no generated C was executed.
+
+Independent published status now observed: e77cd0a oracle-fix CI 38911835030,
+84797f7 switch-case CI 38907237071 and cff28ab foundation CI 38904988323 passed
+all jobs. The earlier 391fd01 failed native array oracle remains recorded. Full
+isolated M19f1 GCC/Clang matrix passed; M19f2 has GCC pass, Clang pending. M23d1
+and this increment's isolated/public checks remain separately pending.

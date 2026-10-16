@@ -200,6 +200,20 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		break;
 	}
+	case type_syntax_typeof_expression: {
+		struct ast_typeof_expression_syntax *query = (struct ast_typeof_expression_syntax *)syntax;
+
+		/* Preserve only the root load/decay boundary; children keep their constraints.
+		 * Variably modified types are unsupported, so no operand evaluation occurs.
+		 */
+		if (!sema_expression(sema, &query->operand, false))
+			return NULL;
+		syntax->type = query->unqualify ?
+			unqualified_type(sema, query->operand->type, syntax->location) : query->operand->type;
+		if (!syntax->type)
+			return NULL;
+		break;
+	}
 	case type_syntax_void:
 		syntax->type = &type_void;
 		break;
@@ -458,6 +472,16 @@ static bool check_cast(struct sema *sema, const struct ast_expression *operand,
 {
 	const struct type *source = operand->type;
 
+	/* Naming nullptr_t via typeof also makes its explicit cast rule reachable.
+	 * Assignment-like conversion still requires a nullptr_t source, not integer zero.
+	 */
+	if (target->kind == type_kind_nullptr) {
+		if (is_null_pointer_source(operand))
+			return true;
+		diagnostic_error(sema->diagnostics, location,
+			"cast to nullptr type requires a null pointer constant or nullptr value");
+		return false;
+	}
 	if (target->kind == type_kind_pointer && is_null_pointer_source(operand))
 		return true;
 	if (source->kind == type_kind_pointer && target->kind == type_kind_pointer) {

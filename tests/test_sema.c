@@ -3244,8 +3244,83 @@ static void test_typeof_type_tree(void)
 }
 
 
+static void test_typeof_expression_tree(void)
+{
+	const char *text = "int f(void) { const int x=1; typeof(x) y=2; int a[2]; typeof(a) b; typeof_unqual(x) z=3; typeof(f) *p=f; typeof((x,x)) v=4; typeof(z++) n=5; return z; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *x;
+	struct ast_local_declaration *y;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *b;
+	struct ast_local_declaration *z;
+	struct ast_local_declaration *p;
+	struct ast_local_declaration *v;
+	struct ast_local_declaration *n;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_comma_expression *comma;
+	struct ast_expression *original;
+	size_t local_count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	x = (struct ast_local_declaration *)first_function(unit)->body->items;
+	y = (struct ast_local_declaration *)x->item.next;
+	a = (struct ast_local_declaration *)y->item.next;
+	b = (struct ast_local_declaration *)a->item.next;
+	z = (struct ast_local_declaration *)b->item.next;
+	p = (struct ast_local_declaration *)z->item.next;
+	v = (struct ast_local_declaration *)p->item.next;
+	n = (struct ast_local_declaration *)v->item.next;
+	query = (struct ast_typeof_expression_syntax *)y->type_syntax;
+	assert(query->syntax.kind == type_syntax_typeof_expression && !query->unqualify);
+	assert(query->syntax.location.offset == (size_t)(strstr(text, "typeof(") - text));
+	assert(!query->syntax.type && !query->operand->type);
+	original = query->operand;
+	assert(original->kind == expression_name);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(query->operand == original && original->is_lvalue);
+	assert(((struct ast_name_expression *)original)->declaration == x);
+	assert(query->syntax.type == x->type && query->syntax.type == y->type);
+	assert(y->type->qualifiers == type_qualifier_const);
+	query = (struct ast_typeof_expression_syntax *)b->type_syntax;
+	assert(query->operand->kind == expression_name && query->operand->is_lvalue);
+	assert(b->type == a->type && b->type->kind == type_kind_array);
+	query = (struct ast_typeof_expression_syntax *)z->type_syntax;
+	assert(query->unqualify && !z->type->qualifiers && z->type->kind == type_kind_int);
+	assert(query->operand->type == x->type && query->operand->type->qualifiers);
+	query = (struct ast_typeof_expression_syntax *)((struct ast_pointer_type_syntax *)p->type_syntax)->referent;
+	assert(query->operand->kind == expression_function_designator && !query->operand->is_lvalue);
+	assert(query->syntax.type->kind == type_kind_function);
+	assert(((const struct pointer_type *)p->type)->referent == query->syntax.type);
+	query = (struct ast_typeof_expression_syntax *)v->type_syntax;
+	comma = (struct ast_comma_expression *)query->operand;
+	assert(comma->expression.kind == expression_comma && !v->type->qualifiers);
+	assert(comma->left->kind == expression_load && comma->right->kind == expression_load);
+	query = (struct ast_typeof_expression_syntax *)n->type_syntax;
+	assert(query->operand->kind == expression_postfix_update && !query->operand->is_lvalue);
+	assert(query->syntax.type == query->operand->type && !n->type->qualifiers);
+	for (struct ast_local_declaration *local = first_function(unit)->locals; local; local = local->next_local)
+		local_count++;
+	assert(local_count == 8 && !unit->strings);
+
+	fclose(stream);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_typeof_expression_tree();
 	test_typeof_type_tree();
 	test_switch_case_tree();
 	test_switch_foundation_tree();

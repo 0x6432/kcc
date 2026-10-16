@@ -458,8 +458,8 @@ static struct ast_type_syntax *parse_type_name(struct parser *parser,
 	return parse_derived_type(parser, base, name, has_name, context);
 }
 
-/* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" type-name ")"
- * Expression operands are a separate increment, not guessed type-name syntax.
+/* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" (type-name | expression) ")"
+ * One demand peek distinguishes current type starts; typedef names are later work.
  */
 static struct ast_type_syntax *parse_typeof_contents(struct parser *parser, struct token keyword)
 {
@@ -470,9 +470,16 @@ static struct ast_type_syntax *parse_typeof_contents(struct parser *parser, stru
 	if (!expect_token(parser, token_left_paren, "expected '(' after typeof operator", NULL))
 		return NULL;
 	if (!begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
-		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-			"typeof expression operands are not supported yet");
-		return NULL;
+		struct ast_expression *expression = parse_expression(parser, 0);
+		struct ast_typeof_expression_syntax *query;
+
+		if (!expression || !expect_token(parser, token_right_paren, "expected ')' after typeof expression", NULL))
+			return NULL;
+		query = ast_new_typeof_expression_syntax(parser->arena, keyword.location, expression,
+			keyword.kind == token_typeof_unqual);
+		if (!query)
+			allocation_error(parser, keyword.location);
+		return query ? &query->syntax : NULL;
 	}
 	operand = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
 	if (!operand || !expect_token(parser, token_right_paren, "expected ')' after typeof type name", NULL))
@@ -484,7 +491,7 @@ static struct ast_type_syntax *parse_typeof_contents(struct parser *parser, stru
 	return node ? &node->syntax : NULL;
 }
 
-/* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" type-name ")"; bounded nesting. */
+/* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" (type-name | expression) ")"; bounded nesting. */
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword)
 {
 	struct ast_type_syntax *syntax;
