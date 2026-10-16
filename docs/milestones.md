@@ -1813,3 +1813,27 @@ failure; generated C was never executed. M19f1 cff28ab public CI 38904988323
 completed success; M19f2 84797f7 run 38907237071 remains in progress at this
 checkpoint. Isolated full matrices and this commit's CI are separately pending.
 Next expression-operand design is m23-typeof-expressions.md.
+
+### M23d1 native array-qualification oracle correction
+
+Exact-source CI 391fd01 run 38909406525 failed both Build and test jobs while
+fuzz passed. The original typeof_unqual(const int[2][3]) program was rejected
+as a read-only assignment by GCC and Clang. N3096 6.2.5p31 says array and element
+are identically qualified; 6.7.2.5p5/example 2 shows typeof_unqual removing array
+element qualification. Keep kcc's immutable unqualification and typed-AST checks.
+Classify only this exact original source with either exact observed read-only
+diagnostic as a native gap, not agreement. Unexpected sources/diagnostics still
+fail. All original sources still compile/run with kcc/QBE; no macro/type rewrite
+is used. Zero gaps are also valid when a native compiler implements the rule.
+M23d2 uncommitted work was stashed while this independent correction is tested;
+its interrupted full regression is not a pass. Its both-host targeted sanitizer
+run finished before interruption, but full validation will be restarted after
+restoring the increment. Preserve the older reset stashes.
+
+M23d1 oracle correction local validation: full normal/QBE regression and the
+corrected suite with both unchanged GCC/Clang ASan/UBSan compiler binaries passed.
+Bounded sanitized fuzz ran 14,800 lexer / 48,621 pipeline inputs in
+26/26 seconds without reported failure. Exact-gap classifier units accept only
+the observed source/diagnostics, rejecting unrelated source or extra errors.
+No compiler source or constraint changed. M19f1 cff28ab isolated full GCC/Clang
+normal and ASan/UBSan matrix now completed; later matrices/CI remain separate.

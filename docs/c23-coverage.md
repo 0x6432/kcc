@@ -467,3 +467,9 @@ parameter is not yet normalized to an empty signature; existing literal void
 syntax remains supported. These are documented subset gaps, not C constraints.
 The current file-scope bare-function alias path reports the existing unsupported
 file-scope-object diagnostic; it does not guess a function AST.
+
+M23d1 native oracle: the published GCC/Clang jobs rejected the original nested
+const-array typeof_unqual write, unlike N3096 6.2.5p31 / 6.7.2.5p5 example 2.
+Only that original source plus exact observed read-only diagnostics is labelled
+a native qualification gap, not an agreement. kcc runtime and immutable qualifier
+tests remain mandatory; unexpected native failures still fail the suite.

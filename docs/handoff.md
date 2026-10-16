@@ -2,7 +2,12 @@
 
 ## Current checkpoint
 
-M23d1 typeof/typeof_unqual type-name operands are complete. Full normal/QBE and
+M23d1 typeof/typeof_unqual type-name operands are implemented. Native oracle
+correction passed local full normal/QBE, both-host targeted ASan/UBSan and
+bounded fuzz after 391fd01 CI 38909406525 failed both reference
+jobs on array unqualification; fuzz passed. See milestones.md for exact-source
+diagnostic evidence and N3096 6.2.5p31 / 6.7.2.5p5 example 2. kcc behavior is
+unchanged. M23d2 expression work is preserved in the newest named stash, not lost. Full normal/QBE and
 both-host targeted ASan/UBSan passed; bounded sanitized fuzz ran 15,037 lexer /
 52,225 pipeline inputs in 26 seconds each without reported failure.
 Focused tests passed 48 original kcc/QBE programs and 24 cross-object ABI cases
@@ -10,6 +15,8 @@ per host, ten constraints and syntax/subset/64-query boundaries. GCC 11 and Clan
 15 lack the actual keywords: exact legacy diagnostic probes are labelled absence,
 not native agreement or a GNU-alias rewrite. Read m23-typeof-type-names.md.
 Implementation script implement-m23d1.py is already applied; do not reapply.
+After committing/pushing this oracle fix, restore only the M23d2 named stash.
+The M19f1 full GCC/Clang normal/ASan/UBSan isolated matrix now passed.
 Expression operands are designed separately in m23-typeof-expressions.md for
 M23d2; implement it after the M23d1 tested commit/push. Remote and isolated full
 M23d1 matrices are separate and not yet claimed passed.

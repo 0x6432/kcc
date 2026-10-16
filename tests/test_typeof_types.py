@@ -66,6 +66,22 @@ subset_errors = [
     ('typeof(int(void)) f;','file-scope object declarations are not supported yet'),
     ('int f(typeof(void));','parameter cannot have void type'),
 ]
+def native_array_qualification_gap(text, diagnostics):
+    expected = 'int main(void) { typeof_unqual(const int[2][3]) a; a[1][2]=42; return a[1][2]; }'
+    errors = re.findall(r'error: ([^\n]+)',diagnostics.replace('‘', "'").replace('’', "'"))
+    return text == expected and errors in [["assignment of read-only location 'a[1][2]'"],
+                                          ['read-only variable is not assignable']]
+
+# Exercise only the diagnostic classifier, not a synthetic native compiler.
+array_gap_source = 'int main(void) { typeof_unqual(const int[2][3]) a; a[1][2]=42; return a[1][2]; }'
+assert 'typeof_unqual(const int[2][3])' in array_gap_source
+for diagnostic in ["error: assignment of read-only location ‘a[1][2]’\n",
+                   "error: read-only variable is not assignable\n"]:
+    assert native_array_qualification_gap(array_gap_source, diagnostic)
+    assert not native_array_qualification_gap('int unrelated;', diagnostic)
+    assert not native_array_qualification_gap(array_gap_source, diagnostic+'error: unexpected failure\n')
+assert not native_array_qualification_gap(array_gap_source, 'error: unsupported operand\n')
+
 with tempfile.TemporaryDirectory(prefix='kcc typeof types ') as directory:
     directory = Path(directory)
     source,native,il,assembly,obj,executable = [directory/n for n in ('k.c','h.c','p.ssa','p.s','h.o','p')]
@@ -98,6 +114,7 @@ with tempfile.TemporaryDirectory(prefix='kcc typeof types ') as directory:
                               ['expected function body after function declarator']], result.stderr
     native_supported = all(support)
     native_programs = 0
+    native_array_gaps = 0
     native_constraints = 0
     for text in programs:
         compile_source(text)
@@ -106,9 +123,14 @@ with tempfile.TemporaryDirectory(prefix='kcc typeof types ') as directory:
         if native_supported:
             native.write_text(text+'\n')
             result = subprocess.run([host,'-std=c2x','-pedantic-errors',str(native),'-o',str(executable)], capture_output=True, text=True, timeout=10)
-            assert result.returncode == 0, (text,result.stderr)
-            assert subprocess.run([str(executable)], timeout=5).returncode == 42
-            native_programs += 1
+            if result.returncode:
+                # N3096 6.2.5p31 and 6.7.2.5p5/example 2 remove array
+                # qualification. These hosts retain it; this is not agreement.
+                assert native_array_qualification_gap(text, result.stderr), (text,result.stderr)
+                native_array_gaps += 1
+            else:
+                assert subprocess.run([str(executable)], timeout=5).returncode == 42
+                native_programs += 1
     for text,message in constraints:
         compile_source(text,False,message)
         if native_supported:
@@ -140,6 +162,6 @@ with tempfile.TemporaryDirectory(prefix='kcc typeof types ') as directory:
                 result = subprocess.run([host,'-std=c2x','-pedantic-errors','-c',str(native),'-o',str(obj)], capture_output=True, text=True, timeout=10)
                 assert result.returncode == 0, (host_text,result.stderr)
                 link_run([assembly,obj])
-print(f'Typeof type names passed: {len(programs)} original programs, {native_programs} strict native agreements, {len(constraints)} kcc constraints / {native_constraints} strict native rejections; syntax/subset/64-query limits; {host}'
+print(f'Typeof type names passed: {len(programs)} original programs, {native_programs} strict native agreements / {native_array_gaps} exact native array-qualification gaps, {len(constraints)} kcc constraints / {native_constraints} strict native rejections; syntax/subset/64-query limits; {host}'
       + ('; native original C23 keyword support' if native_supported else '; exact legacy keyword absence (no GNU alias oracle)')
       + ('; QBE/runtime and 24 mixed-stack primitive-result ABI arrangements passed' if qbe else ''))
