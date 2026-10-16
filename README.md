@@ -6,12 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14L3A: Automatic objects may now hide outer typedefs. The on-demand parser uses scoped
-ordinary-name masks; semantic alias lookup stops at nearer objects. Publication
-occurs after each complete declarator and before its initializer, preserving own
-array bounds and shared comma-list type specifiers. Same-scope conflicts remain
-errors. Named parameter/prototype alias hiding is still a separate increment.
-Read docs/m14-object-typedef-shadowing.md and the latest coverage/limitations records.
+M14L3B: Named parameters may hide outer typedef names. Their names publish after
+complete declarators, affect later parameters and queries, and extend into the
+defining function body. Nested callback scopes, trailing return declarators and
+post-definition file scope restore the proper meanings. Existing semantic scopes
+and parameter ABI/storage are unchanged; duplicate and same-scope conflicts
+remain errors. Read docs/m14-parameter-typedef-shadowing.md and the latest
+coverage/limitations records. VM types and full C23 remain unsupported.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite

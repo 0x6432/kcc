@@ -44,7 +44,6 @@ constraints = [
     ('int f(int x) { return x; } int main(void) { int (*T)(int)=f; { typedef int T; return T(42); } }','typedef name is not an expression'),
 ]
 subset_errors = [
-    ('typedef int T; int f(int T) { return T; }','shadowing a typedef'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc typedef object shadowing ') as directory:
     directory = Path(directory)

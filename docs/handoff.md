@@ -2,6 +2,45 @@
 
 ## Current checkpoint
 
+M14l3b is implemented and locally validated. Read
+m14-parameter-typedef-shadowing.md, then the latest coverage/limitations/contracts
+and ledger entries. The user's explicit resume request on 2026-10-16 superseded
+the historical STOP REQUEST below; it is not a new standing pause. No old
+snapshot scripts or fixtures were regenerated. Resumed by fresh public clone:
+HEAD and origin/development were 966995b, clean; no local stashes existed and
+none were discarded. Keep the two historical named stashes if they reappear.
+
+Local validation passed: full normal regressions with GCC 11.5/GCC 14.2.1/Clang
+18.1.8 native oracles, full QBE suites with both modern hosts, both-host targeted
+ASan/UBSan lexer/sema plus 15 suites, and bounded compile-only fuzz (6,930 lexer /
+20,923 pipeline inputs, 26 seconds each). Frozen source/test/Makefile manifests
+matched. Focused 48 standard + 6 C23 originals and 24 both-direction mixed-stack
+ABI arrangements per host passed; exact GCC named-void and Clang for-typedef gaps
+are separate, never native agreements. Read the ledger for complete evidence.
+No invalid curated C or fuzz-generated C was executed. Normal helpers were built
+serially before parallel validation.
+
+The previous 966995b and all three preceding shadowing checkpoints were verified
+green on GitHub. New exact-commit CI remains pending until checked after push;
+local passes are not proof of remote CI.
+
+Tool restoration: pinned QBE was rebuilt with scripts/build_qbe.sh at
+/data/tools/qbe-1.2/qbe. Native hosts are /usr/bin/gcc (11.5), /usr/bin/clang
+(15.0.7), /usr/bin/gcc14-gcc (14.2.1) and /usr/bin/clang-18 (18.1.8), installed
+from system packages; no source-rewriting wrappers. Sanitizer runtime packages
+are installed. Both targeted sanitizer builds use non-PIE executables to avoid
+sandbox ASLR/runtime mapping conflicts. Exact frozen copies are under
+/data/validation-m14l3b/{gcc,clang}; logs and manifest are /data/tools/m14l3b-*.
+These paths are disposable and must be verified after any sandbox reset.
+
+Next work needs its own small design; do not broaden typedef storage-class
+permutations or alias-derived function definitions by merely removing a guard.
+Preserve on-demand lexing, shared specifier caches, declaration identity,
+no-alias-storage invariants and all existing resource bounds. No next milestone
+source or generators have been created. No subagents were used or authorized.
+
+## Earlier M14l3a checkpoint (historical)
+
 M14L3A is implemented and locally validated. Read m14-object-typedef-shadowing.md.
 Only changed source/tests/Makefile were copied from /data/next-m14l3a; both
 frozen manifest checks matched. Never replace current docs with stale snapshot

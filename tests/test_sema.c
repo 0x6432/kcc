@@ -4083,8 +4083,103 @@ static void test_object_typedef_shadowing_tree(void)
 	fclose(stream);
 }
 
+static void test_parameter_typedef_shadowing_tree(void)
+{
+	const char *text = "typedef long T; int proto(int T,typeof(T) x); "
+		"int f(int T,typeof(T) x,int (*cb)(char T,typeof(T) y),typeof(T) z) { "
+		"typeof(T) v=T; return v; } int g(T x) { return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_typedef_declaration *alias;
+	struct ast_function_declaration *prototype;
+	struct ast_function *function;
+	struct ast_function *following;
+	struct ast_parameter *parameter;
+	struct ast_parameter *callback;
+	struct ast_function_type_syntax *nested;
+	struct ast_typeof_expression_syntax *first_query;
+	struct ast_typeof_expression_syntax *nested_query;
+	struct ast_typeof_expression_syntax *last_query;
+	struct ast_typeof_expression_syntax *body_query;
+	struct ast_local_declaration *local;
+	struct ast_name_expression *captured;
+	struct ast_name_expression *inner_captured;
+	struct ast_name_expression *body_captured;
+	struct ast_load_expression *load;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	alias = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+	prototype = (struct ast_function_declaration *)unit->declarations->next;
+	assert(prototype->external.kind == external_function_declaration);
+	function = (struct ast_function *)prototype->external.next;
+	assert(function->external.kind == external_function_definition);
+	following = (struct ast_function *)function->external.next;
+	parameter = function->declaration->parameters;
+	assert(parameter->has_name && !parameter->local);
+	first_query = (struct ast_typeof_expression_syntax *)parameter->next->type_syntax;
+	assert(first_query->syntax.kind == type_syntax_typeof_expression);
+	assert(first_query->operand->kind == expression_name);
+	captured = (struct ast_name_expression *)first_query->operand;
+	callback = parameter->next->next;
+	assert(callback->type_syntax->kind == type_syntax_pointer);
+	nested = (struct ast_function_type_syntax *)((struct ast_pointer_type_syntax *)callback->type_syntax)->referent;
+	assert(nested->syntax.kind == type_syntax_function && nested->parameter_count == 2);
+	nested_query = (struct ast_typeof_expression_syntax *)nested->parameters->next->type_syntax;
+	assert(nested_query->syntax.kind == type_syntax_typeof_expression);
+	assert(nested_query->operand->kind == expression_name);
+	inner_captured = (struct ast_name_expression *)nested_query->operand;
+	last_query = (struct ast_typeof_expression_syntax *)callback->next->type_syntax;
+	assert(last_query->syntax.kind == type_syntax_typeof_expression);
+	assert(last_query->operand->kind == expression_name);
+	local = (struct ast_local_declaration *)function->body->items;
+	assert(local->item.kind == block_item_declaration);
+	body_query = (struct ast_typeof_expression_syntax *)local->type_syntax;
+	assert(body_query->syntax.kind == type_syntax_typeof_expression);
+	assert(body_query->operand->kind == expression_name);
+	body_captured = (struct ast_name_expression *)body_query->operand;
+	assert(following->declaration->parameters->type_syntax->kind == type_syntax_typedef_name);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(alias->type == &type_long);
+	assert(first_query->syntax.type == &type_int && last_query->syntax.type == &type_int);
+	assert(nested_query->syntax.type == &type_char && body_query->syntax.type == &type_int);
+	/* Prototype queries capture type-only objects, not definition spill locals. */
+	assert(captured->declaration && captured->declaration != parameter->local);
+	assert(captured->declaration->type == &type_int && !captured->declaration->next_local);
+	assert(((struct ast_name_expression *)last_query->operand)->declaration == captured->declaration);
+	assert(inner_captured->declaration != captured->declaration);
+	assert(inner_captured->declaration->type == &type_char);
+	assert(!nested->parameters->local && !nested->parameters->next->local);
+	assert(!prototype->parameters->local && !prototype->parameters->next->local);
+	assert(body_captured->declaration == parameter->local);
+	assert(local->initializer->kind == expression_load);
+	load = (struct ast_load_expression *)local->initializer;
+	assert(load->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)load->operand)->declaration == parameter->local);
+	assert(parameter->local->slot == 0 && parameter->next->local->slot == 1);
+	assert(callback->local->slot == 2 && callback->next->local->slot == 3 && local->slot == 4);
+	assert(function->locals == local && local->next_local == callback->next->local);
+	assert(callback->next->local->next_local == callback->local);
+	assert(callback->local->next_local == parameter->next->local);
+	assert(parameter->next->local->next_local == parameter->local && !parameter->local->next_local);
+	assert(following->declaration->parameters->type == alias->type && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_parameter_typedef_shadowing_tree();
 	test_object_typedef_shadowing_tree();
 	test_typedef_object_shadowing_tree();
 	test_typedef_function_shadowing_tree();

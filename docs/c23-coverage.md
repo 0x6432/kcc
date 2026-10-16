@@ -9,7 +9,7 @@ of complete ISO conformance.
 | --- | --- | --- |
 | Source/translation phases | subset (newline policy, splicing, physical mappings; M09a) | M01, M09-M11, M25 |
 | Tokens and literals | subset (raw pp boundary, shared spelling decoder, runtime ordinary byte characters and four-base/separator/U/L/LL integer literals; M12j) | M02, M12, M20, M23 |
-| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e, callbacks/void M14f-g and const qualification M14j2; query-derived types and scoped typedef lists through C23 for initializers M14l2b) | M03, M08, M12-M18, M23-M24 |
+| Declarations/types | subset (_Bool, plain/signed/unsigned char, signed/unsigned short/int/long/long long; M12j; object pointers, fixed multidimensional arrays, ordinary strings and adjusted array parameters M13k; parenthesized object/abstract declarators M14a and fixed function suffixes M14e, callbacks/void M14f-g and const qualification M14j2; query-derived types and scoped typedef lists through C23 for initializers M14l2b and ordinary-name shadowing through parameter/prototype scopes M14l3b) | M03, M08, M12-M18, M23-M24 |
 | Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d; sequenced comma/conditional expressions, integer compound assignments and updates; direct goto and integer switch/case/default through M19f2) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
@@ -856,3 +856,20 @@ object slots with no alias storage.
 Frozen manifest /data/tools/m14l3a-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l3b parameter names hiding outer typedefs
+
+Implemented and locally validated for the stated Linux amd64 LP64 subset:
+parameter point of declaration, later parameter/type-query disambiguation,
+nested prototype restoration, trailing return syntax and definition-body names.
+No VM types, globals, new storage classes or full-C23 conformance is implied.
+
+Focused originals: 48 standard + 6 C23, all kcc/QBE-valid; GCC 14.2.1 agrees on
+54, Clang 18.1.8 on 53 with one exact C23 for-typedef grammar gap. Legacy GCC
+11.5/Clang 15.0.7 agree on all 48 standard originals; keyword gaps are not
+agreements. Ten kcc constraints remain errors; GCC has nine strict rejections
+plus one exact named-void warning, Clang ten strict rejections. No source is
+rewritten to obtain native agreement. Both-direction ABI, AST identities,
+128/129 parameter and 256/257 local boundaries, complete regression/QBE,
+both-host targeted sanitizers and bounded compile-only fuzz passed. Read the
+M14l3b ledger for exact counts/tools and separate pending exact-commit CI status.

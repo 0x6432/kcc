@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l3b scoped typedef/ordinary-name bindings including parameters; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -2341,3 +2341,58 @@ object slots with no alias storage.
 Frozen manifest /data/tools/m14l3a-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l3b parameter names hiding outer typedefs
+
+Named parameters may now hide outer typedef names. Each function suffix saves
+its incoming syntax-only ordinary-name head, publishes each named parameter
+after its complete declarator, and restores the head after the closing
+parenthesis on success or failure. Own bounds see the outer typedef; later
+parameters and queries see adjusted parameter objects. Nested callback names do
+not leak into outer/sibling parameters or trailing derived return syntax.
+Definitions republish only their outer function's named parameters around body
+parsing, then restore file scope. The existing semantic prototype scopes,
+nearest-object alias barrier, immutable types and real definition-local binding
+paths remain unchanged. Same-scope conflicts and duplicate names remain errors.
+
+AST tests distinguish captured type-only prototype objects from real parameter
+spill locals; later outer queries retain the original outer binding after a
+nested callback hides it. Body queries/initializers capture the real parameter.
+The four parameters plus one body object occupy exactly slots 0 through 4;
+prototype/callback names and aliases allocate no runtime locals or QBE storage.
+Tests also preserve the standard int (T) unnamed-function-parameter ambiguity.
+Existing 128 parameters, 256 locals and other resource budgets are unchanged.
+VM types, globals, block function declarations, other storage classes and bare
+alias-derived definitions remain unsupported. This is not full C23 conformance.
+Read m14-parameter-typedef-shadowing.md for the pre-implementation lifetime plan.
+
+Validation on the frozen source/test/Makefile manifest passed: full make test
+with GCC 11.5, GCC 14.2.1 and Clang 18.1.8 original-source native oracles; full
+make test-codegen with QBE 1.2 and both modern native hosts; GCC 11.5 / Clang
+15.0.7 targeted ASan/UBSan lexer/sema and 15 typedef/query/bound/nullptr/control
+suites. Helpers were built serially before parallel read-only validation.
+Bounded sanitized fuzz passed 6,930 lexer and 20,923 pipeline inputs in 26 seconds
+each; no invalid curated C or fuzz-generated C was executed. Manifest checks
+matched before and after validation and in both isolated sanitizer copies.
+
+Focused: 48 standard + 6 C23 original programs and 24 both-direction mixed-stack
+primitive ABI arrangements per host. GCC 11 / Clang 15 agree on all 48 standard
+originals (their exact C23 keyword absence is not an agreement). GCC 14 agrees
+on all 54; Clang 18 agrees on 53 and reports one exact for-typedef grammar gap.
+All ten kcc constraints remain rejected. Clang strictly rejects all ten; GCC
+strictly rejects nine and emits the one exact named-void warning, classified
+separately. Neither native gap changes kcc acceptance or rewrites source.
+Exact 128/129 parameter and 256/257 local boundaries, declaration-only IL and
+captured identities passed. Three obsolete parameter-shadowing subset rejections
+were removed only after their behavior became covered by the positive suite.
+The initial invalid long-returning main and incompatible callback test fixtures
+were rejected before execution and corrected before freezing; no intermediate
+failure was counted as a pass. Initial full-QBE launches used Make's default
+qbe name rather than the supplied environment path and failed to find QBE;
+complete reruns with command-line QBE=/data/tools/qbe-1.2/qbe passed. This was a
+validation launcher correction, not a compiler change or a pass.
+
+Public GitHub CI for predecessor 966995b (run 38933785916) and 99bbdf0,
+2a65a40 and 543815c was verified completed/success at resume. This milestone's
+new exact-commit CI remains pending until queried after push; local passes are
+not remote CI evidence.

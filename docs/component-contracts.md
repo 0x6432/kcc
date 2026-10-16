@@ -1834,3 +1834,21 @@ object slots with no alias storage.
 Frozen manifest /data/tools/m14l3a-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l3b parameter/prototype syntax bindings
+
+The parser saves its ordinary-name head at each function suffix, publishes a
+parameter object mask after its complete declarator, and restores on suffix
+success or failure. This is syntax classification, not semantic name resolution.
+Later parameters inherit earlier masks; nested callbacks restore their incoming
+head before later outer parameters and trailing derived return syntax. Only
+the outer defining function's named parameters are republished around body
+parsing; file scope restores on every exit. Unnamed/void markers publish nothing.
+
+Sema's existing left-to-right temporary prototype objects and adjusted types
+remain independent of real definition spill locals. Query captures retain those
+identities: nested masks do not retarget earlier captures, and body uses bind to
+real parameters. No AST/lexer/type/codegen interface changes or alias storage.
+Same-scope constraints and all resource budgets remain enforced. AST assertions
+check temporary versus real bindings, nested restoration and exact real-local
+slots. See the M14l3b design and ledger for scope limits and frozen validation.

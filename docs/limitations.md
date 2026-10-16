@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14L3A automatic objects hiding typedef names. Read the latest entries together with README.md and
+Current milestone: M14L3B parameter names hiding outer typedefs. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1908,3 +1908,19 @@ object slots with no alias storage.
 Frozen manifest /data/tools/m14l3a-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l3b parameter names hiding outer typedefs
+
+Named parameters may hide outer typedefs, after their complete declarators.
+Own bounds retain the outer meaning; later parameters and bodies see objects.
+Nested callback/prototype names do not escape into sibling parameters, trailing
+return syntax or enclosing scopes. Definition bodies carry only the defining
+outer function's parameter names. Duplicate names and same-scope body
+alias/object conflicts remain errors. Existing parameter/local/type budgets are
+unchanged; only named definition parameters allocate runtime locals.
+
+VM types, globals, block function declarations, other storage classes and bare
+alias-derived definitions remain unsupported. This is not full C23. Read
+m14-parameter-typedef-shadowing.md and the M14l3b ledger for the lifetime design
+and exact validation/native gap counts; earlier parameter-shadowing limits above
+are historical and superseded by this increment.

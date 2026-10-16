@@ -328,6 +328,8 @@ static bool parse_function_suffix(struct parser *parser,
 	struct parsed_declarator *declarator, struct token opening)
 {
 	struct ast_function_type_syntax *function;
+	struct parser_name *saved_names = parser->names;
+	bool success;
 
 	if (declarator->functions == ast_max_function_layers) {
 		diagnostic_error(parser->diagnostics, opening.location, "function declarator exceeds layer limit (64)");
@@ -338,8 +340,11 @@ static bool parse_function_suffix(struct parser *parser,
 		allocation_error(parser, opening.location);
 		return false;
 	}
-	if (!parse_parameters(parser, function) ||
-		!expect_token(parser, token_right_paren, "expected ')' after parameter list", NULL))
+	success = parse_parameters(parser, function) &&
+		expect_token(parser, token_right_paren, "expected ')' after parameter list", NULL);
+	/* Callback names and parameter masks do not escape into return syntax. */
+	parser->names = saved_names;
+	if (!success)
 		return false;
 	*declarator->base_slot = &function->syntax;
 	declarator->base_slot = &function->return_syntax;
@@ -432,11 +437,6 @@ static bool parse_declarator_contents(struct parser *parser,
 	if (token.kind == token_identifier && context != declarator_cast) {
 		declarator->name = preprocess_next(parser->preprocessor);
 		declarator->has_name = true;
-		if (context == declarator_parameter && is_typedef_name(parser, token)) {
-			diagnostic_error(parser->diagnostics, token.location,
-				"shadowing a typedef name is not supported yet");
-			return false;
-		}
 	} else if (token.kind == token_left_paren) {
 		size_t derived_before = declarator->pointers + declarator->dimensions + declarator->functions;
 		bool name_before = declarator->has_name;
@@ -2285,6 +2285,7 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 
 /* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
  * parameter-declaration ::= declaration-specifiers [ declarator ]
+ * Publish each name after its complete declarator, before the next parameter.
  * C23's empty list specifies zero parameters, just like (void).
  */
 static bool parse_parameters(struct parser *parser,
@@ -2320,6 +2321,8 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		}
 		parameter->type_syntax = type_syntax;
+		if (has_name && !publish_parser_name(parser, name, parser_name_object))
+			return false;
 		*tail = parameter;
 		tail = &parameter->next;
 		function->parameter_count++;
@@ -2410,6 +2413,28 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 	return declarations;
 }
 
+/* function-body ::= compound-statement
+ * Only the defining outer function's parameter names extend into its body.
+ */
+static struct ast_compound_statement *parse_function_body(struct parser *parser,
+	struct ast_function_declaration *declaration)
+{
+	struct parser_name *saved_names = parser->names;
+	struct ast_compound_statement *body = NULL;
+
+	for (struct ast_parameter *parameter = declaration->parameters; parameter;
+		parameter = parameter->next) {
+		if (parameter->has_name &&
+			!publish_parser_name(parser, parameter->name, parser_name_object))
+			goto done;
+	}
+	parser->block_items = 0;
+	body = parse_compound_statement(parser);
+done:
+	parser->names = saved_names;
+	return body;
+}
+
 /* external-declaration ::= typedef-declaration | static-assert-declaration |
  *     declaration-specifiers declarator (";" | compound-statement)
  */
@@ -2456,8 +2481,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		preprocess_next(parser->preprocessor);
 		return &declaration->external;
 	}
-	parser->block_items = 0;
-	body = parse_compound_statement(parser);
+	body = parse_function_body(parser, declaration);
 	if (!body)
 		return NULL;
 	function = ast_new_function(parser->arena, declaration, body);
