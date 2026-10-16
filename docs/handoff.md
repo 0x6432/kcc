@@ -2,6 +2,38 @@
 
 ## Current checkpoint
 
+M14l4 typedef specifier placement is implemented and locally validated. Read
+m14-typedef-specifier-placement.md and the latest ledger/contracts/coverage/limits.
+One shared specifier scan selects existing concrete alias/ordinary tails at
+file/block/for scope, including consumed alias starts. Parameters/type names
+reject typedef; duplicate typedefs and all prior constraints remain errors.
+Shared bases, actual keyword locations, complete-declarator publication, scoped
+bindings and no-alias-storage invariants are tested. Other storage classes,
+globals, VM types and bare alias-derived definitions remain unsupported.
+
+Full normal regressions with GCC 11/GCC 14/Clang 18, full QBE with both modern
+hosts, both-host targeted ASan/UBSan lexer/sema plus 16 suites, four-host focused
+original/ABI checks and exact resource boundaries passed. Frozen manifest/logs:
+/data/tools/m14l4-*, isolated sanitizer copies /data/validation-m14l4/{gcc,clang}.
+Bounded compile-only fuzz: 6,924 lexer / 17,277 pipeline inputs
+in 26/26 seconds; no invalid/generated C executed. Helpers built serially
+before parallel validation. Source/test/Makefile hashes matched before/after.
+Read the ledger for exact native agreements/gaps and pre-freeze fixture fixes.
+
+a7a9528 correction CI run 38954615388 completed successfully.
+The failed c3cc992 GCC run is not retroactively green; a7a9528 was the independent
+exact-source native diagnostic correction. New M14l4 exact-commit CI is pending
+until queried after push. Local passes are not remote evidence.
+
+The user authorizes continued development; the old STOP REQUEST is superseded.
+No stashes were present or discarded; preserve the two historical named stashes
+if they reappear after another reset. No old fixture/snapshot generators were
+rerun. /data/tools/implement-m14l4-current.py was applied once for this increment;
+do not rerun it. No next milestone source/design was implemented; plan its scope
+before coding. No subagents were used. Verify tool paths/versions after resets.
+
+## Earlier M14l3b native-oracle correction (historical)
+
 M14l3b's native for-typedef test-oracle correction is locally validated. Read
 m14-parameter-native-diagnostics.md and the latest ledger entry. c3cc992 remote
 CI failed GCC's normal suite on the valid C23 for-typedef fixture; Clang and fuzz

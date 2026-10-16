@@ -4177,8 +4177,76 @@ static void test_parameter_typedef_shadowing_tree(void)
 	fclose(stream);
 }
 
+static void test_typedef_specifier_placement_tree(void)
+{
+	const char *text = "long typedef T; int f(void) { T typedef U,*P,F(U); "
+		"U x=42; P p=&x; return *p; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_typedef_declaration *outer;
+	struct ast_typedef_declaration *aliases[3];
+	struct ast_function *function;
+	struct ast_block_item *item;
+	struct ast_local_declaration *value;
+	struct ast_local_declaration *pointer;
+	struct ast_type_syntax *base;
+	const struct function_type *signature;
+	size_t keyword_offset = (size_t)(strstr(text, "T typedef") + 2 - text);
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	assert(unit->declarations->kind == external_typedef_declaration);
+	outer = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+	assert(outer->location.offset == 5 && !outer->type);
+	function = (struct ast_function *)unit->declarations->next;
+	assert(function->external.kind == external_function_definition);
+	item = function->body->items;
+	for (size_t i = 0; i < 3; i++) {
+		assert(item && item->kind == block_item_typedef_declaration);
+		aliases[i] = ((struct ast_block_typedef_declaration *)item)->declaration;
+		assert(aliases[i]->location.offset == keyword_offset && !aliases[i]->type);
+		item = item->next;
+	}
+	base = aliases[0]->type_syntax;
+	assert(base->kind == type_syntax_typedef_name);
+	assert(aliases[1]->type_syntax->kind == type_syntax_pointer);
+	assert(((struct ast_pointer_type_syntax *)aliases[1]->type_syntax)->referent == base);
+	assert(aliases[2]->type_syntax->kind == type_syntax_function);
+	assert(((struct ast_function_type_syntax *)aliases[2]->type_syntax)->return_syntax == base);
+	value = (struct ast_local_declaration *)item;
+	assert(value->item.kind == block_item_declaration);
+	pointer = (struct ast_local_declaration *)item->next;
+	assert(pointer->item.kind == block_item_declaration);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(outer->type == &type_long && aliases[0]->type == outer->type);
+	assert(base->type == outer->type);
+	assert(((const struct pointer_type *)aliases[1]->type)->referent == outer->type);
+	signature = (const struct function_type *)aliases[2]->type;
+	assert(signature->type.kind == type_kind_function && signature->parameter_count == 1);
+	assert(signature->return_type == outer->type && signature->parameters->type == outer->type);
+	assert(value->type == outer->type && pointer->type == aliases[1]->type);
+	assert(value->slot == 0 && pointer->slot == 1);
+	assert(function->locals == pointer && pointer->next_local == value && !value->next_local);
+	assert(pointer->initializer->kind == expression_address);
+	assert(((struct ast_name_expression *)((struct ast_address_expression *)pointer->initializer)->operand)->declaration == value);
+	assert(!unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_specifier_placement_tree();
 	test_parameter_typedef_shadowing_tree();
 	test_object_typedef_shadowing_tree();
 	test_typedef_object_shadowing_tree();

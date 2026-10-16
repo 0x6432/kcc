@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14L3B parameter names hiding outer typedefs. Read the latest entries together with README.md and
+Current milestone: M14L4 typedef placement in declaration specifiers. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1933,3 +1933,15 @@ separately from native agreements; only exact source, status 1 and a single
 observed error match. This test-only CI correction changes no language scope,
 resource budget or ABI. Read m14-parameter-native-diagnostics.md and the latest
 ledger entry for the failed predecessor CI and frozen local validation evidence.
+
+## M14l4 typedef placement in declaration specifiers
+
+The typedef keyword may appear once anywhere among supported type/const
+specifiers in file/block/for declarations, including consumed alias starts and
+query-derived bases. It may not follow a declarator or appear in a parameter or
+type name. Existing same-scope constraints, point of declaration and resource
+limits remain. Other storage classes, VM types, globals, typedef initializers,
+block function declarations and bare alias-derived definitions are not added.
+Read m14-typedef-specifier-placement.md and the M14l4 ledger for exact frozen
+validation and native gaps. Earlier general placement restrictions are historical;
+only typedef placement is broadened, not all storage-class combinations.

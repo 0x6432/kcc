@@ -95,8 +95,8 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 {
 	enum token_kind kind = token.kind;
 
-	return kind == token_void || kind == token_const || kind == token_typeof ||
-		kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
+	return kind == token_typedef || kind == token_void || kind == token_const ||
+		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
 /* type-qualifier-list ::= "const" { "const" }
@@ -117,7 +117,7 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
 
-/* declaration-specifiers ::= permutation of type-qualifier-list and builtin-type
+/* declaration-specifiers ::= permutation of [ "typedef" ], type-qualifier-list and builtin-type
  * builtin-type ::= integer-type | "void" | typeof-specifier | typedef-name
  * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
@@ -126,7 +126,7 @@ static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, str
  * integer specifiers. Qualifiers do not hide duplicate/conflicting specifiers.
  */
 static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *parser,
-	struct token *beginning, struct ast_type_syntax *named_type)
+	struct token *beginning, struct ast_type_syntax *named_type, struct token *typedef_keyword)
 {
 	bool seen_int = false;
 	bool seen_void = false;
@@ -146,6 +146,20 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		struct token token = preprocess_peek(parser->preprocessor);
 
+		if (token.kind == token_typedef) {
+			if (!typedef_keyword) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"typedef is not permitted in a type name or parameter declaration");
+				return NULL;
+			}
+			if (typedef_keyword->kind == token_typedef) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"duplicate typedef storage-class specifier");
+				return NULL;
+			}
+			*typedef_keyword = preprocess_next(parser->preprocessor);
+			continue;
+		}
 		/* A second alias is a declarator name, not another type specifier. */
 		if (is_typedef_name(parser, token)) {
 			struct ast_typedef_name_type_syntax *alias;
@@ -289,8 +303,11 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
 }
 
-/* declaration-specifiers ::= { "const" } (builtin-type | typeof-specifier | typedef-name) { "const" } */
-static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser, struct token *beginning)
+/* declaration-specifiers ::= permutation of [ "typedef" ], qualifiers and type-specifiers
+ * A NULL storage output disallows typedef in type-name and parameter contexts.
+ */
+static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser,
+	struct token *beginning, struct token *typedef_keyword)
 {
 	*beginning = preprocess_peek(parser->preprocessor);
 	if (!begins_declaration_specifier(parser, *beginning)) {
@@ -298,7 +315,7 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 			diagnostic_error(parser->diagnostics, beginning->location, "expected integer type specifier");
 		return NULL;
 	}
-	return parse_declaration_specifiers_tail(parser, beginning, NULL);
+	return parse_declaration_specifiers_tail(parser, beginning, NULL, typedef_keyword);
 }
 
 enum declarator_context {
@@ -530,7 +547,7 @@ static struct ast_type_syntax *parse_type_name(struct parser *parser,
 	struct token *beginning, struct token *name, bool *has_name,
 	enum declarator_context context)
 {
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning);
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning, NULL);
 
 	return parse_derived_type(parser, base, name, has_name, context);
 }
@@ -1735,7 +1752,8 @@ static struct ast_do_statement *parse_do_statement(struct parser *parser)
 }
 
 static struct ast_block_item *parse_local_declaration(struct parser *parser);
-static struct ast_block_item *parse_block_typedef_declaration(struct parser *parser);
+static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser *parser,
+	struct token keyword, struct ast_type_syntax *base);
 static struct ast_block_item *parse_block_item(struct parser *parser);
 static bool begins_static_assertion(enum token_kind kind);
 static bool count_block_item(struct parser *parser, struct source_location location);
@@ -1760,11 +1778,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
-	if (preprocess_peek(parser->preprocessor).kind == token_typedef) {
-		initializer_declarations = parse_block_typedef_declaration(parser);
-		if (!initializer_declarations)
-			return NULL;
-	} else if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
 		initializer_declarations = parse_block_item(parser);
@@ -2025,12 +2039,19 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 	return items;
 }
 
-/* local-declaration ::= declaration-specifiers init-declarator { "," init-declarator } ";" */
+/* block-declaration ::= declaration-specifiers (typedef-list | init-declarator-list) ";"
+ * Select the concrete declaration kind after scanning all specifiers once.
+ */
 static struct ast_block_item *parse_local_declaration(struct parser *parser)
 {
 	struct token beginning;
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
+	struct token typedef_keyword = { 0 };
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning, &typedef_keyword);
 
+	if (!base)
+		return NULL;
+	if (typedef_keyword.kind == token_typedef)
+		return parse_block_typedef_declaration_tail(parser, typedef_keyword, base);
 	return parse_local_declaration_tail(parser, beginning, base);
 }
 
@@ -2099,12 +2120,12 @@ static struct ast_typedef_declaration *new_typedef_declaration(struct parser *pa
 	return declaration;
 }
 
-/* block-typedef-declaration ::= "typedef" declaration-specifiers declarator { "," declarator } ";" */
-static struct ast_block_item *parse_block_typedef_declaration(struct parser *parser)
+/* block-typedef-declaration-tail ::= declarator { "," declarator } ";"
+ * Specifiers already selected typedef storage and one shared written base.
+ */
+static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser *parser,
+	struct token keyword, struct ast_type_syntax *base)
 {
-	struct token keyword = preprocess_next(parser->preprocessor);
-	struct token beginning;
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
 	struct ast_block_item *items = NULL;
 	struct ast_block_item **tail = &items;
 
@@ -2196,17 +2217,20 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 		if (is_typedef_name(parser, token)) {
 			struct ast_typedef_name_type_syntax *alias = ast_new_typedef_name_type_syntax(parser->arena, token);
 			struct ast_type_syntax *base;
+			struct token typedef_keyword = { 0 };
 
 			if (!alias) {
 				allocation_error(parser, token.location);
 				return NULL;
 			}
-			base = parse_declaration_specifiers_tail(parser, &token, &alias->syntax);
+			base = parse_declaration_specifiers_tail(parser, &token, &alias->syntax, &typedef_keyword);
+			if (!base)
+				return NULL;
+			if (typedef_keyword.kind == token_typedef)
+				return parse_block_typedef_declaration_tail(parser, typedef_keyword, base);
 			return parse_local_declaration_tail(parser, token, base);
 		}
 		statement = parse_identifier_expression_statement(parser, token);
-	} else if (token.kind == token_typedef) {
-		return parse_block_typedef_declaration(parser);
 	} else if (begins_static_assertion(token.kind)) {
 		struct ast_static_assertion *declaration = parse_static_assertion(parser);
 		struct ast_block_static_assertion *assertion;
@@ -2359,15 +2383,13 @@ static struct ast_external_declaration *parse_external_type_declaration(struct p
 	return declaration ? &declaration->external : NULL;
 }
 
-/* typedef-declaration ::= "typedef" declaration-specifiers declarator { "," declarator } ";"
+/* typedef-declaration-tail ::= declarator { "," declarator } ";"
+ * Specifiers already selected typedef storage and one shared written base.
  * Every name is visible to later declarators, not its own unfinished declarator.
  */
-static struct ast_external_declaration *parse_typedef_declaration(struct parser *parser,
-	size_t remaining_declarations)
+static struct ast_external_declaration *parse_typedef_declaration_tail(struct parser *parser,
+	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base)
 {
-	struct token keyword = preprocess_next(parser->preprocessor);
-	struct token beginning;
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
 	struct ast_external_declaration *declarations = NULL;
 	struct ast_external_declaration **tail = &declarations;
 	size_t count = 0;
@@ -2442,14 +2464,13 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	size_t remaining_declarations)
 {
 	struct ast_type_syntax *type_syntax;
+	struct ast_type_syntax *base;
 	struct token beginning;
 	struct token name;
+	struct token typedef_keyword = { 0 };
 	struct ast_function_declaration *declaration;
 	struct ast_compound_statement *body;
 	struct ast_function *function;
-
-	if (preprocess_peek(parser->preprocessor).kind == token_typedef)
-		return parse_typedef_declaration(parser, remaining_declarations);
 
 	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		struct ast_static_assertion *assertion = parse_static_assertion(parser);
@@ -2462,7 +2483,12 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			allocation_error(parser, assertion->location);
 		return external ? &external->external : NULL;
 	}
-	type_syntax = parse_type_name(parser, &beginning, &name, NULL, declarator_external);
+	base = parse_declaration_specifiers(parser, &beginning, &typedef_keyword);
+	if (!base)
+		return NULL;
+	if (typedef_keyword.kind == token_typedef)
+		return parse_typedef_declaration_tail(parser, remaining_declarations, typedef_keyword, base);
+	type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 	if (!type_syntax)
 		return NULL;
 	if (type_syntax->kind != type_syntax_function)

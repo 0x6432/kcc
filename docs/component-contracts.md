@@ -1852,3 +1852,16 @@ real parameters. No AST/lexer/type/codegen interface changes or alias storage.
 Same-scope constraints and all resource budgets remain enforced. AST assertions
 check temporary versus real bindings, nested restoration and exact real-local
 slots. See the M14l3b design and ledger for scope limits and frozen validation.
+
+## M14l4 typedef-aware declaration specifiers
+
+The parser's shared specifier scan accepts a nullable typedef-token output:
+non-NULL permits one storage-class token, NULL rejects it in type-name/parameter
+contexts. Callers initialize the token; its location is the actual written or
+macro-invocation keyword location, not necessarily the first type specifier.
+File/block/for entry points and the consumed-alias block path select existing
+concrete declaration tails after one scan. No token replay or semantic inference.
+Shared written bases, complete-declarator publication and label priority remain.
+Sema/type/codegen interfaces and no-alias-storage behavior are unchanged. Existing
+resource limits and same-scope constraints remain independently enforced. AST
+assertions verify base identity, keyword location and real-local-only slots.

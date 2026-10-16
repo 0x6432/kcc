@@ -20,7 +20,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
-| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l3b scoped typedef/ordinary-name bindings including parameters; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
+| M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
@@ -2433,3 +2433,52 @@ and runtimes were restored, versions verified, and complete checks restarted.
 The original failed GCC job is 117124816108; Clang 117124815832 and fuzz
 117124816333 passed. New exact-commit remote CI remains pending until queried
 after push. Local correction passes do not retroactively make c3cc992 CI green.
+
+## M14l4 typedef storage-class placement
+
+Design recorded before implementation in m14-typedef-specifier-placement.md.
+The one implemented storage class may appear anywhere among declaration
+specifiers: e.g. unsigned typedef long T, const typedef int T, T typedef U and
+typeof(int) typedef T. File/block/for declarations scan once and choose existing
+concrete typedef or ordinary declaration tails. A nullable typedef-token output
+permits storage only at declaration entry points and retains the actual keyword
+location. Type names and parameters reject it; duplicate typedefs remain errors.
+The consumed-alias block path handles late typedef without token replay and
+still recognizes labels first. Every comma declarator shares its written base
+and publishes after its complete declarator, preserving own bounds and later
+names. No semantic/type/codegen/AST interface change or alias runtime storage.
+
+Frozen local validation: full make test with GCC 11.5/GCC 14.2.1/Clang 18.1.8
+native oracles; full make test-codegen with QBE 1.2 and both modern native hosts;
+both GCC 11 / Clang 15 ASan/UBSan lexer/sema plus 16 targeted suites, with the
+placement suite also checked against original Clang 18 sources. Normal helpers
+were built serially before parallel validation; isolated sanitizer manifests and
+primary source/test/Makefile manifests matched before and after. Bounded
+sanitized fuzz passed 6,924 lexer / 17,277 pipeline inputs in
+26/26 seconds. Invalid curated and fuzz-generated C never executed.
+
+Focused: 45 standard + 6 C23-specific + 4 C23 for originals, all through kcc/QBE.
+GCC 14 agrees on all 55; Clang 18 agrees on 51 and reports four exact for-typedef
+grammar gaps. Legacy GCC 11/Clang 15 agree on 45 standard originals and report
+four exact for-typedef gaps, with C23-specific comparisons omitted on the exact
+keyword probe failure (not counted as agreements). Seventeen kcc constraints
+and three valid-C subset rejections remain; modern natives strictly reject all
+17 constraints, legacy natives the 15 non-C23 constraints. Each host passes 24
+both-direction mixed-stack primitive ABI arrangements. AST assertions verify
+shared bases, keyword locations, immutable aliases, captured object identity and
+exactly two real locals; aliases/prototypes allocate no storage. Exact 512/513
+external, 4096/4097 item and 128/129 expanded-depth boundaries passed.
+
+Before freezing, one invalid same-scope alias/object positive fixture was rejected
+before execution and corrected using a nested object scope. The unchanged
+label-before-declaration original was correctly moved to the C23-specific group,
+not rewritten for a legacy host. A string-versus-tuple membership mistake in the
+new native constraint counter was fixed before freezing so missing C23 keywords
+cannot masquerade as native constraint agreements. No intermediate failure was
+counted as a pass.
+
+Other storage classes, globals, block function declarations, VM types, typedef
+initializers and bare alias-derived definitions remain unsupported. This is not
+full C23. a7a9528 correction CI run 38954615388 completed successfully.
+c3cc992's failed GCC native-oracle run remains a historical failure. New M14l4
+exact-commit CI is pending until checked after push, separately from local passes.

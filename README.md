@@ -6,16 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14L3B: Named parameters may hide outer typedef names. Their names publish after
-complete declarators, affect later parameters and queries, and extend into the
-defining function body. Nested callback scopes, trailing return declarators and
-post-definition file scope restore the proper meanings. Existing semantic scopes
-and parameter ABI/storage are unchanged; duplicate and same-scope conflicts
-remain errors. Read docs/m14-parameter-typedef-shadowing.md and the latest
-coverage/limitations records. VM types and full C23 remain unsupported.
-A test-only follow-up recognizes the exact GCC and Clang native C23 for-typedef
-grammar-gap diagnostics without changing source or kcc acceptance; see
-docs/m14-parameter-native-diagnostics.md.
+M14L4: The typedef storage class may appear anywhere among declaration
+specifiers at file, block and C23 for scope, including alias/query-derived bases.
+Declarations still use the existing concrete ASTs and shared comma-list bases;
+parameters/type names reject typedef, and aliases allocate no runtime storage.
+Read docs/m14-typedef-specifier-placement.md and the latest ledger/limitations.
+Earlier ordinary-name shadowing, including parameter/prototype lifetimes, remains
+supported. Other storage classes, VM types and full C23 remain unsupported.
+Native for-typedef grammar gaps remain separately classified on unchanged source.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite
