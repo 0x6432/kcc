@@ -1287,3 +1287,14 @@ preserve the located offending node and a static reason, separating not_constant
 from invalid arithmetic. Consumers own diagnostics and constant requirements.
 Queries allocate nothing and do not mutate ASTs or emit QBE. Skipped operands
 retain ICE form constraints without arithmetic; sizeof/alignof do not descend.
+
+## M18b2 assertion declarations
+
+ast_static_assertion owns condition and optional diagnostic-only decoded string;
+concrete block/external wrappers own their respective common list headers.
+Parser uses conditional floor 2, bounded message concatenation and existing item/
+external quotas; a for initializer owns one declaration item, never an expression.
+Sema checks in current source-order scope, then queries ICE and diagnoses located
+failure. Message rendering is bounded and byte-preserving through escapes. Do not
+register diagnostic messages in unit.strings or local slots. Codegen skips the
+assertion wrappers entirely; unreachable declarations are still checked by sema.

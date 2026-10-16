@@ -806,6 +806,9 @@ static bool codegen_block_items(struct codegen *codegen,
 {
 	while (item) {
 		switch (item->kind) {
+		case block_item_static_assertion:
+			/* Fully checked at translation time; no runtime effect or datum. */
+			break;
 		case block_item_declaration: {
 			const struct ast_local_declaration *local =
 				(const struct ast_local_declaration *)item;

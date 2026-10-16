@@ -356,6 +356,7 @@ static const struct keyword keywords[] = {
 	{ "continue", token_continue }, { "const", token_const },
 	{ "sizeof", token_sizeof }, { "alignof", token_alignof },
 	{ "_Alignof", token_legacy_alignof },
+	{ "static_assert", token_static_assert }, { "_Static_assert", token_legacy_static_assert },
 };
 
 static struct token convert_identifier(struct token token)
@@ -741,6 +742,8 @@ const char *token_kind_name(enum token_kind kind)
 	case token_sizeof: return "sizeof";
 	case token_alignof: return "alignof";
 	case token_legacy_alignof: return "_Alignof";
+	case token_static_assert: return "static_assert";
+	case token_legacy_static_assert: return "_Static_assert";
 	case token_return: return "return";
 	case token_if: return "if";
 	case token_else: return "else";

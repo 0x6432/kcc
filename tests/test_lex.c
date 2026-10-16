@@ -320,8 +320,20 @@ static void test_layout_keywords(void)
 }
 
 
+static void test_assertion_keywords(void)
+{
+	const enum token_kind kinds[] = { token_static_assert, token_legacy_static_assert,
+		token_static_assert, token_identifier };
+
+	check_tokens("#define CHECK static_assert\nstatic_assert _Static_assert CHECK static_assertion",
+		kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_static_assert), "static_assert") == 0);
+	assert(strcmp(token_kind_name(token_legacy_static_assert), "_Static_assert") == 0);
+}
+
 int main(void)
 {
+	test_assertion_keywords();
 	test_layout_keywords();
 	test_conditional_punctuation();
 	test_boolean_keywords();

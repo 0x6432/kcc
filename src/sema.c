@@ -1,4 +1,5 @@
 #include "sema.h"
+#include "consteval.h"
 #include "type.h"
 
 #include <assert.h>
@@ -1257,10 +1258,75 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	return false;
 }
 
+/* Assertion messages are diagnostic bytes, never static objects or format strings. */
+static void failed_static_assertion(struct sema *sema, const struct ast_static_assertion *node)
+{
+	static const char prefix[] = "static assertion failed: ";
+	static const char hex[] = "0123456789abcdef";
+	const struct ast_string_expression *string = node->message;
+	char *message;
+	size_t offset;
+
+	if (!string) {
+		diagnostic_error(sema->diagnostics, node->location, "static assertion failed");
+		return;
+	}
+	/* Parser bounds message length by ast_max_string_length. */
+	message = arena_alloc(sema->arena, sizeof(prefix) + 2 + string->length * 4);
+	if (!message) {
+		diagnostic_error(sema->diagnostics, node->location,
+			"out of memory formatting static assertion message");
+		return;
+	}
+	memcpy(message, prefix, sizeof(prefix) - 1);
+	offset = sizeof(prefix) - 1;
+	message[offset++] = '"';
+	for (size_t i = 0; i < string->length; i++) {
+		unsigned char byte = string->bytes[i];
+
+		if (byte == '"' || byte == '\\') {
+			message[offset++] = '\\';
+			message[offset++] = (char)byte;
+		} else if (byte >= 32 && byte <= 126) {
+			message[offset++] = (char)byte;
+		} else {
+			message[offset++] = '\\';
+			message[offset++] = 'x';
+			message[offset++] = hex[byte >> 4];
+			message[offset++] = hex[byte & 15];
+		}
+	}
+	message[offset++] = '"';
+	message[offset] = 0;
+	diagnostic_error(sema->diagnostics, node->location, message);
+}
+
+static bool sema_static_assertion(struct sema *sema, struct ast_static_assertion *node)
+{
+	struct constant_result result;
+
+	if (!sema_expression(sema, &node->condition, true))
+		return false;
+	result = evaluate_integer_constant(node->condition);
+	if (result.status != constant_value) {
+		diagnostic_error(sema->diagnostics, result.location, result.message);
+		return false;
+	}
+	if (!result.bits) {
+		failed_static_assertion(sema, node);
+		return false;
+	}
+	return true;
+}
+
 static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 {
 	while (item) {
 		switch (item->kind) {
+		case block_item_static_assertion:
+			if (!sema_static_assertion(sema, ((struct ast_block_static_assertion *)item)->declaration))
+				return false;
+			break;
 		case block_item_declaration:
 			if (!sema_local(sema, (struct ast_local_declaration *)item))
 				return false;
@@ -1416,6 +1482,13 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		struct ast_function *definition = NULL;
 		struct ast_function_declaration *declaration;
 
+		if (external->kind == external_static_assertion) {
+			if (!sema_static_assertion(&sema,
+				((struct ast_external_static_assertion *)external)->declaration))
+				return false;
+			external = external->next;
+			continue;
+		}
 		if (external->kind == external_function_definition) {
 			definition = (struct ast_function *)external;
 			declaration = definition->declaration;

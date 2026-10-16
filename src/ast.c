@@ -806,3 +806,42 @@ struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,
 		};
 	return node;
 }
+
+struct ast_static_assertion *ast_new_static_assertion(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_string_expression *message)
+{
+	struct ast_static_assertion *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_static_assertion) {
+			.location = location, .condition = condition, .message = message,
+		};
+	return node;
+}
+
+struct ast_block_static_assertion *ast_new_block_static_assertion(struct arena *arena,
+	struct ast_static_assertion *declaration)
+{
+	struct ast_block_static_assertion *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_block_static_assertion) {
+			.item = { .kind = block_item_static_assertion, .location = declaration->location },
+			.declaration = declaration,
+		};
+	return node;
+}
+
+struct ast_external_static_assertion *ast_new_external_static_assertion(struct arena *arena,
+	struct ast_static_assertion *declaration)
+{
+	struct ast_external_static_assertion *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_external_static_assertion) {
+			.external = { .kind = external_static_assertion, .location = declaration->location },
+			.declaration = declaration,
+		};
+	return node;
+}

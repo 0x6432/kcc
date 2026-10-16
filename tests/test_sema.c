@@ -2423,8 +2423,78 @@ static void test_sizeof_alignment_tree(void)
 }
 
 
+static void test_static_assertion_tree(void)
+{
+	const char *text = "static_assert(true,\"a\\0\" \"b\");"
+		"int f(int x) { _Static_assert(sizeof x==4,\"parameter\");"
+		"const short y=1; { static_assert(sizeof y==2); }"
+		"for(static_assert(1,\"for\");0;) ; return x; }"
+		"static_assert(sizeof f(1)==4);";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_static_assertion *external;
+	struct ast_function *function;
+	struct ast_block_static_assertion *block;
+	struct ast_local_declaration *local;
+	struct ast_statement_item *item;
+	struct ast_compound_statement *compound;
+	struct ast_for_statement *loop;
+	struct ast_binary_expression *comparison;
+	struct ast_sizeof_expression *size;
+
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	external = (struct ast_external_static_assertion *)unit->declarations;
+	assert(external->external.kind == external_static_assertion);
+	assert(external->declaration->condition->kind == expression_boolean);
+	assert(external->declaration->message->length == 3);
+	assert(memcmp(external->declaration->message->bytes, "a\0b", 4) == 0);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(!unit->strings && !external->declaration->message->expression.type);
+	assert(external->declaration->condition->type == &type_bool);
+	function = (struct ast_function *)external->external.next;
+	assert(function->external.kind == external_function_definition);
+	block = (struct ast_block_static_assertion *)function->body->items;
+	assert(block->item.kind == block_item_static_assertion);
+	comparison = (struct ast_binary_expression *)block->declaration->condition;
+	assert(comparison->expression.kind == expression_binary);
+	size = (struct ast_sizeof_expression *)comparison->left;
+	assert(size->expression.kind == expression_sizeof && size->size == 4);
+	assert(size->operand->kind == expression_name && size->operand->is_lvalue);
+	assert(((struct ast_name_expression *)size->operand)->declaration == function->declaration->parameters->local);
+	local = (struct ast_local_declaration *)block->item.next;
+	assert(local->item.kind == block_item_declaration);
+	assert(function->locals == local && local->next_local == function->declaration->parameters->local);
+	assert(!local->next_local->next_local);
+	item = (struct ast_statement_item *)local->item.next;
+	compound = (struct ast_compound_statement *)item->statement;
+	assert(compound->statement.kind == statement_compound);
+	block = (struct ast_block_static_assertion *)compound->items;
+	assert(block->item.kind == block_item_static_assertion && !block->declaration->message);
+	comparison = (struct ast_binary_expression *)block->declaration->condition;
+	size = (struct ast_sizeof_expression *)comparison->left;
+	assert(size->size == 2 && ((struct ast_name_expression *)size->operand)->declaration == local);
+	item = (struct ast_statement_item *)item->item.next;
+	loop = (struct ast_for_statement *)item->statement;
+	assert(loop->statement.kind == statement_for && !loop->initializer_expression);
+	assert(loop->initializer_declarations->kind == block_item_static_assertion);
+	external = (struct ast_external_static_assertion *)function->external.next;
+	assert(external->external.kind == external_static_assertion && !external->external.next);
+	assert(!unit->strings && !external->declaration->message);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_static_assertion_tree();
 	test_sizeof_alignment_tree();
 	test_conditional_expression_tree();
 	test_conditional_integer_types();

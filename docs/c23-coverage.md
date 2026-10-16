@@ -333,3 +333,12 @@ conversions, comparisons, short-circuit conditions, unevaluated comma and fixed
 layout leaves. GCC/Clang strict native form/value oracles and both-host sanitizer
 runs pass. This stage is queried by tests/fuzz only, not yet a source-level
 constant requirement, optimizer, null conversion or full C23 ICE implementation.
+
+### M18b2 static assertions
+
+Both static_assert/_Static_assert spellings and optional ordinary-string messages
+are supported in the available declaration contexts, including for initializers.
+Checked integer constant expressions must be nonzero. Messages are diagnostic
+bytes, not emitted static objects. Both-host strict native, original QBE and
+sanitizer tests cover the subset; exact Clang 15 for-initializer parser and legacy
+keyword-spelling gaps are recorded. Aggregate-member assertions await aggregates.

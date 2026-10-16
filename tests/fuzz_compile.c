@@ -64,7 +64,7 @@ static void check_constant_queries(const struct ast_translation_unit *unit)
 
 			if (item->kind == block_item_declaration) {
 				expression = ((const struct ast_local_declaration *)item)->initializer;
-			} else {
+			} else if (item->kind == block_item_statement) {
 				const struct ast_statement *statement = ((const struct ast_statement_item *)item)->statement;
 
 				if (statement->kind == statement_expression)

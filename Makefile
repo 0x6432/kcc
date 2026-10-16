@@ -105,6 +105,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle
 	QBE="$(QBE)" python3 tests/test_boolean_keywords.py
 	QBE="$(QBE)" python3 tests/test_conditional_expressions.py
 	QBE="$(QBE)" python3 tests/test_sizeof_alignment.py
+	python3 tests/test_static_assertions.py
 	python3 tests/test_consteval.py
 
 build/consteval_oracle: tests/consteval_oracle.c $(COMPILER_SOURCES) $(HEADERS) | build
@@ -179,6 +180,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_boolean_keywords.py
 	python3 tests/test_conditional_expressions.py
 	python3 tests/test_sizeof_alignment.py
+	python3 tests/test_static_assertions.py
 	python3 tests/test_consteval.py
 
 clean:

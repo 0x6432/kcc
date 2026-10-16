@@ -400,15 +400,27 @@ struct ast_continue_statement {
 	struct ast_statement *target;
 };
 
+struct ast_static_assertion {
+	struct source_location location;
+	struct ast_expression *condition;
+	struct ast_string_expression *message;
+};
+
 enum block_item_kind {
 	block_item_declaration,
 	block_item_statement,
+	block_item_static_assertion,
 };
 
 struct ast_block_item {
 	enum block_item_kind kind;
 	struct source_location location;
 	struct ast_block_item *next;
+};
+
+struct ast_block_static_assertion {
+	struct ast_block_item item;
+	struct ast_static_assertion *declaration;
 };
 
 struct ast_local_declaration {
@@ -434,12 +446,18 @@ struct ast_compound_statement {
 enum external_declaration_kind {
 	external_function_declaration,
 	external_function_definition,
+	external_static_assertion,
 };
 
 struct ast_external_declaration {
 	enum external_declaration_kind kind;
 	struct source_location location;
 	struct ast_external_declaration *next;
+};
+
+struct ast_external_static_assertion {
+	struct ast_external_declaration external;
+	struct ast_static_assertion *declaration;
 };
 
 struct ast_parameter {
@@ -475,6 +493,13 @@ struct ast_translation_unit {
 	struct ast_string_expression *strings;
 };
 
+struct ast_static_assertion *ast_new_static_assertion(struct arena *arena,
+	struct source_location location, struct ast_expression *condition,
+	struct ast_string_expression *message);
+struct ast_block_static_assertion *ast_new_block_static_assertion(struct arena *arena,
+	struct ast_static_assertion *declaration);
+struct ast_external_static_assertion *ast_new_external_static_assertion(struct arena *arena,
+	struct ast_static_assertion *declaration);
 struct ast_qualified_type_syntax *ast_new_qualified_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *base, unsigned qualifiers);
 struct ast_void_type_syntax *ast_new_void_type_syntax(struct arena *arena,

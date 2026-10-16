@@ -29,6 +29,8 @@ enum token_kind {
 	token_sizeof,
 	token_alignof,
 	token_legacy_alignof,
+	token_static_assert,
+	token_legacy_static_assert,
 	token_return,
 	token_if,
 	token_else,

@@ -1296,10 +1296,13 @@ static struct ast_do_statement *parse_do_statement(struct parser *parser)
 }
 
 static struct ast_block_item *parse_local_declaration(struct parser *parser);
+static struct ast_block_item *parse_block_item(struct parser *parser);
+static bool begins_static_assertion(enum token_kind kind);
+static bool count_block_item(struct parser *parser, struct source_location location);
 
 /* for-statement ::= "for" "(" for-initializer [ expression ] ";"
  *                   [ expression ] ")" statement
- * for-initializer ::= local-declaration | [ expression ] ";"
+ * for-initializer ::= local-declaration | static-assert-declaration | [ expression ] ";"
  * local-declaration already consumes its semicolon; consume it exactly once.
  */
 static struct ast_for_statement *parse_for_contents(struct parser *parser)
@@ -1316,7 +1319,13 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
-	if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
+	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
+			return NULL;
+		initializer_declarations = parse_block_item(parser);
+		if (!initializer_declarations)
+			return NULL;
+	} else if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind)) {
 		initializer_declarations = parse_local_declaration(parser);
 		if (!initializer_declarations)
 			return NULL;
@@ -1413,6 +1422,12 @@ static struct ast_statement *parse_continue_statement(struct parser *parser)
 static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
+
+	if (begins_static_assertion(token.kind)) {
+		diagnostic_error(parser->diagnostics, token.location,
+			"static assertion is a declaration, not a statement");
+		return NULL;
+	}
 
 	if (token.kind == token_for) {
 		struct ast_for_statement *node = parse_for_statement(parser);
@@ -1524,12 +1539,69 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 	return items;
 }
 
-/* block-item ::= local-declaration | statement */
+static bool begins_static_assertion(enum token_kind kind)
+{
+	return kind == token_static_assert || kind == token_legacy_static_assert;
+}
+
+/* static-assert-declaration ::= ("static_assert" | "_Static_assert") "("
+ *     conditional-expression [ "," ordinary-string-token { ordinary-string-token } ] ")" ";"
+ * The message separator is not the comma operator; parenthesized expressions
+ * still parse at floor zero and are checked for ICE form by sema.
+ */
+static struct ast_static_assertion *parse_static_assertion(struct parser *parser)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct ast_expression *condition;
+	struct ast_string_expression *message = NULL;
+	struct ast_static_assertion *node;
+
+	assert(begins_static_assertion(keyword.kind));
+	if (!expect_token(parser, token_left_paren, "expected '(' after static assertion", NULL))
+		return NULL;
+	condition = parse_expression(parser, 2);
+	if (!condition)
+		return NULL;
+	if (preprocess_peek(parser->preprocessor).kind == token_comma) {
+		struct ast_expression *string;
+
+		preprocess_next(parser->preprocessor);
+		if (preprocess_peek(parser->preprocessor).kind != token_string) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"expected string literal in static assertion");
+			return NULL;
+		}
+		string = parse_string_expression(parser);
+		if (!string)
+			return NULL;
+		message = (struct ast_string_expression *)string;
+	}
+	if (!expect_token(parser, token_right_paren, "expected ')' after static assertion", NULL) ||
+		!expect_token(parser, token_semicolon, "expected ';' after static assertion", NULL))
+		return NULL;
+	node = ast_new_static_assertion(parser->arena, keyword.location, condition, message);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
+}
+
+/* block-item ::= local-declaration | static-assert-declaration | statement */
 static struct ast_block_item *parse_block_item(struct parser *parser)
 {
 	struct ast_statement *statement;
 	struct ast_statement_item *node;
 
+	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+		struct ast_static_assertion *declaration = parse_static_assertion(parser);
+		struct ast_block_static_assertion *assertion;
+
+		if (!declaration)
+			return NULL;
+		assertion = ast_new_block_static_assertion(parser->arena, declaration);
+		if (!assertion)
+			allocation_error(parser, declaration->location);
+		return assertion ? &assertion->item : NULL;
+	}
 	if (begins_declaration_specifier(preprocess_peek(parser->preprocessor).kind))
 		return parse_local_declaration(parser);
 	statement = parse_statement(parser);
@@ -1637,8 +1709,8 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* external-declaration ::= declaration-specifiers declarator
- *                          (";" | compound-statement)
+/* external-declaration ::= static-assert-declaration |
+ *     declaration-specifiers declarator (";" | compound-statement)
  */
 static struct ast_external_declaration *parse_external_declaration(struct parser *parser)
 {
@@ -1649,6 +1721,17 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	struct ast_compound_statement *body;
 	struct ast_function *function;
 
+	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+		struct ast_static_assertion *assertion = parse_static_assertion(parser);
+		struct ast_external_static_assertion *external;
+
+		if (!assertion)
+			return NULL;
+		external = ast_new_external_static_assertion(parser->arena, assertion);
+		if (!external)
+			allocation_error(parser, assertion->location);
+		return external ? &external->external : NULL;
+	}
 	type_syntax = parse_type_name(parser, &beginning, &name, NULL, declarator_external);
 	if (!type_syntax)
 		return NULL;

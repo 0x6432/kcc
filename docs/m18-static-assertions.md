@@ -2,8 +2,8 @@
 
 Consume the pure M18b1 integer constant evaluator in file-scope and block-scope
 static_assert/_Static_assert declarations (N3096 6.7.11). Both spellings accept
-C23's optional message. No assertion is a statement or a for-init declaration;
-structure members remain unavailable with the existing aggregate subset.
+C23's optional message. Assertions are declarations, including for-loop initializers, but not statements.
+Structure members remain unavailable with the existing aggregate subset.
 
 Grammar:
 static-assert-declaration ::= ("static_assert" | "_Static_assert") "("
@@ -41,7 +41,7 @@ file/block scopes, local sizeof and function visibility in sizeof; macro names
 remaining pp identifiers; all supported integer categories, negative/nonzero/high
 unsigned values, short-circuit ICE arithmetic/comma rules; invalid arithmetic and
 nonconstant forms are compile-only tests, never executed. Check malformed grammar,
-for-init/statement exclusion, unknown/late names, pointer operands, depth/item/
+for-init declaration acceptance and statement exclusion, unknown/late names, pointer operands, depth/item/
 external limits, messages after NUL and no QBE symbol/message emission. Typed units
 verify concrete AST/wrappers, inserted conversions, scope lookup and no local/data
 allocation. Full regression/QBE, both-host sanitizers, bounded fuzz and CI follow.
@@ -49,3 +49,9 @@ allocation. Full regression/QBE, both-host sanitizers, bounded fuzz and CI follo
 Non-goals: enums/named constants/constexpr, floating ICE casts, typedef/aggregates,
 generalized bounds, null conversions, static storage initializers or optimizer
 folding. These must deliberately integrate this shared evaluator in later steps.
+
+Grammar audit: N3096 6.7 includes static-assert-declaration in declaration, and
+6.8.5 admits declaration in for clause-1 without excluding assertions. GCC 11
+accepts this form; Clang 15 rejects it. Follow the draft, not the legacy Clang
+parser, and explicitly label that exact host-oracle gap. This corrects the initial
+planning assumption before the for-initializer implementation/tests.

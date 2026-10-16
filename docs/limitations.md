@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M18b1. Read the latest entries together with README.md and
+Current milestone: M18b2. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1262,3 +1262,42 @@ consumers. Next: M18b2 static assertions, designed in m18-static-assertions.md.
 M18b1 bounded sanitized fuzz: 23,575 lexer and 64,254 pipeline inputs in
 26 seconds each, without reported failures. Generated C was never executed.
 Exact-source M23a1 fe26eb4 CI run 38864340577 passed; M19b/M18a were still running.
+
+## M18b2 tested source checkpoint
+
+static_assert and _Static_assert are on-demand post-pp keywords and concrete
+assertion declarations with separate external/block wrappers. Parser accepts
+conditional-expression and optional concatenated ordinary-string messages.
+Sema checks all source-order scopes/unreachable items and consumes the pure ICE
+query, preserving located invalid-arithmetic versus nonconstant diagnostics.
+False values include quoted messages with all control/NUL/high bytes escaped,
+never printf-interpreted. Messages allocate no local slots or QBE static objects;
+successful assertions emit no runtime code, even in for initializers.
+
+A standards audit corrected an initial design assumption: N3096 declarations
+include static assertions in for clause-1. GCC 11 accepts them; Clang 15 rejects
+with its exact identifier/parser diagnostic. Tests follow the draft and record
+the host gap instead of rewriting the original source. Both hosts lack the C23
+static_assert spelling and receive labelled _Static_assert oracle macros only.
+Raw pp defined/undef behavior is checked on the original kcc program; legacy
+host keyword-macro differences are not claimed as native agreements.
+
+Full normal GCC regression and QBE suites passed. Targeted both-host tests cover
+26 original QBE programs, 25 GCC and 24 Clang strict native runtime agreements,
+39 constraints, four strict native ICE rejections, every diagnostic byte, message
+concatenation/NUL/provenance, AST/scope/no-allocation invariants and exact syntax/
+typed/item/external/message length/fragment limits. Both-host ASan/UBSan semantic
+units and complete targeted assertion suites passed. Initial tests needed fixes
+for the existing reverse local list, native diagnostic wording, unary '+' token
+separation and trailing newlines in strict host feature probes; no compiler
+failure was hidden. Bounded fuzz totals follow; no generated C was executed.
+Full isolated/remote exact-source checks remain pending.
+
+Next: M13l1 fixed ICE array bounds, designed in m13-constant-array-bounds.md.
+Enums/constexpr/floating ICE casts, VLA, typedef/aggregates, null constants and
+initializer/optimizer consumers remain unfinished.
+
+M18b2 bounded sanitized fuzz: 21,256 lexer and 59,937 pipeline inputs in
+26 seconds each, without reported failures. Generated C was never executed.
+Exact-source M19b 0c0ef33 CI run 38865164586 and M18a ea59892 run
+38865929894 passed. M18b1 5b71941 run 38866954105 remained in progress.

@@ -6,10 +6,15 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M18b2: static_assert/_Static_assert declarations consume checked integer constant
+expressions at file/block scope and in for initializers. Optional ordinary-string
+messages preserve all diagnostic bytes safely. Successful assertions emit no
+runtime code or message data; VLA/enums/constexpr/null constants remain later work.
+
 M18b1: a pure, checked integer constant evaluator preserves target bits/types and
 locations, distinguishes nonconstant forms from invalid arithmetic, and handles
 short-circuit forms without evaluating skipped arithmetic. Tests/fuzz query this
-stage; static assertions, array bounds and null constants are not consumers yet.
+stage; M18b2 now consumes it for assertions, while array bounds and null constants remain later work.
 
 M18a: fixed sizeof expressions/types and alignof/_Alignof type queries use
 target layout and unsigned-long results. Operands remain semantically checked
