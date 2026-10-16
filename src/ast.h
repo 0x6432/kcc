@@ -11,6 +11,7 @@ struct function_symbol;
 enum expression_kind {
 	expression_integer,
 	expression_character,
+	expression_string,
 	expression_address,
 	expression_indirection,
 	expression_subscript,
@@ -40,6 +41,9 @@ enum {
 	ast_max_arguments = 128,
 	ast_max_pointer_depth = 64,
 	ast_max_array_dimensions = 64,
+	ast_max_string_length = 1024 * 1024,
+	ast_max_string_storage = 8 * 1024 * 1024,
+	ast_max_string_literals = 4096,
 };
 
 struct ast_expression {
@@ -61,6 +65,14 @@ struct ast_integer_expression {
 struct ast_character_expression {
 	struct ast_expression expression;
 	int64_t value;
+};
+
+struct ast_string_expression {
+	struct ast_expression expression;
+	const unsigned char *bytes;
+	size_t length;
+	size_t object_id;
+	struct ast_string_expression *next_string;
 };
 
 struct ast_address_expression {
@@ -378,6 +390,7 @@ struct ast_function {
 
 struct ast_translation_unit {
 	struct ast_external_declaration *declarations;
+	struct ast_string_expression *strings;
 };
 
 struct ast_integer_type_syntax *ast_new_integer_type_syntax(struct arena *arena,
@@ -399,6 +412,8 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);
 struct ast_character_expression *ast_new_character(struct arena *arena,
 	struct token token);
+struct ast_string_expression *ast_new_string(struct arena *arena, struct token token,
+	const unsigned char *bytes);
 struct ast_address_expression *ast_new_address(struct arena *arena,
 	struct source_location location, struct ast_expression *operand);
 struct ast_indirection_expression *ast_new_indirection(struct arena *arena,

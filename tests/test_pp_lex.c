@@ -242,7 +242,7 @@ static void test_conversion_boundary(void)
 {
 	const char *spellings[] = { "int", "42", "12u", "#", "\"x\"", "'x'", "'", "<%" };
 	const enum token_kind expected[] = {
-		token_int, token_integer, token_integer, token_invalid, token_invalid,
+		token_int, token_integer, token_integer, token_invalid, token_string,
 		token_character, token_invalid, token_left_brace,
 	};
 

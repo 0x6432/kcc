@@ -65,6 +65,24 @@ struct ast_character_expression *ast_new_character(struct arena *arena,
 	return node;
 }
 
+struct ast_string_expression *ast_new_string(struct arena *arena, struct token token,
+	const unsigned char *bytes)
+{
+	struct ast_string_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_string_expression) {
+			.expression = {
+				.kind = expression_string,
+				.location = token.location,
+				.depth = 1,
+			},
+			.bytes = bytes,
+			.length = token.string_length,
+		};
+	return node;
+}
+
 struct ast_address_expression *ast_new_address(struct arena *arena,
 	struct source_location location, struct ast_expression *operand)
 {
@@ -600,6 +618,6 @@ struct ast_translation_unit *ast_new_translation_unit(struct arena *arena,
 	struct ast_translation_unit *node = arena_alloc(arena, sizeof(*node));
 
 	if (node)
-		*node = (struct ast_translation_unit) { declarations };
+		*node = (struct ast_translation_unit) { .declarations = declarations };
 	return node;
 }

@@ -1031,3 +1031,24 @@ recursive array compatibility, checked size/alignment and one-level decay need
 no new semantic/backend representation. A matrix decays to pointer-to-row, never
 int**; a selected row may decay to its scalar-element pointer for fixed host ABI
 calls. Resource accounting includes the recursively computed complete object size.
+
+## M13h byte decoding and static literal objects
+
+A pure bounded parse_byte_escape helper shares existing character escape rules
+with parse_string_spelling. The latter measures with NULL output or writes only
+within capacity, returning decoded length without implicit NUL; error output is
+discarded. Lexer validates/measures on demand and caches string_length. Parser
+checks per-literal/TU/count budgets before arena allocation, decodes into owned
+bytes, appends NUL and builds concrete ast_string_expression.
+
+Sema registers literals once in unit order with unique object IDs and array-of-
+char types/lvalues. Ordinary completion inserts existing array decay. General
+address lowering copies $.Lkcc.string.N; QBE emits unexported align-1 byte objects
+before functions. Scalar memory/ABI helpers never receive an array. Separate
+occurrences are not merged; source-level mutation remains undefined. Object-list
+ownership and all source views share the existing compilation lifetime.
+
+Lexer fuzzing checks arbitrary decoder slices, exact capacity guards, byte-octal
+roundtrips and cached length. Pipeline fuzzing asserts static object IDs/counts,
+array types, terminal NUL, size/alignment and total storage before IL emission.
+No generated fuzz program executes.

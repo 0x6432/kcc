@@ -171,6 +171,13 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 {
 	assert(expression->is_lvalue);
 	switch (expression->kind) {
+	case expression_string: {
+		const struct ast_string_expression *string = (const struct ast_string_expression *)expression;
+		size_t result = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =l copy $.Lkcc.string.%zu\n", result, string->object_id);
+		return result;
+	}
 	case expression_name: {
 		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
 		size_t result = codegen->next_temporary++;
@@ -422,6 +429,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 		return value;
 	}
+	case expression_string:
 	case expression_subscript:
 	case expression_name:
 	case expression_indirection:
@@ -710,7 +718,17 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
 {
 	const struct ast_external_declaration *external = unit->declarations;
+	struct codegen data_codegen = { .stream = stream, .output_ok = true };
 
+	for (const struct ast_string_expression *string = unit->strings; string;
+		string = string->next_string) {
+		emit(&data_codegen, "data $.Lkcc.string.%zu = align 1 {\n", string->object_id);
+		for (size_t i = 0; i <= string->length; i++)
+			emit(&data_codegen, "\tb %u%s\n", (unsigned)string->bytes[i], i == string->length ? "" : ",");
+		emit(&data_codegen, "}\n");
+	}
+	if (!data_codegen.output_ok)
+		return false;
 	while (external) {
 		if (external->kind == external_function_definition &&
 			!codegen_function(stream, (const struct ast_function *)external))

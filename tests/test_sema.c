@@ -1270,8 +1270,49 @@ static void test_multidimensional_array_tree(void)
 	source_destroy(&source);
 }
 
+static void test_string_expression_tree(void)
+{
+	const char *text = "char *f(void) { return \"a\\0b\"; } char *g(void) { return \"a\\0b\"; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_statement_item *item;
+	struct ast_return_statement *statement;
+	struct ast_string_expression *string;
+	struct ast_array_decay_expression *decay;
+	const struct array_type *array;
+
+	assert(source_from_bytes(&source, "string.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && !unit->strings);
+	item = (struct ast_statement_item *)first_function(unit)->body->items;
+	statement = (struct ast_return_statement *)item->statement;
+	assert(statement->value->kind == expression_string);
+	string = (struct ast_string_expression *)statement->value;
+	assert(string->length == 3 && string->bytes[0] == 'a' && string->bytes[1] == 0);
+	assert(string->bytes[2] == 'b' && string->bytes[3] == 0 && !string->expression.type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(statement->value->kind == expression_array_decay && statement->value->depth == 2);
+	decay = (struct ast_array_decay_expression *)statement->value;
+	assert(decay->operand == &string->expression && string->expression.is_lvalue);
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &type_char);
+	assert(string->expression.type->kind == type_kind_array && unit->strings == string);
+	array = (const struct array_type *)string->expression.type;
+	assert(array->element == &type_char && array->count == 4 && type_object_size(&array->type) == 4);
+	assert(string->object_id == 0 && string->next_string && string->next_string->object_id == 1);
+	assert(string->next_string->length == 3 && !string->next_string->next_string);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_string_expression_tree();
 	test_multidimensional_array_tree();
 	test_local_array_tree();
 	test_pointer_subscript_tree();

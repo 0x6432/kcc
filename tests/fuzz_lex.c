@@ -2,6 +2,8 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static void assert_same_pp_token(struct pp_token left, struct pp_token right)
 {
@@ -117,6 +119,7 @@ static void assert_same_language_token(struct token left, struct token right)
 	assert(left.spelling_location.offset == right.spelling_location.offset);
 	assert(left.length == right.length && left.integer == right.integer);
 	assert(left.character == right.character);
+	assert(left.string_length == right.string_length);
 	assert(left.integer_base == right.integer_base);
 	assert(left.integer_long_suffix == right.integer_long_suffix);
 	assert(left.integer_unsigned_suffix == right.integer_unsigned_suffix);
@@ -155,6 +158,45 @@ static void fuzz_character_spelling(const unsigned char *data, size_t size)
 	assert(value == roundtrip);
 }
 
+static void fuzz_string_spelling(const unsigned char *data, size_t size)
+{
+	size_t length;
+	size_t actual;
+	unsigned char *decoded;
+	unsigned char *encoded;
+	unsigned char *roundtrip;
+
+	if (parse_string_spelling(data, size, NULL, 0, &length))
+		return;
+	assert(length <= size);
+	decoded = malloc(length + 1);
+	roundtrip = malloc(length + 1);
+	encoded = malloc(length * 4 + 2);
+	assert(decoded && roundtrip && encoded);
+	decoded[length] = 42;
+	assert(!parse_string_spelling(data, size, decoded, length, &actual));
+	assert(actual == length && decoded[length] == 42);
+	encoded[0] = '"';
+	for (size_t i = 0; i < length; i++) {
+		/* Fixed three-digit octal prevents greedy-hex boundary ambiguity. */
+		encoded[1 + i * 4] = '\\';
+		encoded[2 + i * 4] = (unsigned char)('0' + (decoded[i] >> 6));
+		encoded[3 + i * 4] = (unsigned char)('0' + ((decoded[i] >> 3) & 7));
+		encoded[4 + i * 4] = (unsigned char)('0' + (decoded[i] & 7));
+	}
+	encoded[1 + length * 4] = '"';
+	assert(!parse_string_spelling(encoded, length * 4 + 2, roundtrip, length, &actual));
+	assert(actual == length && memcmp(decoded, roundtrip, length) == 0);
+	if (length) {
+		decoded[length - 1] = 42;
+		assert(parse_string_spelling(data, size, decoded, length - 1, &actual));
+		assert(decoded[length - 1] == 42);
+	}
+	free(encoded);
+	free(roundtrip);
+	free(decoded);
+}
+
 /* libFuzzer requires this spelling; compiler identifiers remain snake_case. */
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 {
@@ -168,6 +210,7 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size)
 		return 0;
 	fuzz_integer_spelling(data, size);
 	fuzz_character_spelling(data, size);
+	fuzz_string_spelling(data, size);
 	stream = fopen("/dev/null", "w");
 	assert(stream);
 	diagnostics = (struct diagnostics) { .stream = stream };

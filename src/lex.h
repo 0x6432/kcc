@@ -13,6 +13,7 @@ enum token_kind {
 	token_unsupported_keyword,
 	token_integer,
 	token_character,
+	token_string,
 	token_int,
 	token_signed,
 	token_unsigned,
@@ -78,6 +79,12 @@ const char *parse_integer_spelling(const unsigned char *text, size_t length,
 const char *parse_character_spelling(const unsigned char *text, size_t length,
 	int64_t *result);
 
+/* Pure byte decoder. NULL output measures; length excludes implicit final NUL.
+ * Output on error is discarded. A non-NULL buffer must have enough capacity.
+ */
+const char *parse_string_spelling(const unsigned char *text, size_t length,
+	unsigned char *output, size_t capacity, size_t *decoded_length);
+
 /* Spelling uses spelling_location; location is the diagnostic invocation.
  * Both offsets address prepared source data, with explicit logical length.
  * Spelling may use an arena-owned generated source view, not the input source.
@@ -90,6 +97,7 @@ struct token {
 	size_t length;
 	uint64_t integer;
 	int64_t character;
+	size_t string_length;
 	unsigned integer_base;
 	unsigned integer_long_suffix;
 	bool integer_unsigned_suffix;

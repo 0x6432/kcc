@@ -142,3 +142,16 @@ budget and 42/43 indexed-depth limits pass. The prior a[2][3] rejection now uses
 unsupported a[2][], retaining incomplete-bound constraint coverage. No flattened
 cross-row element-pointer arithmetic is executed. Other bound/declarator and
 initializer limitations remain explicit.
+
+### M13h ordinary byte strings
+
+12 both-host/QBE full-value programs include all 256 octal and hexadecimal byte
+escapes (512 runtime checks), empty/embedded/final NUL, greedy escape boundaries,
+macro stringizing and static-lifetime returns. Both ABI linkage directions and
+two separately compiled kcc objects verify private static data symbols. Typed
+units and pure decoder slice/capacity tests, direct fuzz roundtrips/static-list
+invariants and exact length/storage/count/depth limits cover this increment.
+Four former stringizing rejection fixtures now reject invalid pointer-to-int
+returns at the same invocation anchors; lexer/pp conversion fixtures now expect
+valid string tokens rather than dropping provenance checks. Concatenation,
+encodings and initializers remain later work.

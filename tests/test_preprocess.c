@@ -936,7 +936,7 @@ static void test_stringizing_errors(void)
 		{ token_invalid, "#" }, { token_integer, "7" }, { token_eof, "" },
 	};
 	const struct expected_token literal[] = {
-		{ token_invalid, "\"a\"" }, { token_eof, "" },
+		{ token_string, "\"a\"" }, { token_eof, "" },
 	};
 
 	check_stream("#define S(x) #\n7", definition, 3, 1, "expected a macro parameter");
@@ -945,7 +945,7 @@ static void test_stringizing_errors(void)
 		definition, 3, 1, "expected a macro parameter");
 	check_stream("#define S(...) #__VA_OPT__(#1)\n7", definition, 3, 1,
 		"expected a macro parameter");
-	check_stream("#define S(x) #x\nS(a)", literal, 2, 1, "string literals are not supported yet");
+	check_stream("#define S(x) #x\nS(a)", literal, 2, 0, NULL);
 	check_stream("#define S(x) #x\nS(\\)", (const struct expected_token[]) {
 		{ token_invalid, "#" }, { token_eof, "" },
 	}, 2, 1, "backslash outside a literal");

@@ -29,6 +29,8 @@ struct sema {
 	uint64_t local_storage;
 	struct function_symbol *functions;
 	size_t function_count;
+	size_t string_count;
+	struct ast_string_expression **string_tail;
 };
 
 static bool same_name(struct token left, struct token right)
@@ -399,6 +401,21 @@ static bool sema_expression(struct sema *sema,
 		result_type = pointer->referent;
 		expression->is_lvalue = true;
 		expression->depth = node->operand->depth + 1;
+		break;
+	}
+	case expression_string: {
+		struct ast_string_expression *node = (struct ast_string_expression *)expression;
+		struct array_type *array = type_new_array(sema->arena, &type_char, node->length + 1);
+
+		if (!array) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating string type");
+			return false;
+		}
+		result_type = &array->type;
+		expression->is_lvalue = true;
+		node->object_id = sema->string_count++;
+		*sema->string_tail = node;
+		sema->string_tail = &node->next_string;
 		break;
 	}
 	case expression_character:
@@ -950,7 +967,11 @@ static bool sema_function_declaration(struct sema *sema,
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics)
 {
-	struct sema sema = { .arena = arena, .diagnostics = diagnostics };
+	struct sema sema = {
+		.arena = arena,
+		.diagnostics = diagnostics,
+		.string_tail = &unit->strings,
+	};
 	struct ast_external_declaration *external = unit->declarations;
 
 	while (external) {

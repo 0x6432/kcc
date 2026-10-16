@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M13g implementation: fixed multidimensional local arrays and explicit decay/target layout, pointer
+M13h implementation: static ordinary byte strings, fixed multidimensional arrays
+and explicit decay/target layout, pointer
 subscripts, scaled offsets, signed-long differences and compatible
 comparisons, plus concrete address/indirection ASTs and general object lvalue
 addresses, with pointer mutation, fixed calls/returns/casts
@@ -13,18 +14,19 @@ Branch: development. Public repository: https://github.com/0x6432/kcc
 Commit identity: 0x42 <noreply@localhost> (repository-local).
 Get the exact latest hash with git log -1; avoid a circular self-commit reference.
 
-Latest confirmed exact-source CI: M13d 1435382, run 38826152470, passed GCC/Clang
-normal/sanitizer and fuzz jobs. M13e/f remote checks remain in progress.
-M13g full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
+Latest confirmed exact-source CI: M13g e472687, run 38828318658, passed GCC/Clang
+normal/sanitizer and fuzz jobs; M13e/f also passed their exact-source CI.
+M13h full normal GCC, both-host new runtime/ABI and bounded sanitizer fuzz checks
 passed; full isolated/remote status is recorded chronologically below. Existing
 M12h/i/j isolated full matrices have passed; M13 snapshots queue under an
 external flock. Logs/snapshots are in /data/tools and /data/validation-* outside the repo.
 Check actual logs before claiming completion; older-source passing runs do not
 prove a newer source. Lower CPU priority/serial queues do not omit checks.
 
-Next: M13h ordinary byte string literals, designed in m13-string-literals.md.
+Next: M13i adjacent ordinary strings, designed in m13-string-concatenation.md.
 Null constants, void/functions/full declarators,
-general array bounds/initializers, strings and remaining C23 features stay unfinished. &*null cancellation
+general array bounds/initializers, string concatenation/encodings and remaining
+C23 features stay unfinished. &*null cancellation
 is valid and tested using host-supplied null; actual invalid dereferences are
 never executed. Read current limitations, not old checkpoint entries alone.
 
@@ -1302,3 +1304,33 @@ M13h ordinary strings/static byte objects are designed; a curated QBE data/priva
 symbol probe passed both hosts, not yet compiler string support.
 M13d 1435382 exact-source CI passed 38826152470. Baseline M12 integer subset
 verification is complete; M13 queued local/source-specific checks remain separate.
+
+## M13h tested source checkpoint
+
+Ordinary byte strings now have arena-owned decoded bytes, explicit trailing NUL,
+static array-of-char types and unit-ordered private data IDs. Shared bounded byte-
+escape decoding retains character semantics; lexer validates/measures without
+allocating decoded token buffers. Parser budgets before allocation; sema uses
+ordinary array decay/address paths. QBE emits private align-1 byte data with
+$.Lkcc.string.N symbols, safe across user identifiers and separate object files.
+
+Full normal GCC regressions/QBE/reference/ABI passed. 12 new full-value programs
+passed with GCC and Clang, including 512 all-byte octal/hex checks, empty/embedded/
+trailing NUL, static-lifetime repeated calls, greedy escape boundaries, macro
+stringizing and splicing. Both ABI directions and two separately compiled kcc
+objects pass. Typed array/decay/list units and pure decoder slice/capacity units
+pass. Exact 1 MiB/8 MiB/4096/depth limits compile-only; huge objects do not execute.
+Four earlier stringizing errors now remain invalid pointer-to-int returns at the
+same invocation anchors; lexer/preprocessor conversion tests now expect valid
+strings and retain their provenance checks. No literal modification, unrelated
+literal subtraction/order, undefined or arbitrary generated program executes.
+
+After adding static object ID/type/size/alignment/NUL/budget invariants to pipeline
+fuzzing, the final sanitized bounded run passed 25149 lexer + 74673
+pipeline inputs (99822 total), 26/26 seconds.
+An earlier additional bounded run also passed before these extra invariants.
+Full isolated/remote checks remain pending. M13i adjacent ordinary string
+concatenation is pre-designed; prefixes/encodings/initializers are still later.
+M13e/f/g exact-source CI passed 38826762420/38827482501/38828318658. M13a b6ba02d
+completed both isolated compiler normal/sanitizer legs; M13b GCC leg passed,
+with later local legs/snapshots pending independently.

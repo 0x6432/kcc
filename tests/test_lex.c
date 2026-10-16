@@ -64,6 +64,43 @@ static void test_bracket_tokens(void)
 	assert(strcmp(token_kind_name(token_right_bracket), "]") == 0);
 }
 
+static void test_string_spelling(void)
+{
+	const char *bad[] = { "", "\"", "\"a", "a\"", "\"\\x\"", "\"\\x100\"",
+		"\"\\400\"", "\"\\q\"", "L\"x\"", "u8\"x\"", "\"a\"b\"" };
+	const unsigned char nul[] = { '"', 0, '"' };
+	const unsigned char high[] = { '"', 128, '"' };
+	const unsigned char slice[] = { '"', 'a', '"', 'z' };
+	unsigned char output[4];
+	size_t length;
+	char text[8];
+
+	for (unsigned i = 0; i < 256; i++) {
+		assert(snprintf(text, sizeof(text), "\"\\%03o\"", i) == 6);
+		assert(!parse_string_spelling((const unsigned char *)text, 6, NULL, 0, &length) && length == 1);
+		output[1] = 42;
+		assert(!parse_string_spelling((const unsigned char *)text, 6, output, 1, &length));
+		assert(length == 1 && output[0] == i && output[1] == 42);
+		assert(snprintf(text, sizeof(text), "\"\\x%02x\"", i) == 6);
+		assert(!parse_string_spelling((const unsigned char *)text, 6, output, 1, &length));
+		assert(length == 1 && output[0] == i && output[1] == 42);
+	}
+	assert(!parse_string_spelling((const unsigned char *)"\"\"", 2, output, 0, &length) && !length);
+	assert(!parse_string_spelling(slice, 3, output, 1, &length) && length == 1 && output[0] == 'a');
+	assert(parse_string_spelling(slice, 4, output, sizeof(output), &length));
+	output[0] = 42;
+	assert(parse_string_spelling(slice, 3, output, 0, &length) && output[0] == 42);
+	assert(parse_string_spelling(NULL, 0, output, sizeof(output), &length));
+	assert(parse_string_spelling(nul, sizeof(nul), output, sizeof(output), &length));
+	assert(parse_string_spelling(high, sizeof(high), output, sizeof(output), &length));
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+		assert(parse_string_spelling((const unsigned char *)bad[i], strlen(bad[i]), output, sizeof(output), &length));
+	assert(!parse_string_spelling((const unsigned char *)"\"\\1234\"", 7, output, 2, &length));
+	assert(length == 2 && output[0] == 83 && output[1] == '4');
+	assert(!parse_string_spelling((const unsigned char *)"\"\\xffg\"", 7, output, 2, &length));
+	assert(length == 2 && output[0] == 255 && output[1] == 'g');
+}
+
 static void test_errors(void)
 {
 	const enum token_kind invalid[] = { token_invalid };
@@ -256,6 +293,7 @@ int main(void)
 	}
 	test_bitwise_tokens();
 	test_phase_ordering();
+	test_string_spelling();
 	test_basic();
 	test_bracket_tokens();
 	test_errors();

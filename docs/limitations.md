@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13g. The chronological entries below describe what each
+Current milestone: M13h. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -934,3 +934,23 @@ a row via an element pointer remains undefined even when storage is contiguous;
 tests use proper row pointers and do not flatten a matrix into int**. The separate
 64 pointer-syntax and 128 typed-expression limits remain. Fully indexing 42 unit
 array dimensions reaches typed depth 128; 43 exceeds it.
+
+## M13h
+
+One ordinary unprefixed string literal is a static array of signed plain char,
+with decoded ASCII/simple/octal/hex byte escapes and one implicit final NUL.
+Embedded NUL is retained; ordinary value use explicitly decays to char*. Strings
+can be indexed/passed/returned with static lifetime. Address-of retains the entire
+array type. Raw non-ASCII/NUL/newline/CR, prefixes/Unicode/UCNs, adjacent literal
+concatenation and all array/string initializers remain unsupported.
+
+Literal modification is undefined and never tested; writable target data is not
+a promise to permit it. Each occurrence has its own object; no inter-occurrence
+equality/ordering/subtraction promise is made. Private unexported QBE symbols
+cannot collide with C identifiers or separately compiled units. Target bytes
+128..255 load as negative plain chars; explicit unsigned-char casts recover bits.
+
+Before decoded allocation, parser limits one literal to 1 MiB decoded bytes,
+all literal object bytes (including final NULs) to 8 MiB and objects to 4096 per
+TU. These static-object budgets are separate from local storage. Every decay
+counts in typed depth. Lexer measurement allocates no decoded token buffer.

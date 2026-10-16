@@ -9,6 +9,8 @@ struct parser {
 	unsigned depth;
 	unsigned statement_nesting;
 	size_t block_items;
+	size_t string_bytes;
+	size_t string_count;
 };
 
 static bool expect_token(struct parser *parser, enum token_kind kind,
@@ -206,6 +208,50 @@ static struct ast_expression *parse_character_expression(struct parser *parser)
 	return &node->expression;
 }
 
+/* string-expression ::= ordinary-string-token
+ * Adjacent literal concatenation is a separate translation-phase increment.
+ */
+static struct ast_expression *parse_string_expression(struct parser *parser)
+{
+	struct token token;
+	struct ast_string_expression *node;
+	unsigned char *bytes;
+	const unsigned char *spelling;
+	size_t decoded_length;
+	const char *error;
+
+	if (!expect_token(parser, token_string, "expected string literal", &token))
+		return NULL;
+	if (token.string_length > ast_max_string_length ||
+		token.string_length >= ast_max_string_storage - parser->string_bytes ||
+		parser->string_count == ast_max_string_literals) {
+		diagnostic_error(parser->diagnostics, token.location,
+			"string literal storage/count limit exceeded");
+		return NULL;
+	}
+	bytes = arena_alloc(parser->arena, token.string_length + 1);
+	if (!bytes) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	spelling = token.spelling_location.source->data + token.spelling_location.offset;
+	error = parse_string_spelling(spelling, token.length, bytes, token.string_length, &decoded_length);
+	if (error) {
+		diagnostic_error(parser->diagnostics, token.location, error);
+		return NULL;
+	}
+	assert(decoded_length == token.string_length);
+	bytes[decoded_length] = 0;
+	node = ast_new_string(parser->arena, token, bytes);
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	parser->string_bytes += decoded_length + 1;
+	parser->string_count++;
+	return &node->expression;
+}
+
 struct infix_operator {
 	enum token_kind token;
 	unsigned left_binding_power;
@@ -250,13 +296,15 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 static struct ast_expression *parse_expression(struct parser *parser,
 	unsigned minimum_binding_power);
 
-/* primary-atom ::= integer-expression | character-expression | identifier
+/* primary-atom ::= integer-expression | character-expression | string-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.
  */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
 
+	if (token.kind == token_string)
+		return parse_string_expression(parser);
 	if (token.kind == token_character)
 		return parse_character_expression(parser);
 	if (token.kind == token_identifier) {
