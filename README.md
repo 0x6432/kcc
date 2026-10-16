@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M13l1: fixed array bounds use checked integer constant expressions, including
+sizeof/alignof and short-circuit arithmetic. Prototype parameter names resolve
+in explicit temporary scopes without allocating runtime slots. Positive/storage
+constraints and adjusted-array ABI behavior remain enforced; VLAs are rejected.
+
 M18b2: static_assert/_Static_assert declarations consume checked integer constant
 expressions at file/block scope and in for initializers. Optional ordinary-string
 messages preserve all diagnostic bytes safely. Successful assertions emit no
@@ -14,7 +19,7 @@ runtime code or message data; VLA/enums/constexpr/null constants remain later wo
 M18b1: a pure, checked integer constant evaluator preserves target bits/types and
 locations, distinguishes nonconstant forms from invalid arithmetic, and handles
 short-circuit forms without evaluating skipped arithmetic. Tests/fuzz query this
-stage; M18b2 now consumes it for assertions, while array bounds and null constants remain later work.
+stage; M18b2 now consumes it for assertions, while null constants remain later work.
 
 M18a: fixed sizeof expressions/types and alignof/_Alignof type queries use
 target layout and unsigned-long results. Operands remain semantically checked

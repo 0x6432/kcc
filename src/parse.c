@@ -16,6 +16,9 @@ struct parser {
 	size_t string_fragment_count;
 };
 
+static struct ast_expression *parse_expression(struct parser *parser,
+	unsigned minimum_binding_power);
+
 static bool expect_token(struct parser *parser, enum token_kind kind,
 	const char *message, struct token *result)
 {
@@ -250,7 +253,7 @@ static bool parse_function_suffix(struct parser *parser,
 	return true;
 }
 
-/* object-array-suffix ::= "[" [ integer-token ] "]"
+/* object-array-suffix ::= "[" [ assignment-expression ] "]"
  * Sema rejects incomplete elements/objects before layout, while a pointer to
  * an unknown-bound array is complete. Append dimensions in source order.
  */
@@ -259,7 +262,7 @@ static bool parse_object_array_suffixes(struct parser *parser,
 {
 	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
 		struct token opening = preprocess_next(parser->preprocessor);
-		struct token bound = { 0 };
+		struct ast_expression *bound = NULL;
 		struct ast_array_type_syntax *array;
 		bool has_bound = preprocess_peek(parser->preprocessor).kind != token_right_bracket;
 
@@ -268,11 +271,14 @@ static bool parse_object_array_suffixes(struct parser *parser,
 				"array declarator exceeds dimension limit (64)");
 			return false;
 		}
-		if (has_bound && !expect_token(parser, token_integer, "array bound must be an integer literal", &bound))
-			return false;
+		if (has_bound) {
+			bound = parse_expression(parser, 1);
+			if (!bound)
+				return false;
+		}
 		if (!expect_token(parser, token_right_bracket, "expected ']' after array bound", NULL))
 			return false;
-		array = ast_new_array_type_syntax(parser->arena, opening.location, NULL, has_bound, bound);
+		array = ast_new_array_type_syntax(parser->arena, opening.location, NULL, bound);
 		if (!array) {
 			allocation_error(parser, opening.location);
 			return false;
@@ -605,9 +611,6 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 			return &infix_operators[i];
 	return NULL;
 }
-
-static struct ast_expression *parse_expression(struct parser *parser,
-	unsigned minimum_binding_power);
 
 /* primary-atom ::= integer-expression | boolean-constant | character-expression | string-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.

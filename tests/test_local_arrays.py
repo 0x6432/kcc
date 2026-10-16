@@ -150,9 +150,9 @@ int main(void) {{ {name} a[3]; a[0]=1; a[1]=2; a[2]=3;
     rejected = [
         ('int main(void) { int a[0]; return 0; }', 'array bound'),
         ('int main(void) { int a[18446744073709551615ULL]; return 0; }', 'storage limit'),
-        ('int main(void) { int a[-1]; return 0; }', 'integer literal'),
-        ('int main(void) { int n=3; int a[n]; return 0; }', 'integer literal'),
-        ('int main(void) { int a[1+2]; return 0; }', "expected ']'"),
+        ('int main(void) { int a[-1]; return 0; }', 'array bound'),
+        ('int main(void) { int n=3; int a[n]; return 0; }', 'integer constant expression'),
+        ('int main(void) { int a[1,2]; return 0; }', "expected ']'"),
         ('int main(void) { int a[]; return 0; }', 'local object type must be complete'),
         ('int main(void) { int a[2][]; return 0; }', 'array element type must be complete'),
         ('int main(void) { int a[2]=1; return 0; }', 'array initializers'),

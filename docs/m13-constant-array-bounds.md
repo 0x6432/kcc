@@ -28,8 +28,10 @@ not itself. Bindings use arena-owned diagnostic/type-only local ASTs with no slo
 no function-local list membership and no initializer; actual definition parameter
 locals are still created/bound by sema_function_body as before. Nested function
 prototypes get nested scopes. Restore the outer scope on every error/success.
-Resolve derived return syntax while the completed parameter scope is visible
-(e.g. pointer-to-array returns with sizeof a parameter), then discard the scope.
+Resolve return syntax before entering the parameter scope, as before. Parameter
+names are not visible in a trailing derived return type; both hosts reject
+int (*f(int x))[sizeof x]. Discard the prototype scope before function-body
+bindings are installed.
 No runtime expression from these type-only bindings can reach QBE: only fixed
 ICE bounds are retained and sizeof operands are already opaque. Typedef names,
 VLA dependencies, static/qualified parameter brackets and [*] remain unsupported.
@@ -37,7 +39,7 @@ VLA dependencies, static/qualified parameter brackets and [*] remain unsupported
 Tests: all integer/boolean/character kinds; expressions/conditional/short-circuit
 bounds; sizeof/alignof, macros, known/unknown composites; fixed multidimensional
 and grouped/abstract declarations; prior-local sizeof, own-name shadowing,
-prototype parameter shadowing/adjusted arrays/nested callbacks and derived return
+prototype parameter shadowing/adjusted arrays/nested callbacks and parameter-scope exclusion from derived return
 types. Reject nonconstant forms, signed negative/zero/overflow, invalid shifts,
 evaluated comma/assignment, huge unsigned values and storage excess, never execute
 those cases. Check parser/typed/cross-type recursion and exact resource limits.

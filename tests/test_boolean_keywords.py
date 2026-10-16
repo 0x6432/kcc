@@ -67,7 +67,7 @@ constraints = [
     ('int main(void) { true=false; return 0; }', 'modifiable'),
     ('int main(void) { bool *p=&true; return 0; }', 'lvalue'),
     ('int main(void) { bool *p=false; return 0; }', 'pointer conversion'),
-    ('int main(void) { bool a[true]; return 0; }', 'bound'),
+    ('int main(void) { bool n=true; bool a[n]; return 0; }', 'integer constant expression'),
     ('int main(void) { bool x=; return 0; }', 'expected'),
     ('int main(void) { int true; return 0; }', 'expected'),
     ('int main(void) { int false; return 0; }', 'expected'),

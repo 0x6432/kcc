@@ -146,6 +146,11 @@ static const struct type *unqualified_type(struct sema *sema, const struct type 
 	return result;
 }
 
+static bool sema_expression(struct sema *sema,
+	struct ast_expression **expression_slot, bool value_required);
+static const struct type *resolve_function_syntax(struct sema *sema,
+	struct ast_function_type_syntax *function);
+
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
 {
@@ -193,53 +198,14 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		syntax->type = &type->type;
 		break;
 	}
-	case type_syntax_function: {
-		struct ast_function_type_syntax *function = (struct ast_function_type_syntax *)syntax;
-		const struct type *return_type = resolve_type_syntax(sema, function->return_syntax);
-		const struct type *parameters[ast_max_parameters];
-		struct function_type *type;
-		size_t count = 0;
-
-		if (!return_type || !sema_parameter_names(sema, function->parameters))
-			return NULL;
-		if (!type_is_scalar(return_type) && return_type->kind != type_kind_void) {
-			diagnostic_error(sema->diagnostics, syntax->location, "function return type must be void or an implemented scalar type");
-			return NULL;
-		}
-		for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
-			const struct type *declared = resolve_type_syntax(sema, parameter->type_syntax);
-
-			if (!declared)
-				return NULL;
-			if (declared->kind == type_kind_void) {
-				diagnostic_error(sema->diagnostics, parameter->location, "parameter cannot have void type");
-				return NULL;
-			}
-			parameter->type = adjust_parameter_type(sema, declared, parameter->location);
-			if (!parameter->type)
-				return NULL;
-			parameters[count] = unqualified_type(sema, parameter->type, parameter->location);
-			if (!parameters[count])
-				return NULL;
-			count++;
-		}
-		assert(count == function->parameter_count && count <= ast_max_parameters);
-		return_type = unqualified_type(sema, return_type, function->return_syntax->location);
-		if (!return_type)
-			return NULL;
-		type = type_new_function(sema->arena, return_type, parameters, count);
-		if (!type) {
-			diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating function type");
-			return NULL;
-		}
-		syntax->type = &type->type;
+	case type_syntax_function:
+		syntax->type = resolve_function_syntax(sema, (struct ast_function_type_syntax *)syntax);
 		break;
-	}
 	case type_syntax_array: {
 		struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)syntax;
 		const struct type *element = resolve_type_syntax(sema, array->element);
 		struct array_type *type;
-		uint64_t count = array->bound.integer;
+		uint64_t count = 0;
 
 		if (!element)
 			return NULL;
@@ -247,11 +213,27 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "array element type must be complete");
 			return NULL;
 		}
-		if (!array->has_bound) {
+		if (!array->bound) {
 			type = type_new_incomplete_array(sema->arena, element);
 		} else {
-			if (!count || count > ast_max_local_storage / type_object_size(element)) {
-				diagnostic_error(sema->diagnostics, array->bound.location,
+			struct constant_result result;
+			bool negative;
+
+			if (!sema_expression(sema, &array->bound, true))
+				return NULL;
+			result = evaluate_integer_constant(array->bound);
+			if (result.status != constant_value) {
+				diagnostic_error(sema->diagnostics, result.location,
+					result.status == constant_not_constant ?
+					"array bound must be an integer constant expression; variable-length arrays are not supported yet" :
+					result.message);
+				return NULL;
+			}
+			count = result.bits;
+			negative = !type_is_unsigned(result.type) &&
+				(count & (UINT64_C(1) << (type_integer_width(result.type) - 1)));
+			if (negative || !count || count > ast_max_local_storage / type_object_size(element)) {
+				diagnostic_error(sema->diagnostics, array->bound->location,
 					"array bound must be positive and fit array type storage limit (1 MiB)");
 				return NULL;
 			}
@@ -266,6 +248,76 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	}
 	}
 	return syntax->type;
+}
+
+/* Prototype names denote type-only objects, not runtime parameter spill slots.
+ * A parameter's name enters scope only after its whole declarator is resolved.
+ */
+static bool bind_prototype_parameter(struct sema *sema, const struct ast_parameter *parameter)
+{
+	struct ast_local_declaration *local;
+	struct binding *binding;
+
+	if (!parameter->has_name)
+		return true;
+	local = ast_new_local(sema->arena, parameter->location, parameter->name, NULL);
+	binding = arena_alloc(sema->arena, sizeof(*binding));
+	if (!local || !binding) {
+		diagnostic_error(sema->diagnostics, parameter->location,
+			"out of memory binding prototype parameter");
+		return false;
+	}
+	local->type_syntax = parameter->type_syntax;
+	local->type = parameter->type;
+	*binding = (struct binding) { .declaration = local, .next = sema->scope->bindings };
+	sema->scope->bindings = binding;
+	return true;
+}
+
+static const struct type *resolve_function_syntax(struct sema *sema,
+	struct ast_function_type_syntax *function)
+{
+	const struct type *return_type = resolve_type_syntax(sema, function->return_syntax);
+	const struct type *parameters[ast_max_parameters];
+	struct scope scope = { .parent = sema->scope };
+	struct function_type *type = NULL;
+	size_t count = 0;
+
+	if (!return_type || !sema_parameter_names(sema, function->parameters))
+		return NULL;
+	if (!type_is_scalar(return_type) && return_type->kind != type_kind_void) {
+		diagnostic_error(sema->diagnostics, function->syntax.location,
+			"function return type must be void or an implemented scalar type");
+		return NULL;
+	}
+	sema->scope = &scope;
+	for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
+		const struct type *declared = resolve_type_syntax(sema, parameter->type_syntax);
+
+		if (!declared)
+			goto done;
+		if (declared->kind == type_kind_void) {
+			diagnostic_error(sema->diagnostics, parameter->location, "parameter cannot have void type");
+			goto done;
+		}
+		parameter->type = adjust_parameter_type(sema, declared, parameter->location);
+		if (!parameter->type)
+			goto done;
+		parameters[count] = unqualified_type(sema, parameter->type, parameter->location);
+		if (!parameters[count] || !bind_prototype_parameter(sema, parameter))
+			goto done;
+		count++;
+	}
+	assert(count == function->parameter_count && count <= ast_max_parameters);
+	return_type = unqualified_type(sema, return_type, function->return_syntax->location);
+	if (!return_type)
+		goto done;
+	type = type_new_function(sema->arena, return_type, parameters, count);
+	if (!type)
+		diagnostic_error(sema->diagnostics, function->syntax.location, "out of memory creating function type");
+done:
+	sema->scope = scope.parent;
+	return type ? &type->type : NULL;
 }
 
 /* Parameter adjustment changes the effective object/signature type, not the

@@ -665,7 +665,7 @@ struct ast_function_type_syntax *ast_new_function_type_syntax(struct arena *aren
 }
 
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
-	struct source_location location, struct ast_type_syntax *element, bool has_bound, struct token bound)
+	struct source_location location, struct ast_type_syntax *element, struct ast_expression *bound)
 {
 	struct ast_array_type_syntax *node = arena_alloc(arena, sizeof(*node));
 
@@ -673,7 +673,6 @@ struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
 		*node = (struct ast_array_type_syntax) {
 			.syntax = { .kind = type_syntax_array, .location = location },
 			.element = element,
-			.has_bound = has_bound,
 			.bound = bound,
 		};
 	return node;

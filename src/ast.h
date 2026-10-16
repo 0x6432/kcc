@@ -313,8 +313,7 @@ struct ast_pointer_type_syntax {
 struct ast_array_type_syntax {
 	struct ast_type_syntax syntax;
 	struct ast_type_syntax *element;
-	bool has_bound;
-	struct token bound;
+	struct ast_expression *bound; /* NULL is an unspecified bound, never zero. */
 };
 
 struct ast_function_type_syntax {
@@ -511,7 +510,7 @@ struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
 struct ast_function_type_syntax *ast_new_function_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *return_syntax);
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
-	struct source_location location, struct ast_type_syntax *element, bool has_bound, struct token bound);
+	struct source_location location, struct ast_type_syntax *element, struct ast_expression *bound);
 struct ast_function_designator_expression *ast_new_function_designator(struct arena *arena,
 	struct source_location location, struct function_symbol *function);
 struct ast_function_decay_expression *ast_new_function_decay(struct arena *arena,

@@ -1298,3 +1298,20 @@ Sema checks in current source-order scope, then queries ICE and diagnoses locate
 failure. Message rendering is bounded and byte-preserving through escapes. Do not
 register diagnostic messages in unit.strings or local slots. Codegen skips the
 assertion wrappers entirely; unreachable declarations are still checked by sema.
+
+## M13l1 array-bound and prototype-scope contract
+
+ast_array_type_syntax.bound is an optional expression pointer, never duplicated
+has_bound/token state. Parser consumes an assignment-expression at Pratt floor 1.
+Sema resolves the element, checks the bound normally and queries consteval;
+nonconstant versus invalid arithmetic stay distinct diagnostics. Count bits are
+interpreted using the result type's signedness before positive/size checks.
+Resolved count/layout and retained typed bound syntax have arena lifetime.
+Codegen never visits bound syntax, and parameter adjustment still occurs once.
+
+Function return syntax resolves before parameter scope entry. Parameters resolve
+left-to-right; each adjusted name is bound only after its declarator. Temporary
+scope links are stack-local and restored on every exit; type-only declaration/
+binding ASTs are arena-owned but never linked into runtime locals or assigned
+slots. Nested callback scopes cannot leak names. Actual definition parameter
+locals are separately created in the body and remain the runtime bindings.

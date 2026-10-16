@@ -1301,3 +1301,59 @@ M18b2 bounded sanitized fuzz: 21,256 lexer and 59,937 pipeline inputs in
 26 seconds each, without reported failures. Generated C was never executed.
 Exact-source M19b 0c0ef33 CI run 38865164586 and M18a ea59892 run
 38865929894 passed. M18b1 5b71941 run 38866954105 remained in progress.
+
+## M13l1 tested source checkpoint
+
+Array syntax now retains an optional bound expression AST (NULL for unspecified)
+instead of duplicate token/has_bound fields. On-demand Pratt assignment-expression
+parsing feeds normal sema and the pure ICE query; signedness-aware positivity,
+overflow-safe per-type bounds and aggregate local-storage limits are enforced.
+No VLA/runtime bound or global folding is implied. Bounds emit no evaluations.
+
+Function-type resolution now creates/restores ephemeral prototype scopes, resolves
+parameters left-to-right and binds adjusted names only after their declarators.
+Type-only name bindings consume no runtime slots/list entries; real definition
+parameter locals remain separate. Nested callbacks, own-name outer lookup and
+scope restoration are typed-tested. A pre-implementation host probe corrected a
+return-scope assumption: parameters are not visible in trailing derived return
+syntax, so return types continue resolving before entering the prototype scope.
+
+Full normal GCC regression and QBE suites passed. Both-host targeted tests cover
+31 original strict native/QBE programs, 34 constraints, 24 adjusted-array ABI
+arrangements, exact syntax/typed/cross-type recursion and compile-only storage
+boundaries. Both-host ASan/UBSan semantic units and targeted bound suites passed.
+The cross-type recursion boundary is the existing 64 nested declarator edges,
+not 128 independent expression nodes. Tests replace obsolete [true], [sizeof],
+[1+2] rejections with variable-length/unparenthesized-comma cases; unsupported
+static bracket diagnostic expectations now reflect expression parsing. No
+rejection coverage was silently removed. Initial tests also corrected existing
+local-object-storage wording. Bounded fuzz totals follow; generated C was never
+executed. Full isolated/remote exact-source checks remain pending.
+
+Next: M13m traditional null pointer constants, designed in
+m13-null-pointer-constants.md. C23 nullptr/nullptr_t, VLA, typedef/qualifiers,
+enums/constexpr and other constant consumers remain later work.
+
+CI correction preceding this checkpoint: cade2cd's Clang CI run 38868636910
+failed because the native host applies an unevaluated-string numeric-escape
+restriction to a valid C23 assertion message. N3096 6.4.5/6.7.11 were rechecked;
+kcc's acceptance and every diagnostic-byte test remain unchanged. Correction
+5ce95d6 recognizes only that exact single-error host diagnostic for the original
+numeric-message program, does not count it as a native agreement, and still
+runs the original through kcc/QBE. Other native failures remain fatal. Both
+local host assertion/QBE suites passed the correction. Remote CI is pending;
+do not call the failed earlier checkpoint green. M18b1 5b71941 CI run
+38866954105 did pass. A sandbox reset erased installed Clang and queued process
+handles; Clang/compiler-rt were reinstalled. Old matrix source archives/logs
+remain, but pending jobs are not claimed as successful.
+
+M13l1 final post-reset full normal regression and QBE suites passed again;
+bounded sanitized fuzz ran 22,845 lexer and 61,791 pipeline inputs in 26 seconds
+each. Both-host focused ASan/
+UBSan semantic, bound and assertion suites also passed with QBE runtime/ABI.
+No fuzz-generated C was executed. Version-only driver change was rebuilt/smoke
+checked after these suites. Remote/full isolated matrix status remains separate.
+The first native-oracle correction's remote Clang job progressed to the separate
+keyword-macro warning policy; a second exact-diagnostic/same-source warning
+control fixes that test, documented in m18-static-assertions.md. Neither compiler
+language acceptance nor warning policy for other tests was weakened.

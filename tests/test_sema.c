@@ -1176,7 +1176,7 @@ static void test_local_array_tree(void)
 	a = (struct ast_local_declaration *)first_function(unit)->body->items;
 	assert(a->type_syntax->kind == type_syntax_array && !a->type_syntax->type);
 	syntax = (struct ast_array_type_syntax *)a->type_syntax;
-	assert(syntax->bound.integer == 3 && syntax->element->kind == type_syntax_integer);
+	assert(((struct ast_integer_expression *)syntax->bound)->value == 3 && syntax->element->kind == type_syntax_integer);
 	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
 	assert(a->type == syntax->syntax.type && a->type->kind == type_kind_array);
 	type = (const struct array_type *)a->type;
@@ -1238,9 +1238,9 @@ static void test_multidimensional_array_tree(void)
 	a = (struct ast_local_declaration *)first_function(unit)->body->items;
 	assert(a->type_syntax->kind == type_syntax_array);
 	outer_syntax = (struct ast_array_type_syntax *)a->type_syntax;
-	assert(outer_syntax->bound.integer == 2 && outer_syntax->element->kind == type_syntax_array);
+	assert(((struct ast_integer_expression *)outer_syntax->bound)->value == 2 && outer_syntax->element->kind == type_syntax_array);
 	inner_syntax = (struct ast_array_type_syntax *)outer_syntax->element;
-	assert(inner_syntax->bound.integer == 3 && inner_syntax->element->kind == type_syntax_integer);
+	assert(((struct ast_integer_expression *)inner_syntax->bound)->value == 3 && inner_syntax->element->kind == type_syntax_integer);
 	assert(outer_syntax->syntax.location.offset == (size_t)(strstr(text, "[2]") - text));
 	assert(inner_syntax->syntax.location.offset == (size_t)(strstr(text, "[3]") - text));
 	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
@@ -1418,8 +1418,8 @@ static void test_incomplete_array_parameter(void)
 	function = (struct ast_function *)prototype->external.next;
 	parameter = function->declaration->parameters;
 	syntax = (struct ast_array_type_syntax *)parameter->type_syntax;
-	assert(syntax->syntax.kind == type_syntax_array && !syntax->has_bound && !syntax->syntax.type);
-	assert(((struct ast_array_type_syntax *)syntax->element)->has_bound);
+	assert(syntax->syntax.kind == type_syntax_array && !syntax->bound && !syntax->syntax.type);
+	assert(((struct ast_array_type_syntax *)syntax->element)->bound);
 	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
 	declared = (const struct array_type *)syntax->syntax.type;
 	assert(declared->type.kind == type_kind_array && !declared->count);
@@ -1478,7 +1478,7 @@ static void test_parenthesized_object_declarators(void)
 	assert(parameter->type_syntax->kind == type_syntax_pointer);
 	assert(a->type_syntax->kind == type_syntax_array && !a->type_syntax->type);
 	array_syntax = (struct ast_array_type_syntax *)a->type_syntax;
-	assert(array_syntax->has_bound && array_syntax->bound.integer == 2);
+	assert(array_syntax->bound && ((struct ast_integer_expression *)array_syntax->bound)->value == 2);
 	assert(array_syntax->element->kind == type_syntax_pointer);
 	pointer_syntax = (struct ast_pointer_type_syntax *)array_syntax->element;
 	assert(pointer_syntax->referent->kind == type_syntax_integer);
@@ -1486,16 +1486,16 @@ static void test_parenthesized_object_declarators(void)
 	pointer_syntax = (struct ast_pointer_type_syntax *)b->type_syntax;
 	assert(pointer_syntax->referent->kind == type_syntax_array);
 	array_syntax = (struct ast_array_type_syntax *)pointer_syntax->referent;
-	assert(array_syntax->has_bound && array_syntax->bound.integer == 3);
+	assert(array_syntax->bound && ((struct ast_integer_expression *)array_syntax->bound)->value == 3);
 	assert(array_syntax->element->kind == type_syntax_integer);
 	cast = (struct ast_cast_expression *)b->initializer;
 	assert(cast->type_syntax->kind == type_syntax_pointer && !cast->type_syntax->type);
 	array_syntax = (struct ast_array_type_syntax *)c->type_syntax;
-	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->bound.integer == 2);
+	assert(array_syntax->syntax.kind == type_syntax_array && ((struct ast_integer_expression *)array_syntax->bound)->value == 2);
 	pointer_syntax = (struct ast_pointer_type_syntax *)array_syntax->element;
 	assert(pointer_syntax->syntax.kind == type_syntax_pointer);
 	array_syntax = (struct ast_array_type_syntax *)pointer_syntax->referent;
-	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->bound.integer == 3);
+	assert(array_syntax->syntax.kind == type_syntax_array && ((struct ast_integer_expression *)array_syntax->bound)->value == 3);
 	assert(array_syntax->element->kind == type_syntax_pointer);
 	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
 	assert(parameter->type == parameter->type_syntax->type && parameter->local->type == parameter->type);
@@ -1734,8 +1734,8 @@ static void test_function_declarator_syntax_tree(void)
 	pointer_syntax = (struct ast_pointer_type_syntax *)syntax->return_syntax;
 	assert(pointer_syntax->syntax.kind == type_syntax_pointer);
 	array_syntax = (struct ast_array_type_syntax *)pointer_syntax->referent;
-	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->has_bound);
-	assert(array_syntax->bound.integer == 3 && array_syntax->element->kind == type_syntax_integer);
+	assert(array_syntax->syntax.kind == type_syntax_array && array_syntax->bound);
+	assert(((struct ast_integer_expression *)array_syntax->bound)->value == 3 && array_syntax->element->kind == type_syntax_integer);
 	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
 	declared = (const struct function_type *)prototype->type_syntax->syntax.type;
 	assert(declared->type.kind == type_kind_function && declared->parameter_count == 1);
@@ -2492,8 +2492,83 @@ static void test_static_assertion_tree(void)
 	source_destroy(&source);
 }
 
+static void test_constant_bound_tree(void)
+{
+	const char *text = "int f(int n, int a[sizeof n], int (*cb)(char n, int b[sizeof n])) {"
+		"int local[sizeof n+1]; return 0; }"
+		"int g(void) { char n; int (*p)(int n,int a[sizeof n]); int b[sizeof n]; char a; int (*q)(int a[sizeof a]); return 0; }";
+	struct source source;
+	struct arena arena = { 0 };
+	struct diagnostics diagnostics = { 0 };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_parameter *parameter;
+	struct ast_array_type_syntax *array;
+	struct ast_sizeof_expression *size;
+	struct ast_name_expression *name;
+	struct ast_function_type_syntax *callback;
+	struct ast_local_declaration *local;
+	struct ast_local_declaration *outer;
+
+	assert(source_from_bytes(&source, "bounds.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = first_function(unit);
+	parameter = function->declaration->parameters->next;
+	array = (struct ast_array_type_syntax *)parameter->type_syntax;
+	assert(array->syntax.kind == type_syntax_array && array->bound->kind == expression_sizeof);
+	assert(!array->syntax.type && !array->bound->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(((const struct array_type *)array->syntax.type)->count == 4);
+	size = (struct ast_sizeof_expression *)array->bound;
+	assert(size->size == 4 && size->operand->kind == expression_name);
+	name = (struct ast_name_expression *)size->operand;
+	assert(name->declaration->type == &type_int && !name->declaration->next_local);
+	assert(name->declaration != function->declaration->parameters->local);
+	assert(!name->declaration->initializer);
+	callback = (struct ast_function_type_syntax *)
+		((struct ast_pointer_type_syntax *)parameter->next->type_syntax)->referent;
+	assert(callback->syntax.kind == type_syntax_function);
+	array = (struct ast_array_type_syntax *)callback->parameters->next->type_syntax;
+	assert(((const struct array_type *)array->syntax.type)->count == 1);
+	size = (struct ast_sizeof_expression *)array->bound;
+	assert(size->size == 1 && ((struct ast_name_expression *)size->operand)->declaration->type == &type_char);
+	assert(!callback->parameters->local && !callback->parameters->next->local);
+	local = (struct ast_local_declaration *)function->body->items;
+	assert(((const struct array_type *)local->type)->count == 5);
+	array = (struct ast_array_type_syntax *)local->type_syntax;
+	assert(array->bound->kind == expression_binary && array->bound->type == &type_ulong);
+	size = (struct ast_sizeof_expression *)((struct ast_binary_expression *)array->bound)->left;
+	assert(((struct ast_name_expression *)size->operand)->declaration == function->declaration->parameters->local);
+	function = (struct ast_function *)function->external.next;
+	outer = (struct ast_local_declaration *)function->body->items;
+	local = (struct ast_local_declaration *)outer->item.next;
+	callback = (struct ast_function_type_syntax *)((struct ast_pointer_type_syntax *)local->type_syntax)->referent;
+	array = (struct ast_array_type_syntax *)callback->parameters->next->type_syntax;
+	assert(((const struct array_type *)array->syntax.type)->count == 4);
+	local = (struct ast_local_declaration *)local->item.next;
+	assert(((const struct array_type *)local->type)->count == 1);
+	size = (struct ast_sizeof_expression *)((struct ast_array_type_syntax *)local->type_syntax)->bound;
+	assert(((struct ast_name_expression *)size->operand)->declaration == outer);
+	outer = (struct ast_local_declaration *)local->item.next;
+	local = (struct ast_local_declaration *)outer->item.next;
+	callback = (struct ast_function_type_syntax *)((struct ast_pointer_type_syntax *)local->type_syntax)->referent;
+	array = (struct ast_array_type_syntax *)callback->parameters->type_syntax;
+	assert(((const struct array_type *)array->syntax.type)->count == 1);
+	size = (struct ast_sizeof_expression *)array->bound;
+	assert(((struct ast_name_expression *)size->operand)->declaration == outer);
+	assert(!unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_constant_bound_tree();
 	test_static_assertion_tree();
 	test_sizeof_alignment_tree();
 	test_conditional_expression_tree();

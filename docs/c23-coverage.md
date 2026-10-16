@@ -342,3 +342,14 @@ Checked integer constant expressions must be nonzero. Messages are diagnostic
 bytes, not emitted static objects. Both-host strict native, original QBE and
 sanitizer tests cover the subset; exact Clang 15 for-initializer parser and legacy
 keyword-spelling gaps are recorded. Aggregate-member assertions await aggregates.
+
+### M13l1 fixed integer constant array bounds
+
+Assignment-expression bound ASTs are checked with ordinary sema, then the shared
+integer constant evaluator. Positive counts respect per-type/aggregate storage
+limits before layout. Incomplete bounds remain NULL, not zero-length arrays.
+Prototype parameter names have point-of-declaration, nesting and restoration
+rules; names in sizeof consume no runtime locals. Runtime VLA bounds, [*],
+static/qualified brackets, enums/constexpr and general constant consumers remain
+unsupported. Tests cover both-host strict forms, concrete typed ASTs, QBE/ABI,
+storage/recursion boundaries and sanitizer/fuzz paths.
