@@ -2,6 +2,42 @@
 
 ## Current checkpoint
 
+M23e0 local-binding semantic preparation is implemented and locally validated.
+Read m23-auto-binding-phases.md, m23-auto-inference-research.md and the latest
+ledger/contracts/coverage/limits. Private name reservation, storage completion
+and initializer analysis functions preserve the old ordinary bind_local order.
+Named parameter spills still use adjusted types; prototype names allocate no
+runtime storage. No inferred auto or new syntax/type/backend interface was added.
+Existing explicit auto/register behavior and all resource/scope invariants remain.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8; full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 20 targeted suites passed, with the new binding
+suite also checked against Clang 18. Normal helpers were built serially before
+parallel validation. Primary and isolated source/test/Makefile manifests matched
+before/after. Bounded compile-only sanitized fuzz passed 9,612 lexer / 17,298
+pipeline inputs in 26 seconds each. No invalid curated or generated C executed.
+Logs/manifests /data/tools/m23e0-*, isolated trees /data/validation-m23e0/{gcc,clang}.
+Prior M15a2 and frozen M23e0 compiler outputs match byte-for-byte on 149 curated
+compile corpus files (117 accepted / 32 rejected), with no C execution.
+
+Read the ledger for four-host original/ABI counts, AST one-pass identity checks,
+exact budgets including 128 parameter spills, and the pre-freeze fixture fix.
+Inferred auto still needs a fresh final design: outer namesakes are hidden during
+initialization but the new name is not yet usable. Multiple underspecified
+identifiers are UB in N3096, not a required constraint diagnostic. Never execute
+those probes or infer a native compiler bug merely from acceptance.
+
+M15a1 CI run 38972442575 and M15b1 CI run 38974794979 completed/success.
+M15a2 CI run 38977217404 remains pending; no remote pass is claimed.
+New M23e0 exact-commit CI is pending until checked after push; local passes never
+imply remote success. User authorizes continued work; historical STOP superseded.
+No stashes discarded; preserve historical named stashes if restored. No historical
+snapshot scripts rerun or subagents used. Current implementation scripts under
+/data/tools were already applied once; do not rerun. Verify tools after resets.
+
+## Earlier M15a2 checkpoint (historical)
+
 M15a2 explicit-type auto objects is implemented and locally validated. Read
 m15-auto-explicit.md and the latest ledger/contracts/coverage/limits. Explicit
 auto block/for objects use the ordinary path: same addressability/slots/ABI,

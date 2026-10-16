@@ -930,3 +930,13 @@ C23 grammar gaps and unchanged-source C11 corroborations are separately counted,
 never conflated with strict C23 agreement. Register parameters, other storage/
 linkage/globals, VM types and full C23 remain absent. Read the ledger for frozen
 full/QBE/sanitizer/fuzz/boundary evidence and independent CI state.
+
+## M23e0 inference preparation, not implemented inference
+
+Semantic local binding is split into explicit name/storage/initializer phases
+without changing language coverage or interfaces. Ordinary explicit declarations
+and adjusted parameter spills retain their former behavior and limits. C23
+inferred auto remains absent: its unavailable-name interval, concrete syntax,
+qualifier/inference policy and single-identifier/underspecified-UB cases need a
+separate final design. No native acceptance of UB is counted as a missing
+constraint diagnostic. Read the research notes and ledger; not full C23.

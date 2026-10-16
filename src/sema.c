@@ -1414,8 +1414,8 @@ static bool sema_condition(struct sema *sema, struct ast_expression **slot)
 	return true;
 }
 
-static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
-	const struct type *effective_type)
+/* Reserve an ordinary name before any initializer is analyzed. */
+static bool reserve_local_name(struct sema *sema, struct ast_local_declaration *local)
 {
 	struct binding *binding;
 	struct typedef_binding *alias = find_typedef_binding(sema, local->name);
@@ -1444,10 +1444,13 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 	}
 	*binding = (struct binding) { local, sema->scope->bindings };
 	sema->scope->bindings = binding;
+	return true;
+}
 
-	/* Binding precedes initializer analysis; parameter spills use the adjusted
-	 * type while retaining their declared syntax as source provenance.
-	 */
+/* Parameter spills use the adjusted type, retaining written source syntax. */
+static bool complete_local_storage(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *effective_type)
+{
 	assert(type_is_complete_object(effective_type));
 	local->type = effective_type;
 	if (type_object_size(local->type) > ast_max_local_storage - sema->local_storage) {
@@ -1463,6 +1466,12 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
+	return true;
+}
+
+/* Analyze once: lowered loads/decays/conversions must never be revisited. */
+static bool sema_local_initializer(struct sema *sema, struct ast_local_declaration *local)
+{
 	if (local->initializer) {
 		const struct type *target = unqualified_type(sema, local->type, local->name.location);
 
@@ -1470,6 +1479,14 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 			convert_expression(sema, &local->initializer, target);
 	}
 	return true;
+}
+
+/* Explicit declarations complete their binding before the initializer. */
+static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *effective_type)
+{
+	return reserve_local_name(sema, local) && complete_local_storage(sema, local, effective_type) &&
+		sema_local_initializer(sema, local);
 }
 
 static bool sema_local(struct sema *sema, struct ast_local_declaration *local)

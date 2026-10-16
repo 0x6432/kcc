@@ -4393,8 +4393,74 @@ static void test_explicit_auto_tree(void)
 	fclose(stream);
 }
 
+static void test_local_binding_phases_tree(void)
+{
+	const char *text = "int f(void) { int x=sizeof(x),*p=&x; char *s=\"*\"; "
+		"int (*q)(void)=f; int a[2],*r=a; return *s; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *locals[6];
+	struct ast_block_item *item;
+	struct ast_sizeof_expression *size;
+	struct ast_array_decay_expression *decay;
+	struct ast_function_decay_expression *callback;
+	struct ast_conversion_expression *conversion;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	function = (struct ast_function *)unit->declarations;
+	item = function->body->items;
+	for (size_t i = 0; i < 6; i++) {
+		assert(item && item->kind == block_item_declaration);
+		locals[i] = (struct ast_local_declaration *)item;
+		assert(!locals[i]->is_register);
+		item = item->next;
+	}
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	for (size_t i = 0; i < 6; i++) {
+		assert(locals[i]->slot == i && locals[i]->type);
+		assert(locals[i]->next_local == (i ? locals[i - 1] : NULL));
+	}
+	assert(function->locals == locals[5]);
+	conversion = require_conversion(locals[0]->initializer, &type_int, &type_ulong);
+	assert(conversion->operand->kind == expression_sizeof);
+	size = (struct ast_sizeof_expression *)conversion->operand;
+	assert(size->size == 4 && size->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)size->operand)->declaration == locals[0]);
+	assert(locals[1]->initializer->kind == expression_address);
+	assert(((struct ast_name_expression *)((struct ast_address_expression *)locals[1]->initializer)->operand)->declaration == locals[0]);
+	assert(locals[2]->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)locals[2]->initializer;
+	assert(decay->operand->kind == expression_string);
+	assert(unit->strings == (struct ast_string_expression *)decay->operand);
+	assert(unit->strings->object_id == 0 && !unit->strings->next_string);
+	assert(locals[3]->initializer->kind == expression_function_decay);
+	callback = (struct ast_function_decay_expression *)locals[3]->initializer;
+	assert(callback->operand->kind == expression_function_designator);
+	assert(((struct ast_function_designator_expression *)callback->operand)->function == function->declaration->symbol);
+	assert(locals[4]->type->kind == type_kind_array && type_object_size(locals[4]->type) == 8);
+	assert(locals[5]->initializer->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)locals[5]->initializer;
+	assert(decay->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)decay->operand)->declaration == locals[4]);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_local_binding_phases_tree();
 	test_explicit_auto_tree();
 	test_register_array_tree();
 	test_register_scalar_tree();

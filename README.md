@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23E0: Semantic preparation only—local name reservation, storage completion and
+initializer analysis are now explicit ordered phases. Ordinary declarations
+still bind before their initializer, and parameters retain their adjusted spill
+types. No inferred `auto` support or language behavior has been added. Read
+docs/m23-auto-binding-phases.md and the latest ledger/contracts; inferred-name
+visibility and one-pass initialization need the separate design recorded in
+the accompanying research notes before implementation.
+
 M15A2: Traditional `auto` objects with explicit types are supported at block/for
 scope in any declaration-specifier position, including aliases and query bases.
 They are ordinary addressable automatic objects with unchanged slots and ABI;

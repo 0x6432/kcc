@@ -1915,3 +1915,22 @@ new scope policy or initializer visibility rule was introduced. Arrays remain
 addressable/decaying normally; register flags/restrictions remain distinct and
 never propagate through queries. Existing resource and immutable-cache contracts
 remain, with exact original/native/ABI and AST assertions in the new suite.
+
+## M23e0 explicit local binding phases
+
+All functions remain private to sema.c; no parser/AST/type/codegen interface
+changes. reserve_local_name preserves typedef/object conflict checks, the local
+count guard and binding allocation/insertion. complete_local_storage preserves
+effective object type assignment, storage guard/increment, array-initializer
+refusal, slot/count and reverse local-list insertion. sema_local_initializer
+unqualifies the target, analyzes once and converts once. bind_local invokes these
+three phases left-to-right with short-circuit failure, exactly the old order.
+Explicit declarations and named parameter spills still use only this wrapper.
+Ephemeral prototype bindings remain separate and never enter runtime storage.
+
+No unknown-type name barrier, inferred syntax, second analysis of lowered nodes,
+new flag, budget or scope behavior was added. Ordinary own-bound aliases and
+initializer new-object meaning remain different, as before. AST tests retain
+self-size/address/array/string/function identities, one static string occurrence
+and exact slot/list order. The later inference path needs its own explicit
+unavailable-name and one-pass design before using these phases differently.

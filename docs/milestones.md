@@ -33,7 +33,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
-| M23e | auto inference | Valid initializers and forbidden declarations | planned |
+| M23e | auto inference | Valid initializers and forbidden declarations | preparation only (M23e0 binding phases); inferred types remain absent |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
 | M23h | constexpr objects and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
@@ -2615,3 +2615,55 @@ M15b1 CI run 38974794979 remains pending; no remote pass is claimed.
 New M15a2 exact-commit CI is pending until queried after push. Local validation
 never implies remote success. Inferred auto/combination lifetimes still need a
 separate design before coding; register parameters remain unsupported.
+
+## M23e0 local name/storage/initializer phase preparation
+
+Design recorded before implementation in m23-auto-binding-phases.md after pushed
+bd77dc3. Factor the old bind_local sequence into private name reservation,
+effective-type/storage completion and one-pass initializer functions, keeping
+bind_local as the left-to-right ordinary wrapper. Preserve every check, failure
+order, slot/list insertion and parameter adjustment. No new AST/type/parser/QBE
+interface, storage flag, unavailable-name barrier or inferred-auto feature.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8; full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 20 targeted suites passed, with the new binding
+suite also checked against Clang 18. Normal helpers were built serially before
+parallel validation. Primary and isolated source/test/Makefile manifests matched
+before/after. Bounded compile-only sanitized fuzz passed 9,612 lexer / 17,298
+pipeline inputs in 26 seconds each. No invalid curated or generated C executed.
+Logs/manifests /data/tools/m23e0-*, isolated trees /data/validation-m23e0/{gcc,clang}.
+Prior M15a2 and frozen M23e0 compiler outputs match byte-for-byte on 149 curated
+compile corpus files (117 accepted / 32 rejected), with no C execution.
+
+New focused suite: 36 standard + 6 C23 originals all passed through kcc/QBE.
+Both modern hosts strictly agree on all 42; legacy hosts on 36, excluding six
+comparisons on the exact missing-C23 keyword probe, never as agreements. Eight
+native constraints on modern hosts, seven on legacy; four existing subset
+refusals remain compile-only. No new native gap classifier. Each host passes 24
+both-direction mixed-stack primitive ABI arrangements. Auto and both register
+suites were rerun on all four hosts with their original exact native gap counts.
+AST checks prove own self-size binding, address identity, one string occurrence,
+function/array/string decay identities and six real slots in exact reverse list
+order. Exact 256/257 local, 4096/4097 item, 1 MiB/overflow storage and 128/129
+expanded-typedef depth boundaries pass. Additional 128 named spills + 128/129
+objects and 128 spills + exact storage/overflow checks prove parameter budgets
+remain part of the same ordinary accounting; aliases allocate no storage.
+
+Four additional compile-only old/new probes also preserve byte-identical failure
+precedence: duplicate and typedef conflict before local limit, local limit before
+initializer analysis, and storage limit before initializer analysis.
+
+Before freezing, the new pointer-constraint fixture's expected diagnostic was
+corrected to the existing unsupported-pointer-conversion wording; no compiler
+behavior or diagnostic was changed to hide it. Research read the full normative
+underspecified declaration wording: multiple identifiers are semantic UB, not a
+required constraint rejection. Native syntax-only divergence was not executed or
+counted as a Clang constraint bug. The pre-implementation design's future-work
+wording was corrected accordingly before commit; no frozen source/test changed.
+
+M15a1 CI run 38972442575 and M15b1 CI run 38974794979 completed/success.
+M15a2 CI run 38977217404 remains pending; no remote pass is claimed.
+New M23e0 exact-commit CI remains pending until checked after push. Local passes
+are independent of remote evidence. Inference remains absent and needs its own
+final design, especially its unavailable-name interval and typedef ambiguity.

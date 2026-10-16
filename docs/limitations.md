@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15A2 explicit-type auto objects. Read the latest entries together with README.md and
+Current milestone: M23E0 local-binding preparation (inference still absent). Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2014,3 +2014,21 @@ fail. The same 16 affected traditional-C originals pass unchanged under strict
 C11, recorded as corroboration, NOT C23 agreement. A separate header-free
 keyword-auto macro triggers Clang's exact strict warning-as-error. Read the
 ledger for precise native counts and frozen/CI evidence.
+
+## M23e0 local binding phase preparation
+
+This is an internal semantic refactor, not a language extension. The existing
+ordinary bind_local wrapper reserves the name, completes effective type/storage,
+and analyzes/converts the initializer in exactly its old order. Named definition
+parameters still use adjusted spill types; prototype-only names allocate none.
+Explicit auto/register/ordinary declarations keep all prior supported behavior,
+constraints, failure ordering and 256-local/1 MiB storage limits.
+
+C23 inferred auto remains unsupported. Its unavailable-name interval is NOT
+implemented by this refactor: an inferred initializer must see neither the new
+object nor an outer namesake. Research notes also distinguish underspecified
+multiple identifiers (N3096 6.7 paragraph 12 gives UB, not a required diagnostic)
+from actual constraints. Such probes were syntax-compiled only, never executed.
+Register parameters, globals, VM types, array initializers and other storage
+classes remain unsupported. Read m23-auto-inference-research.md before planning
+inference; no full C23 claim or native-acceptance shortcut.
