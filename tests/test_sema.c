@@ -3803,8 +3803,86 @@ static void test_for_typedef_tree(void)
 	fclose(stream);
 }
 
+static void test_typedef_shadowing_tree(void)
+{
+	const char *text = "typedef long T; int main(void) { typedef int T,T,*P; T x=40; "
+		"{ typedef T *T,*T; T p=&x; { typedef char T; T y=2; x+=y; } "
+		"T q=p; if(*q!=42) return 1; } T z=0; return x+z; } T f(T x) { return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_function *after;
+	struct ast_block_item *item;
+	struct ast_compound_statement *nested;
+	struct ast_compound_statement *deep;
+	struct ast_typedef_declaration *file_alias;
+	struct ast_typedef_declaration *outer;
+	struct ast_typedef_declaration *repeated;
+	struct ast_typedef_declaration *inner;
+	struct ast_typedef_declaration *inner_repeated;
+	struct ast_typedef_declaration *deep_alias;
+	struct ast_local_declaration *local;
+	size_t local_count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	assert(unit->declarations->kind == external_typedef_declaration);
+	file_alias = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+	function = (struct ast_function *)unit->declarations->next;
+	assert(function->external.kind == external_function_definition);
+	after = (struct ast_function *)function->external.next;
+	assert(after->external.kind == external_function_definition && !after->external.next);
+	item = function->body->items;
+	assert(item->kind == block_item_typedef_declaration);
+	outer = ((struct ast_block_typedef_declaration *)item)->declaration;
+	repeated = ((struct ast_block_typedef_declaration *)item->next)->declaration;
+	item = item->next->next->next->next;
+	assert(item->kind == block_item_statement);
+	nested = (struct ast_compound_statement *)((struct ast_statement_item *)item)->statement;
+	assert(nested->statement.kind == statement_compound);
+	item = nested->items;
+	assert(item->kind == block_item_typedef_declaration);
+	inner = ((struct ast_block_typedef_declaration *)item)->declaration;
+	inner_repeated = ((struct ast_block_typedef_declaration *)item->next)->declaration;
+	item = item->next->next->next;
+	assert(item->kind == block_item_statement);
+	deep = (struct ast_compound_statement *)((struct ast_statement_item *)item)->statement;
+	assert(deep->statement.kind == statement_compound);
+	assert(deep->items->kind == block_item_typedef_declaration);
+	deep_alias = ((struct ast_block_typedef_declaration *)deep->items)->declaration;
+	assert(!file_alias->type && !outer->type && !inner->type && !deep_alias->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	assert(file_alias->type == &type_long);
+	assert(outer->type == &type_int && repeated->type == outer->type);
+	assert(inner->type->kind == type_kind_pointer && inner_repeated->type == inner->type);
+	assert(((const struct pointer_type *)inner->type)->referent == outer->type);
+	assert(deep_alias->type == &type_char);
+	assert(((struct ast_local_declaration *)nested->items->next->next)->type == inner->type);
+	assert(((struct ast_local_declaration *)deep->items->next)->type == deep_alias->type);
+	assert(((struct ast_local_declaration *)item->next)->type == inner->type);
+	assert(after->return_type == file_alias->type);
+	assert(after->declaration->parameters->type == file_alias->type);
+	for (local = function->locals; local; local = local->next_local)
+		local_count++;
+	assert(local_count == 5 && function->locals->type == outer->type && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_typedef_shadowing_tree();
 	test_for_typedef_tree();
 	test_block_typedef_tree();
 	test_typedef_declaration_list_tree();

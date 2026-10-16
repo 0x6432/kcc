@@ -45,8 +45,6 @@ constraints = [
     ('int f(int T) { typedef int T; return 0; }','typedef name conflicts with prior ordinary declaration'),
 ]
 subset_errors = [
-    ('typedef int T; int main(void) { typedef int T; return 42; }','block typedef shadowing a typedef'),
-    ('int main(void) { typedef int T; { typedef long T; } return 42; }','block typedef shadowing a typedef'),
     ('int f(void); int main(void) { typedef int f; return 42; }','block typedef shadowing a function'),
     ('int main(void) { int T=42; { typedef int T; } return 42; }','block typedef shadowing an object'),
     ('int f(int T) { { typedef long T; } return 42; }','block typedef shadowing an object'),

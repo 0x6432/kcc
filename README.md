@@ -6,13 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14l2b: typedef declaration lists work in compound blocks and C23 for
-initializers, with same-type redeclarations and independent syntax/semantic scope
-lifetimes. Loop aliases are visible through clause-1, condition, step and body,
-but not afterward. Each alias is a concrete compile-time-only item with no local
-or QBE storage; block and external item budgets remain independent. Alias
-shadowing and storage-specifier permutations remain separate increments.
-Alias-expanded types remain bounded at 4096 nodes and 128 levels.
+M14L2C: Inner typedefs may now hide outer aliases, with same-type checks limited to the
+current scope. Independent inner aliases resolve their written types before
+publication, then restore outer meanings on exit. Object/function hiding is still
+outside this checkpoint; alias-expanded budgets remain 4096 nodes / 128 levels.
+Read docs/m14-typedef-shadowing.md and the latest coverage/limitations records.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite

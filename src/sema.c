@@ -2171,12 +2171,8 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 		return false;
 
 	previous = find_typedef_binding(sema, declaration->name);
-	if (previous) {
-		if (previous->scope != sema->scope) {
-			diagnostic_error(sema->diagnostics, declaration->name.location,
-				"block typedef shadowing a typedef is not supported yet");
-			return false;
-		}
+	/* Only the current scope redeclares; an outer alias remains independent. */
+	if (previous && previous->scope == sema->scope) {
 		if (!type_same(previous->declaration->type, type)) {
 			diagnostic_error(sema->diagnostics, declaration->name.location,
 				"typedef redeclaration has different type");

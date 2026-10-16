@@ -2197,3 +2197,35 @@ IL checks passed. Frozen manifest /data/tools/m14l2b-source.sha256 matched befor
 and after integration. Earlier interrupted helper-build-race runs are not passes;
 all final normal helpers were built serially before parallel tests. Remote CI
 remains separate from these local results.
+
+## M14l2c nested typedef-to-typedef shadowing
+
+An inner typedef can hide an outer typedef with either the same or a different
+type. Sema applies same-type redeclaration checking only when the nearest alias
+binding belongs to the current scope; otherwise it prepends an independent
+binding after resolving the written type. Thus typedef T *T uses the outer T in
+its specifiers, not its own unfinished declaration. A repeated name within the
+new scope must still name the same non-VM type, not merely a compatible type.
+
+No parser/lexer classification change is needed: both visible meanings are type
+names. Existing compound/function/for save-and-restore contracts reveal the outer
+alias after inner scope exit. Syntax caches and canonical types remain immutable;
+typedefs still create no runtime locals, slots or data. Item and expanded-type
+limits are unchanged. Typedef/object/function hiding in either direction,
+prototype scopes, storage-class permutations, VM and aggregate types remain
+unsupported. Read m14-typedef-shadowing.md before broadening ordinary-name lookup.
+
+
+M14L2C validation: complete normal/QBE regressions, complete normal
+regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
+GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
+suites passed. Bounded sanitized fuzz executed 3,927 lexer /
+6,164 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 46 standard + 4 C23 originals, 6 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 39+4
+originals; GCC 14 agrees on all 43 / 4 constraints; other hosts report exact grammar
+gaps separately. AST tests verify canonical same-scope repeats, independent nested
+bindings, scope restoration and no alias storage.
+Frozen manifest /data/tools/m14l2c-source.sha256 matched before and after
+integration. Normal test helpers were built serially before parallel validation.
+Remote GitHub CI is tracked separately; local passes do not prove remote success.

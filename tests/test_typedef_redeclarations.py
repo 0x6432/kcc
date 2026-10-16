@@ -55,7 +55,6 @@ constraints = [
     ('typedef const int A[2]; typedef int A[2];','typedef redeclaration has different type'),
 ]
 subset_errors = [
-    ('typedef int T; int main(void) { typedef int T; return 42; }','block typedef shadowing a typedef'),
     ('typedef int T; int main(void) { int T=42; return T; }','shadowing a typedef'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc typedef redeclarations ') as directory:
