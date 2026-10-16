@@ -76,8 +76,6 @@ constraints = [
 ]
 subset_errors = [
     ('typedef int T=42;','cannot have initializers'),
-    ('typedef int T; int main(void) { int T=42; return T; }','shadowing a typedef'),
-    ('typedef int T; int main(void) { T T=42; return T; }','shadowing a typedef'),
     ('typedef int T; int f(int T) { return T; }','shadowing a typedef'),
     ('typedef int T; T x;','file-scope object declarations'),
     ('typedef int F(void); F f { return 42; }',"query-derived external declarations require ';'"),

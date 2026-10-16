@@ -44,7 +44,6 @@ constraints = [
     ('int f(int T) { typedef int T; return 0; }','typedef name conflicts with prior ordinary declaration'),
 ]
 subset_errors = [
-    ('typedef int T; int main(void) { typedef long T; { int T=42; } return 42; }','shadowing a typedef'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc typedef shadowing ') as directory:
     directory = Path(directory)

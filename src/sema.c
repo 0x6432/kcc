@@ -80,25 +80,6 @@ static bool same_name(struct token left, struct token right)
 			left.length) == 0;
 }
 
-static struct typedef_binding *find_typedef_binding(struct sema *sema, struct token name)
-{
-	struct typedef_binding *binding = sema->typedefs;
-
-	while (binding) {
-		if (same_name(binding->declaration->name, name))
-			return binding;
-		binding = binding->next;
-	}
-	return NULL;
-}
-
-static struct ast_typedef_declaration *find_typedef(struct sema *sema, struct token name)
-{
-	struct typedef_binding *binding = find_typedef_binding(sema, name);
-
-	return binding ? binding->declaration : NULL;
-}
-
 static struct ast_local_declaration *find_in_scope(struct scope *scope,
 	struct token name)
 {
@@ -125,6 +106,34 @@ static struct ast_local_declaration *find_local(struct sema *sema,
 		scope = scope->parent;
 	}
 	return NULL;
+}
+
+static struct typedef_binding *find_typedef_binding(struct sema *sema, struct token name)
+{
+	struct typedef_binding *binding = sema->typedefs;
+
+	while (binding) {
+		if (same_name(binding->declaration->name, name)) {
+			struct scope *scope = sema->scope;
+
+			/* A nearer object hides this alias in the ordinary namespace. */
+			while (scope && scope != binding->scope) {
+				if (find_in_scope(scope, name))
+					return NULL;
+				scope = scope->parent;
+			}
+			return binding;
+		}
+		binding = binding->next;
+	}
+	return NULL;
+}
+
+static struct ast_typedef_declaration *find_typedef(struct sema *sema, struct token name)
+{
+	struct typedef_binding *binding = find_typedef_binding(sema, name);
+
+	return binding ? binding->declaration : NULL;
 }
 
 static struct function_symbol *find_function(struct sema *sema, struct token name)
@@ -1395,7 +1404,13 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 	const struct type *effective_type)
 {
 	struct binding *binding;
+	struct typedef_binding *alias = find_typedef_binding(sema, local->name);
 
+	if (alias && alias->scope == sema->scope) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"ordinary declaration conflicts with typedef name");
+		return false;
+	}
 	if (find_in_scope(sema->scope, local->name)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"redeclaration of local in this scope");

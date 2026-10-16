@@ -17,6 +17,8 @@ for name in integers:
     programs.append(f'int main(void) {{ int done=0; int result=0; for(typedef {name} T,T,*P,A[2];!done;done=1) {{ A a; P p=&a[1]; *p={expected}; result=*p=={expected}?42:1; }} return result; }}')
     programs.append(f'int main(void) {{ int done=0; int result=0; for(typedef {name} T;(T)done<1;done+=(T)1) {{ T x={expected}; result=x=={expected}?42:1; }} return result; }}')
 programs += [
+    'int main(void) { for(typedef int T;;) { int T=42; return T; } }',
+    'typedef long T; int main(void) { for(T T=40;T<42;T++) {} T x=42; return x; }',
     'int main(void) { int done=0; int result=0; for(typedef int T;!done;done=1) { T x=40; for(typedef T U;x<42;x+=(U)1) { U y=1; if(y!=1) return 1; } result=x; } return result; }',
     'int main(void) { int done=0; for(typedef int T;!done;done=1) { T x=1; if(sizeof(T)!=4 || x!=1) return 1; } done=0; for(typedef long T;!done;done=1) { T x=42; if(sizeof(T)!=8 || x!=42) return 1; } return 42; }',
     'int main(void) { int done=0; for(typedef int T;!done;done=1) { T x=1; if(x!=1) return 1; } typedef long T; T x=42; return sizeof(T)==8?x:1; }',
@@ -56,7 +58,6 @@ constraints = [
     ('int main(void) { for(typedef int T=1;;) return 0; }','typedef declarations cannot have initializers'),
 ]
 subset_errors = [
-    ('int main(void) { for(typedef int T;;) { int T=42; } }','shadowing a typedef'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc for typedefs ') as directory:
     directory = Path(directory)

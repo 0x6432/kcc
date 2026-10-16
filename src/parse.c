@@ -5,16 +5,22 @@
 #include <string.h>
 
 /* Syntax disambiguation only; semantic types are independently resolved later. */
-struct parser_typedef_name {
+enum parser_name_kind {
+	parser_name_typedef,
+	parser_name_object,
+};
+
+struct parser_name {
 	struct token name;
-	struct parser_typedef_name *next;
+	enum parser_name_kind kind;
+	struct parser_name *next;
 };
 
 struct parser {
 	struct preprocessor *preprocessor;
 	struct arena *arena;
 	struct diagnostics *diagnostics;
-	struct parser_typedef_name *typedef_names;
+	struct parser_name *names;
 	unsigned depth;
 	unsigned statement_nesting;
 	unsigned declarator_nesting;
@@ -56,7 +62,7 @@ static bool begins_integer_type(enum token_kind kind)
 
 static bool is_typedef_name(struct parser *parser, struct token token)
 {
-	struct parser_typedef_name *name = parser->typedef_names;
+	struct parser_name *name = parser->names;
 
 	if (token.kind != token_identifier)
 		return false;
@@ -64,10 +70,25 @@ static bool is_typedef_name(struct parser *parser, struct token token)
 		if (name->name.length == token.length &&
 			memcmp(name->name.spelling_location.source->data + name->name.spelling_location.offset,
 				token.spelling_location.source->data + token.spelling_location.offset, token.length) == 0)
-			return true;
+			return name->kind == parser_name_typedef;
 		name = name->next;
 	}
 	return false;
+}
+
+/* A complete declarator starts its ordinary identifier's scope. */
+static bool publish_parser_name(struct parser *parser, struct token name,
+	enum parser_name_kind kind)
+{
+	struct parser_name *binding = arena_alloc(parser->arena, sizeof(*binding));
+
+	if (!binding) {
+		allocation_error(parser, name.location);
+		return false;
+	}
+	*binding = (struct parser_name) { .name = name, .kind = kind, .next = parser->names };
+	parser->names = binding;
+	return true;
 }
 
 static bool begins_declaration_specifier(struct parser *parser, struct token token)
@@ -411,7 +432,7 @@ static bool parse_declarator_contents(struct parser *parser,
 	if (token.kind == token_identifier && context != declarator_cast) {
 		declarator->name = preprocess_next(parser->preprocessor);
 		declarator->has_name = true;
-		if ((context == declarator_local || context == declarator_parameter) && is_typedef_name(parser, token)) {
+		if (context == declarator_parameter && is_typedef_name(parser, token)) {
 			diagnostic_error(parser->diagnostics, token.location,
 				"shadowing a typedef name is not supported yet");
 			return false;
@@ -1794,12 +1815,12 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 static struct ast_for_statement *parse_for_statement(struct parser *parser)
 {
 	struct ast_for_statement *node;
-	struct parser_typedef_name *saved_typedefs = parser->typedef_names;
+	struct parser_name *saved_names = parser->names;
 
 	if (!begin_nested_statement(parser))
 		return NULL;
 	node = parse_for_contents(parser);
-	parser->typedef_names = saved_typedefs;
+	parser->names = saved_names;
 	parser->statement_nesting--;
 	return node;
 }
@@ -1979,6 +2000,8 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 		if (!type_syntax)
 			return NULL;
+		if (!publish_parser_name(parser, name, parser_name_object))
+			return NULL;
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 			preprocess_next(parser->preprocessor);
 			initializer = parse_expression(parser, 1);
@@ -2062,7 +2085,6 @@ static struct ast_typedef_declaration *new_typedef_declaration(struct parser *pa
 	struct token keyword, struct ast_type_syntax *type_syntax, struct token name)
 {
 	struct ast_typedef_declaration *declaration;
-	struct parser_typedef_name *binding;
 
 	declaration = ast_new_typedef_declaration(parser->arena, keyword.location, type_syntax, name);
 	if (!declaration) {
@@ -2072,13 +2094,8 @@ static struct ast_typedef_declaration *new_typedef_declaration(struct parser *pa
 	/* Redeclarations do not need a second syntax-only name binding. */
 	if (is_typedef_name(parser, name))
 		return declaration;
-	binding = arena_alloc(parser->arena, sizeof(*binding));
-	if (!binding) {
-		allocation_error(parser, keyword.location);
+	if (!publish_parser_name(parser, name, parser_name_typedef))
 		return NULL;
-	}
-	*binding = (struct parser_typedef_name) { .name = name, .next = parser->typedef_names };
-	parser->typedef_names = binding;
 	return declaration;
 }
 
@@ -2256,12 +2273,12 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 static struct ast_compound_statement *parse_compound_statement(struct parser *parser)
 {
 	struct ast_compound_statement *node;
-	struct parser_typedef_name *saved_typedefs = parser->typedef_names;
+	struct parser_name *saved_names = parser->names;
 
 	if (!begin_nested_statement(parser))
 		return NULL;
 	node = parse_compound_contents(parser);
-	parser->typedef_names = saved_typedefs;
+	parser->names = saved_names;
 	parser->statement_nesting--;
 	return node;
 }

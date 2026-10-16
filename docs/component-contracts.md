@@ -1794,3 +1794,43 @@ identity and original object slots; aliases allocate no local storage.
 Frozen manifest /data/tools/m14l2e-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
+
+## M14l3a automatic objects hiding typedef names
+
+The parser maintains one syntax-only ordinary-name chain, recording typedef or
+object kind. Nearest matching names control type/expression disambiguation. An
+object publishes after its complete declarator and before its initializer; each
+comma declarator publishes independently. Compound/for scope restoration handles
+both kinds. No token buffering, backtracking, lexer change or new AST kind occurs.
+
+Semantic typedef lookup honors nearer object scopes rather than falling through
+to a hidden alias. Same-scope alias/object declarations remain constraints. Type
+resolution precedes object binding, which precedes initializer analysis. Shared
+specifier caches preserve the written base in T T=40,*P=&T while later value uses
+bind to the object T. Existing typed conversion/load nodes and storage slots keep
+their provenance. Alias/object nesting in both directions restores prior meanings.
+
+Tests cover initializers, own-declarator array bounds, comma lists, parentheses
+versus casts, sizeof/typeof, for lifetimes, labels, captured addresses, same-scope
+constraints and no alias storage. Named parameters hiding visible aliases remain
+explicitly unsupported pending a separate prototype-scope design. Globals,
+block function declarations, VM/aggregate types and storage-class permutations
+are not added. Existing item/local/storage/expanded-type budgets remain unchanged.
+Read m14-object-typedef-shadowing.md before broadening prototype name lifetimes.
+
+
+M14L3A validation: complete normal/QBE regressions, complete normal
+regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
+GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
+suites passed. Bounded sanitized fuzz executed 20,122 lexer /
+90,589 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 44 standard + 5 C23 originals, 8 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Legacy hosts agree on 44
+originals; modern hosts agree on all 49. Expanded for suite: 45+4 originals; GCC 14
+agrees on all 49 / 4 constraints; other hosts report exact grammar gaps separately.
+AST assertions verify shared written base syntax, captured object identity, nested
+alias/object restoration, the implicit long-to-int return conversion and four
+object slots with no alias storage.
+Frozen manifest /data/tools/m14l3a-source.sha256 matched before and after
+integration. Normal test helpers were built serially before parallel validation.
+Remote GitHub CI is tracked separately; local passes do not prove remote success.

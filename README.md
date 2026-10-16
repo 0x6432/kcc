@@ -6,11 +6,12 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14L2E: Block and loop aliases may hide outer automatic objects and parameters. Same-scope
-object/alias collisions remain constraints, including parameters in the outermost
-function body. Hidden object value uses reject; captured addresses stay live and
-scope exit restores the object. Objects hiding aliases remain unsupported here.
-Read docs/m14-typedef-object-shadowing.md and the latest coverage/limitations records.
+M14L3A: Automatic objects may now hide outer typedefs. The on-demand parser uses scoped
+ordinary-name masks; semantic alias lookup stops at nearer objects. Publication
+occurs after each complete declarator and before its initializer, preserving own
+array bounds and shared comma-list type specifiers. Same-scope conflicts remain
+errors. Named parameter/prototype alias hiding is still a separate increment.
+Read docs/m14-object-typedef-shadowing.md and the latest coverage/limitations records.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite

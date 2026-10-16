@@ -4006,8 +4006,86 @@ static void test_typedef_object_shadowing_tree(void)
 	fclose(stream);
 }
 
+static void test_object_typedef_shadowing_tree(void)
+{
+	const char *text = "typedef long T; int main(void) { T T=40,*P=&T; "
+		"{ typedef char T; { int T=2; *P+=T; } T c=1; if(c!=1) return 1; } return T; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_typedef_declaration *outer;
+	struct ast_typedef_declaration *inner;
+	struct ast_local_declaration *value;
+	struct ast_local_declaration *pointer;
+	struct ast_local_declaration *nested;
+	struct ast_local_declaration *character;
+	struct ast_compound_statement *block;
+	struct ast_compound_statement *deep;
+	struct ast_block_item *item;
+	struct ast_return_statement *returned;
+	struct ast_address_expression *address;
+	struct ast_load_expression *load;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	outer = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+	assert(unit->declarations->next->kind == external_function_definition);
+	function = (struct ast_function *)unit->declarations->next;
+	item = function->body->items;
+	assert(item->kind == block_item_declaration);
+	value = (struct ast_local_declaration *)item;
+	item = item->next;
+	assert(item->kind == block_item_declaration);
+	pointer = (struct ast_local_declaration *)item;
+	assert(pointer->type_syntax->kind == type_syntax_pointer);
+	assert(((struct ast_pointer_type_syntax *)pointer->type_syntax)->referent == value->type_syntax);
+	item = item->next;
+	block = (struct ast_compound_statement *)((struct ast_statement_item *)item)->statement;
+	assert(block->statement.kind == statement_compound);
+	inner = ((struct ast_block_typedef_declaration *)block->items)->declaration;
+	deep = (struct ast_compound_statement *)((struct ast_statement_item *)block->items->next)->statement;
+	assert(deep->statement.kind == statement_compound);
+	nested = (struct ast_local_declaration *)deep->items;
+	character = (struct ast_local_declaration *)block->items->next->next;
+	returned = (struct ast_return_statement *)((struct ast_statement_item *)item->next)->statement;
+	assert(returned->statement.kind == statement_return);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	assert(outer->type == &type_long && inner->type == &type_char);
+	assert(value->type == outer->type && value->type_syntax->type == outer->type);
+	assert(pointer->type->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)pointer->type)->referent == outer->type);
+	assert(pointer->initializer->kind == expression_address);
+	address = (struct ast_address_expression *)pointer->initializer;
+	assert(address->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)address->operand)->declaration == value);
+	assert(returned->value->kind == expression_conversion);
+	assert(((struct ast_conversion_expression *)returned->value)->operand->kind == expression_load);
+	load = (struct ast_load_expression *)((struct ast_conversion_expression *)returned->value)->operand;
+	assert(load->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)load->operand)->declaration == value);
+	assert(nested->type == &type_int && character->type == inner->type);
+	assert(value->slot == 0 && pointer->slot == 1 && nested->slot == 2 && character->slot == 3);
+	assert(function->locals == character && character->next_local == nested);
+	assert(nested->next_local == pointer && pointer->next_local == value);
+	assert(!value->next_local && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_object_typedef_shadowing_tree();
 	test_typedef_object_shadowing_tree();
 	test_typedef_function_shadowing_tree();
 	test_typedef_shadowing_tree();

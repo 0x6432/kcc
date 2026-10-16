@@ -2,24 +2,26 @@
 
 ## Current checkpoint
 
-M14L2E is implemented and locally validated. Read m14-typedef-object-shadowing.md.
-Only changed source/tests/Makefile were copied from /data/next-m14l2e; both
+M14L3A is implemented and locally validated. Read m14-object-typedef-shadowing.md.
+Only changed source/tests/Makefile were copied from /data/next-m14l3a; both
 frozen manifest checks matched. Never replace current docs with stale snapshot
 docs. Preserve both old stashes. All implementation/test generators were already
-applied; do not rerun them. This checkpoint follows 2a65a40.
+applied; do not rerun them. This checkpoint follows 99bbdf0.
 
 
-M14L2E validation: complete normal/QBE regressions, complete normal
+M14L3A validation: complete normal/QBE regressions, complete normal
 regressions with original-source GCC 14.1.0 and Clang 18.1.8 oracles, and both
 GCC 11 / Clang 15 targeted ASan/UBSan lexer/sema/typedef/query/nullptr/control
-suites passed. Bounded sanitized fuzz executed 6,665 lexer /
-36,413 pipeline inputs in 26/26 seconds. No invalid or generated C
-was executed. Four-host focused checks: 33 standard + 4 C23 originals, 8 native constraint rejections, and 24 both-direction
-mixed-stack primitive ABI arrangements per host passed. Expanded for suite: 43+4
-originals; GCC 14 agrees on all 47 / 4 constraints; other hosts report exact grammar
-gaps separately. AST tests preserve captured parameter addresses, restored object
-identity and original object slots; aliases allocate no local storage.
-Frozen manifest /data/tools/m14l2e-source.sha256 matched before and after
+suites passed. Bounded sanitized fuzz executed 20,122 lexer /
+90,589 pipeline inputs in 26/26 seconds. No invalid or generated C
+was executed. Four-host focused checks: 44 standard + 5 C23 originals, 8 native constraint rejections, and 24 both-direction
+mixed-stack primitive ABI arrangements per host passed. Legacy hosts agree on 44
+originals; modern hosts agree on all 49. Expanded for suite: 45+4 originals; GCC 14
+agrees on all 49 / 4 constraints; other hosts report exact grammar gaps separately.
+AST assertions verify shared written base syntax, captured object identity, nested
+alias/object restoration, the implicit long-to-int return conversion and four
+object slots with no alias storage.
+Frozen manifest /data/tools/m14l3a-source.sha256 matched before and after
 integration. Normal test helpers were built serially before parallel validation.
 Remote GitHub CI is tracked separately; local passes do not prove remote success.
 
@@ -28,18 +30,34 @@ foundation 721e9fd also passed all jobs. Last queried remote runs: 50e457a
 38929197527 GCC/fuzz success with Clang sanitizers pending; 3c79ce0 38930527428
 fuzz success, GCC sanitizers and Clang QBE pending. Recheck rather than infer.
 
-Further isolated trees /data/next-m14l2d, /data/next-m14l2e and /data/next-m14l3a
-may contain later work, not automatically landed. Inspect their exact manifests,
-active handles and logs; validate completely and integrate in predecessor order.
-M14l3a is ordinary objects hiding aliases with parser masks and semantic scope
-barriers; read m14-object-typedef-shadowing.md. Its first new AST unit incorrectly
-used a function-first helper on an alias-first translation unit; that TEST traversal
-was corrected during focused validation. Its return expectation was also corrected
-to the existing implicit conversion node, not a load or written cast. An intermediate
-incorrect expectation build was stopped, not counted as a pass. These were test
-assumptions, not compiler regressions; final AST and four-host checks passed.
-The initial relative-path design write failed; the drafted design was persisted
-before landing. Parameter/prototype alias hiding remains a separate increment.
+All four resumed shadowing milestones are landed in predecessor order:
+543815c nested aliases; 2a65a40 aliases hiding functions; 99bbdf0 aliases hiding
+outer objects/parameters; this commit adds objects hiding aliases. Each passed
+its own complete local validation before integration. Existing CI recipes run
+all newly added suites and include the new lexer/pipeline fuzz corpus seeds.
+
+STOP REQUEST: the user asked to stop after completing in-progress work to conserve
+tokens. Do not start another milestone without a new request. No M14l3b source or
+design was implemented. Next work would need a fresh prototype/parameter scope
+plan; named parameters hiding aliases remain deliberately unsupported.
+
+M14l3a initial AST test assumptions were corrected before freezing: the translation
+unit starts with a typedef (not a function), and returning long from int main
+contains an implicit conversion node above its load. An intermediate mistaken
+written-cast expectation was stopped, not counted as a pass. Final AST tests,
+four-host original-source/ABI focus, full regressions, sanitizers and fuzz passed.
+The initial relative-path design write failed; the already drafted design was
+persisted during isolated testing, before landing. All generators were already
+applied; do not regenerate fixtures. Frozen source manifest and logs are under
+/data/tools/m14l3a-*. Resume from GitHub development if the sandbox is stale.
+
+Latest public GitHub CI query before the final commit (not the final commit's
+results):
+- 99bbdf0 run 38933282375: in_progress, no conclusion yet.
+- 2a65a40 run 38932980365: in_progress, no conclusion yet.
+- 543815c run 38931895075: in_progress, no conclusion yet.
+- 3c79ce0 run 38930527428: in_progress, no conclusion yet.
+- 50e457a run 38929197527: completed, success.
 
 ## Earlier checkpoint (historical)
 
