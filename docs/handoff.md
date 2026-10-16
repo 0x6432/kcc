@@ -2,7 +2,13 @@
 
 ## Current checkpoint
 
-M23d2 expression queries are complete. Final full normal/QBE and both-host
+M23d2 expression queries are locally complete; a test-only native expression-
+array qualification oracle correction passed both-host normal/QBE and sanitized
+focused tests, units and bounded fuzz (16,211 lexer / 34,704 pipeline; 26/26s) after 05097e6 CI
+38918142442 failed both reference jobs on the exact b[1] read-only diagnostic.
+Fuzz passed. See milestones.md; kcc behavior is unchanged. M14k1 uncommitted work
+is preserved in the newest named stash and its interrupted full/sanitizer runs
+must restart after restoration. Commit/push this independent correction, then restore only the M14k1 named stash. Final full normal/QBE and both-host
 targeted ASan/UBSan passed; sanitized bounded fuzz completed 15,177 lexer /
 39,321 pipeline inputs in 26/26 seconds without reported failure. Focused tests
 passed 65 original kcc/QBE programs, 17 constraints, syntax/subset/mixed 64/65

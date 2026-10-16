@@ -1885,3 +1885,28 @@ Independent published status now observed: e77cd0a oracle-fix CI 38911835030,
 all jobs. The earlier 391fd01 failed native array oracle remains recorded. Full
 isolated M19f1 GCC/Clang matrix passed; M19f2 has GCC pass, Clang pending. M23d1
 and this increment's isolated/public checks remain separately pending.
+
+### M23d2 expression-array native oracle correction
+
+Exact-source CI 05097e6 run 38918142442 passed fuzz but both reference jobs failed
+at the original const int a[2]; typeof_unqual(a) b write, reporting read-only b[1].
+This is the expression form of the already documented host array-unqualification
+gap (N3096 6.2.5p31, 6.7.2.5p5/example 2). Keep kcc semantic behavior and all
+original kcc/QBE programs unchanged. Classify only that exact original source
+and the exact GCC/Clang read-only diagnostic as a native gap, not an agreement.
+Classifier units reject unrelated sources and extra/unexpected errors. Do not
+broaden skips to arbitrary arrays, rewrites or errors.
+
+M14k1 source/tests/docs are stashed during this independent correction. Its
+interrupted full/sanitizer runs are not passes and must restart after restoration.
+Compiler source is unchanged by this oracle fix; full prior local M23d2 regression
+remains recorded separately, not a fresh full-run claim for this test-only change.
+
+M23d2 oracle correction validation: lexer/sema units, 65 original QBE programs,
+17 constraints, mixed nesting/erasure checks and 24 cross-object ABI cases passed
+with each GCC/Clang normal and unchanged M23d2 ASan/UBSan compiler binary. These
+are focused checks of a test-only change; prior full local regression is not
+presented as a fresh full run. Bounded sanitized fuzz ran 16,211 lexer / 34,704
+pipeline inputs in 26/26 seconds without reported failure. No generated C ran.
+The exact classifier's positive/negative units passed. No compiler source or
+semantic acceptance changed. Remote CI for this correction remains pending.

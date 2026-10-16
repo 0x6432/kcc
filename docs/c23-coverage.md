@@ -498,3 +498,19 @@ evaluation, GNU aliases, alias-derived bare function declarations and sole
 query-derived void-parameter normalization remain separate work. sizeof(void)
 and void objects are still invalid; typeof of a void expression itself is valid.
 No stddef.h exposure or full C23 conformance is implied.
+
+### M23d2 expression-array native oracle correction
+
+Exact-source CI 05097e6 run 38918142442 passed fuzz but both reference jobs failed
+at the original const int a[2]; typeof_unqual(a) b write, reporting read-only b[1].
+This is the expression form of the already documented host array-unqualification
+gap (N3096 6.2.5p31, 6.7.2.5p5/example 2). Keep kcc semantic behavior and all
+original kcc/QBE programs unchanged. Classify only that exact original source
+and the exact GCC/Clang read-only diagnostic as a native gap, not an agreement.
+Classifier units reject unrelated sources and extra/unexpected errors. Do not
+broaden skips to arbitrary arrays, rewrites or errors.
+
+M14k1 source/tests/docs are stashed during this independent correction. Its
+interrupted full/sanitizer runs are not passes and must restart after restoration.
+Compiler source is unchanged by this oracle fix; full prior local M23d2 regression
+remains recorded separately, not a fresh full-run claim for this test-only change.
