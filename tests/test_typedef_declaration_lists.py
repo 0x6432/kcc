@@ -49,7 +49,6 @@ constraints = [
     ('int T(void); typedef int A,T;','typedef name conflicts with prior ordinary declaration'),
 ]
 subset_errors = [
-    ('typedef int T; int main(void) { typedef int A,B; return 42; }','block-scope typedef'),
     ('typedef int T,*P; int main(void) { int T=42; return T; }','shadowing a typedef'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc typedef lists ') as directory:

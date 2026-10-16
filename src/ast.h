@@ -537,6 +537,7 @@ enum block_item_kind {
 	block_item_declaration,
 	block_item_statement,
 	block_item_static_assertion,
+	block_item_typedef_declaration,
 };
 
 struct ast_block_item {
@@ -564,6 +565,11 @@ struct ast_block_label {
 struct ast_block_static_assertion {
 	struct ast_block_item item;
 	struct ast_static_assertion *declaration;
+};
+
+struct ast_block_typedef_declaration {
+	struct ast_block_item item;
+	struct ast_typedef_declaration *declaration;
 };
 
 struct ast_local_declaration {
@@ -699,6 +705,8 @@ struct ast_parameter *ast_new_parameter(struct arena *arena,
 struct ast_typedef_name_type_syntax *ast_new_typedef_name_type_syntax(struct arena *arena, struct token name);
 struct ast_typedef_declaration *ast_new_typedef_declaration(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
+struct ast_block_typedef_declaration *ast_new_block_typedef_declaration(struct arena *arena,
+	struct ast_typedef_declaration *declaration);
 struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(struct arena *arena,
 	struct ast_typedef_declaration *declaration);
 struct ast_external_type_declaration *ast_new_external_type_declaration(struct arena *arena,

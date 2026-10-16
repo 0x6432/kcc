@@ -1739,7 +1739,7 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_typedef) {
 		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-			"block-scope typedef declarations are not supported yet");
+			"typedef declarations in for initializers are not supported yet");
 		return NULL;
 	}
 	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
@@ -2054,7 +2054,78 @@ static struct ast_static_assertion *parse_static_assertion(struct parser *parser
 	return node;
 }
 
-/* block-item ::= local-declaration | static-assert-declaration | unlabeled-statement | label
+/* Each declarator publishes one syntax-only name after its complete type. */
+static struct ast_typedef_declaration *new_typedef_declaration(struct parser *parser,
+	struct token keyword, struct ast_type_syntax *type_syntax, struct token name)
+{
+	struct ast_typedef_declaration *declaration;
+	struct parser_typedef_name *binding;
+
+	declaration = ast_new_typedef_declaration(parser->arena, keyword.location, type_syntax, name);
+	if (!declaration) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	/* Redeclarations do not need a second syntax-only name binding. */
+	if (is_typedef_name(parser, name))
+		return declaration;
+	binding = arena_alloc(parser->arena, sizeof(*binding));
+	if (!binding) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	*binding = (struct parser_typedef_name) { .name = name, .next = parser->typedef_names };
+	parser->typedef_names = binding;
+	return declaration;
+}
+
+/* block-typedef-declaration ::= "typedef" declaration-specifiers declarator { "," declarator } ";" */
+static struct ast_block_item *parse_block_typedef_declaration(struct parser *parser)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct token beginning;
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning);
+	struct ast_block_item *items = NULL;
+	struct ast_block_item **tail = &items;
+
+	if (!base)
+		return NULL;
+	for (;;) {
+		struct token name;
+		struct ast_type_syntax *type_syntax;
+		struct ast_typedef_declaration *declaration;
+		struct ast_block_typedef_declaration *item;
+
+		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
+			return NULL;
+		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_typedef);
+		if (!type_syntax)
+			return NULL;
+		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
+		if (!declaration)
+			return NULL;
+		item = ast_new_block_typedef_declaration(parser->arena, declaration);
+		if (!item) {
+			allocation_error(parser, keyword.location);
+			return NULL;
+		}
+		*tail = &item->item;
+		tail = &item->item.next;
+		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"typedef declarations cannot have initializers");
+			return NULL;
+		}
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
+	}
+	if (!expect_token(parser, token_semicolon, "expected ',' or ';' after typedef declarator", NULL))
+		return NULL;
+	return items;
+}
+
+/* block-item ::= local-declaration | block-typedef-declaration | static-assert-declaration | unlabeled-statement | label
  * label ::= identifier ":" | case-label | default-label */
 static struct ast_block_item *parse_block_item(struct parser *parser)
 {
@@ -2115,8 +2186,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 		}
 		statement = parse_identifier_expression_statement(parser, token);
 	} else if (token.kind == token_typedef) {
-		diagnostic_error(parser->diagnostics, token.location, "block-scope typedef declarations are not supported yet");
-		return NULL;
+		return parse_block_typedef_declaration(parser);
 	} else if (begins_static_assertion(token.kind)) {
 		struct ast_static_assertion *declaration = parse_static_assertion(parser);
 		struct ast_block_static_assertion *assertion;
@@ -2162,7 +2232,8 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			return NULL;
 		}
 		/* Declaration groups charge each concrete declaration themselves. */
-		if (!begins_declaration_specifier(parser, token) && !count_block_item(parser, token.location))
+		if (token.kind != token_typedef && !begins_declaration_specifier(parser, token) &&
+			!count_block_item(parser, token.location))
 			return NULL;
 		item = parse_block_item(parser);
 		if (!item)
@@ -2182,10 +2253,12 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 static struct ast_compound_statement *parse_compound_statement(struct parser *parser)
 {
 	struct ast_compound_statement *node;
+	struct parser_typedef_name *saved_typedefs = parser->typedef_names;
 
 	if (!begin_nested_statement(parser))
 		return NULL;
 	node = parse_compound_contents(parser);
+	parser->typedef_names = saved_typedefs;
 	parser->statement_nesting--;
 	return node;
 }
@@ -2263,37 +2336,6 @@ static struct ast_external_declaration *parse_external_type_declaration(struct p
 	return declaration ? &declaration->external : NULL;
 }
 
-/* Each declarator publishes one syntax-only name after its complete type. */
-static struct ast_external_declaration *new_typedef_declaration(struct parser *parser,
-	struct token keyword, struct ast_type_syntax *type_syntax, struct token name)
-{
-	struct ast_typedef_declaration *declaration;
-	struct ast_external_typedef_declaration *external;
-	struct parser_typedef_name *binding;
-
-	declaration = ast_new_typedef_declaration(parser->arena, keyword.location, type_syntax, name);
-	if (!declaration) {
-		allocation_error(parser, keyword.location);
-		return NULL;
-	}
-	external = ast_new_external_typedef_declaration(parser->arena, declaration);
-	if (!external) {
-		allocation_error(parser, keyword.location);
-		return NULL;
-	}
-	/* Redeclarations do not need a second syntax-only name binding. */
-	if (is_typedef_name(parser, name))
-		return &external->external;
-	binding = arena_alloc(parser->arena, sizeof(*binding));
-	if (!binding) {
-		allocation_error(parser, keyword.location);
-		return NULL;
-	}
-	*binding = (struct parser_typedef_name) { .name = name, .next = parser->typedef_names };
-	parser->typedef_names = binding;
-	return &external->external;
-}
-
 /* typedef-declaration ::= "typedef" declaration-specifiers declarator { "," declarator } ";"
  * Every name is visible to later declarators, not its own unfinished declarator.
  */
@@ -2312,7 +2354,8 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 	for (;;) {
 		struct token name;
 		struct ast_type_syntax *type_syntax;
-		struct ast_external_declaration *declaration;
+		struct ast_typedef_declaration *declaration;
+		struct ast_external_typedef_declaration *external;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -2325,8 +2368,13 @@ static struct ast_external_declaration *parse_typedef_declaration(struct parser 
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
-		*tail = declaration;
-		tail = &declaration->next;
+		external = ast_new_external_typedef_declaration(parser->arena, declaration);
+		if (!external) {
+			allocation_error(parser, keyword.location);
+			return NULL;
+		}
+		*tail = &external->external;
+		tail = &external->external.next;
 		count++;
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,

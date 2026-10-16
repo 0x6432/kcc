@@ -3670,8 +3670,81 @@ static void test_typedef_declaration_list_tree(void)
 	fclose(stream);
 }
 
+static void test_block_typedef_tree(void)
+{
+	const char *text = "int f(void) { typedef int T,T,*P; T x=40; "
+		"{ typedef T U; U y=2; x+=y; } return x; } "
+		"typedef long T; int main(void) { T x=2; return f()+x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *first;
+	struct ast_function *main_function;
+	struct ast_block_item *item;
+	struct ast_typedef_declaration *alias;
+	struct ast_typedef_declaration *repeated;
+	struct ast_typedef_declaration *pointer;
+	struct ast_typedef_declaration *nested_alias;
+	struct ast_typedef_declaration *file_alias;
+	struct ast_local_declaration *local;
+	struct ast_compound_statement *nested;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "test.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && diagnostics.errors == 0);
+	first = (struct ast_function *)unit->declarations;
+	assert(first->external.kind == external_function_definition);
+	item = first->body->items;
+	assert(item->kind == block_item_typedef_declaration);
+	alias = ((struct ast_block_typedef_declaration *)item)->declaration;
+	item = item->next;
+	assert(item->kind == block_item_typedef_declaration);
+	repeated = ((struct ast_block_typedef_declaration *)item)->declaration;
+	item = item->next;
+	assert(item->kind == block_item_typedef_declaration);
+	pointer = ((struct ast_block_typedef_declaration *)item)->declaration;
+	assert(alias->type_syntax == repeated->type_syntax);
+	assert(((struct ast_pointer_type_syntax *)pointer->type_syntax)->referent == alias->type_syntax);
+	assert(!alias->type && !repeated->type && !pointer->type);
+	item = item->next;
+	assert(item->kind == block_item_declaration);
+	local = (struct ast_local_declaration *)item;
+	item = item->next;
+	assert(item->kind == block_item_statement);
+	nested = (struct ast_compound_statement *)((struct ast_statement_item *)item)->statement;
+	assert(nested->statement.kind == statement_compound);
+	assert(nested->items->kind == block_item_typedef_declaration);
+	nested_alias = ((struct ast_block_typedef_declaration *)nested->items)->declaration;
+	assert(first->external.next->kind == external_typedef_declaration);
+	file_alias = ((struct ast_external_typedef_declaration *)first->external.next)->declaration;
+	main_function = (struct ast_function *)first->external.next->next;
+	assert(main_function->external.kind == external_function_definition);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(diagnostics.errors == 0);
+	assert(alias->type == &type_int && repeated->type == alias->type);
+	assert(nested_alias->type == alias->type);
+	assert(((const struct pointer_type *)pointer->type)->referent == alias->type);
+	assert(file_alias->type == &type_long);
+	assert(local->type == alias->type && !local->next_local);
+	assert(first->locals && first->locals->next_local == local);
+	assert(first->locals->type == nested_alias->type);
+	assert(main_function->locals && !main_function->locals->next_local);
+	assert(main_function->locals->type == file_alias->type && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_block_typedef_tree();
 	test_typedef_declaration_list_tree();
 	test_typedef_redeclaration_tree();
 	test_typedef_tree();

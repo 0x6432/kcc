@@ -1611,3 +1611,42 @@ constraint diagnostic. Alias-only translation units emit no function or data.
 
 Block scope, alias shadowing, storage-specifier permutations, VM/aggregate types
 and bare alias-derived function definitions remain deferred at this checkpoint.
+
+## M14l2 block-scope typedef foundation
+
+Compound blocks now accept typedef declaration lists through a concrete
+ast_block_typedef_declaration wrapper. Every alias charges one block item; shared
+written specifiers and distinct derived declarators retain source order. The
+complete-declarator syntax-name publication helper is shared with external
+aliases, without making either representation an automatic object.
+
+Parser compound scopes restore their syntax-only alias-list head on success and
+failure. Sema independently restores its bindings around nested compounds and the
+outer function body, tagging each binding with its semantic scope. Same-scope
+same-type redeclarations preserve canonical immutable types. Names cannot leak
+into sibling blocks, later functions or subsequent external declarations.
+
+Codegen skips the new item kind. Aliases create no locals, stack slots, strings,
+runtime initialization or QBE data/function aliases. Expanded type limits remain
+4096 nodes / 128 levels; each alias still counts toward 4096 function block items,
+independently of the 512 external items and 256 function symbols.
+
+Typedef/typedef, typedef/object and typedef/function shadowing remain explicit
+subset restrictions at this checkpoint; same-scope object/parameter conflicts
+and different-type typedef redeclarations are genuine constraints. C23 permits
+for-initializer typedefs: those are deferred to M14l2b, not labelled invalid C.
+Storage-class permutations, VM/aggregate types and general ordinary-namespace
+hiding remain unsupported. Read m14-block-typedef-foundation.md, including its
+normative draft correction, before changing scoped lookup or parser classification.
+
+M14l2 validation: complete normal/QBE regression, complete normal regressions with
+original-source GCC 14.1.0 and Clang 18.1.8 native oracles, both GCC 11 / Clang 15
+targeted ASan/UBSan lexer/sema/typedef/query/nullptr/local-list/assertion/control
+suites and bounded sanitized fuzz passed. Fuzz executed 4,845 lexer / 14,954
+pipeline inputs in 26/26 seconds; no generated or invalid curated C ran. Focused
+suite: 36 standard + 4 C23 originals, 6 strict native constraints, 24 mixed-stack
+primitive ABI arrangements per host, concrete AST scope/wrapper/type identity,
+no alias locals and exact block/external/expanded-depth boundaries. Legacy hosts
+agree on 36 originals, modern hosts on all 40 without rewriting. Frozen manifest
+/data/tools/m14l2-source.sha256 matched before and after integration. Remote CI
+is separate from these local passes.

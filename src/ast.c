@@ -1121,6 +1121,19 @@ struct ast_typedef_declaration *ast_new_typedef_declaration(struct arena *arena,
 	return node;
 }
 
+struct ast_block_typedef_declaration *ast_new_block_typedef_declaration(struct arena *arena,
+	struct ast_typedef_declaration *declaration)
+{
+	struct ast_block_typedef_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_block_typedef_declaration) {
+			.item = { .kind = block_item_typedef_declaration, .location = declaration->location },
+			.declaration = declaration,
+		};
+	return node;
+}
+
 struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(struct arena *arena,
 	struct ast_typedef_declaration *declaration)
 {

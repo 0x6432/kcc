@@ -21,6 +21,7 @@ struct typedef_type_shape {
 };
 
 struct typedef_binding {
+	struct scope *scope;
 	struct ast_typedef_declaration *declaration;
 	struct typedef_binding *next;
 };
@@ -79,16 +80,23 @@ static bool same_name(struct token left, struct token right)
 			left.length) == 0;
 }
 
-static struct ast_typedef_declaration *find_typedef(struct sema *sema, struct token name)
+static struct typedef_binding *find_typedef_binding(struct sema *sema, struct token name)
 {
 	struct typedef_binding *binding = sema->typedefs;
 
 	while (binding) {
 		if (same_name(binding->declaration->name, name))
-			return binding->declaration;
+			return binding;
 		binding = binding->next;
 	}
 	return NULL;
+}
+
+static struct ast_typedef_declaration *find_typedef(struct sema *sema, struct token name)
+{
+	struct typedef_binding *binding = find_typedef_binding(sema, name);
+
+	return binding ? binding->declaration : NULL;
 }
 
 static struct ast_local_declaration *find_in_scope(struct scope *scope,
@@ -1536,6 +1544,8 @@ static bool sema_do(struct sema *sema, struct ast_do_statement *node)
 	return success;
 }
 
+static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_declaration *declaration);
+
 static bool sema_block_items(struct sema *sema, struct ast_block_item *item);
 
 static bool sema_for(struct sema *sema, struct ast_for_statement *node)
@@ -1874,6 +1884,10 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 			if (!sema_static_assertion(sema, ((struct ast_block_static_assertion *)item)->declaration))
 				return false;
 			break;
+		case block_item_typedef_declaration:
+			if (!sema_typedef_declaration(sema, ((struct ast_block_typedef_declaration *)item)->declaration))
+				return false;
+			break;
 		case block_item_declaration:
 			if (!sema_local(sema, (struct ast_local_declaration *)item))
 				return false;
@@ -1894,10 +1908,12 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 static bool sema_compound(struct sema *sema, struct ast_compound_statement *node)
 {
 	struct scope scope = { .parent = sema->scope };
+	struct typedef_binding *saved_typedefs = sema->typedefs;
 	bool success;
 
 	sema->scope = &scope;
 	success = sema_block_items(sema, node->items);
+	sema->typedefs = saved_typedefs;
 	sema->scope = scope.parent;
 	return success;
 }
@@ -1905,6 +1921,7 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 static bool sema_function_body(struct sema *sema, struct ast_function *definition)
 {
 	struct scope scope = { 0 };
+	struct typedef_binding *saved_typedefs = sema->typedefs;
 	bool success = false;
 
 	assert(!sema->scope && !sema->control);
@@ -1940,6 +1957,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 		definition->switch_label_count = sema->switch_label_count;
 	}
 done:
+	sema->typedefs = saved_typedefs;
 	sema->scope = NULL;
 	sema->function = NULL;
 	sema->labels = NULL;
@@ -2129,27 +2147,40 @@ static struct typedef_type_shape *measure_typedef_type(struct sema *sema,
 static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_declaration *declaration)
 {
 	struct typedef_binding *binding;
-	struct ast_typedef_declaration *previous;
+	struct typedef_binding *previous;
 	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
 
 	if (!type)
 		return false;
 	if (find_function(sema, declaration->name)) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
+			sema->scope ? "block typedef shadowing a function is not supported yet" :
 			"typedef name conflicts with prior ordinary declaration");
+		return false;
+	}
+	if (sema->scope && find_local(sema, declaration->name)) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			find_in_scope(sema->scope, declaration->name) ?
+			"typedef name conflicts with prior ordinary declaration" :
+			"block typedef shadowing an object is not supported yet");
 		return false;
 	}
 	if (!measure_typedef_type(sema, type, 0, declaration->location))
 		return false;
 
-	previous = find_typedef(sema, declaration->name);
+	previous = find_typedef_binding(sema, declaration->name);
 	if (previous) {
-		if (!type_same(previous->type, type)) {
+		if (previous->scope != sema->scope) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"block typedef shadowing a typedef is not supported yet");
+			return false;
+		}
+		if (!type_same(previous->declaration->type, type)) {
 			diagnostic_error(sema->diagnostics, declaration->name.location,
 				"typedef redeclaration has different type");
 			return false;
 		}
-		declaration->type = previous->type;
+		declaration->type = previous->declaration->type;
 		return true;
 	}
 
@@ -2159,7 +2190,9 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 		return false;
 	}
 	declaration->type = type;
-	*binding = (struct typedef_binding) { .declaration = declaration, .next = sema->typedefs };
+	*binding = (struct typedef_binding) {
+		.scope = sema->scope, .declaration = declaration, .next = sema->typedefs,
+	};
 	sema->typedefs = binding;
 	return true;
 }

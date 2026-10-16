@@ -1018,6 +1018,7 @@ static bool codegen_block_items(struct codegen *codegen,
 			codegen_named_label(codegen, ((const struct ast_block_label *)item)->label, terminated);
 			terminated = false;
 			break;
+		case block_item_typedef_declaration:
 		case block_item_static_assertion:
 			/* Fully checked at translation time; no runtime effect or datum. */
 			break;

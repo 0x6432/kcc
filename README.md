@@ -6,12 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M14l1c: file-scope typedef aliases now support comma-separated declarators and
-same-type redeclarations. Later declarators can use earlier alias names in the
-same group. Shared written specifiers and distinct derived syntax are preserved;
-canonical immutable aliases emit no storage. Each alias consumes one external
-item. Block typedefs, alias shadowing and storage-specifier permutations remain
-deferred. Alias-expanded types stay bounded at 4096 nodes and 128 levels.
+M14l2: compound blocks now accept scoped typedef declaration lists, including
+same-type redeclarations. Parser name classification and semantic aliases have
+independent scoped lifetimes; names cannot leak into later functions or siblings.
+Concrete typedef items create no locals or QBE storage. Each alias consumes one
+block item, while file aliases consume one external item. For-initializer aliases,
+alias shadowing and storage-specifier permutations remain separate increments.
+Alias-expanded types remain bounded at 4096 nodes and 128 levels.
 
 M14k2: semicolon-terminated query-derived file-scope function declarations now
 share ordinary prototype registration, compatibility and immutable composite
