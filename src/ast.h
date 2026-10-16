@@ -39,6 +39,7 @@ enum {
 	ast_max_parameters = 128,
 	ast_max_arguments = 128,
 	ast_max_pointer_depth = 64,
+	ast_max_array_dimensions = 64,
 };
 
 struct ast_expression {

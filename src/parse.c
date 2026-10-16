@@ -986,29 +986,50 @@ static struct ast_statement *parse_statement(struct parser *parser)
 	return parse_expression_statement(parser);
 }
 
-/* local-array-suffix ::= "[" integer-token "]"
- * This restricted literal bound is not a general integer constant expression.
+/* local-array-suffixes ::= { "[" integer-token "]" }
+ * Bounds are intentionally literal tokens, not general constant expressions.
+ * Source-order suffixes wrap right-to-left: a[2][3] has two rows of three.
  */
-static struct ast_type_syntax *parse_local_array_suffix(struct parser *parser,
+static struct ast_type_syntax *parse_local_array_suffixes(struct parser *parser,
 	struct ast_type_syntax *element)
 {
-	struct token opening = preprocess_next(parser->preprocessor);
-	struct token bound;
-	struct ast_array_type_syntax *array;
+	struct array_dimension {
+		struct token opening;
+		struct token bound;
+	};
+	struct array_dimension dimensions[ast_max_array_dimensions];
+	size_t count = 0;
 
-	if (!expect_token(parser, token_integer, "array bound must be an integer literal", &bound))
-		return NULL;
-	if (!expect_token(parser, token_right_bracket, "expected ']' after array bound", NULL))
-		return NULL;
-	array = ast_new_array_type_syntax(parser->arena, opening.location, element, bound);
-	if (!array) {
-		allocation_error(parser, opening.location);
-		return NULL;
+	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
+		if (count == ast_max_array_dimensions) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"array declarator exceeds dimension limit (64)");
+			return NULL;
+		}
+		dimensions[count].opening = preprocess_next(parser->preprocessor);
+		if (!expect_token(parser, token_integer, "array bound must be an integer literal",
+			&dimensions[count].bound))
+			return NULL;
+		if (!expect_token(parser, token_right_bracket, "expected ']' after array bound", NULL))
+			return NULL;
+		count++;
 	}
-	return &array->syntax;
+	while (count) {
+		struct ast_array_type_syntax *array;
+		struct array_dimension *dimension = &dimensions[--count];
+
+		array = ast_new_array_type_syntax(parser->arena, dimension->opening.location,
+			element, dimension->bound);
+		if (!array) {
+			allocation_error(parser, dimension->opening.location);
+			return NULL;
+		}
+		element = &array->syntax;
+	}
+	return element;
 }
 
-/* local-declaration ::= type-name identifier [ local-array-suffix ]
+/* local-declaration ::= type-name identifier [ local-array-suffixes ]
  *                       [ "=" expression ] ";"
  * Array initializers are diagnosed by sema (braced lists are not parsed yet).
  */
@@ -1026,7 +1047,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 	if (!expect_token(parser, token_identifier, "expected local name", &name))
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
-		type_syntax = parse_local_array_suffix(parser, type_syntax);
+		type_syntax = parse_local_array_suffixes(parser, type_syntax);
 		if (!type_syntax)
 			return NULL;
 	}

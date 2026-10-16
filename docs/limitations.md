@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M13f. The chronological entries below describe what each
+Current milestone: M13g. The chronological entries below describe what each
 checkpoint added; the current supported subset is summarized in M08b/M08c plus the M09/M10 additions.
 
 ## M00
@@ -917,3 +917,20 @@ not a C language limit or an exact bound on backend temporaries/padded frame siz
 Slots allocate at function entry using target size and at least QBE four-byte
 alignment. Tests initialize every executed element before reading it; large limit
 fixtures are compile-only. Dangling array-pointer lifetimes are not made defined.
+
+## M13g
+
+Local literal-bound arrays accept up to 64 dimensions. Source-order bounds wrap
+right-to-left into recursive array types: a[2][3] has two rows of three elements.
+Leaves may be any implemented scalar/pointer type. Compatibility preserves every
+bound and element type, even for shapes with identical byte counts. Ordinary
+decay drops exactly one array level; &array retains the entire shape. Row and
+whole-array pointer arithmetic use the correct complete referent size.
+
+The 1 MiB declared-object budget and positive literal-only bounds remain. General
+constant expressions, VLA/incomplete dimensions, parameter array adjustment,
+initializers and full pointer-to-array declarators are still unsupported. Crossing
+a row via an element pointer remains undefined even when storage is contiguous;
+tests use proper row pointers and do not flatten a matrix into int**. The separate
+64 pointer-syntax and 128 typed-expression limits remain. Fully indexing 42 unit
+array dimensions reaches typed depth 128; 43 exceeds it.

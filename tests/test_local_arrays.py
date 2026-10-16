@@ -154,7 +154,7 @@ int main(void) {{ {name} a[3]; a[0]=1; a[1]=2; a[2]=3;
         ('int main(void) { int n=3; int a[n]; return 0; }', 'integer literal'),
         ('int main(void) { int a[1+2]; return 0; }', "expected ']'"),
         ('int main(void) { int a[]; return 0; }', 'integer literal'),
-        ('int main(void) { int a[2][3]; return 0; }', "expected ';'"),
+        ('int main(void) { int a[2][]; return 0; }', 'integer literal'),
         ('int main(void) { int a[2]=1; return 0; }', 'array initializers'),
         ('int main(void) { int a[2]; int b[2]; a=b; return 0; }', 'modifiable lvalue'),
         ('int main(void) { int a[2]; *(&a)=a; return 0; }', 'modifiable lvalue'),

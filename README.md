@@ -6,8 +6,8 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M13f: fixed one-dimensional local arrays now use explicit array-to-pointer decay
-and target object size/alignment. Bounds are positive integer literal tokens;
+M13g: fixed multidimensional local arrays preserve recursive shape, row strides
+and one-level decay, using the existing target object layout. Bounds are positive integer literal tokens;
 array initializers and general constant-expression bounds remain later work.
 Pointer subscripts, scaled offsets, compatible differences/comparisons and
 object lvalue addresses share the same typed lowering. Separate concrete typed offset/difference ASTs use target
@@ -17,7 +17,7 @@ support loads, mutations, compatible values, fixed calls/returns/casts and
 scalar truth. Null cancellation &*p evaluates p once without touching its
 pointee. All baseline primitive integer types, ordinary byte characters,
 explicit promotions/conversions and canonical byte/halfword ABIs remain
-supported. Multidimensional arrays, strings, null constants and full declarators
+supported. Strings, null constants and full declarators
 remain later increments. C23 bool/true/false spelling and full C23 are
 unfinished. Includes retain bounded explicit search and direct/computed
 quoted/basic angle support.

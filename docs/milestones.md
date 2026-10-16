@@ -18,8 +18,8 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M09 | Preprocessing tokens, phase ordering, directives | Splicing/comment ordering, locations, parser token contract unchanged | complete (stated subset) |
 | M10 | Object/function macros and rescanning | Recursion suppression, arguments, nested expansion, fuzz limits | complete (M10a–M10d documented subset; operators/directives remain M11) |
 | M11 | Includes, conditions, stringizing/token pasting | Include search/provenance, conditional evaluation, expansion tests | complete within recorded M11a–M11m subsets; residual preprocessing audit/encodings/environment tracked in M23–M25 |
-| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | in progress (M12a–M12d implemented; M12e/f long ranks, M12g characters, M12h/i char/short and M12j _Bool implemented; final verification pending) |
-| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-f pointer operations/subscripts and fixed local arrays implemented; later verification pending) |
+| M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
+| M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-g pointer operations/subscripts and fixed multidimensional local arrays implemented; strings and later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | planned |
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | planned |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
@@ -965,3 +965,14 @@ GCC suites, 18 both-host/QBE full-value programs, primitive/pointer storage,
 both-direction borrowed-array ABI, target layout/compatibility/cache, exact
 storage/depth and bounded sanitized fuzz checks. Full isolated/remote verification
 remains pending. M13g multidimensional shape composition is pre-designed.
+
+M13d 1435382 passed exact-source CI 38826152470 (both compiler normal/sanitizer
+legs and fuzz). Its isolated local matrix remains queued independently. M12a-j
+baseline integer subset verification is complete; remaining language areas stay
+in their owning milestones, not implied by the M12 status update.
+
+M13g source checkpoint: multidimensional local arrays passed full normal GCC
+suites, 15 both-host/QBE full-value programs, primitive/pointer leaves, both ABI
+row directions, shape/stride/decay and exact dimension/product/depth checks plus
+bounded sanitized fuzz. Full isolated/remote verification remains pending.
+M13h ordinary byte strings and static data are pre-designed, with a passed QBE probe.

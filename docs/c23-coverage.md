@@ -131,3 +131,14 @@ known C23 separator gap uses an explicit equal-valued host oracle only after the
 original spelling passes kcc/QBE; Clang validates the original source directly.
 General constant-expression bounds, multidimensional/parameter arrays, aggregate
 initializers and strings are not implied by this subset.
+
+### M13g fixed multidimensional arrays
+
+15 both-host/QBE full-value programs and both-direction borrowed-row ABI cover
+all primitive/pointer leaves, unequal dimensions, nested loops, recursive decays,
+row/whole-array strides and lifetime-safe row mutation. Typed syntax/cache/shape
+units distinguish equal-byte incompatible arrays. Exact 64/65 dimensions, product
+budget and 42/43 indexed-depth limits pass. The prior a[2][3] rejection now uses
+unsupported a[2][], retaining incomplete-bound constraint coverage. No flattened
+cross-row element-pointer arithmetic is executed. Other bound/declarator and
+initializer limitations remain explicit.

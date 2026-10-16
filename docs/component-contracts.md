@@ -1021,3 +1021,13 @@ Sema counts declared object bytes (parameters included) against the 1 MiB budget
 retains counts across scope exits because all slots allocate at entry, and resets
 for each function. Resource limits precede codegen; every decay counts in typed
 depth. Source/pp lifetime rules also apply to borrowed array-bound tokens.
+
+## M13g recursive array shape composition
+
+Parser buffers at most 64 opening/bound token pairs in one declarator-local list,
+then wraps array syntax right-to-left. This is not a translation-unit token
+vector. Each syntax node retains its own diagnostic locations and cache. Existing
+recursive array compatibility, checked size/alignment and one-level decay need
+no new semantic/backend representation. A matrix decays to pointer-to-row, never
+int**; a selected row may decay to its scalar-element pointer for fixed host ABI
+calls. Resource accounting includes the recursively computed complete object size.

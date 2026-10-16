@@ -1207,8 +1207,72 @@ static void test_local_array_tree(void)
 	source_destroy(&source);
 }
 
+static void test_multidimensional_array_tree(void)
+{
+	const char *text = "int f(void) { int a[2][3]; int *p=a[1]; return p[2]; }";
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct arena arena = { 0 };
+	struct ast_translation_unit *unit;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *p;
+	struct ast_array_type_syntax *outer_syntax;
+	struct ast_array_type_syntax *inner_syntax;
+	const struct array_type *outer;
+	const struct array_type *inner;
+	struct array_type *other_inner;
+	struct array_type *other_outer;
+	struct ast_array_decay_expression *row_decay;
+	struct ast_array_decay_expression *matrix_decay;
+	struct ast_indirection_expression *indirection;
+	struct ast_pointer_offset_expression *offset;
+
+	assert(source_from_bytes(&source, "matrix.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	a = (struct ast_local_declaration *)first_function(unit)->body->items;
+	assert(a->type_syntax->kind == type_syntax_array);
+	outer_syntax = (struct ast_array_type_syntax *)a->type_syntax;
+	assert(outer_syntax->bound.integer == 2 && outer_syntax->element->kind == type_syntax_array);
+	inner_syntax = (struct ast_array_type_syntax *)outer_syntax->element;
+	assert(inner_syntax->bound.integer == 3 && inner_syntax->element->kind == type_syntax_integer);
+	assert(outer_syntax->syntax.location.offset == (size_t)(strstr(text, "[2]") - text));
+	assert(inner_syntax->syntax.location.offset == (size_t)(strstr(text, "[3]") - text));
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	outer = (const struct array_type *)a->type;
+	assert(outer->type.kind == type_kind_array && outer->count == 2);
+	assert(outer_syntax->syntax.type == &outer->type && outer->element->kind == type_kind_array);
+	inner = (const struct array_type *)outer->element;
+	assert(inner_syntax->syntax.type == &inner->type && inner->count == 3 && inner->element == &type_int);
+	assert(type_object_size(&outer->type) == 24 && type_object_alignment(&outer->type) == 4);
+	other_inner = type_new_array(&arena, &type_int, 2);
+	assert(other_inner);
+	other_outer = type_new_array(&arena, &other_inner->type, 3);
+	assert(other_outer && type_object_size(&other_outer->type) == 24);
+	assert(!type_compatible(&outer->type, &other_outer->type));
+	p = (struct ast_local_declaration *)a->item.next;
+	assert(p->initializer->kind == expression_array_decay && p->initializer->depth == 5);
+	row_decay = (struct ast_array_decay_expression *)p->initializer;
+	assert(((const struct pointer_type *)row_decay->expression.type)->referent == &type_int);
+	assert(row_decay->operand->kind == expression_indirection && row_decay->operand->type == &inner->type);
+	indirection = (struct ast_indirection_expression *)row_decay->operand;
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->expression.kind == expression_pointer_offset && offset->element_size == 12);
+	assert(offset->base->kind == expression_array_decay);
+	matrix_decay = (struct ast_array_decay_expression *)offset->base;
+	assert(matrix_decay->operand->kind == expression_name && matrix_decay->operand->type == a->type);
+	assert(((const struct pointer_type *)matrix_decay->expression.type)->referent == &inner->type);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 int main(void)
 {
+	test_multidimensional_array_tree();
 	test_local_array_tree();
 	test_pointer_subscript_tree();
 	test_pointer_arithmetic_tree();
