@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M14j2. Read the latest entries together with README.md and
+Current milestone: M23a1. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -1173,3 +1173,25 @@ Those original kcc programs run with QBE; tests count the native host gaps rathe
 than changing their source or claiming agreement. GCC 11 accepts all 39 new
 runtime programs. Bring forward M23a1 bool/true/false spellings next, using the
 existing _Bool model; other M14 and M23a work stays incomplete.
+
+## M23a1 boolean keywords and constants
+
+bool and _Bool denote one canonical semantic type. true/false are concrete bool
+constant expressions, not fabricated int literals or predefined object macros.
+Raw preprocessing can define/undef/paste these spellings before language token
+conversion; remaining #if true maps to 1 and other identifiers to 0 as before.
+Ordinary bool promotion, whole-scalar truth conversion and narrow ABI handling
+remain shared with _Bool. No stdbool.h/default header is supplied. Integer
+constant evaluation/null constants remain unimplemented: false-to-pointer and
+boolean array bounds still diagnose. Other M23a keywords remain unfinished.
+
+Both-host tests run 32 original kcc programs, 22 constraints, exact promotion
+bounds, 26 cross-object ABI arrangements and dirty-upper-bit returns. Clang 15
+has native C23 keyword/type agreement. GCC 11 only runs explicitly labelled
+compatibility-macro runtime oracles; three defined/undef programs have no such
+native host oracle and still execute unchanged through kcc/QBE. Semantic units
+inspect real bool constants, source qualifiers and explicit bool->int promotion.
+Full normal regression/QBE and both-host sanitized semantic units passed.
+
+M23a1 bounded sanitized fuzz: 23,176 lexer and 68,839 pipeline inputs in
+26 seconds each, without reported failures. Generated C was never executed.

@@ -281,13 +281,28 @@ static void test_const_tokens(void)
 	assert(strcmp(token_kind_name(token_const), "const") == 0);
 }
 
+static void test_boolean_keywords(void)
+{
+	const enum token_kind kinds[] = { token_c23_bool, token_true, token_false,
+		token_identifier, token_identifier, token_identifier, token_bool };
+
+	check_tokens("#define FLAG bool\n#define YES true\n#define CAT(a,b) a##b\n"
+		"FLAG YES CAT(fal,se) boolish trueish falsehood _Bool", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	assert(strcmp(token_kind_name(token_c23_bool), "bool") == 0);
+	assert(strcmp(token_kind_name(token_true), "true") == 0);
+	assert(strcmp(token_kind_name(token_false), "false") == 0);
+}
+
+
 int main(void)
 {
+	test_boolean_keywords();
 	test_const_tokens();
 	test_character_spellings();
 	test_integer_spellings();
 	{
-		const enum token_kind kinds[] = { token_bool, token_unsupported_keyword, token_unsupported_keyword, token_unsupported_keyword };
+		const enum token_kind kinds[] = { token_bool, token_c23_bool, token_true, token_false };
 
 		check_tokens("_Bool bool true false", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
 	}

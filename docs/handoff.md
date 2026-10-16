@@ -2,7 +2,8 @@
 
 ## Current checkpoint
 
-M14j2 implementation: const syntax/enforcement, immutable qualified types,
+M23a1 implementation: C23 bool/true/false typed constants and raw macro separation;
+prior M14j2 const syntax/enforcement, immutable qualified types,
 value/signature normalization and qualified pointer conversions; prior M19a sequenced comma values/discards with separate argument and
 declaration separator floors; M14i explicit object/function-category pointer casts; prior object/void value conversions and mixed equality; prior real void types/functions, bare returns and effect-only
 casts/discards; prior explicit function designators/decay, callback values and
@@ -26,14 +27,13 @@ Get the exact latest hash with git log -1; avoid a circular self-commit referenc
 
 Latest confirmed exact-source CI: M19a 95a99d7 run 38861248497, M14i
 1ed1cc8 run 38860337750 and M14h 274d966 run 38859812046 passed.
-M14j1 6e7ff50 run 38861821792 was still running at the latest check; M14j2
-remote/full isolated checks remain pending. M14g full GCC/Clang normal and
+M14j1 6e7ff50 run 38861821792 passed. M14j2 b26ff3b run 38863255999
+was still running; M23a1 remote/full isolated checks remain pending. M14g full GCC/Clang normal and
 ASan/UBSan matrix passed; queued newer snapshots need actual log confirmation.
 Logs/snapshots live in /data/tools and /data/validation-* outside the repo.
 
-Next: M23a1 bool/true/false spellings and real boolean constant ASTs, designed
-before implementation in m23-boolean-keywords.md; then remaining M14 qualifier/
-typedef and M23a keyword work. Const design is m14-const-qualification.md.
+Next: M19b conditional expressions, designed in m19-conditional-expressions.md;
+then remaining M14 qualifiers/typedefs and M23a keyword work.
 Null constants, integer/pointer casts and full declarators,
 general array bounds/initializers, string encodings and remaining
 C23 features stay unfinished. &*null cancellation
@@ -1680,3 +1680,25 @@ ASan/UBSan matrix passed. Do not infer other queued-source outcomes.
 Next independent M23a1 bool/true/false keywords and typed boolean constants are
 designed in m23-boolean-keywords.md, retaining the existing C23 pp true rule.
 This does not finish M14 other qualifiers/typedefs or M23a's remaining keywords.
+
+## M23a1 tested source checkpoint
+
+C23 bool/true/false tokens, a separate concrete boolean constant AST and shared
+_Bool semantics/codegen are implemented. Macro expansion stays before keyword
+conversion and preprocessing true/false remains separate from language constants.
+Full normal GCC regression and QBE suites passed. Both-host targeted checks
+cover 32 original programs, 22 constraints, exact bool promotion depth, 26
+cross-object ABI arrangements, mixed register/stack/callbacks and dirty narrow
+returns. GCC 11 compatibility oracles are explicitly labelled; Clang 15 gives
+native C23 keyword/type agreements. Three preprocessing defined/undef programs
+are QBE-tested unchanged and only native hosts serve as their reference oracle.
+Both GCC/Clang ASan/UBSan semantic units passed. Fuzz totals are recorded below;
+no generated C was executed. Exact-source remote/full isolated checks are pending.
+
+M14j1 6e7ff50 CI run 38861821792 passed. M14j2 b26ff3b CI run 38863255999
+was still running at the latest check. Results are source-specific.
+Next: M19b conditional expressions, with the design recorded before editing.
+M14 remaining qualifiers/typedefs and M23a remaining keywords stay unfinished.
+
+M23a1 bounded sanitized fuzz: 23,176 lexer and 68,839 pipeline inputs in
+26 seconds each, without reported failures. Generated C was never executed.

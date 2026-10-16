@@ -6,6 +6,11 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23a1: C23 bool/true/false language keywords use the existing _Bool model
+and distinct typed boolean constant ASTs. Preprocessing identifiers remain raw
+until expansion; #if true/false and actual macro defined/undef rules stay separate.
+Only the boolean subset of M23a is complete.
+
 M14j2: const syntax and modification/conversion constraints preserve qualified
 objects and pointees, strip only value-level qualifiers, and normalize function
 signatures without making const parameter locals mutable. Immutable type graphs,

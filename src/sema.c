@@ -660,6 +660,9 @@ static bool sema_expression(struct sema *sema,
 		sema->string_tail = &node->next_string;
 		break;
 	}
+	case expression_boolean:
+		result_type = &type_bool;
+		break;
 	case expression_character:
 		break;
 	case expression_integer: {

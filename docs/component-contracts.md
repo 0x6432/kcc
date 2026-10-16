@@ -1248,3 +1248,12 @@ conversion nodes with checked depth. Pointer difference ignores immediate
 qualification but checks both referents complete before layout. QBE remains
 kind/width-driven; no invalid loads, read-only automatic-storage promise or
 function adapters are introduced. Other qualifier bits are not implemented yet.
+
+## M23a1 boolean constants
+
+lex.c maps bool/true/false only at token_from_pp, retaining distinct debug kinds
+for bool versus _Bool. Parser constructs ast_boolean_expression with bool value,
+location and depth 1. Sema annotates type_bool without integer literal ranking;
+ordinary promotions insert explicit conversions as usual. QBE emits canonical
+word 0/1, then existing scalar/ABI width rules apply. pp identifiers are not
+keywords; defined tests macros, and #if remaining true is handled independently.

@@ -10,6 +10,7 @@ struct function_symbol;
 
 enum expression_kind {
 	expression_integer,
+	expression_boolean,
 	expression_character,
 	expression_string,
 	expression_address,
@@ -59,6 +60,11 @@ struct ast_expression {
 	const struct type *type;
 	unsigned depth;
 	bool is_lvalue;
+};
+
+struct ast_boolean_expression {
+	struct ast_expression expression;
+	bool value;
 };
 
 struct ast_integer_expression {
@@ -465,6 +471,7 @@ struct ast_parameter *ast_new_parameter(struct arena *arena,
 	struct source_location location, struct token name, bool has_name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,
 	struct source_location location, struct token name);
+struct ast_boolean_expression *ast_new_boolean(struct arena *arena, struct token token);
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token);
 struct ast_character_expression *ast_new_character(struct arena *arena,

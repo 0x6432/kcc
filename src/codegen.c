@@ -357,6 +357,13 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =w copy %jd\n", temporary, (intmax_t)node->value);
 		return temporary;
 	}
+	case expression_boolean: {
+		const struct ast_boolean_expression *node = (const struct ast_boolean_expression *)expression;
+
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w copy %u\n", temporary, node->value ? 1u : 0u);
+		return temporary;
+	}
 	case expression_integer: {
 		const struct ast_integer_expression *node =
 			(const struct ast_integer_expression *)expression;

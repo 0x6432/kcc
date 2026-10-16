@@ -2183,8 +2183,65 @@ static void test_const_qualification_tree(void)
 }
 
 
+static void test_boolean_constant_tree(void)
+{
+	const char *text = "bool id(_Bool); _Bool id(const bool x) { "
+		"const bool a=true; bool b=false; return x; } "
+		"int main(void) { return +true; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function *function;
+	struct ast_local_declaration *a;
+	struct ast_local_declaration *b;
+	struct ast_boolean_expression *constant;
+	struct ast_statement_item *item;
+	struct ast_unary_expression *plus;
+	struct ast_conversion_expression *promotion;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "boolean.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	function = (struct ast_function *)unit->declarations->next;
+	assert(function->external.kind == external_function_definition);
+	assert(function->return_type == &type_bool);
+	assert(function->declaration->parameters->type->qualifiers == type_qualifier_const);
+	a = (struct ast_local_declaration *)function->body->items;
+	b = (struct ast_local_declaration *)a->item.next;
+	assert(a->type->kind == type_kind_bool && a->type->qualifiers == type_qualifier_const);
+	assert(b->type == &type_bool);
+	constant = (struct ast_boolean_expression *)a->initializer;
+	assert(constant->expression.kind == expression_boolean && constant->value);
+	assert(constant->expression.type == &type_bool && constant->expression.depth == 1);
+	assert(!constant->expression.is_lvalue);
+	constant = (struct ast_boolean_expression *)b->initializer;
+	assert(constant->expression.kind == expression_boolean && !constant->value);
+	assert(constant->expression.type == &type_bool && constant->expression.depth == 1);
+	assert(!constant->expression.is_lvalue);
+	function = (struct ast_function *)function->external.next;
+	item = (struct ast_statement_item *)function->body->items;
+	plus = (struct ast_unary_expression *)((struct ast_return_statement *)item->statement)->value;
+	assert(plus->expression.kind == expression_unary && plus->expression.type == &type_int);
+	assert(plus->expression.depth == 3 && !plus->expression.is_lvalue);
+	promotion = (struct ast_conversion_expression *)plus->operand;
+	require_conversion(&promotion->expression, &type_int, &type_bool);
+	assert(promotion->operand->kind == expression_boolean && promotion->operand->depth == 1);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+
 int main(void)
 {
+	test_boolean_constant_tree();
 	test_const_qualification_tree();
 	test_comma_expression_tree();
 	test_explicit_pointer_cast_tree();

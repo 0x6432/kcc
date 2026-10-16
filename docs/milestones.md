@@ -29,7 +29,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
-| M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | planned |
+| M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false implemented; other changes planned) |
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | planned |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | planned |
@@ -1205,3 +1205,25 @@ ASan/UBSan matrix passed. Do not infer other queued-source outcomes.
 Next independent M23a1 bool/true/false keywords and typed boolean constants are
 designed in m23-boolean-keywords.md, retaining the existing C23 pp true rule.
 This does not finish M14 other qualifiers/typedefs or M23a's remaining keywords.
+
+## M23a1 tested source checkpoint
+
+C23 bool/true/false tokens, a separate concrete boolean constant AST and shared
+_Bool semantics/codegen are implemented. Macro expansion stays before keyword
+conversion and preprocessing true/false remains separate from language constants.
+Full normal GCC regression and QBE suites passed. Both-host targeted checks
+cover 32 original programs, 22 constraints, exact bool promotion depth, 26
+cross-object ABI arrangements, mixed register/stack/callbacks and dirty narrow
+returns. GCC 11 compatibility oracles are explicitly labelled; Clang 15 gives
+native C23 keyword/type agreements. Three preprocessing defined/undef programs
+are QBE-tested unchanged and only native hosts serve as their reference oracle.
+Both GCC/Clang ASan/UBSan semantic units passed. Fuzz totals are recorded below;
+no generated C was executed. Exact-source remote/full isolated checks are pending.
+
+M14j1 6e7ff50 CI run 38861821792 passed. M14j2 b26ff3b CI run 38863255999
+was still running at the latest check. Results are source-specific.
+Next: M19b conditional expressions, with the design recorded before editing.
+M14 remaining qualifiers/typedefs and M23a remaining keywords stay unfinished.
+
+M23a1 bounded sanitized fuzz: 23,176 lexer and 68,839 pipeline inputs in
+26 seconds each, without reported failures. Generated C was never executed.

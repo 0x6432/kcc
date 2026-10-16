@@ -39,7 +39,7 @@ static void allocation_error(struct parser *parser, struct source_location locat
 static bool begins_integer_type(enum token_kind kind)
 {
 	return kind == token_int || kind == token_signed || kind == token_unsigned ||
-		kind == token_long || kind == token_char || kind == token_short || kind == token_bool;
+		kind == token_long || kind == token_char || kind == token_short || kind == token_bool || kind == token_c23_bool;
 }
 
 static bool begins_declaration_specifier(enum token_kind kind)
@@ -67,7 +67,7 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
  * builtin-type ::= integer-type | "void"
  * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
- *                | permutation of ['signed' | 'unsigned'] 'short' ['int'] | '_Bool'
+ *                | permutation of ['signed' | 'unsigned'] 'short' ['int'] | '_Bool' | 'bool'
  * At least one actual type specifier is required; void cannot combine with
  * integer specifiers. Qualifiers do not hide duplicate/conflicting specifiers.
  */
@@ -111,7 +111,7 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 			seen_void = true;
 			continue;
 		}
-		if (token.kind == token_bool) {
+		if (token.kind == token_bool || token.kind == token_c23_bool) {
 			if (seen_bool) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate _Bool type specifier");
 				return NULL;
@@ -446,6 +446,19 @@ static struct ast_expression *parse_integer_expression(struct parser *parser)
 	return &node->expression;
 }
 
+/* boolean-constant ::= "true" | "false" */
+static struct ast_expression *parse_boolean_expression(struct parser *parser)
+{
+	struct token token = preprocess_next(parser->preprocessor);
+	struct ast_boolean_expression *node = ast_new_boolean(parser->arena, token);
+
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	return &node->expression;
+}
+
 /* character-expression ::= ordinary-character-token */
 static struct ast_expression *parse_character_expression(struct parser *parser)
 {
@@ -594,13 +607,15 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 static struct ast_expression *parse_expression(struct parser *parser,
 	unsigned minimum_binding_power);
 
-/* primary-atom ::= integer-expression | character-expression | string-expression | identifier
+/* primary-atom ::= integer-expression | boolean-constant | character-expression | string-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.
  */
 static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
 
+	if (token.kind == token_true || token.kind == token_false)
+		return parse_boolean_expression(parser);
 	if (token.kind == token_string)
 		return parse_string_expression(parser);
 	if (token.kind == token_character)

@@ -303,3 +303,10 @@ the current declarator/type subset. Dedicated typed units and 39 QBE programs
 cover this increment. Clang 15 has three exact C23 return-qualification diagnostic
 gaps (not claimed as native agreements). Other qualifiers, typedefs and full C23
 remain later work. bool/true/false source spellings are the next independent step.
+
+### M23a1 C23 boolean subset
+
+bool is an alternate spelling of _Bool; true/false have bool type and concrete
+boolean ASTs. Raw macros and preprocessing conditions keep their phase-specific
+rules. Runtime/type/ABI/boundary tests cover this subset; other keyword changes,
+nullptr, standard headers and full integer constant evaluation remain later work.

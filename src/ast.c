@@ -42,6 +42,23 @@ struct ast_pointer_type_syntax *ast_new_pointer_type_syntax(struct arena *arena,
 	return node;
 }
 
+struct ast_boolean_expression *ast_new_boolean(struct arena *arena, struct token token)
+{
+	struct ast_boolean_expression *node = arena_alloc(arena, sizeof(*node));
+
+	assert(token.kind == token_true || token.kind == token_false);
+	if (node)
+		*node = (struct ast_boolean_expression) {
+			.expression = {
+				.kind = expression_boolean,
+				.location = token.location,
+				.depth = 1,
+			},
+			.value = token.kind == token_true,
+		};
+	return node;
+}
+
 struct ast_integer_expression *ast_new_integer(struct arena *arena,
 	struct token token)
 {

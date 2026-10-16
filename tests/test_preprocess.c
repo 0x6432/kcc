@@ -1379,6 +1379,12 @@ static void test_expression_conditions(void)
 	check_stream("#if 0 && 1/0\n#error bad\n#elif 1 || (9223372036854775807*2)\n42\n"
 		"#elif bad(\n#error bad\n#endif\n", integer, 2, 0, NULL);
 	check_stream("#if true && !false\n42\n#endif\n", integer, 2, 0, NULL);
+	check_stream("#if defined(true) || defined(false) || defined(bool)\n#error keywords are not macros\n"
+		"#elif false || bool\n#error false branch\n#elif true\n42\n#endif\n", integer, 2, 0, NULL);
+	check_stream("#define true 0\n#define false 1\n#if true\n#error replaced true\n"
+		"#elif false\n42\n#endif\n#undef true\n#undef false\n"
+		"#if true && !false\n42\n#endif\n", (const struct expected_token[]) {
+			{ token_integer, "42" }, { token_integer, "42" }, { token_eof, "" } }, 3, 0, NULL);
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
 		assert(snprintf(text, sizeof(text), "#if %s\nint", bad[i]) > 0);
 		check_stream(text, rejected, 3, 1, NULL);
