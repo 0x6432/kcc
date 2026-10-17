@@ -1181,3 +1181,34 @@ C23 conformance claim. Earlier array exclusions are superseded only for this sli
 
 The typeof_unqual expression-array native gap is separate from kcc support and
 native original-source agreement. See the exact classifier/standards audit.
+
+## M15g1 tentative scalar definitions (6.9.2; 6.7.10)
+
+M15g1 adds unadorned file-scope tentative definitions of existing complete
+scalar types: integers, const scalars, object/function pointers and typeof(nullptr).
+Written extern provenance stays on concrete declarations. A canonical symbol's
+first successful tentative declaration is its unique emission anchor; compatible
+repeats and extern interleavings preserve identity and immutable earlier type
+captures. Query/alias roots still classify by resolved type, not storage spelling.
+Read m15-tentative-scalars.md.
+
+QBE emits exactly one exported, explicitly aligned zero datum using the FINAL
+canonical scalar layout, even for unused owned objects. Pure extern scalars and
+arrays still emit no storage. No runtime initialization, local allocation/slot,
+common-symbol merging, new initializer AST or public symbol list is introduced.
+All-zero pointer/nullptr representations are an amd64 SysV target policy, not a
+portable C assertion. Native companions only extern-declare kcc-owned objects.
+
+Only existing COMPLETE SCALARS gain tentative ownership. Tentative arrays,
+unknown-array size-one finalization, explicit initializers (including zero/empty),
+static objects, block extern/functions, inferred file objects, thread/inline, VM,
+aggregate and additional scalar kinds remain deferred. Arrays remain explicit
+extern declarations only. Tentative objects named main are a Linux hosted-target
+subset refusal, not a fabricated universal C constraint. Ordinary const objects
+are not ICEs; writes remain refused. No full C23 conformance claim.
+
+The one-anchor representation is sufficient only while initialized definitions
+are unsupported. Future initialized definitions need a separate ownership and
+duplicate-definition design; static objects need canonical linkage work. Shared
+256 object / independent 256 function / 512 declaration pools and existing local,
+array-type, depth and query budgets are unchanged. No new global-byte budget.

@@ -54,12 +54,8 @@ constraints = [
     ('typeof(int(void)) f; int f(void) { return 42; } int f(void) { return 42; }','redefinition'),
 ]
 subset_errors = [
-    ('typeof(int) x;','file-scope object declarations'),
-    ('typeof(int *) p;','file-scope object declarations'),
-    ('typeof(int[2]) a;','file-scope object declarations'),
-    ('typeof(void) x;','file-scope object declarations'),
-    ('int f(void); typeof(&f) p;','file-scope object declarations'),
-    ('int f(void); typeof(f) *p;','file-scope object declarations'),
+    ('typeof(int[2]) a;','only scalar tentative definitions'),
+    ('typeof(void) x;','only scalar tentative definitions'),
     ('typeof(int(void)) f { return 42; }',"query-derived external declarations require ';'"),
     ('typeof(int(void)) f=0;',"query-derived external declarations require ';'"),
     ('int f(void) { typeof(int(void)) g; return 0; }','block-scope function declarations'),

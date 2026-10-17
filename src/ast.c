@@ -942,13 +942,14 @@ struct ast_call_expression *ast_new_call(struct arena *arena,
 }
 
 struct ast_external_object_declaration *ast_new_external_object_declaration(struct arena *arena,
-	struct source_location location, struct ast_type_syntax *type_syntax, struct token name)
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name, bool is_extern)
 {
 	struct ast_external_object_declaration *node = arena_alloc(arena, sizeof(*node));
 
 	if (node)
 		*node = (struct ast_external_object_declaration) {
 			.external = { .kind = external_object_declaration, .location = location },
+			.is_extern = is_extern,
 			.type_syntax = type_syntax,
 			.name = name,
 		};

@@ -641,6 +641,7 @@ struct ast_external_static_assertion {
 
 struct ast_external_object_declaration {
 	struct ast_external_declaration external;
+	bool is_extern;
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	const struct type *type;
@@ -743,7 +744,7 @@ struct ast_block_typedef_declaration *ast_new_block_typedef_declaration(struct a
 struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(struct arena *arena,
 	struct ast_typedef_declaration *declaration);
 struct ast_external_object_declaration *ast_new_external_object_declaration(struct arena *arena,
-	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name, bool is_extern);
 struct ast_external_type_declaration *ast_new_external_type_declaration(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,

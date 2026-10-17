@@ -2513,28 +2513,30 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* extern-object-tail ::= declarator ( "," | ";" )
- * An initializer would define storage and is a separate unsupported construct.
+/* object-declaration-tail ::= declarator ( "," | ";" )
+ * Extern refers to storage elsewhere; an unadorned scalar is tentative.
+ * Explicit initializers remain a separate unsupported construct.
  */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
-	struct ast_type_syntax *type_syntax, struct token beginning, struct token name)
+	struct ast_type_syntax *type_syntax, struct token beginning, struct token name, bool is_extern)
 {
 	struct ast_external_object_declaration *declaration;
 
 	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
 		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
 		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-			"extern object definitions are not supported yet");
+			is_extern ? "extern object definitions are not supported yet" :
+			"file-scope object initializers are not supported yet");
 		return NULL;
 	}
 	declaration = ast_new_external_object_declaration(parser->arena,
-		beginning.location, type_syntax, name);
+		beginning.location, type_syntax, name, is_extern);
 	if (!declaration)
 		allocation_error(parser, beginning.location);
 	return declaration ? &declaration->external : NULL;
 }
 
-/* Build unresolved alias/query syntax or an explicit extern object declaration.
+/* Build unresolved alias/query syntax or a concrete object declaration.
  * The outer query or typedef name is unresolved; only sema classifies its type.
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
@@ -2548,8 +2550,8 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name) {
-		if (is_extern)
-			return new_external_object_declaration(parser, type_syntax, beginning, name);
+		if (is_extern || !is_static)
+			return new_external_object_declaration(parser, type_syntax, beginning, name, is_extern);
 		diagnostic_error(parser->diagnostics, name.location,
 			"file-scope object declarations are not supported yet");
 		return NULL;
@@ -2649,7 +2651,8 @@ done:
  *     declarator { "," declarator } ";"
  * Only a sole direct function declarator can introduce a definition.
  * Each declarator has its own derived chain around the shared specifier base.
- * Explicit extern also permits declaration-only objects, classified by sema.
+ * Objects are extern declarations or unadorned tentative definitions; sema
+ * classifies alias/query roots and enforces the supported object subset.
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,

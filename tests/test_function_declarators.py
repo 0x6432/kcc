@@ -96,7 +96,6 @@ with tempfile.TemporaryDirectory(prefix='kcc function declarators ') as director
         ('int f(void)[3];', 'function return type'),
         ('int f(void)(int);', 'function return type'),
         ('int f(void) { int a[2](void); return 0; }', 'array element type must be complete'),
-        ('int (*p)(int);', 'file-scope object declarations'),
         ('int f(void) { int (*p)(int)=1; return 0; }', 'pointer conversion'),
         ('int f(int (int)[3]);', 'function return type'),
         ('int f(void) { int g(int); return 0; }', 'block-scope function declarations'),

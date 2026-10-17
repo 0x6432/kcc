@@ -76,7 +76,6 @@ constraints = [
 ]
 subset_errors = [
     ('typedef int T=42;','cannot have initializers'),
-    ('typedef int T; T x;','file-scope object declarations'),
     ('typedef int F(void); F f { return 42; }',"query-derived external declarations require ';'"),
     ('typedef int F(void); int main(void) { F f; return 42; }','block-scope function declarations'),
     ('typedef int F(void); const F f;','function type cannot be qualified'),

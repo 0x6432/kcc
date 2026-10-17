@@ -505,7 +505,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     invalid = [
         "", "int main(void) { return; }", "int main(void) { return 0 }",
         "int main(void) { return 9223372036854775808; }",
-        "int main(void) { return 0xg; }", "int main(void) { return 0; } int x;",
+        "int main(void) { return 0xg; }", "int main(void) { return 0; } int x=42;",
         "int main(void) { return 1 + ; }",
         "int main(void) { return ++1; }", "int main(void) { return (1; }",
         "int main(void) { return 1 / ; }", "#define X 0\n",

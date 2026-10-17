@@ -244,8 +244,7 @@ c23_constraints = [
     ('extern int f(void); extern typeof(&f) f;', 'external object conflicts with prior ordinary'),
 ]
 subset_errors = [
-    ('int x;', 'file-scope object declarations'),
-    ('int x=42;', 'file-scope object declarations'),
+    ('int x=42;', 'file-scope object initializers'),
     ('static int x;', 'file-scope object declarations'),
     ('extern int x=42;', 'extern object definitions'),
     ('extern int (*fp)(int)=0;', 'extern object definitions'),

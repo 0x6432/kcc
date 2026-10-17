@@ -6,6 +6,8 @@
 struct external_object_symbol {
 	struct token name;
 	const struct type *type;
+	/* First successful tentative declaration; NULL for extern-only symbols. */
+	struct ast_external_declaration *tentative_definition;
 	struct external_object_symbol *next;
 };
 

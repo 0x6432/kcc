@@ -2,6 +2,96 @@
 
 ## Current checkpoint
 
+M15g1 adds unadorned file-scope tentative definitions of existing complete
+scalar types: integers, const scalars, object/function pointers and typeof(nullptr).
+Written extern provenance stays on concrete declarations. A canonical symbol's
+first successful tentative declaration is its unique emission anchor; compatible
+repeats and extern interleavings preserve identity and immutable earlier type
+captures. Query/alias roots still classify by resolved type, not storage spelling.
+Read m15-tentative-scalars.md.
+
+QBE emits exactly one exported, explicitly aligned zero datum using the FINAL
+canonical scalar layout, even for unused owned objects. Pure extern scalars and
+arrays still emit no storage. No runtime initialization, local allocation/slot,
+common-symbol merging, new initializer AST or public symbol list is introduced.
+All-zero pointer/nullptr representations are an amd64 SysV target policy, not a
+portable C assertion. Native companions only extern-declare kcc-owned objects.
+
+Final exact source freeze contains 396 src/tests/Makefile files. Normal helpers
+were built serially BEFORE independent normal/QBE validations. Full make test
+passed with GCC11/GCC14/Clang18 native hosts; full make test-codegen passed with
+QBE1.2 and both modern hosts. Actual GCC11 and Clang15 isolated ASan/UBSan builds
+passed lex/raw-pp/sema plus 30 targeted suites and eleven extra Clang18 native
+comparison suites each. Primary and both isolated before/after manifests match.
+Bounded sanitized compile-only fuzz passed 7107 lexer / 13449 pipeline inputs.
+Logs /data/tools/m15g1-*; isolated trees /data/validation-m15g1/{gcc,clang}.
+No invalid curated, resource-boundary or fuzz-generated C was executed.
+
+Two full candidates were retired for obsolete negatives, not production defects:
+test_compile.py expected trailing int x; after a function to fail; later,
+test_pointer_values.py still refused int (*f)(void);. Remaining validators were
+stopped, and exact source/partial logs preserved separately in
+m15g1-retired-trailing-object-candidate and m15g1-retired-pointer-object-candidate.
+The trailing refusal became a still-unsupported explicit initializer plus a real
+sole-owner trailing-tentative positive; the obsolete callback-object refusal was
+removed with existing g1 ownership positives retained. A full normal preflight
+and independent rejection-fixture audit preceded the new freeze. ALL final
+batches were rerun against one candidate; retired partials are not final evidence.
+
+Focused suite: 72 sole-owner initialized-by-default pairs, including 24 simple
+primitive and 24 distinct mixed-stack primitive arrangements in both driver
+directions. GCC14/Clang18 each pass 72 unchanged native agreements and 72 QBE pairs.
+GCC11/Clang15 each pass 64 agreements and 70 QBE pairs; eight independently probed
+keyword-gated native pairs and two nullptr-companion gaps are not agreements.
+All hosts check 24 kcc constraints, 14 subset refusals and six compile-only
+unavailable-inference barriers. Modern hosts reject 24 native constraints;
+legacy hosts reject 21 applicable ones. Native constraints use real -c -fno-common:
+GCC14 accepts void cell; in syntax-only mode but rejects its TU-end definition
+when compiling to an object; Clang18 rejects both. No source rewrite or waiver.
+
+IL/assembly/nm checks prove unique strong ownership (never common .comm/.lcomm),
+exact zero-data size/alignment for all twelve primitive types and four const/
+pointer/nullptr cases, no duplicate companion definition, external-only U versus
+owned B/D and native const R acceptance. /dev/full returns status 1 with exactly
+kcc: error: cannot write QBE output. Callback objects are assigned before calling;
+zero pointers are never dereferenced. Trailing objects after functions retain
+one owner. Query-only private functions still create no runtime references.
+
+The 31-node AST fixture checks written extern flags and exact first-tentative
+anchors through concrete/query repeats, alias/function classification, canonical
+row-pointer composites versus immutable earlier declaration/query/address types,
+distinct symbols and no global runtime locals/spills. Local/register-parameter
+hiding and restored global lookup preserve captured bindings. Independent source
+review found no production correctness defect; focused compile-only/IL evidence
+is separate from the full main-owned frozen matrix.
+
+All 158 prior corpus sources (126 accepted / 32 rejected) retain byte-identical
+status/stdout/stderr versus frozen e0a3b24. Obsolete plain-scalar, pointer and
+mixed-list refusals were removed only where newly supported, with positive
+coverage; array/static/initializer refusals remain explicit. Exact object/
+function/declaration, parameter/local/storage and depth limits pass compile-only.
+
+Prior M15f2 exact CI run 39056814296 completed successfully: all three jobs green.
+New M15g1 CI remains pending until independently checked after push. Local passes
+never establish remote success. Parallel agents supplied focused tests, AST and
+review; main integration and one final exact matrix establish committed evidence.
+
+Only existing COMPLETE SCALARS gain tentative ownership. Tentative arrays,
+unknown-array size-one finalization, explicit initializers (including zero/empty),
+static objects, block extern/functions, inferred file objects, thread/inline, VM,
+aggregate and additional scalar kinds remain deferred. Arrays remain explicit
+extern declarations only. Tentative objects named main are a Linux hosted-target
+subset refusal, not a fabricated universal C constraint. Ordinary const objects
+are not ICEs; writes remain refused. No full C23 conformance claim.
+
+The one-anchor representation is sufficient only while initialized definitions
+are unsupported. Future initialized definitions need a separate ownership and
+duplicate-definition design; static objects need canonical linkage work. Shared
+256 object / independent 256 function / 512 declaration pools and existing local,
+array-type, depth and query budgets are unchanged. No new global-byte budget.
+
+## Previous checkpoint: M15f2
+
 M15f2 extends explicit file-scope extern objects to fixed arrays and arrays with
 unknown outer bounds, retaining complete elements and existing scalar support.
 Mixed function/scalar/array lists, aliases, typeof/typeof_unqual, rows, pointer

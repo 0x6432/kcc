@@ -232,9 +232,9 @@ c23_constraints = [
 ]
 # Deferred definitions/storage probes make no native-constraint claims.
 subset_errors = [
-    ('int a[2];', 'file-scope object declarations'),
+    ('int a[2];', 'only scalar tentative definitions'),
     ('static int a[2];', 'file-scope object declarations'),
-    ('int a[2]={40,2};', 'file-scope object declarations'),
+    ('int a[2]={40,2};', 'file-scope object initializers'),
     ('extern int a[2]={40,2};', 'extern object definitions'),
     ('extern int a[]={40,2};', 'extern object definitions'),
     ('typedef int Row[2]; extern Row a={40,2};', "query-derived external declarations require ';'"),

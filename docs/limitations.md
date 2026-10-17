@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15E1 file-scope static functions. Read the latest entries together with README.md and
+Current milestone: M15G1 scalar tentative definitions. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2198,3 +2198,19 @@ C23 conformance claim. Earlier array exclusions are superseded only for this sli
 The audited typeof_unqual array native gap does not narrow kcc semantics; exact
 original/status/diagnostic classifiers cannot waive other failures. All source
 cache/point-of-declaration/register-array restrictions remain unchanged.
+
+## M15g1 scalar tentative ownership
+
+Only existing COMPLETE SCALARS gain tentative ownership. Tentative arrays,
+unknown-array size-one finalization, explicit initializers (including zero/empty),
+static objects, block extern/functions, inferred file objects, thread/inline, VM,
+aggregate and additional scalar kinds remain deferred. Arrays remain explicit
+extern declarations only. Tentative objects named main are a Linux hosted-target
+subset refusal, not a fabricated universal C constraint. Ordinary const objects
+are not ICEs; writes remain refused. No full C23 conformance claim.
+
+The one-anchor representation is sufficient only while initialized definitions
+are unsupported. Future initialized definitions need a separate ownership and
+duplicate-definition design; static objects need canonical linkage work. Shared
+256 object / independent 256 function / 512 declaration pools and existing local,
+array-type, depth and query budgets are unchanged. No new global-byte budget.

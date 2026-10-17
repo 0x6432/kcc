@@ -2142,3 +2142,27 @@ size/depth policy and immutable type_composite remain authoritative. Shared 256
 object symbols cover scalar AND array kinds within 512 concrete declarations.
 Global array lvalues never use local declaration/register or %vslot assumptions;
 value conversion inserts array decay before element loads/indirect calls.
+
+## M15g1 written provenance and tentative emission anchor
+
+M15g1 adds unadorned file-scope tentative definitions of existing complete
+scalar types: integers, const scalars, object/function pointers and typeof(nullptr).
+Written extern provenance stays on concrete declarations. A canonical symbol's
+first successful tentative declaration is its unique emission anchor; compatible
+repeats and extern interleavings preserve identity and immutable earlier type
+captures. Query/alias roots still classify by resolved type, not storage spelling.
+Read m15-tentative-scalars.md.
+
+QBE emits exactly one exported, explicitly aligned zero datum using the FINAL
+canonical scalar layout, even for unused owned objects. Pure extern scalars and
+arrays still emit no storage. No runtime initialization, local allocation/slot,
+common-symbol merging, new initializer AST or public symbol list is introduced.
+All-zero pointer/nullptr representations are an amd64 SysV target policy, not a
+portable C assertion. Native companions only extern-declare kcc-owned objects.
+
+The parser explicitly initializes concrete is_extern; unresolved nodes retain
+their written flags. Sema checks ordinary-namespace compatibility and composites
+BEFORE canonical mutation or first-anchor assignment. Only canonical type and
+initially-null ownership may change; source caches never do. Codegen uses exact
+anchor identity and final layout, propagates write/flush failure, and never
+interprets a pure extern declaration as owned storage.

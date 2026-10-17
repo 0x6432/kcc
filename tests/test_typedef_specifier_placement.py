@@ -75,7 +75,6 @@ c23_constraints = [
 
 subset_errors = [
     ('int f(int n) { int typedef T[n]; return 0; }', 'variable-length arrays'),
-    ('int typedef T; T value;', 'file-scope object declarations'),
     ('int typedef F(void); F f { return 42; }', "query-derived external declarations require ';'"),
 ]
 

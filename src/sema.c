@@ -2230,12 +2230,24 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	return symbol;
 }
 
-/* Extern declarations refer to storage owned by another translation unit. */
+/* A tentative anchor owns storage once; extern-only symbols own none. */
 static struct external_object_symbol *register_external_object(struct sema *sema,
-	struct token name, const struct type *type)
+	struct token name, const struct type *type,
+	struct ast_external_declaration *tentative_definition)
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 
+	if (tentative_definition && !type_is_scalar(type)) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"only scalar tentative definitions are supported yet");
+		return NULL;
+	}
+	if (tentative_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
+		name.spelling_location.offset, "main", 4) == 0) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"tentative main object is not supported on the Linux target");
+		return NULL;
+	}
 	if (!type_is_scalar(type) && type->kind != type_kind_array) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"only scalar or array extern objects are supported yet");
@@ -2261,6 +2273,8 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 			return NULL;
 		}
 		symbol->type = composite;
+		if (tentative_definition && !symbol->tentative_definition)
+			symbol->tentative_definition = tentative_definition;
 		return symbol;
 	}
 	if (sema->external_object_count == ast_max_external_objects) {
@@ -2277,6 +2291,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	*symbol = (struct external_object_symbol) {
 		.name = name,
 		.type = type,
+		.tentative_definition = tentative_definition,
 		.next = sema->external_objects,
 	};
 	sema->external_objects = symbol;
@@ -2291,7 +2306,8 @@ static bool sema_external_object_declaration(struct sema *sema,
 
 	if (!type)
 		return false;
-	declaration->symbol = register_external_object(sema, declaration->name, type);
+	declaration->symbol = register_external_object(sema, declaration->name, type,
+		declaration->is_extern ? NULL : &declaration->external);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = type;
@@ -2305,8 +2321,9 @@ static bool sema_external_type_declaration(struct sema *sema,
 
 	if (!type)
 		return false;
-	if (type->kind != type_kind_function && declaration->is_extern) {
-		declaration->object_symbol = register_external_object(sema, declaration->name, type);
+	if (type->kind != type_kind_function && !declaration->is_static) {
+		declaration->object_symbol = register_external_object(sema, declaration->name, type,
+			declaration->is_extern ? NULL : &declaration->external);
 		if (!declaration->object_symbol)
 			return false;
 		declaration->type = type;

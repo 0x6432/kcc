@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15G1: File-scope tentative scalar definitions now own exactly one aligned,
+zero-initialized exported datum. Written extern provenance and the first tentative
+anchor preserve extern-only behavior, captured types and source-order identity.
+Both-direction sole-owner ABI tests avoid common merging and companion double
+definitions. Initializers, tentative arrays and static objects remain deferred.
+Read docs/m15-tentative-scalars.md for scope and exact frozen validation.
+
 M15F2: Explicit file-scope `extern` arrays now support fixed or unknown outer
 bounds, rows, qualified/pointer/callback elements and mixed declaration lists.
 Existing decay/address lowering references native-owned storage; no new data or
