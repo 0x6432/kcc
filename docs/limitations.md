@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M23E2 inferred auto with register storage. Read the latest entries together with README.md and
+Current milestone: M23E3 inferred identifiers hiding outer typedefs. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2076,3 +2076,28 @@ undergo normal conversion to pointers; register-array decay still rejects.
 Address restrictions belong to the actual register local, not its type or an
 ordinary copied local. Storage/local/item/type/declarator limits are unchanged.
 Read the ledger for exact frozen local validation and independent remote CI.
+
+## M23e3 inferred typedef-name hiding
+
+Only initialized single identifiers, optionally grouped, and implemented complete
+scalar inference are supported. Derived/braced/incomplete/nonobject inference,
+register parameters, globals/other storage, constexpr/attributes/VM/aggregates
+remain unsupported. Same-scope prior aliases/objects and multiple underspecified
+identifiers are UB refusal probes under N3096 6.7p12, NOT required native
+constraint diagnostics; none execute. Combined auto/register with explicit types
+is still a 6.7.1p4 constraint. Existing register-array conversion refusal, ordinary
+own-bound/initializer rules and all resource/ABI limits remain. Not full C23.
+
+The prior visible-typedef ambiguity exclusion is removed only for the supported
+bare/grouped inferred object grammar. An already-consumed alias start in an
+explicit declaration, other explicit specifiers or a following declarator name
+still denotes a type: auto T x and T auto x retain their old behavior. There is
+no fallback to an outer typedef while analyzing an inferred initializer. The
+parser-specific grouping rule does not extend inferred pointer/array/function
+declarators or alter general explicit declarators/parameter grammar.
+
+GCC 14 has an exact original-source typedef-inference grammar feature gap despite
+supporting basic inference; only Clang 18 provides new strict source/constraint
+agreements in this matrix. Legacy hosts lack basic inference. All hosts still
+validate ordinary native helper/driver ABI linkage, not syntax conformance. Read
+the ledger for frozen validation, diagnostic classifier controls and remote CI.

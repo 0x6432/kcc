@@ -4631,8 +4631,121 @@ static void test_register_auto_inference_tree(void)
 	fclose(stream);
 }
 
+static void test_inferred_typedef_shadowing_tree(void)
+{
+	const char *texts[] = {
+		"typedef long T; int f(void) { T old=40,*p=&old; auto T=2; typeof(T) copy=T; return *p+copy; }",
+		"typedef long T; int f(void) { T old=40,*p=&old; auto ((T))=2; typeof(T) copy=T; return *p+copy; }",
+		"typedef long T; int f(void) { T old=40,*p=&old; register auto T=2; typeof(T) copy=T; return *p+copy; }",
+	};
+
+	for (size_t form = 0; form < sizeof(texts) / sizeof(texts[0]); form++) {
+		struct source source;
+		struct arena arena = { 0 };
+		FILE *stream = tmpfile();
+		struct diagnostics diagnostics = { .stream = stream };
+		struct preprocessor preprocessor;
+		struct ast_translation_unit *unit;
+		struct ast_function *function;
+		struct ast_typedef_declaration *alias;
+		struct ast_local_declaration *locals[4];
+		struct ast_block_item *item;
+		struct ast_typeof_expression_syntax *query;
+		struct ast_load_expression *load;
+		struct ast_address_expression *address;
+
+		assert(stream);
+		assert(source_from_bytes(&source, "test.c", (const unsigned char *)texts[form], strlen(texts[form])));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+		assert(unit && !diagnostics.errors);
+		alias = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+		function = (struct ast_function *)unit->declarations->next;
+		assert(function->external.kind == external_function_definition);
+		item = function->body->items;
+		for (size_t i = 0; i < 4; i++) {
+			assert(item && item->kind == block_item_declaration);
+			locals[i] = (struct ast_local_declaration *)item;
+			item = item->next;
+		}
+		assert(locals[0]->type_syntax->kind == type_syntax_typedef_name);
+		assert(((struct ast_pointer_type_syntax *)locals[1]->type_syntax)->referent == locals[0]->type_syntax);
+		assert(locals[2]->type_syntax->kind == type_syntax_inferred);
+		assert(locals[2]->is_register == (form == 2));
+		assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+		for (size_t i = 0; i < 4; i++) {
+			assert(locals[i]->slot == i && locals[i]->type);
+			assert(locals[i]->next_local == (i ? locals[i - 1] : NULL));
+		}
+		assert(function->locals == locals[3]);
+		assert(type_compatible(alias->type, &type_long) && locals[0]->type == alias->type);
+		assert(type_compatible(locals[2]->type, &type_int));
+		assert(locals[2]->type != alias->type && locals[2]->type_syntax->type == locals[2]->type);
+		address = (struct ast_address_expression *)locals[1]->initializer;
+		assert(address->expression.kind == expression_address && address->operand->kind == expression_name);
+		assert(((struct ast_name_expression *)address->operand)->declaration == locals[0]);
+		query = (struct ast_typeof_expression_syntax *)locals[3]->type_syntax;
+		assert(query->syntax.kind == type_syntax_typeof_expression && query->operand->kind == expression_name);
+		assert(((struct ast_name_expression *)query->operand)->declaration == locals[2]);
+		load = (struct ast_load_expression *)locals[3]->initializer;
+		assert(load->expression.kind == expression_load && load->operand->kind == expression_name);
+		assert(((struct ast_name_expression *)load->operand)->declaration == locals[2]);
+		assert(!locals[3]->is_register && locals[3]->type == locals[2]->type);
+		assert(!unit->strings);
+		arena_destroy(&arena);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		fclose(stream);
+	}
+}
+
+static void test_inferred_typedef_unavailable_tree(void)
+{
+	const char *texts[] = {
+		"typedef long T; int f(void) { auto T=sizeof(T); return 0; }",
+		"typedef long T; int f(void) { auto ((T))=sizeof(T); return 0; }",
+	};
+
+	for (size_t form = 0; form < sizeof(texts) / sizeof(texts[0]); form++) {
+		struct source source;
+		struct arena arena = { 0 };
+		FILE *stream = tmpfile();
+		struct diagnostics diagnostics = { .stream = stream };
+		struct preprocessor preprocessor;
+		struct ast_translation_unit *unit;
+		struct ast_function *function;
+		struct ast_typedef_declaration *alias;
+		struct ast_local_declaration *local;
+		struct ast_sizeof_expression *size;
+
+		assert(stream);
+		assert(source_from_bytes(&source, "test.c", (const unsigned char *)texts[form], strlen(texts[form])));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+		assert(unit && !diagnostics.errors);
+		alias = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+		function = (struct ast_function *)unit->declarations->next;
+		local = (struct ast_local_declaration *)function->body->items;
+		assert(!sema_translation_unit(unit, &arena, &diagnostics) && diagnostics.errors == 1);
+		assert(type_compatible(alias->type, &type_long));
+		assert(local->type_syntax->kind == type_syntax_inferred && !local->type && !local->type_syntax->type);
+		assert(!function->locals);
+		size = (struct ast_sizeof_expression *)local->initializer;
+		assert(size->expression.kind == expression_sizeof && size->operand->kind == expression_name);
+		assert(((struct ast_name_expression *)size->operand)->declaration == local);
+		arena_destroy(&arena);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		fclose(stream);
+	}
+}
+
 int main(void)
 {
+	test_inferred_typedef_shadowing_tree();
+	test_inferred_typedef_unavailable_tree();
 	test_register_auto_inference_tree();
 	test_auto_inference_tree();
 	test_auto_inference_unavailable_tree();

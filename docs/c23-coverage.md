@@ -14,7 +14,7 @@ of complete ISO conformance.
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
-| C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); bool/true/false, alignof/static_assert and distinct nullptr constant/type implemented; typeof/typeof_unqual type and expression operands and C23 for-typedefs implemented; standard header support incomplete | M10-M11, M23a-M23h, M24a-M24g |
+| C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); bool/true/false, alignof/static_assert and distinct nullptr constant/type implemented; typeof/typeof_unqual type and expression operands, C23 for-typedefs and bounded block/for auto inference (including register and outer typedef hiding) implemented; standard header support incomplete | M10-M11, M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |
 | Self-hosting | absent | M26 |
 
@@ -989,3 +989,28 @@ Modern original-source agreement, independently probed legacy absence, exact
 AST/budget tests and both-direction ABI arrangements are recorded in the ledger.
 Native acceptance of UB never proves a missing constraint. Frozen full normal/
 QBE/both-host sanitizers/fuzz evidence and remote CI are independently recorded.
+
+## M23e3 inferred identifiers hiding typedefs (N3096 6.2.1 / 6.7 / 6.7.9)
+
+Validated block/for extension: bare/grouped inferred identifiers can hide outer
+typedef names, including ordinary/register auto and written const. The '=' lookahead
+forces an initialized identifier, not an unnamed explicit type. The parameter-
+list ambiguity rule is not applied to these object definitions. Existing one-
+pass complete-scalar inference and unavailable-name semantics apply; initializer
+queries cannot expose the alias, completed queries bind the object, and scope
+exit restores the type. Explicit auto/type aliases and shared caches remain.
+
+Only initialized single identifiers, optionally grouped, and implemented complete
+scalar inference are supported. Derived/braced/incomplete/nonobject inference,
+register parameters, globals/other storage, constexpr/attributes/VM/aggregates
+remain unsupported. Same-scope prior aliases/objects and multiple underspecified
+identifiers are UB refusal probes under N3096 6.7p12, NOT required native
+constraint diagnostics; none execute. Combined auto/register with explicit types
+is still a 6.7.1p4 constraint. Existing register-array conversion refusal, ordinary
+own-bound/initializer rules and all resource/ABI limits remain. Not full C23.
+
+Original Clang 18 agreement and exact GCC 14 typedef-inference grammar absence
+are recorded separately, as are legacy basic-inference absence and cross-object
+ABI linkage. No syntax-gap rejection is counted as semantic constraint agreement;
+no UB acceptance is called a missing diagnostic. Read the ledger for exact
+classifier/AST/boundary/full frozen local validation and independent remote CI.

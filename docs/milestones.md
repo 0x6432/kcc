@@ -33,7 +33,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
-| M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases, M23e1 single-identifier block/for scalar inference and M23e2 register combinations); derived/alias ambiguity/other storage/constexpr/VM work remains |
+| M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases, M23e1 single-identifier block/for scalar inference, M23e2 register combinations and M23e3 outer-typedef hiding); derived/other storage/constexpr/VM work remains |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
 | M23h | constexpr objects and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
@@ -2788,3 +2788,74 @@ M23e1 CI run 38982126026 is pending; no remote pass is claimed.
 New M23e2 exact-commit CI is pending until checked after push; local passes
 never imply remote success. No subagents, discarded stashes, historical snapshot
 regeneration, force push or committed credentials. User authorizes continuous work.
+
+## M23e3 inferred identifiers hiding outer typedefs
+
+Design recorded before implementation in m23-inferred-typedef-shadowing.md after
+validated/pushed 77e2acb. One demand peek and an explicit consumed-name token
+disambiguate bare identifiers; a grammar-specific grouped-name parser avoids
+parameter-type ambiguity. Existing syntax/name/storage phases and scalar
+inference apply unchanged. No semantic/backend/public interface change.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 as native
+comparison hosts; normal C11 helpers were built with GCC 11. Full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 23 targeted suites passed; inferred-typedef,
+register-inference, ordinary inference and binding suites also passed with Clang
+18 as native oracle. Normal helpers were built serially before parallel runs.
+Frozen primary and isolated source/test/Makefile manifests matched before/after.
+Bounded compile-only sanitized fuzz passed 10,381 lexer / 19,799 pipeline inputs
+in 26 seconds each. No invalid curated or generated C executed. Logs/manifests
+/data/tools/m23e3-*, isolated trees /data/validation-m23e3-final/{gcc,clang}.
+
+The previous M23e2 sanitized compiler and frozen M23e3 compiler have identical
+return codes/stdout/stderr on all 151 pre-existing compile corpus files
+(119 accepted / 32 rejected), compiled only, excluding the new typedef seed.
+
+Focused inferred-typedef suite: 54 unchanged original C23 programs passed through
+kcc/QBE; Clang 18 strictly agrees on all 54 and rejects 43 constraints, including
+36 unavailable-name barriers. GCC 14 supports basic inference but rejects the
+exact independent typedef-name inference probe with two known grammar errors;
+zero new source agreements or semantic constraint agreements are counted on
+that host. Legacy GCC 11/Clang 15 lack basic inference on the separate exact
+probe; likewise zero new agreements. No originals rewritten to explicit types
+or native failures masked. The grammar-gap classifier requires exact probe text,
+status 1 and complete diagnostic records; wrong text/status, signals, extra notes,
+warnings, fatal errors and duplicate records are negative-tested.
+
+All four hosts pass 24 both-direction mixed-stack primitive ABI arrangements
+with inferred kcc code and ordinary native helpers/drivers; linkage does not
+masquerade as native syntax support. Five UB refusals and nine subset refusals
+compile only. Ordinary/register inference, explicit auto, binding and both
+register suites reran on all four hosts with existing native gap counts unchanged.
+Two old visible-typedef subset refusals in auto_inference were replaced by this
+new positive coverage; that suite now has nine subset refusals.
+
+AST assertions cover bare, grouped and register forms: old shared typedef bases
+and captured object addresses remain identical, outer alias stays long while the
+new inferred object is int, completed typeof/loads capture the new declaration,
+ordinary copies have no register flag, and four real slots/reverse-list entries
+exclude alias storage. Failed bare/grouped self-size initializers capture the
+reserved untyped INNER object, not the old alias, with no completed runtime local
+or IL. A string-inference IL probe has one static string and one real slot;
+existing AST string-occurrence invariants remain in the sanitizer matrix.
+Exact 256/257 locals (including 128 named spills), 4096/4097 items, 1 MiB/overflow
+storage, 64/65 grouped typedef identifiers and 128/129 expanded-type depth pass.
+Generated sibling-block and other boundary programs compile only, never execute.
+
+Before freezing, three qualifier/specifier-order originals and an explicit-void
+constraint were added, plus the static-string IL invariant and successful/failed
+AST identity cases. Final four-host focused validation used all 54 originals;
+the earlier 51-source Clang log is preliminary evidence only. An initial fully passing candidate was retired after a style review: the error
+branch now assigns failure explicitly and avoids a single-statement braced
+conditional. All initial validators had stopped before that cleanup. Initial
+logs/manifests are archived under /data/tools/m23e3-initial-candidate/ and are NOT
+counted as final-source validation. Final source was rebuilt, re-focused, frozen
+and the complete normal/QBE/sanitizer/fuzz matrix rerun; no source edits during
+either frozen run, and no native source rewriting to fake agreement.
+
+M23e1 CI run 38982126026 completed/success, all three jobs green.
+M23e2 CI run 38984165289 completed/success, all three jobs green.
+New M23e3 exact-commit CI is pending until checked after push; local passes
+never imply remote success. No subagents, discarded stashes, historical snapshot
+regeneration, forced push or committed credentials. User authorizes continuous work.

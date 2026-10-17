@@ -6,6 +6,15 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M23E3: Inferred `auto T = ...` and `auto (T) = ...` may now hide an outer typedef
+T at block/for scope, including register inference. One demand peek disambiguates
+bare names; a dedicated balanced-identifier grammar preserves nesting limits.
+The name hides the alias but is unavailable in its initializer; completed uses
+see the inferred object, and scope exit restores the typedef. Explicit auto T x
+and old comma-list caches are unchanged. Read
+docs/m23-inferred-typedef-shadowing.md. GCC 14's exact typedef-inference grammar
+gap is reported separately; original sources are not rewritten. Still not full C23.
+
 M23E2: C23 inferred `auto` may now combine with `register` at block/for scope,
 in either order and with const qualifiers. The existing real local retains the
 register address restriction; inferred copies do not inherit it. Combined auto/

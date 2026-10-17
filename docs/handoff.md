@@ -2,6 +2,88 @@
 
 ## Current checkpoint
 
+M23e3 inferred identifiers may hide outer typedef names at block/for scope,
+bare or parenthesized, including register inference. Read
+m23-inferred-typedef-shadowing.md and the latest ledger/contracts/coverage/limits.
+The scanner uses one demand peek at '=' after an auto-prefixed visible alias
+and explicitly returns that consumed identifier, not an old alias type. A small
+inferred-identifier grammar handles balanced names without misclassifying a
+typedef as a function parameter. Private declaration_head preserves storage/auto
+and consumed-name tokens; no replay, token vector or new public interface.
+
+The same syntax object mask and reserved-untyped semantic local hide the alias
+throughout initialization; sizeof/typeof/dead branches cannot use it. Completion
+exposes the same inferred object; block/for exit restores prior type meaning.
+Explicit auto T x / T auto x and old shared declaration bases remain unchanged.
+No sema/type/QBE source changes, alias runtime storage or second initialization.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 as native
+comparison hosts; normal C11 helpers were built with GCC 11. Full make
+test-codegen passed with QBE 1.2 and both modern native hosts. GCC 11 and Clang
+15 ASan/UBSan lexer/sema plus 23 targeted suites passed; inferred-typedef,
+register-inference, ordinary inference and binding suites also passed with Clang
+18 as native oracle. Normal helpers were built serially before parallel runs.
+Frozen primary and isolated source/test/Makefile manifests matched before/after.
+Bounded compile-only sanitized fuzz passed 10,381 lexer / 19,799 pipeline inputs
+in 26 seconds each. No invalid curated or generated C executed. Logs/manifests
+/data/tools/m23e3-*, isolated trees /data/validation-m23e3-final/{gcc,clang}.
+
+The previous M23e2 sanitized compiler and frozen M23e3 compiler have identical
+return codes/stdout/stderr on all 151 pre-existing compile corpus files
+(119 accepted / 32 rejected), compiled only, excluding the new typedef seed.
+
+Focused inferred-typedef suite: 54 unchanged original C23 programs passed through
+kcc/QBE; Clang 18 strictly agrees on all 54 and rejects 43 constraints, including
+36 unavailable-name barriers. GCC 14 supports basic inference but rejects the
+exact independent typedef-name inference probe with two known grammar errors;
+zero new source agreements or semantic constraint agreements are counted on
+that host. Legacy GCC 11/Clang 15 lack basic inference on the separate exact
+probe; likewise zero new agreements. No originals rewritten to explicit types
+or native failures masked. The grammar-gap classifier requires exact probe text,
+status 1 and complete diagnostic records; wrong text/status, signals, extra notes,
+warnings, fatal errors and duplicate records are negative-tested.
+
+All four hosts pass 24 both-direction mixed-stack primitive ABI arrangements
+with inferred kcc code and ordinary native helpers/drivers; linkage does not
+masquerade as native syntax support. Five UB refusals and nine subset refusals
+compile only. Ordinary/register inference, explicit auto, binding and both
+register suites reran on all four hosts with existing native gap counts unchanged.
+Two old visible-typedef subset refusals in auto_inference were replaced by this
+new positive coverage; that suite now has nine subset refusals.
+
+AST assertions cover bare, grouped and register forms: old shared typedef bases
+and captured object addresses remain identical, outer alias stays long while the
+new inferred object is int, completed typeof/loads capture the new declaration,
+ordinary copies have no register flag, and four real slots/reverse-list entries
+exclude alias storage. Failed bare/grouped self-size initializers capture the
+reserved untyped INNER object, not the old alias, with no completed runtime local
+or IL. A string-inference IL probe has one static string and one real slot;
+existing AST string-occurrence invariants remain in the sanitizer matrix.
+Exact 256/257 locals (including 128 named spills), 4096/4097 items, 1 MiB/overflow
+storage, 64/65 grouped typedef identifiers and 128/129 expanded-type depth pass.
+Generated sibling-block and other boundary programs compile only, never execute.
+
+Only initialized single identifiers, optionally grouped, and implemented complete
+scalar inference are supported. Derived/braced/incomplete/nonobject inference,
+register parameters, globals/other storage, constexpr/attributes/VM/aggregates
+remain unsupported. Same-scope prior aliases/objects and multiple underspecified
+identifiers are UB refusal probes under N3096 6.7p12, NOT required native
+constraint diagnostics; none execute. Combined auto/register with explicit types
+is still a 6.7.1p4 constraint. Existing register-array conversion refusal, ordinary
+own-bound/initializer rules and all resource/ABI limits remain. Not full C23.
+
+M23e1 CI run 38982126026 completed/success, all three jobs green.
+M23e2 CI run 38984165289 completed/success, all three jobs green.
+New M23e3 exact-commit CI is pending until checked after push; local validation
+never implies remote success. User authorizes continued work and supersedes
+historical STOP. No stashes discarded or subagents used. Preserve historical
+named stashes if a reset restores them. Do not rerun historical snapshots or
+current outside implementation scripts already applied once. Verify tools,
+worktree and origin/development after resets. Next increment needs a fresh
+recorded design; register parameter storage is still research only.
+
+## Earlier M23e2 checkpoint (historical)
+
 M23e2 register + inferred auto is implemented and locally validated at block/
 for scope, in either order with existing const positions. Read
 m23-register-auto-inference.md and the latest ledger/contracts/coverage/limits.

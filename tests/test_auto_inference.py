@@ -92,8 +92,6 @@ subset_errors = [
     ('int main(void) { auto x={42}; return 0; }', 'expected integer literal'),
     ('int main(void) { auto x=(void)42; return 0; }', 'complete scalar initializer type'),
     ('int f(auto x);', 'auto is not permitted in a type name or parameter declaration'),
-    ('typedef int T; int main(void) { auto T=42; return 0; }', 'expected local name'),
-    ('typedef long T; int main(void) { auto (T)=42; return 0; }', 'expected local name'),
     ('int main(void) { register int a[2]; auto p=a; return 0; }', 'register array-to-pointer conversion'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc inferred auto ') as directory:

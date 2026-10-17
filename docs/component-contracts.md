@@ -1981,3 +1981,27 @@ Unary & already checks that exact identity. An ordinary query/inferred copy has
 no register flag; referents are not confused with register pointer objects.
 No extra runtime slot/alias storage, type qualifier or ABI protocol. Parameter/
 prototype lifetimes, budget accounting and immutable source caches remain.
+
+## M23e3 declaration heads and inferred identifier grammar
+
+Private declaration_head replaces declaration_storage and carries ordinary
+storage, auto and an optional already-consumed inferred_name token. With no
+explicit type seen, an auto-prefixed visible alias immediately followed by '='
+is the inferred identifier; construct inferred syntax and return that name BEFORE
+allocating typedef-name syntax. Existing explicit builtin/query/consumed-alias
+paths never reclassify. No token rewind, vector or duplicate initializer/name
+ownership in type syntax. External auto still rejects before publication.
+
+For an inferred base, use either the returned name or parse_inferred_identifier:
+identifier (including a typedef spelling), optionally enclosed in balanced
+parentheses. Share the existing declarator_nesting guard and restore it on every
+exit; derived forms remain refused. Count one block item, then publish the same
+syntax-only object mask after the complete identifier and before initializer
+parsing. Explicit derived declarations continue through the unchanged general
+parser and shared bases. No new public AST/semantic/type/codegen interfaces.
+
+Existing reserved-untyped binding hides aliases and rejects self-use during
+initialization, even in queries. It completes the same actual local once, then
+subsequent typeof/load nodes capture that local; scope exit restores the alias.
+Same-scope conflicts, immutable old type caches, captured object/function
+identities, no alias runtime storage, register flags, ABI and budgets remain.
