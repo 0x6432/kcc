@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions and M15f1 extern scalar-object declarations implemented; other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions and M15f1 extern scalar-object and M15f2 extern array declarations implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -3221,3 +3221,88 @@ to incomplete arrays are scalar objects and retain existing composite rules.
 Ordinary const objects are not constant expressions. Missing external storage is
 a linker error, not an invented per-TU definition requirement. No full C23 claim.
 Earlier global-object exclusions are superseded only for this documented slice.
+
+## M15f2 external array declarations: final verification
+
+M15f2 extends explicit file-scope extern objects to fixed arrays and arrays with
+unknown outer bounds, retaining complete elements and existing scalar support.
+Mixed function/scalar/array lists, aliases, typeof/typeof_unqual, rows, pointer
+arrays and function-pointer arrays reuse the current concrete object nodes and
+canonical symbols. The only production semantic change admits scalar OR array,
+not arbitrary object kinds. Array-suffix grammar comments distinguish incomplete
+extern declarations from complete local storage. Read m15-extern-arrays.md.
+
+Unknown outer arrays decay to pointers to their complete elements; subscripts and
+row strides reuse current lowering and $symbol addresses. Whole-array addresses
+retain array types, and sizeof/whole-array pointer arithmetic still require
+completeness. Canonical unknown-to-known composites never rewrite earlier source,
+query, address or expression snapshots. Extern arrays allocate no data/local slots.
+The resolver retains its existing 1 MiB PER ARRAY TYPE ceiling, even though native
+storage is elsewhere; independent arrays do not consume a global byte budget.
+
+Final exact source freeze contains 393 src/tests/Makefile files. Normal helpers
+were built serially BEFORE independent normal/QBE validation makes. Full make
+test passed with GCC11/GCC14/Clang18 native hosts; full make test-codegen passed
+with QBE1.2 and both modern hosts. Actual GCC11 and Clang15 ASan/UBSan isolated
+builds passed lex/raw-pp/sema plus 29 targeted suites and ten extra Clang18 native
+comparison suites each. Primary and both isolated before/after manifests match.
+Bounded sanitized compile-only fuzz passed 4751 lexer / 7572 pipeline inputs.
+Logs /data/tools/m15f2-*; isolated trees /data/validation-m15f2/{gcc,clang}.
+No invalid curated, resource-boundary or fuzz-generated C was executed.
+
+All 157 prior corpus sources (125 accepted / 32 rejected) have byte-identical
+status/stdout/stderr versus frozen b64e0f9. Existing scalar extern suites pass all
+four hosts; only two obsolete array refusals were removed with positive replacements
+and the void subset diagnostic updated. Source grammar comments are included in
+this freeze; no production source/test changes were made during validation.
+
+Focused suite: 74 initialized native-owner pairs, including 48 distinct fixed/
+unknown-outer primitive array arrangements in both driver directions. Modern
+GCC14/Clang18 each pass 74 QBE paired runtimes, 73 unchanged strict native agreements
+and one EXACT array-unqualification native feature gap. Legacy GCC11/Clang15 each
+pass 68 native agreements and 73 QBE pairs, with six independently probed keyword-
+gated native pairs and one nullptr-owner keyword gap. All hosts check 34 kcc
+constraints, nine subset refusals and six compile-only inferred-name barriers;
+modern hosts reject all 34 native constraints, legacy hosts reject 30 applicable
+ones. Original native programs are never rewritten to manufacture agreement.
+
+The one-dimensional typeof_unqual(array-expression) original remains unchanged.
+N3096 6.7.2.5p5/example2 and 6.2.5p31 require removing array/element const, not pointer
+referent const. Both native hosts retain const here; exact original membership,
+status 1 and complete normalized error/warning/note records are required for the
+gap classification. Changed sources/statuses/signals/extra/missing/duplicate
+records fail negative controls. Rejected native originals never link or execute;
+QBE runs the standards-valid original against a separately compiled valid owner.
+This is not native agreement or a kcc bug. The pre-implementation standards audit
+and the existing separate multidimensional gap precedent are recorded in the design.
+
+The 18-node AST fixture verifies shared specifiers; unknown/known/repeated canonical
+identity; immutable source/typeof/whole-address snapshots; element/row sizeof and
+decay; indirect callback-element calls; const decay; no global runtime locals or
+slots. Focused IL/nm verifies U references without B/D definitions, no data/alloc,
+private t/exported T functions, unused/non-VM query-only linker erasure, including
+callback arrays queried from an undefined private function. Runtime cases check
+fixed/unknown whole-array versus element addresses, row strides, pointer/callback
+slot mutation, const reads, nullptr leaves, own/local/repeated/same-list bound
+visibility, parameter-query adjustment and scope restoration.
+
+Exact 512/513 declarations, 256/257 shared scalar/array objects, independent 256
+functions and mixed 512 totals pass. Complete/unknown-row/multidimensional array
+1 MiB limits and one-element-over failures, 64/65 dimensions, independent large
+extern arrays and an unchanged 1 MiB local storage allowance pass compile-only.
+The retained scalar/static/declarator suites cover the other existing resource
+and mixed-stack ABI contracts; array arrangements are not relabeled scalar ABI.
+
+Prior M15f1 exact CI run 39052481142 completed successfully, all three jobs green.
+New M15f2 CI remains pending until independently checked after push. Local passes
+never establish remote CI success. Parallel subagents prepared/reviewed tests,
+AST and standards; one main-owned final exact snapshot establishes this evidence.
+
+Only explicit extern declarations gain arrays. All definitions, initializers,
+tentative/plain/static objects, block extern/functions, inferred extern, VM/VLA,
+aggregate additions, thread storage/inline and remaining qualifiers stay deferred.
+Unknown INNER rows, void/function elements and invalid constant bounds remain
+errors. Unknown outer arrays are not tentative definitions and are not completed
+to one element at TU end. Referenced native storage must exist at link time; every
+executed index in curated tests is backed by initialized owner storage. No full
+C23 conformance claim. Earlier array exclusions are superseded only for this slice.

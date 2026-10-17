@@ -2117,3 +2117,28 @@ source items. No new file parser masks, token replay or generic symbol abstracti
 Lowered global lvalues carry external_object_symbol; local expression_name still
 requires a real local declaration, preserving register checks and %vslot storage.
 Backend address emission uses $name; TU emission ignores extern object nodes.
+
+## M15f2 existing array machinery for external lvalues
+
+M15f2 extends explicit file-scope extern objects to fixed arrays and arrays with
+unknown outer bounds, retaining complete elements and existing scalar support.
+Mixed function/scalar/array lists, aliases, typeof/typeof_unqual, rows, pointer
+arrays and function-pointer arrays reuse the current concrete object nodes and
+canonical symbols. The only production semantic change admits scalar OR array,
+not arbitrary object kinds. Array-suffix grammar comments distinguish incomplete
+extern declarations from complete local storage. Read m15-extern-arrays.md.
+
+Unknown outer arrays decay to pointers to their complete elements; subscripts and
+row strides reuse current lowering and $symbol addresses. Whole-array addresses
+retain array types, and sizeof/whole-array pointer arithmetic still require
+completeness. Canonical unknown-to-known composites never rewrite earlier source,
+query, address or expression snapshots. Extern arrays allocate no data/local slots.
+The resolver retains its existing 1 MiB PER ARRAY TYPE ceiling, even though native
+storage is elsewhere; independent arrays do not consume a global byte budget.
+
+No AST/type/backend interface or symbol pool is added. External object registration
+accepts only existing scalar or array kinds. Resolver element completeness, ICE,
+size/depth policy and immutable type_composite remain authoritative. Shared 256
+object symbols cover scalar AND array kinds within 512 concrete declarations.
+Global array lvalues never use local declaration/register or %vslot assumptions;
+value conversion inserts array decay before element loads/indirect calls.

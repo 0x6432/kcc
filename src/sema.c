@@ -2236,9 +2236,9 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 
-	if (!type_is_scalar(type)) {
+	if (!type_is_scalar(type) && type->kind != type_kind_array) {
 		diagnostic_error(sema->diagnostics, name.location,
-			"only scalar extern objects are supported yet");
+			"only scalar or array extern objects are supported yet");
 		return NULL;
 	}
 	if (find_typedef(sema, name) || find_function(sema, name)) {

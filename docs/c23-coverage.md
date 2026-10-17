@@ -1151,3 +1151,33 @@ to incomplete arrays are scalar objects and retain existing composite rules.
 Ordinary const objects are not constant expressions. Missing external storage is
 a linker error, not an invented per-TU definition requirement. No full C23 claim.
 Earlier global-object exclusions are superseded only for this documented slice.
+
+## M15f2 external array declarations (6.2.2; 6.7.6.2; 6.9)
+
+M15f2 extends explicit file-scope extern objects to fixed arrays and arrays with
+unknown outer bounds, retaining complete elements and existing scalar support.
+Mixed function/scalar/array lists, aliases, typeof/typeof_unqual, rows, pointer
+arrays and function-pointer arrays reuse the current concrete object nodes and
+canonical symbols. The only production semantic change admits scalar OR array,
+not arbitrary object kinds. Array-suffix grammar comments distinguish incomplete
+extern declarations from complete local storage. Read m15-extern-arrays.md.
+
+Unknown outer arrays decay to pointers to their complete elements; subscripts and
+row strides reuse current lowering and $symbol addresses. Whole-array addresses
+retain array types, and sizeof/whole-array pointer arithmetic still require
+completeness. Canonical unknown-to-known composites never rewrite earlier source,
+query, address or expression snapshots. Extern arrays allocate no data/local slots.
+The resolver retains its existing 1 MiB PER ARRAY TYPE ceiling, even though native
+storage is elsewhere; independent arrays do not consume a global byte budget.
+
+Only explicit extern declarations gain arrays. All definitions, initializers,
+tentative/plain/static objects, block extern/functions, inferred extern, VM/VLA,
+aggregate additions, thread storage/inline and remaining qualifiers stay deferred.
+Unknown INNER rows, void/function elements and invalid constant bounds remain
+errors. Unknown outer arrays are not tentative definitions and are not completed
+to one element at TU end. Referenced native storage must exist at link time; every
+executed index in curated tests is backed by initialized owner storage. No full
+C23 conformance claim. Earlier array exclusions are superseded only for this slice.
+
+The typeof_unqual expression-array native gap is separate from kcc support and
+native original-source agreement. See the exact classifier/standards audit.

@@ -5367,8 +5367,299 @@ static void test_extern_object_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+static void test_extern_array_tree(void)
+{
+	const char *text = "extern int a[], rows[][2], (*callbacks[])(int); "
+		"extern const int frozen[]; "
+		"extern typeof(a) captured; extern typeof(&a) address_snapshot; "
+		"unsigned long row_size(void) { return sizeof rows[0]; } "
+		"unsigned long element_size(void) { return sizeof a[0]; } "
+		"int (*whole(void))[] { return &a; } "
+		"int *element(void) { return a; } "
+		"int (*row_pointer(void))[2] { return rows; } "
+		"int invoke(void) { return callbacks[0](7); } "
+		"const int *const_pointer(void) { return frozen; } "
+		"extern int a[3]; extern int a[]; "
+		"int *later(void) { return a; } "
+		"int *saved(void) { return captured; } "
+		"unsigned long total(void) { return sizeof a; }";
+	const enum external_declaration_kind kinds[] = {
+		external_object_declaration, external_object_declaration,
+		external_object_declaration, external_object_declaration,
+		external_type_declaration, external_type_declaration,
+		external_function_definition, external_function_definition,
+		external_function_definition, external_function_definition,
+		external_function_definition, external_function_definition,
+		external_function_definition, external_object_declaration,
+		external_object_declaration, external_function_definition,
+		external_function_definition, external_function_definition,
+	};
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *nodes[18];
+	struct ast_external_declaration *external;
+	struct ast_external_object_declaration *a;
+	struct ast_external_object_declaration *rows;
+	struct ast_external_object_declaration *callbacks;
+	struct ast_external_object_declaration *frozen;
+	struct ast_external_object_declaration *known;
+	struct ast_external_object_declaration *repeated;
+	struct ast_external_type_declaration *captured;
+	struct ast_external_type_declaration *address_snapshot;
+	struct ast_array_type_syntax *array_syntax;
+	struct ast_array_type_syntax *row_syntax;
+	struct ast_pointer_type_syntax *pointer_syntax;
+	struct ast_function_type_syntax *function_syntax;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_external_object_expression *object;
+	struct ast_function *function;
+	struct ast_return_statement *returned;
+	struct ast_expression *returns[18] = { 0 };
+	struct ast_address_expression *address;
+	struct ast_array_decay_expression *decay;
+	struct ast_sizeof_expression *size;
+	struct ast_indirection_expression *indirection;
+	struct ast_pointer_offset_expression *offset;
+	struct ast_call_expression *call;
+	struct ast_load_expression *load;
+	const struct array_type *unknown;
+	const struct array_type *canonical;
+	const struct array_type *matrix;
+	const struct array_type *row;
+	const struct array_type *callback_array;
+	const struct array_type *const_array;
+	const struct pointer_type *callback_pointer;
+	size_t count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "extern-arrays.c",
+		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	for (external = unit->declarations; external; external = external->next) {
+		assert(count < sizeof(nodes) / sizeof(nodes[0]));
+		nodes[count] = external;
+		assert(external->kind == kinds[count]);
+		count++;
+	}
+	assert(count == sizeof(nodes) / sizeof(nodes[0]));
+	a = (struct ast_external_object_declaration *)nodes[0];
+	rows = (struct ast_external_object_declaration *)nodes[1];
+	callbacks = (struct ast_external_object_declaration *)nodes[2];
+	frozen = (struct ast_external_object_declaration *)nodes[3];
+	captured = (struct ast_external_type_declaration *)nodes[4];
+	address_snapshot = (struct ast_external_type_declaration *)nodes[5];
+	known = (struct ast_external_object_declaration *)nodes[13];
+	repeated = (struct ast_external_object_declaration *)nodes[14];
+	assert(!a->symbol && !a->type && !a->type_syntax->type);
+	assert(!rows->symbol && !callbacks->symbol && !frozen->symbol);
+	assert(captured->is_extern && !captured->is_static);
+	assert(!captured->symbol && !captured->object_symbol && !captured->type);
+	assert(address_snapshot->is_extern && !address_snapshot->is_static);
+	assert(!address_snapshot->symbol && !address_snapshot->object_symbol);
+
+	/* The comma list has one int specifier, even below pointer/function tails. */
+	assert(a->type_syntax->kind == type_syntax_array);
+	array_syntax = (struct ast_array_type_syntax *)a->type_syntax;
+	assert(!array_syntax->bound && array_syntax->element->kind == type_syntax_integer);
+	assert(rows->type_syntax->kind == type_syntax_array);
+	row_syntax = (struct ast_array_type_syntax *)rows->type_syntax;
+	assert(!row_syntax->bound && row_syntax->element->kind == type_syntax_array);
+	row_syntax = (struct ast_array_type_syntax *)row_syntax->element;
+	assert(row_syntax->bound && row_syntax->element == array_syntax->element);
+	assert(callbacks->type_syntax->kind == type_syntax_array);
+	row_syntax = (struct ast_array_type_syntax *)callbacks->type_syntax;
+	assert(!row_syntax->bound && row_syntax->element->kind == type_syntax_pointer);
+	pointer_syntax = (struct ast_pointer_type_syntax *)row_syntax->element;
+	assert(pointer_syntax->referent->kind == type_syntax_function);
+	function_syntax = (struct ast_function_type_syntax *)pointer_syntax->referent;
+	assert(function_syntax->return_syntax == array_syntax->element);
+
+	/* Expected to pass only after the scalar-or-array extern admission change. */
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(!diagnostics.errors && !unit->strings);
+	assert(a->type->kind == type_kind_array && a->type_syntax->type == a->type);
+	unknown = (const struct array_type *)a->type;
+	assert(!unknown->count && unknown->element == &type_int);
+	assert(!type_is_complete_object(a->type));
+	assert(a->symbol == known->symbol && a->symbol == repeated->symbol);
+	canonical = (const struct array_type *)a->symbol->type;
+	assert(canonical->type.kind == type_kind_array && canonical->count == 3);
+	assert(canonical->element == &type_int && canonical != unknown);
+	assert(type_same(known->type, &canonical->type));
+	assert(type_compatible(a->type, &canonical->type));
+	assert(repeated->type->kind == type_kind_array);
+	assert(!((const struct array_type *)repeated->type)->count);
+	assert(repeated->type_syntax->type == repeated->type);
+	assert(a->type_syntax->type == &unknown->type && !unknown->count);
+
+	/* A second object captures the old array, not a live alias to a's symbol. */
+	assert(captured->object_symbol && !captured->symbol);
+	assert(captured->object_symbol != a->symbol && captured->type == a->type);
+	assert(captured->object_symbol->type == a->type);
+	assert(captured->type_syntax->kind == type_syntax_typeof_expression);
+	query = (struct ast_typeof_expression_syntax *)captured->type_syntax;
+	assert(query->syntax.type == a->type && query->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)query->operand;
+	assert(object->object == a->symbol && object->expression.type == a->type);
+	assert(object->expression.is_lvalue);
+	assert(address_snapshot->object_symbol && !address_snapshot->symbol);
+	assert(address_snapshot->type->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)address_snapshot->type)->referent == a->type);
+	query = (struct ast_typeof_expression_syntax *)address_snapshot->type_syntax;
+	assert(query->operand->kind == expression_address && query->syntax.type == address_snapshot->type);
+	address = (struct ast_address_expression *)query->operand;
+	assert(address->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)address->operand;
+	assert(object->object == a->symbol && object->expression.type == a->type);
+
+	/* Every function is parameterless and contains only one return: no slots. */
+	for (size_t i = 0; i < count; i++) {
+		if (nodes[i]->kind != external_function_definition)
+			continue;
+		function = (struct ast_function *)nodes[i];
+		assert(!function->locals && function->declaration->symbol->definition == function);
+		assert(function->declaration->symbol->type->parameter_count == 0);
+		assert(function->body->items && !function->body->items->next);
+		assert(function->body->items->kind == block_item_statement);
+		returned = (struct ast_return_statement *)
+			((struct ast_statement_item *)function->body->items)->statement;
+		assert(returned->statement.kind == statement_return);
+		returns[i] = returned->value;
+	}
+
+	/* sizeof rows[0] preserves the complete row; its rows operand decays. */
+	assert(rows->type->kind == type_kind_array);
+	matrix = (const struct array_type *)rows->type;
+	assert(!matrix->count && matrix->element->kind == type_kind_array);
+	row = (const struct array_type *)matrix->element;
+	assert(row->count == 2 && row->element == &type_int);
+	assert(returns[6]->kind == expression_sizeof);
+	size = (struct ast_sizeof_expression *)returns[6];
+	assert(size->size == 8 && size->operand->kind == expression_indirection);
+	assert(size->operand->is_lvalue && size->operand->type == &row->type);
+	indirection = (struct ast_indirection_expression *)size->operand;
+	assert(indirection->operand->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->element_size == 8 && !offset->subtract);
+	assert(offset->base->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)offset->base;
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &row->type);
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == rows->symbol && object->expression.type == rows->type);
+
+	assert(returns[7]->kind == expression_sizeof);
+	size = (struct ast_sizeof_expression *)returns[7];
+	assert(size->size == 4 && size->operand->kind == expression_indirection);
+	assert(size->operand->type == &type_int && size->operand->is_lvalue);
+	indirection = (struct ast_indirection_expression *)size->operand;
+	assert(indirection->operand->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->element_size == 4 && offset->base->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)offset->base;
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == a->symbol && object->expression.type == a->type);
+
+	/* &a suppresses decay entirely and keeps the captured unknown whole array. */
+	assert(returns[8]->kind == expression_address);
+	address = (struct ast_address_expression *)returns[8];
+	assert(address->expression.type->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)address->expression.type)->referent == a->type);
+	assert(address->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)address->operand;
+	assert(object->object == a->symbol && object->expression.type == a->type);
+	assert(object->expression.is_lvalue);
+
+	assert(returns[9]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[9];
+	assert(!decay->expression.is_lvalue && decay->operand->is_lvalue);
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &type_int);
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == a->symbol && object->expression.type == a->type);
+	assert(returns[10]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[10];
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &row->type);
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == rows->symbol && object->expression.type == rows->type);
+
+	/* Subscript loads one function-pointer element, never the entire array. */
+	assert(callbacks->type->kind == type_kind_array);
+	callback_array = (const struct array_type *)callbacks->type;
+	assert(!callback_array->count && callback_array->element->kind == type_kind_pointer);
+	callback_pointer = (const struct pointer_type *)callback_array->element;
+	assert(callback_pointer->referent->kind == type_kind_function);
+	assert(returns[11]->kind == expression_call);
+	call = (struct ast_call_expression *)returns[11];
+	assert(!call->function && call->argument_count == 1 && !call->arguments->next);
+	assert(&call->signature->type == callback_pointer->referent);
+	assert(call->signature->return_type == &type_int && call->signature->parameter_count == 1);
+	assert(call->callee->kind == expression_load);
+	load = (struct ast_load_expression *)call->callee;
+	assert(load->operand->kind == expression_indirection);
+	assert(load->expression.type == callback_array->element);
+	indirection = (struct ast_indirection_expression *)load->operand;
+	assert(indirection->expression.is_lvalue && indirection->operand->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->element_size == type_object_size(callback_array->element));
+	assert(offset->base->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)offset->base;
+	assert(((const struct pointer_type *)decay->expression.type)->referent == callback_array->element);
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == callbacks->symbol && object->expression.type == callbacks->type);
+
+	/* Const array decay retains the element qualifier; no array load appears. */
+	assert(frozen->type->kind == type_kind_array);
+	const_array = (const struct array_type *)frozen->type;
+	assert(!const_array->count && const_array->type.qualifiers == type_qualifier_const);
+	assert(const_array->element->kind == type_kind_int);
+	assert(const_array->element->qualifiers == type_qualifier_const);
+	assert(returns[12]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[12];
+	assert(((const struct pointer_type *)decay->expression.type)->referent == const_array->element);
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == frozen->symbol && object->expression.type == frozen->type);
+
+	/* Later a uses the known canonical composite, captured remains unknown. */
+	assert(returns[15]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[15];
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == a->symbol && object->expression.type == a->symbol->type);
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &type_int);
+	assert(returns[16]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[16];
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == captured->object_symbol && object->expression.type == a->type);
+	assert(((const struct pointer_type *)decay->expression.type)->referent == &type_int);
+	assert(returns[17]->kind == expression_sizeof);
+	size = (struct ast_sizeof_expression *)returns[17];
+	assert(size->size == 12 && size->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)size->operand;
+	assert(object->object == a->symbol && object->expression.type == a->symbol->type);
+	assert(object->expression.is_lvalue && !unknown->count);
+	assert(captured->object_symbol->type == a->type && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_extern_array_tree();
 	test_extern_object_tree();
 	test_static_function_tree();
 	test_function_declaration_list_tree();

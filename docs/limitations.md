@@ -2183,3 +2183,18 @@ to incomplete arrays are scalar objects and retain existing composite rules.
 Ordinary const objects are not constant expressions. Missing external storage is
 a linker error, not an invented per-TU definition requirement. No full C23 claim.
 Earlier global-object exclusions are superseded only for this documented slice.
+
+## M15f2 declaration-only external arrays
+
+Only explicit extern declarations gain arrays. All definitions, initializers,
+tentative/plain/static objects, block extern/functions, inferred extern, VM/VLA,
+aggregate additions, thread storage/inline and remaining qualifiers stay deferred.
+Unknown INNER rows, void/function elements and invalid constant bounds remain
+errors. Unknown outer arrays are not tentative definitions and are not completed
+to one element at TU end. Referenced native storage must exist at link time; every
+executed index in curated tests is backed by initialized owner storage. No full
+C23 conformance claim. Earlier array exclusions are superseded only for this slice.
+
+The audited typeof_unqual array native gap does not narrow kcc semantics; exact
+original/status/diagnostic classifiers cannot waive other failures. All source
+cache/point-of-declaration/register-array restrictions remain unchanged.

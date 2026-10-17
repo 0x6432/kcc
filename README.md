@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15F2: Explicit file-scope `extern` arrays now support fixed or unknown outer
+bounds, rows, qualified/pointer/callback elements and mixed declaration lists.
+Existing decay/address lowering references native-owned storage; no new data or
+local slots. Immutable captured types survive canonical bound completion, and
+the 1 MiB per-array-type ceiling remains. Definitions and VM arrays stay deferred.
+Read docs/m15-extern-arrays.md for exact native gaps and frozen validation.
+
 M15F1: Explicit file-scope `extern` scalar objects now support native-owned
 storage references, mixed function/object lists, typed reads/writes/addresses and
 indirect callbacks. Canonical object identity and immutable captured types survive

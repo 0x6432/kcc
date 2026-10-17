@@ -443,8 +443,8 @@ static bool parse_function_suffix(struct parser *parser,
 }
 
 /* object-array-suffix ::= "[" [ assignment-expression ] "]"
- * Sema rejects incomplete elements/objects before layout, while a pointer to
- * an unknown-bound array is complete. Append dimensions in source order.
+ * Sema requires complete elements and complete local storage objects; extern
+ * arrays may have an unknown outer bound. Append dimensions in source order.
  */
 static bool parse_object_array_suffixes(struct parser *parser,
 	struct parsed_declarator *declarator)
