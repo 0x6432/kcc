@@ -7,6 +7,8 @@ struct function_symbol {
 	struct token name;
 	const struct function_type *type;
 	struct ast_function *definition;
+	bool is_internal;
+	bool is_referenced;
 	struct function_symbol *next;
 };
 

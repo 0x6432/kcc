@@ -633,6 +633,7 @@ struct ast_external_static_assertion {
 /* Written query-root declaration; sema determines whether it is a function. */
 struct ast_external_type_declaration {
 	struct ast_external_declaration external;
+	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	const struct type *type;
@@ -653,6 +654,7 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
+	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_function_type_syntax *type_syntax;
 	struct ast_type_syntax *return_syntax;
 	struct token name;

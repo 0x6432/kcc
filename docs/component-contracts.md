@@ -2067,3 +2067,26 @@ symbols; compatible repeated names retain canonical composite types. Existing
 source unknown-bound/composite known-bound caches and per-definition register
 spills remain unchanged. No public AST, sema/type/backend changes, prototype
 storage or duplicate IL exports. Unsupported members prevent all partial IL.
+
+## M15e1 canonical internal linkage and unevaluated uses
+
+lex.c converts static only at the final preprocessing-identifier boundary;
+raw tokens, macro keyword replacement and demand peeks remain unchanged. Shared
+scanner keeps one ordinary class plus independent auto; parameters allow only
+register, type names no storage. Local static fails before publication/storage.
+Concrete ast_function_declaration and ast_external_type_declaration carry written
+is_static; nested parameter/function type syntax never inherits it. Canonical
+function_symbol owns is_internal and is_referenced. Repeated static and later
+extern/unadorned reuse that symbol; external-first/static fails before mutation.
+
+A private saved/restored sema unevaluated flag is independent of value_required:
+address-of remains evaluated, whereas sizeof/alignof/typeof expression/type query
+wrappers suppress reference marking while preserving all type/operand constraints.
+Only name-to-function-designator resolution marks ordinary uses. Cached queries
+are never analyzed twice. Final translation-unit traversal checks missing internal
+definitions after forward recursion/redeclarations can complete. Registration,
+composite/cache identity and actual definition parameter provenance remain.
+QBE emits export only for canonical external symbols, not written definition
+spelling. Local object symbols use ordinary unmangled QBE names and Linux local
+t binding. No aliases/prototypes produce IL/storage; unsupported source emits no
+partial IL. VM support must revisit query evaluation; no hypothetical storage enum.

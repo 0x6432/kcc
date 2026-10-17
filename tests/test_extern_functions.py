@@ -87,7 +87,6 @@ subset_errors = [
     ('int main(void) { extern int f(void); return 0; }','block-scope extern declarations'),
     ('typedef int F(int); int main(void) { F extern f; return 0; }','block-scope extern declarations'),
     ('typedef int T; int main(void) { extern auto T=42; return 0; }','block-scope extern declarations'),
-    ('static int f(void) { return 42; }','error:'),
     ('extern inline int f(void) { return 42; }','error:'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc extern functions ') as directory:

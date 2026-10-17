@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory(prefix='kcc incomplete parameter bounds ') as d
         ('int main(void) { int a[]; return 0; }', 'local object type must be complete'),
         ('int f(int a[0]) { return 0; }', 'array bound'),
         ('int f(int a[][0]) { return 0; }', 'array bound'),
-        ('int f(int a[static 2]) { return 0; }', 'keyword is not supported'),
+        ('int f(int a[static 2]) { return 0; }', 'static array bounds are not supported'),
         ('int f(int [][3]); int f(int [][4]);', 'incompatible function'),
         ('int f(int **); int f(int [][3]);', 'incompatible function'),
         ('int f(char []); int f(signed char []);', 'incompatible function'),

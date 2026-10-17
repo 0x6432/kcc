@@ -65,6 +65,7 @@ struct sema {
 	size_t local_count;
 	uint64_t local_storage;
 	struct function_symbol *functions;
+	bool unevaluated;
 	struct typedef_binding *typedefs;
 	struct typedef_type_shape *typedef_shapes;
 	size_t function_count;
@@ -217,6 +218,33 @@ static bool sema_expression(struct sema *sema,
 static const struct type *resolve_function_syntax(struct sema *sema,
 	struct ast_function_type_syntax *function);
 
+static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax);
+
+/* Non-VM queries retain constraints without creating evaluated function uses. */
+static bool sema_unevaluated_expression(struct sema *sema,
+	struct ast_expression **expression_slot)
+{
+	bool saved = sema->unevaluated;
+	bool success;
+
+	sema->unevaluated = true;
+	success = sema_expression(sema, expression_slot, false);
+	sema->unevaluated = saved;
+	return success;
+}
+
+static const struct type *resolve_unevaluated_type_syntax(struct sema *sema,
+	struct ast_type_syntax *syntax)
+{
+	bool saved = sema->unevaluated;
+	const struct type *type;
+
+	sema->unevaluated = true;
+	type = resolve_type_syntax(sema, syntax);
+	sema->unevaluated = saved;
+	return type;
+}
+
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
 {
@@ -257,7 +285,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	}
 	case type_syntax_typeof_type: {
 		struct ast_typeof_type_syntax *query = (struct ast_typeof_type_syntax *)syntax;
-		const struct type *operand = resolve_type_syntax(sema, query->operand);
+		const struct type *operand = resolve_unevaluated_type_syntax(sema, query->operand);
 
 		if (!operand)
 			return NULL;
@@ -272,7 +300,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		/* Preserve only the root load/decay boundary; children keep their constraints.
 		 * Variably modified types are unsupported, so no operand evaluation occurs.
 		 */
-		if (!sema_expression(sema, &query->operand, false))
+		if (!sema_unevaluated_expression(sema, &query->operand))
 			return NULL;
 		syntax->type = query->unqualify ?
 			unqualified_type(sema, query->operand->type, syntax->location) : query->operand->type;
@@ -1014,6 +1042,8 @@ static bool sema_expression(struct sema *sema,
 				diagnostic_error(sema->diagnostics, expression->location, "out of memory creating function designator");
 				return false;
 			}
+			if (!sema->unevaluated)
+				function->is_referenced = true;
 			expression = &designator->expression;
 			*expression_slot = expression;
 			result_type = &function->type->type;
@@ -1024,7 +1054,7 @@ static bool sema_expression(struct sema *sema,
 		struct ast_sizeof_expression *node = (struct ast_sizeof_expression *)expression;
 
 		/* No immediate load/array/function decay; constraints still apply inside. */
-		if (!sema_expression(sema, &node->operand, false))
+		if (!sema_unevaluated_expression(sema, &node->operand))
 			return false;
 		if (!type_is_complete_object(node->operand->type)) {
 			diagnostic_error(sema->diagnostics, expression->location, "sizeof requires a complete object type");
@@ -1037,7 +1067,7 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_sizeof_type: {
 		struct ast_sizeof_type_expression *node = (struct ast_sizeof_type_expression *)expression;
-		const struct type *type = resolve_type_syntax(sema, node->type_syntax);
+		const struct type *type = resolve_unevaluated_type_syntax(sema, node->type_syntax);
 
 		if (!type)
 			return false;
@@ -1051,7 +1081,7 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_alignof: {
 		struct ast_alignof_expression *node = (struct ast_alignof_expression *)expression;
-		const struct type *type = resolve_type_syntax(sema, node->type_syntax);
+		const struct type *type = resolve_unevaluated_type_syntax(sema, node->type_syntax);
 
 		if (!type)
 			return false;
@@ -2084,7 +2114,7 @@ done:
  * written function declarators and query-derived function declarations.
  */
 static struct function_symbol *register_function(struct sema *sema, struct token name,
-	const struct function_type *type, struct ast_function *definition)
+	const struct function_type *type, struct ast_function *definition, bool is_static)
 {
 	struct function_symbol *symbol = find_function(sema, name);
 	const struct type *return_type;
@@ -2097,6 +2127,17 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 		name.spelling_location.offset, "main", 4) == 0 && type->parameter_count) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"only zero-parameter main is supported yet");
+		return NULL;
+	}
+	if (is_static && name.length == 4 && memcmp(name.spelling_location.source->data +
+		name.spelling_location.offset, "main", 4) == 0) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"static main is not supported on the Linux target");
+		return NULL;
+	}
+	if (is_static && symbol && !symbol->is_internal) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"static declaration after external linkage is not supported");
 		return NULL;
 	}
 	return_type = type->return_type;
@@ -2127,6 +2168,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 		*symbol = (struct function_symbol) {
 			.name = name,
 			.type = type,
+			.is_internal = is_static,
 			.next = sema->functions,
 		};
 		sema->functions = symbol;
@@ -2166,7 +2208,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 		return false;
 	}
 	declaration->symbol = register_function(sema, declaration->name,
-		(const struct function_type *)type, NULL);
+		(const struct function_type *)type, NULL, declaration->is_static);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = type;
@@ -2183,7 +2225,7 @@ static bool sema_function_declaration(struct sema *sema,
 		return false;
 	assert(resolved->kind == type_kind_function);
 	symbol = register_function(sema, declaration->name,
-		(const struct function_type *)resolved, definition);
+		(const struct function_type *)resolved, definition, declaration->is_static);
 	if (!symbol)
 		return false;
 	declaration->symbol = symbol;
@@ -2347,6 +2389,13 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		if (!sema_function_declaration(&sema, declaration, definition))
 			return false;
 		external = external->next;
+	}
+	for (struct function_symbol *symbol = sema.functions; symbol; symbol = symbol->next) {
+		if (symbol->is_internal && symbol->is_referenced && !symbol->definition) {
+			diagnostic_error(diagnostics, symbol->name.location,
+				"referenced internal function requires a definition");
+			return false;
+		}
 	}
 	return true;
 }

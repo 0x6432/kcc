@@ -30,6 +30,7 @@ enum token_kind {
 	token_typedef,
 	token_register,
 	token_extern,
+	token_static,
 	token_auto,
 	token_typeof,
 	token_typeof_unqual,

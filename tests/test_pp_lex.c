@@ -318,9 +318,21 @@ static void test_extern_preprocessing_identifier(void)
 	check_raw("extern name", tokens, sizeof(tokens) / sizeof(tokens[0]), 0);
 }
 
+static void test_static_preprocessing_identifier(void)
+{
+	const struct expected_pp_token tokens[] = {
+		{ pp_identifier, "static", false, true },
+		{ pp_identifier, "name", true, false },
+		{ pp_eof, "", false, false },
+	};
+
+	check_raw("static name", tokens, sizeof(tokens) / sizeof(tokens[0]), 0);
+}
+
 int main(void)
 {
 	test_extern_preprocessing_identifier();
+	test_static_preprocessing_identifier();
 	test_keywords_and_spacing();
 	test_comment_lines();
 	test_numbers();

@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15E1: File-scope `static` functions now have canonical internal linkage, retained
+through later `extern` or unadorned declarations and definitions. QBE emits local
+rather than exported symbols. Referenced internal functions require definitions;
+unused and non-VM `sizeof`/`typeof`-only prototypes remain valid. Read
+docs/m15-static-functions.md for source/AST/ABI/diagnostic and frozen-matrix evidence.
+Objects, block storage, inline/thread and full C23 remain unsupported.
+
 M15D2: File-scope function declarations can share specifiers in comma lists,
 including extern and alias/query-derived prototypes. Each concrete declarator
 keeps its own syntax/parameter scope and counts once toward the existing budget;

@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15D2 file-scope function declaration lists. Read the latest entries together with README.md and
+Current milestone: M15E1 file-scope static functions. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2154,3 +2154,21 @@ list output. Clang 15/18 top-level return-qualification redeclaration gaps are
 reported on exact original programs, not called kcc failures or fabricated native
 agreements. Query/alias-derived bodies remain explicitly unsupported with their
 old diagnostics. Definitions are not allowed inside prototype comma lists.
+
+## M15e1 internal-linkage functions
+
+Only file-scope functions gain static/internal linkage. Static/global/local
+objects, tentative definitions, block function declarations, inline/thread storage,
+inferred static objects, static array parameters and static main remain explicit
+subset refusals. External-first then static is conservatively refused mixed-linkage
+UB (6.2.2p7), not a required constraint claim. Auto+static grammar is valid but
+explicit-type combinations require inference under 6.7.1p4. Existing register-void,
+VM/aggregate/qualifier/inference and constant-expression subsets remain; dead calls
+in array bounds are still refused by the ICE-only bound subset inside type
+queries; no claim that a dead-call bound itself is non-VM is made. Future VM support must revise the explicit unevaluated-use exceptions.
+Not full C23 conformance.
+
+Unused/query-only internal prototypes need no definition. Ordinary uses do, including
+syntactically dead calls. Clang status-zero warnings satisfy the native diagnostic
+requirement; they are not counted as rejections. Earlier static-function exclusions
+are superseded only for the documented file-scope subset.

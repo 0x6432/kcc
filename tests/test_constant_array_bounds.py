@@ -87,7 +87,7 @@ constraints = [
     ('int (*f(int n))[sizeof n];', 'undeclared identifier'),
     ('int f(void) { int a[&f]; return 0; }', 'integer constant expression'),
     ('int f(void) { int a[1,2]; return 0; }', "expected ']'"),
-    ('int f(int a[static 2]);', 'keyword is not supported'),
+    ('int f(int a[static 2]);', 'static array bounds are not supported'),
     ('int f(int a[*]);', 'expected integer literal'),
     ('int f(void) { int a[1048576/4+1]; return 0; }', 'storage limit'),
     ('int f(void) { char a[1048576],b[1]; return 0; }', 'local object storage'),

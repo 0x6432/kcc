@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists implemented; other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -3067,3 +3067,84 @@ immutable; no token vector/replay or second semantic/cache owner. Not full C23.
 M15c1 exact-commit CI run 39009008993 and M15d1 run 39010665350 both completed
 successfully with all three jobs green. New M15d2 exact-commit CI is pending until
 checked after push; local passes never imply remote success.
+
+## M15e1 static functions and use provenance
+
+Design recorded before implementation against validated/pushed 267a27f.
+
+M15e1 supports file-scope static function declarations, definitions and prototype
+lists, including alias/query prototypes, callbacks, register/adjusted parameters,
+recursion and internal function pointers returned through exported wrappers.
+Written static is recorded only on concrete external declarations. Canonical
+function symbols retain internal linkage through later extern OR unadorned
+prototypes/definitions; QBE omits export using that canonical linkage. Function
+types/caches do not acquire a linkage qualifier. Read m15-static-functions.md.
+
+Ordinary function-designator resolution records syntactic uses, including dead
+branches, addresses and discarded expressions. Saved/restored unevaluated context
+for sizeof/alignof/typeof expression AND type queries preserves constraints but
+excludes non-VM query-only uses. After the whole unit, referenced internal symbols
+must have a definition; unused/query-only prototypes remain valid and emit no IL.
+Alias/prototype names still consume no runtime locals, spills or storage.
+
+Normal helpers/compiler were built serially with GCC11/C11 before the frozen
+matrix. Full make test passed with GCC11/GCC14/Clang18 native comparison hosts;
+full QBE1.2 make test-codegen passed with both modern hosts. Actual GCC11/Clang15
+ASan/UBSan builds passed lex/raw-pp/sema and 27 targeted suites; eight suites also
+used Clang18 native comparisons. Frozen 387-file primary and isolated manifests
+matched before/after. Bounded sanitized compile-only fuzz passed 14130 lexer /
+37096 pipeline inputs, 26 seconds each. Logs /data/tools/m15e1-*; isolated
+trees /data/validation-m15e1/{gcc,clang}. Prior frozen 267a27f and current compiler
+have byte-identical return codes/stdout/stderr on all 155 prior compile corpus
+files (123 accepted / 32 rejected), excluding only the new static-function seed.
+
+Four-host focused suite: 53 unchanged baseline + 13 C23-keyword originals.
+GCC14/Clang18 agree on 66 positives and reject 23 applicable constraints; legacy
+GCC11/Clang15 agree on 53 and reject 17, with exact independent C23-keyword gaps.
+Missing internal definitions are diagnosed on 14 modern / nine legacy originals:
+GCC rejects, Clang warns with exit status zero. Full exact error/warning/note
+records, original source membership, exit status and negative controls are checked;
+source-specific unused-value warnings are recognized only for the five discarded
+expression/query originals. Warnings are diagnostic agreements, NOT rejections or
+feature gaps. Five mixed-linkage UB refusals and 14 subset refusals compile only.
+No invalid curated/generated C executed; original programs are never rewritten.
+
+All four hosts pass 24 both-direction full-width mixed-stack primitive ABI
+arrangements plus two row/callback arrangements. Internal helpers cross public
+wrappers; function-pointer returns execute. Two kcc objects with same-named private
+helpers link successfully, and a native exported helper does not interpose on the
+kcc private namesake. nm verifies local t versus exported T and unresolved U.
+Unused/alias/query-only prototype IL is empty and inherited definitions stay local.
+
+New 11-node AST fixture asserts written static versus inherited canonical linkage,
+shared list bases, distinct symbols, unused/query-only unreferenced state, ordinary
+and dead-branch referenced state, saved nested-query context, exact captured symbol
+identity and immutable compatible type caches. Prototype register provenance does
+not leak into ordinary definition spills; actual register definition spill keeps
+its own restriction and slot. Existing typedef scope/cache/identity tests pass.
+Exact 512/513 concrete list names, 511/512 after a prior declaration, 256/257 unique
+symbols, 128/129 parameters, 256/257 locals including 128 spills, 1 MiB storage,
+4096 items, 64 declarator nesting and 128 expanded depth pass compile-only.
+Only two obsolete static-function refusals were removed with positive replacements:
+extern suite 11 -> 10 subsets and declaration-list suite seven -> six subsets.
+Three existing static-array probes now expect the explicit shared-suffix subset
+diagnostic rather than a removed unsupported-keyword classification. The initial
+frozen candidate was retired when full regression caught that diagnostic path;
+all final evidence is from a fresh complete matrix, not partial initial passes.
+A passing intermediate candidate was also retired after correcting the parser
+BNF comment; the final full matrix includes that comment-only source change.
+
+Only file-scope functions gain static/internal linkage. Static/global/local
+objects, tentative definitions, block function declarations, inline/thread storage,
+inferred static objects, static array parameters and static main remain explicit
+subset refusals. External-first then static is conservatively refused mixed-linkage
+UB (6.2.2p7), not a required constraint claim. Auto+static grammar is valid but
+explicit-type combinations require inference under 6.7.1p4. Existing register-void,
+VM/aggregate/qualifier/inference and constant-expression subsets remain; dead calls
+in array bounds are still refused by the ICE-only bound subset inside type
+queries; no claim that a dead-call bound itself is non-VM is made. Future VM support must revise the explicit unevaluated-use exceptions.
+Not full C23 conformance.
+
+Previous exact M15d2 CI run 39014365465: completed successfully, all three jobs green. New M15e1 CI remains
+pending until independently checked after push. Local validation never proves
+remote success.

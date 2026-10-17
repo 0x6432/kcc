@@ -1063,7 +1063,9 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 
 	assert(type_is_scalar(function->return_type) || function->return_type->kind == type_kind_void);
 
-	emit(&codegen, "export function ");
+	if (!function->declaration->symbol->is_internal)
+		emit(&codegen, "export ");
+	emit(&codegen, "function ");
 	if (function->return_type->kind != type_kind_void)
 		emit(&codegen, "%s ", qbe_abi_type(function->return_type));
 	emit(&codegen, "$%.*s(", (int)name.length,

@@ -1092,3 +1092,34 @@ immutable; no token vector/replay or second semantic/cache owner. Not full C23.
 Clause 6.7.6.3p4 removes top-level return qualifiers in C23 function typing; exact
 native diagnostic gaps are separate from original-source agreements. See the
 ledger for shared-cache/scope/ABI/resource evidence and independent CI status.
+
+## M15e1 static functions (6.2.2; 6.7.1; 6.9p3)
+
+M15e1 supports file-scope static function declarations, definitions and prototype
+lists, including alias/query prototypes, callbacks, register/adjusted parameters,
+recursion and internal function pointers returned through exported wrappers.
+Written static is recorded only on concrete external declarations. Canonical
+function symbols retain internal linkage through later extern OR unadorned
+prototypes/definitions; QBE omits export using that canonical linkage. Function
+types/caches do not acquire a linkage qualifier. Read m15-static-functions.md.
+
+Ordinary function-designator resolution records syntactic uses, including dead
+branches, addresses and discarded expressions. Saved/restored unevaluated context
+for sizeof/alignof/typeof expression AND type queries preserves constraints but
+excludes non-VM query-only uses. After the whole unit, referenced internal symbols
+must have a definition; unused/query-only prototypes remain valid and emit no IL.
+Alias/prototype names still consume no runtime locals, spills or storage.
+
+Only file-scope functions gain static/internal linkage. Static/global/local
+objects, tentative definitions, block function declarations, inline/thread storage,
+inferred static objects, static array parameters and static main remain explicit
+subset refusals. External-first then static is conservatively refused mixed-linkage
+UB (6.2.2p7), not a required constraint claim. Auto+static grammar is valid but
+explicit-type combinations require inference under 6.7.1p4. Existing register-void,
+VM/aggregate/qualifier/inference and constant-expression subsets remain; dead calls
+in array bounds are still refused by the ICE-only bound subset inside type
+queries; no claim that a dead-call bound itself is non-VM is made. Future VM support must revise the explicit unevaluated-use exceptions.
+Not full C23 conformance.
+
+See the milestone ledger for exact source, diagnostic, ABI, AST and resource
+evidence. Both evaluated and non-VM unevaluated function-use contexts are tested.

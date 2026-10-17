@@ -5075,8 +5075,90 @@ static void test_function_declaration_list_tree(void)
 	fclose(stream);
 }
 
+static void test_static_function_tree(void)
+{
+	const char *text = "static int f(register int),unused(void),queried(void); "
+		"extern int f(int); typeof(queried) query_alias; typedef int F(int); "
+		"static F alias; typeof(f) captured; "
+		"int f(int x) { int *p=&x; sizeof(&queried); return *p; } "
+		"int alias(register int x) { return f(x); } "
+		"int main(void) { sizeof(sizeof(&queried)); typeof(queried) *p; "
+		"if(0) return alias(1); return f(42); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *nodes[11];
+	struct ast_external_declaration *item;
+	struct ast_function_declaration *f;
+	struct ast_function_declaration *unused;
+	struct ast_function_declaration *queried;
+	struct ast_function_declaration *inherited;
+	struct ast_external_type_declaration *alias;
+	struct ast_external_type_declaration *captured;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_function_designator_expression *designator;
+	struct ast_function *definition;
+	struct ast_function *alias_definition;
+	struct ast_function *main_function;
+	size_t count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "static-functions.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	for (item = unit->declarations; item; item = item->next) {
+		assert(count < sizeof(nodes) / sizeof(nodes[0]));
+		nodes[count++] = item;
+	}
+	assert(count == 11);
+	f = (struct ast_function_declaration *)nodes[0];
+	unused = (struct ast_function_declaration *)nodes[1];
+	queried = (struct ast_function_declaration *)nodes[2];
+	inherited = (struct ast_function_declaration *)nodes[3];
+	alias = (struct ast_external_type_declaration *)nodes[6];
+	captured = (struct ast_external_type_declaration *)nodes[7];
+	definition = (struct ast_function *)nodes[8];
+	alias_definition = (struct ast_function *)nodes[9];
+	main_function = (struct ast_function *)nodes[10];
+	assert(f->is_static && unused->is_static && queried->is_static && alias->is_static);
+	assert(!inherited->is_static && !captured->is_static && !definition->declaration->is_static);
+	assert(f->return_syntax == unused->return_syntax && unused->return_syntax == queried->return_syntax);
+	assert(f->parameters->is_register && !definition->declaration->parameters->is_register);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(f->symbol == inherited->symbol && f->symbol == definition->declaration->symbol);
+	assert(f->symbol->is_internal && f->symbol->is_referenced && f->symbol->definition == definition);
+	assert(!unused->symbol->definition && !unused->symbol->is_referenced && unused->symbol->is_internal);
+	assert(!queried->symbol->definition && !queried->symbol->is_referenced && queried->symbol->is_internal);
+	assert(alias->symbol == alias_definition->declaration->symbol && alias->symbol->is_internal);
+	assert(alias->symbol->is_referenced && !alias_definition->declaration->is_static);
+	assert(!captured->symbol->is_internal && !captured->symbol->definition && !captured->symbol->is_referenced);
+	assert(!main_function->declaration->symbol->is_internal);
+	query = (struct ast_typeof_expression_syntax *)captured->type_syntax;
+	designator = (struct ast_function_designator_expression *)query->operand;
+	assert(designator->expression.kind == expression_function_designator && designator->function == f->symbol);
+	assert(type_compatible(query->syntax.type, inherited->type_syntax->syntax.type));
+	assert(query->syntax.type == designator->expression.type);
+	assert(type_compatible(query->syntax.type, &f->symbol->type->type));
+	assert(!f->parameters->local && !inherited->parameters->local);
+	assert(definition->declaration->parameters->local->slot == 0);
+	assert(!definition->declaration->parameters->local->is_register);
+	assert(alias_definition->locals == alias_definition->declaration->parameters->local);
+	assert(alias_definition->locals->slot == 0 && alias_definition->locals->is_register);
+	assert(!alias_definition->locals->next_local && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_static_function_tree();
 	test_function_declaration_list_tree();
 	test_extern_function_tree();
 	test_register_parameter_tree();

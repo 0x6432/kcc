@@ -95,7 +95,8 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 {
 	enum token_kind kind = token.kind;
 
-	return kind == token_typedef || kind == token_register || kind == token_extern || kind == token_auto ||
+	return kind == token_typedef || kind == token_register || kind == token_extern ||
+		kind == token_static || kind == token_auto ||
 		kind == token_void || kind == token_const ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
@@ -134,8 +135,8 @@ struct declaration_head {
 };
 
 /* declaration-specifiers ::= permutation of storage-specifiers, qualifiers and builtin-type
- * storage-specifiers ::= [ "typedef" | "register" | "extern" | "auto" ]
- * Auto may additionally accompany register/extern only for an inferred type.
+ * storage-specifiers ::= [ "typedef" | "register" | "extern" | "static" | "auto" ]
+ * Auto may additionally accompany register/extern/static only for an inferred type.
  * builtin-type ::= integer-type | "void" | typeof-specifier | typedef-name
  * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
@@ -166,7 +167,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		struct token token = preprocess_peek(parser->preprocessor);
 
 		if (token.kind == token_typedef || token.kind == token_register ||
-			token.kind == token_extern || token.kind == token_auto) {
+			token.kind == token_extern || token.kind == token_static || token.kind == token_auto) {
 			struct token *slot;
 
 			if (!head || (context == declarator_parameter && token.kind != token_register)) {
@@ -178,6 +179,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 					message = "auto is not permitted in a type name or parameter declaration";
 				else if (token.kind == token_extern)
 					message = "extern is not permitted in a type name or parameter declaration";
+				else if (token.kind == token_static)
+					message = "static is not permitted in a type name or parameter declaration";
 				diagnostic_error(parser->diagnostics, token.location, message);
 				return NULL;
 			}
@@ -191,6 +194,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 					message = "duplicate register storage-class specifier";
 				else if (token.kind == token_extern)
 					message = "duplicate extern storage-class specifier";
+				else if (token.kind == token_static)
+					message = "duplicate static storage-class specifier";
 				diagnostic_error(parser->diagnostics, token.location, message);
 				return NULL;
 			}
@@ -296,7 +301,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			unsigned_type = token.kind == token_unsigned;
 		}
 	}
-	if (head && (head->keyword.kind == token_register || head->keyword.kind == token_extern) &&
+	if (head && (head->keyword.kind == token_register ||
+		head->keyword.kind == token_extern || head->keyword.kind == token_static) &&
 		head->auto_keyword.kind == token_auto &&
 		(query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count)) {
 		diagnostic_error(parser->diagnostics, beginning->location,
@@ -452,6 +458,11 @@ static bool parse_object_array_suffixes(struct parser *parser,
 		if (declarator->dimensions == ast_max_array_dimensions) {
 			diagnostic_error(parser->diagnostics, opening.location,
 				"array declarator exceeds dimension limit (64)");
+			return false;
+		}
+		if (preprocess_peek(parser->preprocessor).kind == token_static) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"static array bounds are not supported yet");
 			return false;
 		}
 		if (has_bound) {
@@ -2113,8 +2124,10 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
-	if (head.keyword.kind == token_extern) {
+	if (head.keyword.kind == token_extern || head.keyword.kind == token_static) {
 		diagnostic_error(parser->diagnostics, head.keyword.location,
+			head.keyword.kind == token_static ?
+			"block-scope static declarations are not supported yet" :
 			"block-scope extern declarations are not supported yet");
 		return NULL;
 	}
@@ -2504,7 +2517,7 @@ static bool parse_parameters(struct parser *parser,
  * The outer query or typedef name is unresolved; only sema classifies its type.
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
-	struct ast_type_syntax *type_syntax, struct token beginning, struct token name)
+	struct ast_type_syntax *type_syntax, struct token beginning, struct token name, bool is_static)
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
@@ -2527,6 +2540,8 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		beginning.location, type_syntax, name);
 	if (!declaration)
 		allocation_error(parser, beginning.location);
+	else
+		declaration->is_static = is_static;
 	return declaration ? &declaration->external : NULL;
 }
 
@@ -2610,7 +2625,7 @@ done:
  * Each prototype has its own derived chain around the shared specifier base.
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
-	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base)
+	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base, bool is_static)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -2630,7 +2645,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		if (!type_syntax)
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -2640,6 +2655,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 				allocation_error(parser, beginning.location);
 				return NULL;
 			}
+			declaration->is_static = is_static;
 			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
 			/* Views of one outer function syntax, not reparsed copies. */
 			declaration->return_syntax = declaration->type_syntax->return_syntax;
@@ -2710,7 +2726,8 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	}
 	if (head.keyword.kind == token_typedef)
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
-	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base);
+	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
+		head.keyword.kind == token_static);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */
