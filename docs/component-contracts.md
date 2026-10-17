@@ -2166,3 +2166,25 @@ BEFORE canonical mutation or first-anchor assignment. Only canonical type and
 initially-null ownership may change; source caches never do. Codegen uses exact
 anchor identity and final layout, propagates write/flush failure, and never
 interprets a pure extern declaration as owned storage.
+
+## M15g2 immutable TU-end array finalization
+
+M15g2 extends tentative file-scope ownership to existing fixed arrays and arrays
+with unknown OUTER bounds. After the entire ordered TU and internal-function
+checks, a private semantic pass replaces only anchored, still-unknown canonical
+arrays with fresh one-element types. Later known composites win; extern-only
+unknown arrays stay incomplete/unowned. Scalars and pointer referents are not
+recursively completed. Earlier declaration, typedef, query, expression and
+function-return captures remain immutable. Read m15-tentative-arrays.md.
+
+Existing first-tentative anchors emit one explicitly aligned exported zero datum
+using final canonical layout. No new AST fields, public symbol list, backend
+operation, local slot, initializer interpreter or startup stores. Existing decay,
+row strides, element updates and indirect callbacks reuse global addresses.
+
+The finalizer checks complete elements and the existing per-type byte policy,
+allocates before replacing the canonical pointer, and diagnoses failure at the
+first tentative anchor. Failure prevents IL; prior finalized symbols need no
+rollback because the whole failed unit is discarded. Codegen consumes final
+complete canonical layout, not an incomplete anchor cache. Extern-only arrays
+and unknown pointer referents are never defaulted to one.

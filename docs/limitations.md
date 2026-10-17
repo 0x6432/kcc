@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15G1 scalar tentative definitions. Read the latest entries together with README.md and
+Current milestone: M15G2 tentative array definitions. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2214,3 +2214,22 @@ are unsupported. Future initialized definitions need a separate ownership and
 duplicate-definition design; static objects need canonical linkage work. Shared
 256 object / independent 256 function / 512 declaration pools and existing local,
 array-type, depth and query budgets are unchanged. No new global-byte budget.
+
+## M15g2 tentative array completion
+
+Only current scalar/array tentative definitions are supported. Static objects,
+explicit initializers (including zero/empty), block extern/functions, inferred
+file objects, thread/inline, VM/VLA, aggregates, incomplete inner rows, function/
+void elements, array assignment/copy/return and additional scalar kinds remain
+deferred. Tentative objects named main remain a Linux hosted-target subset
+refusal. Earlier sizeof or whole-array arithmetic on unknown arrays still fails,
+even if later declarations or TU-end finalization supply storage. Fallback [1]
+runtime fixtures access only element zero (row zero for rows); callback elements
+are assigned before calling. No full C23 conformance claim.
+
+Keep the existing 1 MiB PER ARRAY TYPE ceiling, including complete rows used by
+fallback [1]. This is not a combined global-byte budget: independent 256 canonical
+objects, 256 functions, 512 concrete declarations and local-storage/depth/query
+budgets remain separate. Maximal/invalid/resource/fuzz programs compile only.
+Initialized definitions need a separate precedence/duplicate-ownership design;
+static objects need distinct canonical linkage work.

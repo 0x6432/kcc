@@ -5956,8 +5956,358 @@ static void test_tentative_scalar_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+/* TU-end array completion replaces canonical types, never source snapshots.
+ * AST identity/slot checks are separate from codegen storage validation.
+ */
+static void test_tentative_array_tree(void)
+{
+	const char *text = "extern int a[]; int a[]; typedef typeof(a) Saved; "
+		"typeof(&a) before(void) { return &a; } "
+		"int *early(void) { return a; } extern int a[3]; int a[]; "
+		"Saved b; extern Saved c; typeof(a) knowncopy; "
+		"extern int u[]; int u[]; typeof(u) u; typedef typeof(u) Unknown; "
+		"typeof(&u) fallback_address(void) { return &u; } "
+		"int *fallback_decay(void) { return u; } "
+		"Unknown other; extern typeof(u) only; "
+		"int (*p)[]; int (*pointers[])[]; int rows[][3]; "
+		"int (*callbacks[])(int); int scalar; "
+		"int (*row_decay(void))[3] { return rows; } "
+		"int inspect(void) { return rows[0][0]; } "
+		"typeof(callbacks[0]) callback_element(void) { return callbacks[0]; } "
+		"unsigned long row_size(void) { return sizeof rows[0]; } "
+		"typeof(&u) snapshot; extern int extern_only[]; "
+		"int *external_decay(void) { return extern_only; } "
+		"int *later(void) { return a; }";
+	const enum external_declaration_kind kinds[] = {
+		external_object_declaration, external_object_declaration,
+		external_typedef_declaration, external_function_definition,
+		external_function_definition, external_object_declaration,
+		external_object_declaration, external_type_declaration,
+		external_type_declaration, external_type_declaration,
+		external_object_declaration, external_object_declaration,
+		external_type_declaration, external_typedef_declaration,
+		external_function_definition, external_function_definition,
+		external_type_declaration, external_type_declaration,
+		external_object_declaration, external_object_declaration,
+		external_object_declaration, external_object_declaration,
+		external_object_declaration, external_function_definition,
+		external_function_definition, external_function_definition,
+		external_function_definition, external_type_declaration,
+		external_object_declaration, external_function_definition,
+		external_function_definition,
+	};
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *nodes[31];
+	struct ast_external_declaration *external;
+	struct ast_expression *returns[31] = { 0 };
+	struct ast_external_object_declaration *a;
+	struct ast_external_object_declaration *u;
+	struct ast_external_object_declaration *concrete;
+	struct ast_external_type_declaration *unresolved;
+	struct ast_typedef_declaration *saved;
+	struct ast_typedef_declaration *unknown_alias;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_function *function;
+	struct ast_return_statement *returned;
+	struct ast_external_object_expression *object;
+	struct ast_address_expression *address;
+	struct ast_array_decay_expression *decay;
+	struct ast_load_expression *load;
+	struct ast_indirection_expression *indirection;
+	struct ast_pointer_offset_expression *offset;
+	struct ast_sizeof_expression *size;
+	const struct type *a_source;
+	const struct type *u_source;
+	const struct type *row_type;
+	const struct type *callback_type;
+	const struct type *source_element;
+	const struct array_type *source_array;
+	const struct array_type *final_array;
+	struct external_object_symbol *objects[16];
+	size_t object_count = 0;
+	size_t count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "tentative-arrays.c",
+		(const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	for (external = unit->declarations; external; external = external->next) {
+		assert(count < sizeof(nodes) / sizeof(nodes[0]));
+		nodes[count] = external;
+		assert(external->kind == kinds[count]);
+		count++;
+	}
+	assert(count == sizeof(nodes) / sizeof(nodes[0]));
+	a = (struct ast_external_object_declaration *)nodes[0];
+	u = (struct ast_external_object_declaration *)nodes[10];
+	saved = ((struct ast_external_typedef_declaration *)nodes[2])->declaration;
+	unknown_alias = ((struct ast_external_typedef_declaration *)nodes[13])->declaration;
+	assert(a->is_extern && u->is_extern && !a->symbol && !u->symbol);
+	assert(!saved->type && !unknown_alias->type);
+	assert(a->type_syntax->kind == type_syntax_array);
+	assert(!((struct ast_array_type_syntax *)a->type_syntax)->bound);
+	assert(!((struct ast_array_type_syntax *)u->type_syntax)->bound);
+	assert(sema_translation_unit(unit, &arena, &diagnostics));
+	assert(!diagnostics.errors && !unit->strings);
+
+	/* First tentative, never the early extern, remains the exact base anchor. */
+	a_source = a->type;
+	u_source = u->type;
+	assert(a_source->kind == type_kind_array && u_source->kind == type_kind_array);
+	assert(!((const struct array_type *)a_source)->count);
+	assert(!((const struct array_type *)u_source)->count);
+	assert(a->symbol->tentative_definition == nodes[1]);
+	assert(u->symbol->tentative_definition == nodes[11]);
+	for (size_t i = 0; i < count; i++) {
+		if (i != 0 && i != 1 && i != 5 && i != 6 && i != 10 && i != 11)
+			continue;
+		concrete = (struct ast_external_object_declaration *)nodes[i];
+		assert(concrete->symbol == (i < 10 ? a->symbol : u->symbol));
+		assert(concrete->symbol->tentative_definition == (i < 10 ? nodes[1] : nodes[11]));
+		assert(concrete->is_extern == (i == 0 || i == 5 || i == 10));
+		assert(concrete->type_syntax->type == concrete->type);
+		assert(((const struct array_type *)concrete->type)->count == (i == 5 ? 3 : 0));
+	}
+	unresolved = (struct ast_external_type_declaration *)nodes[12];
+	assert(!unresolved->is_extern && !unresolved->symbol && unresolved->object_symbol == u->symbol);
+	assert(unresolved->type == u_source && u->symbol->tentative_definition == nodes[11]);
+	query = (struct ast_typeof_expression_syntax *)unresolved->type_syntax;
+	assert(query->syntax.type == u_source && query->operand->kind == expression_external_object);
+	assert(((struct ast_external_object_expression *)query->operand)->object == u->symbol);
+
+	/* The later known bound wins; fallback one replaces only the canonical type. */
+	final_array = (const struct array_type *)a->symbol->type;
+	assert(final_array->type.kind == type_kind_array && final_array->count == 3);
+	assert(final_array->element == &type_int && a->symbol->type != a_source);
+	final_array = (const struct array_type *)u->symbol->type;
+	assert(final_array->type.kind == type_kind_array && final_array->count == 1);
+	assert(final_array->element == &type_int && u->symbol->type != u_source);
+	assert(a->type_syntax->type == a_source && u->type_syntax->type == u_source);
+	assert(saved->type == a_source && unknown_alias->type == u_source);
+	query = (struct ast_typeof_expression_syntax *)saved->type_syntax;
+	assert(query->syntax.type == a_source && query->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)query->operand;
+	assert(object->object == a->symbol && object->expression.type == a_source);
+	query = (struct ast_typeof_expression_syntax *)unknown_alias->type_syntax;
+	assert(query->syntax.type == u_source && query->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)query->operand;
+	assert(object->object == u->symbol && object->expression.type == u_source);
+
+	/* Distinct captured objects finalize independently without rewriting aliases. */
+	for (size_t i = 7; i <= 17; i++) {
+		if (i != 7 && i != 8 && i != 9 && i != 16 && i != 17)
+			continue;
+		unresolved = (struct ast_external_type_declaration *)nodes[i];
+		assert(unresolved->object_symbol && !unresolved->symbol);
+		assert(unresolved->object_symbol != a->symbol && unresolved->object_symbol != u->symbol);
+		assert(unresolved->type->kind == type_kind_array);
+		assert(((const struct array_type *)unresolved->type)->count == (i == 9 ? 3 : 0));
+		assert(unresolved->type_syntax->type == unresolved->type);
+		assert(unresolved->is_extern == (i == 8 || i == 17));
+		final_array = (const struct array_type *)unresolved->object_symbol->type;
+		assert(final_array->count == (i == 8 || i == 17 ? 0 : i == 9 ? 3 : 1));
+		assert(unresolved->object_symbol->tentative_definition == (i == 8 || i == 17 ? NULL : nodes[i]));
+		if (i == 8 || i == 17)
+			assert(unresolved->object_symbol->type == unresolved->type);
+		if (i == 7 || i == 8)
+			assert(unresolved->type == saved->type);
+		if (i == 16 || i == 17)
+			assert(unresolved->type == unknown_alias->type);
+		if (i == 7 || i == 16)
+			assert(unresolved->object_symbol->type != unresolved->type);
+	}
+
+	/* Collect return roots: no source function has parameters, locals, or slots. */
+	for (size_t i = 0; i < count; i++) {
+		if (nodes[i]->kind != external_function_definition)
+			continue;
+		function = (struct ast_function *)nodes[i];
+		assert(!function->locals && function->declaration->symbol->type->parameter_count == 0);
+		assert(function->body->items && !function->body->items->next);
+		assert(function->body->items->kind == block_item_statement);
+		returned = (struct ast_return_statement *)((struct ast_statement_item *)function->body->items)->statement;
+		assert(returned->statement.kind == statement_return);
+		returns[i] = returned->value;
+	}
+
+	/* Query-derived signatures and whole-array addresses retain unknown bounds. */
+	for (size_t i = 3; i <= 14; i += 11) {
+		function = (struct ast_function *)nodes[i];
+		source_element = i == 3 ? a_source : u_source;
+		assert(function->return_type->kind == type_kind_pointer);
+		assert(((const struct pointer_type *)function->return_type)->referent == source_element);
+		assert(function->declaration->return_syntax->type == function->return_type);
+		assert(function->declaration->symbol->type->return_type == function->return_type);
+		query = (struct ast_typeof_expression_syntax *)function->declaration->return_syntax;
+		assert(query->operand->kind == expression_address);
+		address = (struct ast_address_expression *)query->operand;
+		assert(address->operand->kind == expression_external_object);
+		object = (struct ast_external_object_expression *)address->operand;
+		assert(object->object == (i == 3 ? a->symbol : u->symbol));
+		assert(object->expression.type == source_element);
+		assert(returns[i]->kind == expression_address);
+		address = (struct ast_address_expression *)returns[i];
+		assert(((const struct pointer_type *)address->expression.type)->referent == source_element);
+		assert(address->operand->kind == expression_external_object);
+		object = (struct ast_external_object_expression *)address->operand;
+		assert(object->object == (i == 3 ? a->symbol : u->symbol));
+		assert(object->expression.type == source_element && object->expression.is_lvalue);
+	}
+	for (size_t i = 4; i <= 15; i += 11) {
+		assert(returns[i]->kind == expression_array_decay);
+		decay = (struct ast_array_decay_expression *)returns[i];
+		assert(((const struct pointer_type *)decay->expression.type)->referent == &type_int);
+		assert(decay->operand->kind == expression_external_object);
+		object = (struct ast_external_object_expression *)decay->operand;
+		assert(object->object == (i == 4 ? a->symbol : u->symbol));
+		assert(object->expression.type == (i == 4 ? a_source : u_source));
+	}
+
+	/* Scalar pointer pointees never acquire a bound, even when owning storage. */
+	concrete = (struct ast_external_object_declaration *)nodes[18];
+	assert(concrete->symbol->tentative_definition == nodes[18]);
+	assert(concrete->symbol->type == concrete->type && concrete->type->kind == type_kind_pointer);
+	source_array = (const struct array_type *)((const struct pointer_type *)concrete->type)->referent;
+	assert(source_array->type.kind == type_kind_array && !source_array->count);
+	unresolved = (struct ast_external_type_declaration *)nodes[27];
+	assert(!unresolved->symbol && unresolved->object_symbol->tentative_definition == nodes[27]);
+	assert(unresolved->type->kind == type_kind_pointer && unresolved->object_symbol->type == unresolved->type);
+	assert(((const struct pointer_type *)unresolved->type)->referent == u_source);
+
+	/* Only outer count becomes one: pointer elements keep incomplete referents. */
+	concrete = (struct ast_external_object_declaration *)nodes[19];
+	assert(concrete->symbol->tentative_definition == nodes[19]);
+	source_array = (const struct array_type *)concrete->type;
+	final_array = (const struct array_type *)concrete->symbol->type;
+	assert(source_array->type.kind == type_kind_array && !source_array->count);
+	assert(final_array->type.kind == type_kind_array && final_array->count == 1);
+	assert(source_array != final_array && source_array->element == final_array->element);
+	assert(source_array->element->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)source_array->element)->referent->kind == type_kind_array);
+	assert(!((const struct array_type *)((const struct pointer_type *)source_array->element)->referent)->count);
+
+	/* Row and callback arrays finalize one outer element, preserving source types. */
+	for (size_t i = 20; i <= 21; i++) {
+		concrete = (struct ast_external_object_declaration *)nodes[i];
+		assert(concrete->symbol->tentative_definition == nodes[i]);
+		source_array = (const struct array_type *)concrete->type;
+		final_array = (const struct array_type *)concrete->symbol->type;
+		assert(!source_array->count && final_array->count == 1 && source_array != final_array);
+		assert(source_array->element == final_array->element);
+		assert(concrete->type_syntax->type == concrete->type);
+	}
+	row_type = ((const struct array_type *)((struct ast_external_object_declaration *)nodes[20])->type)->element;
+	assert(row_type->kind == type_kind_array && ((const struct array_type *)row_type)->count == 3);
+	assert(((const struct array_type *)row_type)->element == &type_int);
+	callback_type = ((const struct array_type *)((struct ast_external_object_declaration *)nodes[21])->type)->element;
+	assert(callback_type->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)callback_type)->referent->kind == type_kind_function);
+	assert(returns[23]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[23];
+	assert(((const struct pointer_type *)decay->expression.type)->referent == row_type);
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	concrete = (struct ast_external_object_declaration *)nodes[20];
+	assert(object->object == concrete->symbol && object->expression.type == concrete->type);
+	assert(returns[24]->kind == expression_load);
+	load = (struct ast_load_expression *)returns[24];
+	assert(load->operand->kind == expression_indirection);
+	indirection = (struct ast_indirection_expression *)load->operand;
+	assert(indirection->operand->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->element_size == 4 && offset->base->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)offset->base;
+	assert(decay->operand->kind == expression_indirection && decay->operand->type == row_type);
+	indirection = (struct ast_indirection_expression *)decay->operand;
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->expression.kind == expression_pointer_offset && offset->element_size == 12);
+	assert(offset->base->kind == expression_array_decay);
+
+	assert(returns[25]->kind == expression_load);
+	load = (struct ast_load_expression *)returns[25];
+	assert(load->expression.type == callback_type && load->operand->kind == expression_indirection);
+	function = (struct ast_function *)nodes[25];
+	assert(function->return_type == callback_type);
+	indirection = (struct ast_indirection_expression *)load->operand;
+	assert(indirection->operand->kind == expression_pointer_offset);
+	offset = (struct ast_pointer_offset_expression *)indirection->operand;
+	assert(offset->element_size == type_object_size(callback_type) && offset->base->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)offset->base;
+	assert(decay->operand->kind == expression_external_object);
+	concrete = (struct ast_external_object_declaration *)nodes[21];
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == concrete->symbol && object->expression.type == concrete->type);
+	assert(returns[26]->kind == expression_sizeof);
+	size = (struct ast_sizeof_expression *)returns[26];
+	assert(size->size == 12 && size->operand->kind == expression_indirection);
+	assert(size->operand->type == row_type);
+
+	/* No recursive completion for scalars, and no completion at all for externs. */
+	concrete = (struct ast_external_object_declaration *)nodes[22];
+	assert(concrete->type == &type_int && concrete->symbol->type == &type_int);
+	assert(concrete->symbol->tentative_definition == nodes[22]);
+	concrete = (struct ast_external_object_declaration *)nodes[28];
+	assert(concrete->is_extern && !concrete->symbol->tentative_definition);
+	assert(concrete->symbol->type == concrete->type);
+	assert(concrete->type->kind == type_kind_array && !((const struct array_type *)concrete->type)->count);
+	assert(returns[29]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[29];
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == concrete->symbol && object->expression.type == concrete->type);
+	assert(returns[30]->kind == expression_array_decay);
+	decay = (struct ast_array_decay_expression *)returns[30];
+	assert(decay->operand->kind == expression_external_object);
+	object = (struct ast_external_object_expression *)decay->operand;
+	assert(object->object == a->symbol && object->expression.type == a->symbol->type);
+
+	/* Count distinct identities; finalization creates no extra AST declarations. */
+	for (size_t i = 0; i < count; i++) {
+		struct external_object_symbol *symbol = NULL;
+		bool seen = false;
+
+		if (nodes[i]->kind == external_object_declaration)
+			symbol = ((struct ast_external_object_declaration *)nodes[i])->symbol;
+		else if (nodes[i]->kind == external_type_declaration)
+			symbol = ((struct ast_external_type_declaration *)nodes[i])->object_symbol;
+		if (!symbol)
+			continue;
+		for (size_t j = 0; j < object_count; j++)
+			if (objects[j] == symbol)
+				seen = true;
+		if (!seen) {
+			assert(object_count < sizeof(objects) / sizeof(objects[0]));
+			objects[object_count++] = symbol;
+		}
+		if (symbol->tentative_definition)
+			assert(type_is_complete_object(symbol->type));
+	}
+	assert(object_count == 14);
+	count = 0;
+	for (external = unit->declarations; external; external = external->next) {
+		assert(count < sizeof(nodes) / sizeof(nodes[0]) && nodes[count] == external);
+		count++;
+	}
+	assert(count == sizeof(nodes) / sizeof(nodes[0]));
+	assert(!((const struct array_type *)saved->type)->count);
+	assert(!((const struct array_type *)unknown_alias->type)->count && !unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_tentative_array_tree();
 	test_tentative_scalar_tree();
 	test_extern_array_tree();
 	test_extern_object_tree();

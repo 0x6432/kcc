@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15G2: Tentative fixed/unknown-outer arrays now own zero-initialized storage.
+TU-end completion creates one element only for still-unknown owned canonical
+arrays; known composites and immutable source captures remain distinct. Existing
+anchors/QBE data emission are reused. Exact native layout guards keep audited
+Clang underallocations compile-only. Initializers/static objects remain deferred.
+Read docs/m15-tentative-arrays.md for scope and frozen validation.
+
 M15G1: File-scope tentative scalar definitions now own exactly one aligned,
 zero-initialized exported datum. Written extern provenance and the first tentative
 anchor preserve extern-only behavior, captured types and source-order identity.

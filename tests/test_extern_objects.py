@@ -249,7 +249,7 @@ subset_errors = [
     ('extern int x=42;', 'extern object definitions'),
     ('extern int (*fp)(int)=0;', 'extern object definitions'),
     ('typedef int T; extern T x=42;', "query-derived external declarations require ';'"),
-    ('extern void x;', 'only scalar or array extern objects'),
+    ('extern void x;', 'only scalar or array file-scope objects'),
     ('int f(void) { extern int x; return 0; }', 'block-scope extern declarations'),
     ('extern int x; int f(void) { extern int x; return 0; }', 'block-scope extern declarations'),
     ('extern auto x=42;', 'file-scope auto declarations'),

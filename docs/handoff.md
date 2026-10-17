@@ -2,6 +2,110 @@
 
 ## Current checkpoint
 
+M15g2 extends tentative file-scope ownership to existing fixed arrays and arrays
+with unknown OUTER bounds. After the entire ordered TU and internal-function
+checks, a private semantic pass replaces only anchored, still-unknown canonical
+arrays with fresh one-element types. Later known composites win; extern-only
+unknown arrays stay incomplete/unowned. Scalars and pointer referents are not
+recursively completed. Earlier declaration, typedef, query, expression and
+function-return captures remain immutable. Read m15-tentative-arrays.md.
+
+Existing first-tentative anchors emit one explicitly aligned exported zero datum
+using final canonical layout. No new AST fields, public symbol list, backend
+operation, local slot, initializer interpreter or startup stores. Existing decay,
+row strides, element updates and indirect callbacks reuse global addresses.
+
+The exact final freeze contains 399 src/tests/Makefile files. Normal helpers were
+built serially BEFORE independent validation makes. Full make test passed with
+GCC11/GCC14/Clang18 native hosts; full make test-codegen passed with QBE1.2 and
+both modern hosts. Actual GCC11 and Clang15 isolated ASan/UBSan builds passed
+lex/raw-pp/sema plus 31 targeted suites and twelve extra Clang18 native comparison
+suites each. Primary and both isolated before/after manifests match. Bounded
+sanitized compile-only fuzz passed 6002 lexer / 13040 pipeline inputs.
+Logs /data/tools/m15g2-*; isolated trees /data/validation-m15g2/{gcc,clang}.
+No invalid curated, resource-boundary or fuzz-generated C was executed.
+
+All 159 prior corpus sources (127 accepted / 32 rejected) retain byte-identical
+status/stdout/stderr versus frozen 49aeb82. Six obsolete tentative-array refusals
+were removed with new positive coverage; void-object diagnostic wording is now
+storage-neutral. Full normal preflight and independent rejection-fixture audit
+preceded freezing. Production grammar comments and all test changes are included
+in the one final snapshot, not patched during validation.
+
+Focused unchanged-source suite: 74 sole-owner zero-storage pairs, including 48
+fixed/unknown-outer primitive arrangements in both driver directions. GCC14 passes
+74 native agreements; Clang18 passes 70 agreements and identifies four EXACT native
+storage bugs, never linked/executed. Both modern hosts pass 74 QBE paired runtimes
+and 29 native constraints. GCC11 passes 70 agreements; Clang15 passes 68 plus two
+EXACT non-executed storage bugs. Legacy hosts each have four independently probed
+keyword-gated native pairs, 26 applicable native constraints and 73 QBE pairs with
+one nullptr-companion keyword gap. Every host checks 29 kcc constraints, nine subset
+refusals and six unavailable-inference barriers. Companions extern-declare storage
+only; -fno-common and ownership checks prevent second definitions/common merging.
+
+Optional status-zero final-one warnings on correctly sized valid objects are
+separately counted agreement candidates only after layout and runtime success.
+The Clang15 fixed-row logical warning/note is separately source-bound. These are
+not constraint rejections or keyword gaps. Clang18 incorrectly allocates one
+element/row in four later-known-completion originals (Clang15 two non-keyword
+ones): items 4 instead of 12 bytes, rows 12 instead of 24. N3096 6.9.2p2 requires
+the FINAL composite bound; the retained compile-only assembly/section audit
+confirms actual undersized storage, not merely missing/wrong ELF symbol metadata.
+See the committed m15-tentative-arrays-native-audit.md for exact originals and
+assembly/section evidence.
+Originals remain unchanged. GCC allocates the required known bounds. Correct kcc/
+QBE runtime checks are independent; undersized native originals never execute.
+
+Classifiers probe compiler family/target macros and log exact version rather than
+assuming vendor version/executable aliases. Exact frozen source, flags, status,
+complete ordered diagnostic records, object freshness and exact owned layouts are
+mandatory. Unknown messages/layouts fail closed; changed source/status/target,
+missing/extra/duplicate/reordered diagnostics, wrong kind/size/count and stale/
+missing-object controls pass. Corrected storage cannot match an old bug category.
+Mutable objects require B/D; R is accepted only for exact const ownership records.
+Actual Ubuntu CI evidence remains separate from local portability reasoning.
+
+QBE1.2 omits ELF data .size metadata. The initial focused harness assumption that
+nm -S alone supplied kcc data sizes was corrected BEFORE the final freeze, not by
+relaxing native guards. kcc allocation evidence combines exact IL zero size/align,
+assembly .fill directives, unique B symbols/offsets and readelf NOBITS extent with
+alignment padding. Native nm -S sizes remain mandatory. Pure negative controls
+reject truncated allocations, wrong alignment/offset/section extent, duplicates,
+unknown ownership and mutable R. /dev/full still reports output failure.
+
+The 31-declaration/14-object AST fixture verifies exact anchors, final known/[1]
+canonical types versus immutable source/typedef/query/address/function-return
+snapshots, unowned externs, no recursive pointer completion, rows/callbacks and no
+extra runtime locals. Six isolated compile-only linker-wrapper probes establish
+finalizer-specific allocation failure at the tentative anchor with empty stdout,
+unwrapped correct-size success, three no-finalizer-call controls and a distinct
+resolver-allocation failure. The wrapped compiler's source manifest matches the
+final production source; no allocator API or stage architecture was changed.
+
+Prior M15g1 exact CI run 39060376796: test (gcc) success, fuzz success, test (clang) in_progress. Pending jobs are not local-pass claims.
+New M15g2 CI remains pending until independently checked after push. Local results
+never establish remote success. Subagents supplied tests, AST and independent
+source/standards/native-layout review; main owns integration and final snapshot.
+
+Only current scalar/array tentative definitions are supported. Static objects,
+explicit initializers (including zero/empty), block extern/functions, inferred
+file objects, thread/inline, VM/VLA, aggregates, incomplete inner rows, function/
+void elements, array assignment/copy/return and additional scalar kinds remain
+deferred. Tentative objects named main remain a Linux hosted-target subset
+refusal. Earlier sizeof or whole-array arithmetic on unknown arrays still fails,
+even if later declarations or TU-end finalization supply storage. Fallback [1]
+runtime fixtures access only element zero (row zero for rows); callback elements
+are assigned before calling. No full C23 conformance claim.
+
+Keep the existing 1 MiB PER ARRAY TYPE ceiling, including complete rows used by
+fallback [1]. This is not a combined global-byte budget: independent 256 canonical
+objects, 256 functions, 512 concrete declarations and local-storage/depth/query
+budgets remain separate. Maximal/invalid/resource/fuzz programs compile only.
+Initialized definitions need a separate precedence/duplicate-ownership design;
+static objects need distinct canonical linkage work.
+
+## Previous checkpoint: M15g1
+
 M15g1 adds unadorned file-scope tentative definitions of existing complete
 scalar types: integers, const scalars, object/function pointers and typeof(nullptr).
 Written extern provenance stays on concrete declarations. A canonical symbol's

@@ -1212,3 +1212,38 @@ are unsupported. Future initialized definitions need a separate ownership and
 duplicate-definition design; static objects need canonical linkage work. Shared
 256 object / independent 256 function / 512 declaration pools and existing local,
 array-type, depth and query budgets are unchanged. No new global-byte budget.
+
+## M15g2 tentative arrays (6.9.2; 6.7.6.2; 6.7.10)
+
+M15g2 extends tentative file-scope ownership to existing fixed arrays and arrays
+with unknown OUTER bounds. After the entire ordered TU and internal-function
+checks, a private semantic pass replaces only anchored, still-unknown canonical
+arrays with fresh one-element types. Later known composites win; extern-only
+unknown arrays stay incomplete/unowned. Scalars and pointer referents are not
+recursively completed. Earlier declaration, typedef, query, expression and
+function-return captures remain immutable. Read m15-tentative-arrays.md.
+
+Existing first-tentative anchors emit one explicitly aligned exported zero datum
+using final canonical layout. No new AST fields, public symbol list, backend
+operation, local slot, initializer interpreter or startup stores. Existing decay,
+row strides, element updates and indirect callbacks reuse global addresses.
+
+Only current scalar/array tentative definitions are supported. Static objects,
+explicit initializers (including zero/empty), block extern/functions, inferred
+file objects, thread/inline, VM/VLA, aggregates, incomplete inner rows, function/
+void elements, array assignment/copy/return and additional scalar kinds remain
+deferred. Tentative objects named main remain a Linux hosted-target subset
+refusal. Earlier sizeof or whole-array arithmetic on unknown arrays still fails,
+even if later declarations or TU-end finalization supply storage. Fallback [1]
+runtime fixtures access only element zero (row zero for rows); callback elements
+are assigned before calling. No full C23 conformance claim.
+
+Keep the existing 1 MiB PER ARRAY TYPE ceiling, including complete rows used by
+fallback [1]. This is not a combined global-byte budget: independent 256 canonical
+objects, 256 functions, 512 concrete declarations and local-storage/depth/query
+budgets remain separate. Maximal/invalid/resource/fuzz programs compile only.
+Initialized definitions need a separate precedence/duplicate-ownership design;
+static objects need distinct canonical linkage work.
+
+The exact Clang native storage bugs and permitted-warning agreement categories
+are separate from kcc support; see the retained standards/layout audit.

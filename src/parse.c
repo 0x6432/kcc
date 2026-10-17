@@ -443,8 +443,8 @@ static bool parse_function_suffix(struct parser *parser,
 }
 
 /* object-array-suffix ::= "[" [ assignment-expression ] "]"
- * Sema requires complete elements and complete local storage objects; extern
- * arrays may have an unknown outer bound. Append dimensions in source order.
+ * Sema requires complete elements and complete local storage objects; file-scope
+ * arrays may retain an unknown outer bound. Append dimensions in source order.
  */
 static bool parse_object_array_suffixes(struct parser *parser,
 	struct parsed_declarator *declarator)
@@ -2514,7 +2514,7 @@ static bool parse_parameters(struct parser *parser,
 }
 
 /* object-declaration-tail ::= declarator ( "," | ";" )
- * Extern refers to storage elsewhere; an unadorned scalar is tentative.
+ * Extern refers to storage elsewhere; an unadorned object is tentative.
  * Explicit initializers remain a separate unsupported construct.
  */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,

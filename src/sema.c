@@ -2237,11 +2237,6 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 
-	if (tentative_definition && !type_is_scalar(type)) {
-		diagnostic_error(sema->diagnostics, name.location,
-			"only scalar tentative definitions are supported yet");
-		return NULL;
-	}
 	if (tentative_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
 		name.spelling_location.offset, "main", 4) == 0) {
 		diagnostic_error(sema->diagnostics, name.location,
@@ -2250,7 +2245,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	}
 	if (!type_is_scalar(type) && type->kind != type_kind_array) {
 		diagnostic_error(sema->diagnostics, name.location,
-			"only scalar or array extern objects are supported yet");
+			"only scalar or array file-scope objects are supported yet");
 		return NULL;
 	}
 	if (find_typedef(sema, name) || find_function(sema, name)) {
@@ -2472,6 +2467,37 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 	return true;
 }
 
+/* Finish tentative storage only after every source-point type query is checked.
+ * Replace canonical unknown outer arrays; never rewrite captured source types.
+ */
+static bool finalize_tentative_objects(struct sema *sema)
+{
+	for (struct external_object_symbol *symbol = sema->external_objects; symbol; symbol = symbol->next) {
+		const struct array_type *array;
+		struct array_type *completed;
+
+		if (!symbol->tentative_definition || symbol->type->kind != type_kind_array)
+			continue;
+		array = (const struct array_type *)symbol->type;
+		if (array->count)
+			continue;
+		if (!type_is_complete_object(array->element) ||
+			type_object_size(array->element) > ast_max_local_storage) {
+			diagnostic_error(sema->diagnostics, symbol->tentative_definition->location,
+				"tentative array element must be complete and fit array type storage limit (1 MiB)");
+			return false;
+		}
+		completed = type_new_array(sema->arena, array->element, 1);
+		if (!completed) {
+			diagnostic_error(sema->diagnostics, symbol->tentative_definition->location,
+				"out of memory completing tentative array type");
+			return false;
+		}
+		symbol->type = &completed->type;
+	}
+	return true;
+}
+
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics)
 {
@@ -2532,5 +2558,5 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 			return false;
 		}
 	}
-	return true;
+	return finalize_tentative_objects(&sema);
 }
