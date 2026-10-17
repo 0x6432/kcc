@@ -2513,11 +2513,33 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* Build an unresolved alias/query function prototype without consuming its delimiter.
+/* extern-object-tail ::= declarator ( "," | ";" )
+ * An initializer would define storage and is a separate unsupported construct.
+ */
+static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
+	struct ast_type_syntax *type_syntax, struct token beginning, struct token name)
+{
+	struct ast_external_object_declaration *declaration;
+
+	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
+		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"extern object definitions are not supported yet");
+		return NULL;
+	}
+	declaration = ast_new_external_object_declaration(parser->arena,
+		beginning.location, type_syntax, name);
+	if (!declaration)
+		allocation_error(parser, beginning.location);
+	return declaration ? &declaration->external : NULL;
+}
+
+/* Build unresolved alias/query syntax or an explicit extern object declaration.
  * The outer query or typedef name is unresolved; only sema classifies its type.
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
-	struct ast_type_syntax *type_syntax, struct token beginning, struct token name, bool is_static)
+	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
+	bool is_static, bool is_extern)
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
@@ -2526,6 +2548,8 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name) {
+		if (is_extern)
+			return new_external_object_declaration(parser, type_syntax, beginning, name);
 		diagnostic_error(parser->diagnostics, name.location,
 			"file-scope object declarations are not supported yet");
 		return NULL;
@@ -2540,8 +2564,10 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		beginning.location, type_syntax, name);
 	if (!declaration)
 		allocation_error(parser, beginning.location);
-	else
+	else {
 		declaration->is_static = is_static;
+		declaration->is_extern = is_extern;
+	}
 	return declaration ? &declaration->external : NULL;
 }
 
@@ -2622,10 +2648,12 @@ done:
 /* external-declarator-tail ::= declarator compound-statement |
  *     declarator { "," declarator } ";"
  * Only a sole direct function declarator can introduce a definition.
- * Each prototype has its own derived chain around the shared specifier base.
+ * Each declarator has its own derived chain around the shared specifier base.
+ * Explicit extern also permits declaration-only objects, classified by sema.
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
-	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base, bool is_static)
+	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
+	bool is_static, bool is_extern)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -2645,7 +2673,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		if (!type_syntax)
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -2727,7 +2755,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	if (head.keyword.kind == token_typedef)
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
-		head.keyword.kind == token_static);
+		head.keyword.kind == token_static, head.keyword.kind == token_extern);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

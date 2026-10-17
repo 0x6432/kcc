@@ -2090,3 +2090,30 @@ QBE emits export only for canonical external symbols, not written definition
 spelling. Local object symbols use ordinary unmangled QBE names and Linux local
 t binding. No aliases/prototypes produce IL/storage; unsupported source emits no
 partial IL. VM support must revisit query evaluation; no hypothetical storage enum.
+
+## M15f1 external object identity and captured types
+
+M15f1 supports file-scope explicit extern declarations of current complete scalar
+objects: integers, object/function pointers and typeof(nullptr). Compatible
+redeclarations reuse canonical external-object symbols; composite refinements
+never rewrite earlier syntax/query/expression type snapshots. Mixed extern
+function/object lists share immutable specifiers and preserve source order.
+Native translation units own storage. kcc emits external addresses and existing
+typed loads/stores/updates/indirect calls, never data or local slots for these
+declarations. Read m15-extern-objects.md.
+
+Concrete external-object declarations and lowered external-object lvalues remain
+separate from functions and real locals. Query/alias-root declarations retain
+written extern permission and resolve to exactly one function or object symbol.
+Nearer typedefs/locals/parameters hide globals; inferred unavailable locals reject
+self-use without falling back to outer objects. File ordinary-namespace conflicts
+are checked before canonical mutations. Function-pointer objects remain indirect
+calls, while query-only internal functions remain unreferenced.
+
+Independent object/function symbol pools share file ordinary-namespace collision
+checks: 256 distinct objects and 256 functions within 512 concrete declarations.
+Declaration registration occurs after complete type resolution, before later
+source items. No new file parser masks, token replay or generic symbol abstraction.
+Lowered global lvalues carry external_object_symbol; local expression_name still
+requires a real local declaration, preserving register checks and %vslot storage.
+Backend address emission uses $name; TU emission ignores extern object nodes.

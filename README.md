@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15F1: Explicit file-scope `extern` scalar objects now support native-owned
+storage references, mixed function/object lists, typed reads/writes/addresses and
+indirect callbacks. Canonical object identity and immutable captured types survive
+compatible redeclarations; globals add no data or runtime local slots. Definitions,
+initializers, object arrays and block extern remain deferred. Read
+docs/m15-extern-objects.md for exact scope and frozen validation evidence.
+
 M15E1: File-scope `static` functions now have canonical internal linkage, retained
 through later `extern` or unadorned declarations and definitions. QBE emits local
 rather than exported symbols. Referenced internal functions require definitions;

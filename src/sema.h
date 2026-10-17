@@ -3,6 +3,12 @@
 
 #include "ast.h"
 
+struct external_object_symbol {
+	struct token name;
+	const struct type *type;
+	struct external_object_symbol *next;
+};
+
 struct function_symbol {
 	struct token name;
 	const struct function_type *type;

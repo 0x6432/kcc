@@ -2172,3 +2172,14 @@ Unused/query-only internal prototypes need no definition. Ordinary uses do, incl
 syntactically dead calls. Clang status-zero warnings satisfy the native diagnostic
 requirement; they are not counted as rejections. Earlier static-function exclusions
 are superseded only for the documented file-scope subset.
+
+## M15f1 declaration-only external scalar objects
+
+Only explicit file-scope extern scalar declarations are added. Object definitions,
+initializers, tentative/plain/static object declarations, externally declared object
+arrays, block extern/function declarations, inferred extern, thread/inline storage,
+VM/aggregate/remaining qualifier support and full C23 remain unsupported. Pointers
+to incomplete arrays are scalar objects and retain existing composite rules.
+Ordinary const objects are not constant expressions. Missing external storage is
+a linker error, not an invented per-TU definition requirement. No full C23 claim.
+Earlier global-object exclusions are superseded only for this documented slice.

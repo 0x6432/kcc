@@ -65,6 +65,8 @@ struct sema {
 	size_t local_count;
 	uint64_t local_storage;
 	struct function_symbol *functions;
+	struct external_object_symbol *external_objects;
+	size_t external_object_count;
 	bool unevaluated;
 	struct typedef_binding *typedefs;
 	struct typedef_type_shape *typedef_shapes;
@@ -135,6 +137,18 @@ static struct ast_typedef_declaration *find_typedef(struct sema *sema, struct to
 	struct typedef_binding *binding = find_typedef_binding(sema, name);
 
 	return binding ? binding->declaration : NULL;
+}
+
+static struct external_object_symbol *find_external_object(struct sema *sema, struct token name)
+{
+	struct external_object_symbol *symbol = sema->external_objects;
+
+	while (symbol) {
+		if (same_name(symbol->name, name))
+			return symbol;
+		symbol = symbol->next;
+	}
+	return NULL;
 }
 
 static struct function_symbol *find_function(struct sema *sema, struct token name)
@@ -868,7 +882,7 @@ static bool sema_expression(struct sema *sema,
 			struct ast_name_expression *name = (struct ast_name_expression *)node->callee;
 
 			if (!find_typedef(sema, name->name) && !find_local(sema, name->name) &&
-				!find_function(sema, name->name)) {
+				!find_function(sema, name->name) && !find_external_object(sema, name->name)) {
 				diagnostic_error(sema->diagnostics, name->expression.location, "call to undeclared function");
 				return false;
 			}
@@ -1014,13 +1028,15 @@ static bool sema_expression(struct sema *sema,
 	case expression_name: {
 		struct ast_name_expression *node =
 			(struct ast_name_expression *)expression;
+		struct external_object_symbol *object;
 
-		/* A visible typedef hides any outer function; it is never a value. */
+		/* A visible typedef hides outer ordinary names; it is never a value. */
 		if (find_typedef(sema, node->name)) {
 			diagnostic_error(sema->diagnostics, expression->location, "typedef name is not an expression");
 			return false;
 		}
 		node->declaration = find_local(sema, node->name);
+		object = find_external_object(sema, node->name);
 		if (node->declaration) {
 			if (!node->declaration->type) {
 				diagnostic_error(sema->diagnostics, expression->location,
@@ -1029,6 +1045,19 @@ static bool sema_expression(struct sema *sema,
 			}
 			result_type = node->declaration->type;
 			expression->is_lvalue = true;
+		} else if (object) {
+			struct ast_external_object_expression *reference;
+
+			reference = ast_new_external_object(sema->arena, expression->location, object);
+			if (!reference) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"out of memory creating external object reference");
+				return false;
+			}
+			expression = &reference->expression;
+			*expression_slot = expression;
+			expression->is_lvalue = true;
+			result_type = object->type;
 		} else {
 			struct function_symbol *function = find_function(sema, node->name);
 			struct ast_function_designator_expression *designator;
@@ -1376,6 +1405,7 @@ static bool sema_expression(struct sema *sema,
 		break;
 	}
 	case expression_function_designator:
+	case expression_external_object:
 	case expression_function_decay:
 	case expression_pointer_offset:
 	case expression_pointer_difference:
@@ -2119,6 +2149,11 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	struct function_symbol *symbol = find_function(sema, name);
 	const struct type *return_type;
 
+	if (find_external_object(sema, name)) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"function name conflicts with external object");
+		return NULL;
+	}
 	if (find_typedef(sema, name)) {
 		diagnostic_error(sema->diagnostics, name.location, "function name conflicts with typedef name");
 		return NULL;
@@ -2195,6 +2230,74 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	return symbol;
 }
 
+/* Extern declarations refer to storage owned by another translation unit. */
+static struct external_object_symbol *register_external_object(struct sema *sema,
+	struct token name, const struct type *type)
+{
+	struct external_object_symbol *symbol = find_external_object(sema, name);
+
+	if (!type_is_scalar(type)) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"only scalar extern objects are supported yet");
+		return NULL;
+	}
+	if (find_typedef(sema, name) || find_function(sema, name)) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"external object conflicts with prior ordinary declaration");
+		return NULL;
+	}
+	if (symbol) {
+		const struct type *composite;
+
+		if (!type_compatible(symbol->type, type)) {
+			diagnostic_error(sema->diagnostics, name.location,
+				"incompatible external object declaration");
+			return NULL;
+		}
+		composite = type_composite(sema->arena, symbol->type, type);
+		if (!composite) {
+			diagnostic_error(sema->diagnostics, name.location,
+				"out of memory creating composite external object type");
+			return NULL;
+		}
+		symbol->type = composite;
+		return symbol;
+	}
+	if (sema->external_object_count == ast_max_external_objects) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"translation unit exceeds external object limit (256)");
+		return NULL;
+	}
+	symbol = arena_alloc(sema->arena, sizeof(*symbol));
+	if (!symbol) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"out of memory creating external object symbol");
+		return NULL;
+	}
+	*symbol = (struct external_object_symbol) {
+		.name = name,
+		.type = type,
+		.next = sema->external_objects,
+	};
+	sema->external_objects = symbol;
+	sema->external_object_count++;
+	return symbol;
+}
+
+static bool sema_external_object_declaration(struct sema *sema,
+	struct ast_external_object_declaration *declaration)
+{
+	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
+
+	if (!type)
+		return false;
+	declaration->symbol = register_external_object(sema, declaration->name, type);
+	if (!declaration->symbol)
+		return false;
+	declaration->type = type;
+	return true;
+}
+
 static bool sema_external_type_declaration(struct sema *sema,
 	struct ast_external_type_declaration *declaration)
 {
@@ -2202,6 +2305,13 @@ static bool sema_external_type_declaration(struct sema *sema,
 
 	if (!type)
 		return false;
+	if (type->kind != type_kind_function && declaration->is_extern) {
+		declaration->object_symbol = register_external_object(sema, declaration->name, type);
+		if (!declaration->object_symbol)
+			return false;
+		declaration->type = type;
+		return true;
+	}
 	if (type->kind != type_kind_function) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"file-scope object declarations are not supported yet");
@@ -2306,7 +2416,8 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 
 	if (!type)
 		return false;
-	if (!sema->scope && find_function(sema, declaration->name)) {
+	if (!sema->scope && (find_function(sema, declaration->name) ||
+		find_external_object(sema, declaration->name))) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"typedef name conflicts with prior ordinary declaration");
 		return false;
@@ -2369,6 +2480,13 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		if (external->kind == external_static_assertion) {
 			if (!sema_static_assertion(&sema,
 				((struct ast_external_static_assertion *)external)->declaration))
+				return false;
+			external = external->next;
+			continue;
+		}
+		if (external->kind == external_object_declaration) {
+			if (!sema_external_object_declaration(&sema,
+				(struct ast_external_object_declaration *)external))
 				return false;
 			external = external->next;
 			continue;

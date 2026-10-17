@@ -136,6 +136,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle
 	python3 tests/test_register_arrays.py
 	python3 tests/test_register_parameters.py
 	python3 tests/test_extern_functions.py
+	python3 tests/test_extern_objects.py
 	python3 tests/test_static_functions.py
 	python3 tests/test_function_declaration_lists.py
 	python3 tests/test_auto_explicit.py
@@ -249,6 +250,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_register_arrays.py
 	python3 tests/test_register_parameters.py
 	python3 tests/test_extern_functions.py
+	python3 tests/test_extern_objects.py
 	python3 tests/test_static_functions.py
 	python3 tests/test_function_declaration_lists.py
 	python3 tests/test_auto_explicit.py

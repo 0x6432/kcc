@@ -7,6 +7,7 @@
 struct type;
 struct ast_local_declaration;
 struct function_symbol;
+struct external_object_symbol;
 
 enum expression_kind {
 	expression_integer,
@@ -19,6 +20,7 @@ enum expression_kind {
 	expression_subscript,
 	expression_name,
 	expression_function_designator,
+	expression_external_object,
 	expression_function_decay,
 	expression_postfix_update,
 	expression_prefix_update,
@@ -54,6 +56,7 @@ enum {
 	ast_max_local_storage = 1024 * 1024,
 	ast_max_external_declarations = 512,
 	ast_max_functions = 256,
+	ast_max_external_objects = 256,
 	ast_max_parameters = 128,
 	ast_max_arguments = 128,
 	ast_max_pointer_depth = 64,
@@ -143,6 +146,11 @@ struct ast_name_expression {
 	struct ast_expression expression;
 	struct token name;
 	struct ast_local_declaration *declaration;
+};
+
+struct ast_external_object_expression {
+	struct ast_expression expression;
+	struct external_object_symbol *object;
 };
 
 struct ast_function_designator_expression {
@@ -604,6 +612,7 @@ enum external_declaration_kind {
 	external_function_definition,
 	external_static_assertion,
 	external_type_declaration,
+	external_object_declaration,
 	external_typedef_declaration,
 };
 
@@ -630,9 +639,19 @@ struct ast_external_static_assertion {
 	struct ast_static_assertion *declaration;
 };
 
-/* Written query-root declaration; sema determines whether it is a function. */
+struct ast_external_object_declaration {
+	struct ast_external_declaration external;
+	struct ast_type_syntax *type_syntax;
+	struct token name;
+	const struct type *type;
+	struct external_object_symbol *symbol;
+};
+
+/* Written alias/query root; sema classifies the resolved function/object type. */
 struct ast_external_type_declaration {
 	struct ast_external_declaration external;
+	bool is_extern;
+	struct external_object_symbol *object_symbol;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_type_syntax *type_syntax;
 	struct token name;
@@ -703,6 +722,8 @@ struct ast_function_type_syntax *ast_new_function_type_syntax(struct arena *aren
 	struct source_location location, struct ast_type_syntax *return_syntax);
 struct ast_array_type_syntax *ast_new_array_type_syntax(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *element, struct ast_expression *bound);
+struct ast_external_object_expression *ast_new_external_object(struct arena *arena,
+	struct source_location location, struct external_object_symbol *object);
 struct ast_function_designator_expression *ast_new_function_designator(struct arena *arena,
 	struct source_location location, struct function_symbol *function);
 struct ast_function_decay_expression *ast_new_function_decay(struct arena *arena,
@@ -721,6 +742,8 @@ struct ast_block_typedef_declaration *ast_new_block_typedef_declaration(struct a
 	struct ast_typedef_declaration *declaration);
 struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(struct arena *arena,
 	struct ast_typedef_declaration *declaration);
+struct ast_external_object_declaration *ast_new_external_object_declaration(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
 struct ast_external_type_declaration *ast_new_external_type_declaration(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax, struct token name);
 struct ast_function_declaration *ast_new_function_declaration(struct arena *arena,

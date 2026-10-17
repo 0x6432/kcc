@@ -941,6 +941,20 @@ struct ast_call_expression *ast_new_call(struct arena *arena,
 	return node;
 }
 
+struct ast_external_object_declaration *ast_new_external_object_declaration(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax, struct token name)
+{
+	struct ast_external_object_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_external_object_declaration) {
+			.external = { .kind = external_object_declaration, .location = location },
+			.type_syntax = type_syntax,
+			.name = name,
+		};
+	return node;
+}
+
 struct ast_external_type_declaration *ast_new_external_type_declaration(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax, struct token name)
 {
@@ -991,6 +1005,19 @@ struct ast_translation_unit *ast_new_translation_unit(struct arena *arena,
 
 	if (node)
 		*node = (struct ast_translation_unit) { .declarations = declarations };
+	return node;
+}
+
+struct ast_external_object_expression *ast_new_external_object(struct arena *arena,
+	struct source_location location, struct external_object_symbol *object)
+{
+	struct ast_external_object_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_external_object_expression) {
+			.expression = { .kind = expression_external_object, .location = location, .depth = 1 },
+			.object = object,
+		};
 	return node;
 }
 

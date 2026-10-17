@@ -1123,3 +1123,31 @@ Not full C23 conformance.
 
 See the milestone ledger for exact source, diagnostic, ABI, AST and resource
 evidence. Both evaluated and non-VM unevaluated function-use contexts are tested.
+
+## M15f1 external scalar declarations (6.2.2; 6.7; 6.9)
+
+M15f1 supports file-scope explicit extern declarations of current complete scalar
+objects: integers, object/function pointers and typeof(nullptr). Compatible
+redeclarations reuse canonical external-object symbols; composite refinements
+never rewrite earlier syntax/query/expression type snapshots. Mixed extern
+function/object lists share immutable specifiers and preserve source order.
+Native translation units own storage. kcc emits external addresses and existing
+typed loads/stores/updates/indirect calls, never data or local slots for these
+declarations. Read m15-extern-objects.md.
+
+Concrete external-object declarations and lowered external-object lvalues remain
+separate from functions and real locals. Query/alias-root declarations retain
+written extern permission and resolve to exactly one function or object symbol.
+Nearer typedefs/locals/parameters hide globals; inferred unavailable locals reject
+self-use without falling back to outer objects. File ordinary-namespace conflicts
+are checked before canonical mutations. Function-pointer objects remain indirect
+calls, while query-only internal functions remain unreferenced.
+
+Only explicit file-scope extern scalar declarations are added. Object definitions,
+initializers, tentative/plain/static object declarations, externally declared object
+arrays, block extern/function declarations, inferred extern, thread/inline storage,
+VM/aggregate/remaining qualifier support and full C23 remain unsupported. Pointers
+to incomplete arrays are scalar objects and retain existing composite rules.
+Ordinary const objects are not constant expressions. Missing external storage is
+a linker error, not an invented per-TU definition requirement. No full C23 claim.
+Earlier global-object exclusions are superseded only for this documented slice.

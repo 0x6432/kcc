@@ -183,6 +183,16 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 		return result;
 	}
+	case expression_external_object: {
+		const struct ast_external_object_expression *object =
+			(const struct ast_external_object_expression *)expression;
+		struct token name = object->object->name;
+		size_t result = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =l copy $%.*s\n", result, (int)name.length,
+			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		return result;
+	}
 	case expression_string: {
 		const struct ast_string_expression *string = (const struct ast_string_expression *)expression;
 		size_t result = codegen->next_temporary++;
@@ -638,6 +648,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		return value;
 	}
 	case expression_function_designator:
+	case expression_external_object:
 	case expression_string:
 	case expression_subscript:
 	case expression_name:

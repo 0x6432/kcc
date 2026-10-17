@@ -2,6 +2,79 @@
 
 ## Current checkpoint
 
+M15f1 supports file-scope explicit extern declarations of current complete scalar
+objects: integers, object/function pointers and typeof(nullptr). Compatible
+redeclarations reuse canonical external-object symbols; composite refinements
+never rewrite earlier syntax/query/expression type snapshots. Mixed extern
+function/object lists share immutable specifiers and preserve source order.
+Native translation units own storage. kcc emits external addresses and existing
+typed loads/stores/updates/indirect calls, never data or local slots for these
+declarations. Read m15-extern-objects.md.
+
+Concrete external-object declarations and lowered external-object lvalues remain
+separate from functions and real locals. Query/alias-root declarations retain
+written extern permission and resolve to exactly one function or object symbol.
+Nearer typedefs/locals/parameters hide globals; inferred unavailable locals reject
+self-use without falling back to outer objects. File ordinary-namespace conflicts
+are checked before canonical mutations. Function-pointer objects remain indirect
+calls, while query-only internal functions remain unreferenced.
+
+Normal compiler/helpers were built serially before the exact frozen source matrix.
+Full make test passed with GCC11/GCC14/Clang18 native hosts; full QBE1.2
+make test-codegen passed with both modern hosts. Actual GCC11/Clang15 ASan/UBSan
+builds passed lex/raw-pp/sema and 28 targeted suites, plus 9 extra Clang18
+native comparison suites. Frozen 390-file primary/isolated manifests matched
+before/after. Sanitized compile-only fuzz passed 12063 lexer / 28278 pipeline
+inputs. Logs: /data/tools/m15f1-*; isolated trees: /data/validation-m15f1/.
+All 156 prior corpus files (124 accepted / 32 rejected) retain byte-identical
+status/stdout/stderr versus the frozen 1b44e97 compiler. No invalid curated or
+fuzz-generated C was executed. Original native test programs were not rewritten.
+
+Focused unchanged-source evidence: 79 initialized native-owner pairs per modern
+host, with 79 native agreements and 79 QBE paired runtimes; 30 native constraints,
+14 explicit subset refusals and six kcc-only inferred-name visibility barriers.
+Legacy GCC11/Clang15 agree on 70 pairs and reject 25 applicable constraints;
+nine pairs have independently probed exact C23 keyword gaps. QBE runs 77 pairs
+with each legacy owner toolchain; two nullptr-owning pairs require modern owners.
+Simple object-reference and mixed-stack primitive ABI arrangements are separately
+counted: 24 each, all four hosts. Mixed-stack cases use six integer register and
+two stack arguments and observe initialized native-owned storage in both driver
+directions. Callback objects include void and pointer returns; parameter queries,
+typeof_unqual, captured incomplete-row pointers and source-order shadowing pass.
+All 512/513 declaration, 256/257 object/function independent mixed-pool,
+128/129 parameter, 256/257 local including spills, 1 MiB storage, 4096 item,
+64 nesting and 128 expanded-depth boundaries pass compile-only. IL/nm verifies
+external U references, private t/exported T functions, no global allocation/data,
+no extra local slots and no references from unused/non-VM query-only names.
+All four-host results are retained in /data/tools/m15f1-four-host-focused.log.
+
+The 11-node AST fixture checks shared specifiers, source-order global captures,
+canonical known-bound row-pointer composites versus immutable earlier unknown
+snapshots, resolved query object/function distinction, exact object identity,
+query-only internal function state, indirect callbacks, register-parameter/local
+shadowing and exact runtime-local slot chains. External declarations add no slots.
+Removed only three obsolete extern-object refusals and one mixed-list refusal;
+extern initializer remains an explicit definition subset refusal. The original
+function-declaration delimiter diagnostic is preserved. All grammar comments and
+final source/test changes are included in this frozen validation, not patched
+after it. Parallel subagents supplied semantic review, focused tests and AST tests;
+main integration and one final matrix establish the committed evidence.
+
+Prior M15e1 exact CI run 39017514042 completed successfully with all three jobs
+green. New M15f1 CI remains pending until independently checked after push;
+local validation never establishes remote success.
+
+Only explicit file-scope extern scalar declarations are added. Object definitions,
+initializers, tentative/plain/static object declarations, externally declared object
+arrays, block extern/function declarations, inferred extern, thread/inline storage,
+VM/aggregate/remaining qualifier support and full C23 remain unsupported. Pointers
+to incomplete arrays are scalar objects and retain existing composite rules.
+Ordinary const objects are not constant expressions. Missing external storage is
+a linker error, not an invented per-TU definition requirement. No full C23 claim.
+Earlier global-object exclusions are superseded only for this documented slice.
+
+## Previous checkpoint: M15e1
+
 M15e1 supports file-scope static function declarations, definitions and prototype
 lists, including alias/query prototypes, callbacks, register/adjusted parameters,
 recursion and internal function pointers returned through exported wrappers.

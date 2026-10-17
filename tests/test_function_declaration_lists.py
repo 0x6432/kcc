@@ -70,7 +70,6 @@ c23_constraints = [
 ]
 subset_errors = [
     ('int f(void),x;','file-scope object declarations'),
-    ('extern int f(void),(*p)(int);','file-scope object declarations'),
     ('typeof(int(void)) f,g=0;',"query-derived external declarations require ';'"),
     ('typedef int F(void); extern F f,g { return 42; }',"query-derived external declarations require ';'"),
     ('int main(void) { extern int f(void),g(void); return 0; }','block-scope extern declarations'),
