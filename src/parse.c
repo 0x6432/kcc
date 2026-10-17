@@ -118,6 +118,14 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
 
+enum declarator_context {
+	declarator_local,
+	declarator_external,
+	declarator_typedef,
+	declarator_parameter,
+	declarator_cast,
+};
+
 /* Preserve storage spellings and an inferred name consumed during disambiguation. */
 struct declaration_head {
 	struct token keyword;
@@ -135,7 +143,8 @@ struct declaration_head {
  * Void cannot combine with integer specifiers; qualifiers do not hide conflicts.
  */
 static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *parser,
-	struct token *beginning, struct ast_type_syntax *named_type, struct declaration_head *head)
+	struct token *beginning, struct ast_type_syntax *named_type, struct declaration_head *head,
+	enum declarator_context context)
 {
 	bool seen_int = false;
 	bool seen_void = false;
@@ -158,7 +167,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		if (token.kind == token_typedef || token.kind == token_register || token.kind == token_auto) {
 			struct token *slot;
 
-			if (!head) {
+			if (!head || (context == declarator_parameter && token.kind != token_register)) {
 				const char *message = "register storage is not supported in this context";
 
 				if (token.kind == token_typedef)
@@ -363,10 +372,10 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 }
 
 /* declaration-specifiers ::= permutation of storage-specifiers, qualifiers and type-specifiers
- * A NULL storage output disallows storage classes in type-name/parameter contexts.
+ * NULL head forbids type-name storage; parameters permit only register.
  */
 static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parser,
-	struct token *beginning, struct declaration_head *head)
+	struct token *beginning, struct declaration_head *head, enum declarator_context context)
 {
 	*beginning = preprocess_peek(parser->preprocessor);
 	if (!begins_declaration_specifier(parser, *beginning)) {
@@ -374,16 +383,8 @@ static struct ast_type_syntax *parse_declaration_specifiers(struct parser *parse
 			diagnostic_error(parser->diagnostics, beginning->location, "expected integer type specifier");
 		return NULL;
 	}
-	return parse_declaration_specifiers_tail(parser, beginning, NULL, head);
+	return parse_declaration_specifiers_tail(parser, beginning, NULL, head, context);
 }
-
-enum declarator_context {
-	declarator_local,
-	declarator_external,
-	declarator_typedef,
-	declarator_parameter,
-	declarator_cast,
-};
 
 /* The base slot is construction state: every published syntax has a base. */
 struct parsed_declarator {
@@ -600,13 +601,13 @@ static struct ast_type_syntax *parse_derived_type(struct parser *parser,
 }
 
 /* type-name ::= declaration-specifiers [ declarator ]
- * A local declarator is required; parameter/cast abstract forms may be absent.
+ * Outer type names forbid storage; nested parameter lists have their own context.
  */
 static struct ast_type_syntax *parse_type_name(struct parser *parser,
 	struct token *beginning, struct token *name, bool *has_name,
 	enum declarator_context context)
 {
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning, NULL);
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning, NULL, context);
 
 	return parse_derived_type(parser, base, name, has_name, context);
 }
@@ -2173,7 +2174,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 {
 	struct token beginning;
 	struct declaration_head head = { 0 };
-	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning, &head);
+	struct ast_type_syntax *base = parse_declaration_specifiers(parser, &beginning, &head, declarator_local);
 
 	if (!base)
 		return NULL;
@@ -2350,7 +2351,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 				allocation_error(parser, token.location);
 				return NULL;
 			}
-			base = parse_declaration_specifiers_tail(parser, &token, &alias->syntax, &head);
+			base = parse_declaration_specifiers_tail(parser, &token, &alias->syntax, &head, declarator_local);
 			if (!base)
 				return NULL;
 			if (head.keyword.kind == token_typedef)
@@ -2451,6 +2452,7 @@ static bool parse_parameters(struct parser *parser,
 		struct token name = { 0 };
 		struct ast_parameter *parameter;
 		struct ast_type_syntax *type_syntax;
+		struct declaration_head head = { 0 };
 		bool has_name = false;
 
 		if (function->parameter_count == ast_max_parameters) {
@@ -2459,11 +2461,13 @@ static bool parse_parameters(struct parser *parser,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
-		type_syntax = parse_type_name(parser, &beginning, &name, &has_name, declarator_parameter);
+		type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
+		type_syntax = parse_derived_type(parser, type_syntax, &name, &has_name, declarator_parameter);
 		if (!type_syntax)
 			return false;
-		/* Only a sole unnamed, underived void is the empty-list marker. */
-		if (!function->parameter_count && !has_name && type_syntax->kind == type_syntax_void &&
+		/* Keep written register void for the semantic subset diagnostic. */
+		if (!function->parameter_count && !has_name && head.keyword.kind != token_register &&
+			type_syntax->kind == type_syntax_void &&
 			preprocess_peek(parser->preprocessor).kind == token_right_paren)
 			return true;
 		parameter = ast_new_parameter(parser->arena, beginning.location, name, has_name);
@@ -2472,6 +2476,7 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		}
 		parameter->type_syntax = type_syntax;
+		parameter->is_register = head.keyword.kind == token_register;
 		if (has_name && !publish_parser_name(parser, name, parser_name_object))
 			return false;
 		*tail = parameter;
@@ -2610,7 +2615,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			allocation_error(parser, assertion->location);
 		return external ? &external->external : NULL;
 	}
-	base = parse_declaration_specifiers(parser, &beginning, &head);
+	base = parse_declaration_specifiers(parser, &beginning, &head, declarator_external);
 	if (!base)
 		return NULL;
 	if (head.keyword.kind == token_register) {

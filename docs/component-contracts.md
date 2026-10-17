@@ -2005,3 +2005,24 @@ initialization, even in queries. It completes the same actual local once, then
 subsequent typeof/load nodes capture that local; scope exit restores the alias.
 Same-scope conflicts, immutable old type caches, captured object/function
 identities, no alias runtime storage, register flags, ABI and budgets remain.
+
+## M15c1 register parameter provenance
+
+Private declarator_context is passed explicitly to shared specifier scanning;
+NULL declaration_head forbids type-name storage and parameter context admits
+only register. Nested parameter parsing has a fresh declaration_head and never
+inherits outer storage. ast_parameter.is_register defaults false, records the
+written declaration only, and does not enter canonical/composite function types.
+Retain direct register-void syntax for sema's explicit subset refusal; reject
+resolved register-void before marker normalization. Plain/query void behavior
+and complete-declarator publication/own-bound visibility stay unchanged.
+
+After normal array/function adjustment, prototype bindings copy written register
+onto their ephemeral ast_local_declaration; no runtime list/count/storage or
+parameter.local is created. Later parameter queries capture those exact objects.
+Actual named definition spills copy only THAT definition's parameter flag then
+use the existing adjusted-type bind_local path. No prototype-to-definition flag
+inheritance. Unnamed parameters remain ABI slots without source binding/storage.
+Existing unary address checks enforce direct-object provenance, including queries;
+adjusted pointer referent indexing/calls/addresses remain ordinary operations.
+Const, source caches, captures, signatures, return types, QBE and budgets remain.

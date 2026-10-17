@@ -645,6 +645,7 @@ struct ast_parameter {
 	struct source_location location;
 	struct token name;
 	bool has_name;
+	bool is_register; /* Written storage, not part of the adjusted function type. */
 	bool is_void_marker; /* Checked sole unnamed void, not an ABI parameter. */
 	struct ast_local_declaration *local; /* NULL for prototypes and unnamed parameters. */
 	struct ast_parameter *next;

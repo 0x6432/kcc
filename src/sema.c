@@ -362,6 +362,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 /* Prototype names denote type-only objects, not runtime parameter spill slots.
  * A parameter's name enters scope only after its whole declarator is resolved.
+ * Written register provenance restricts addresses, but never enters its type.
  */
 static bool bind_prototype_parameter(struct sema *sema, const struct ast_parameter *parameter)
 {
@@ -379,6 +380,7 @@ static bool bind_prototype_parameter(struct sema *sema, const struct ast_paramet
 	}
 	local->type_syntax = parameter->type_syntax;
 	local->type = parameter->type;
+	local->is_register = parameter->is_register;
 	*binding = (struct binding) { .declaration = local, .next = sema->scope->bindings };
 	sema->scope->bindings = binding;
 	return true;
@@ -408,6 +410,11 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		if (!declared)
 			goto done;
 		if (declared->kind == type_kind_void) {
+			if (parameter->is_register) {
+				diagnostic_error(sema->diagnostics, parameter->location,
+					"register void parameters are not supported yet");
+				goto done;
+			}
 			/* Resolve query-derived void without removing its written syntax. */
 			if (function->parameter_count == 1 && !parameter->has_name && !declared->qualifiers) {
 				parameter->type = declared;
@@ -2051,6 +2058,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 			goto done;
 		}
 		parameter->local->type_syntax = parameter->type_syntax;
+		parameter->local->is_register = parameter->is_register;
 		if (!bind_local(sema, parameter->local, parameter->type))
 			goto done;
 	}

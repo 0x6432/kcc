@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M23E3 inferred identifiers hiding outer typedefs. Read the latest entries together with README.md and
+Current milestone: M15C1 register parameter declarations. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2101,3 +2101,22 @@ supporting basic inference; only Clang 18 provides new strict source/constraint
 agreements in this matrix. Legacy hosts lack basic inference. All hosts still
 validate ordinary native helper/driver ABI linkage, not syntax conformance. Read
 the ledger for frozen validation, diagnostic classifier controls and remote CI.
+
+## M15c1 register parameter scope
+
+Register void (direct/query/alias) markers remain conservatively unsupported;
+plain and unregistered query-derived void markers retain zero-ABI normalization.
+Only supported complete scalar adjusted parameters are implemented: no K&R,
+variadics, VM/static/restrict array forms, aggregates or other parameter storage.
+Globals, static/extern/thread storage and real linkage expansion remain deferred.
+Existing register-array conversion refusal and inferred-auto limitations remain.
+Not full C23 conformance.
+
+The previous general register-parameter exclusion is removed only within the
+supported adjusted scalar parameter subset. Register provenance is written per
+parameter and checked on its object binding, not propagated through types,
+prototypes, function symbols or typedef/typeof/inferred copies. A named adjusted
+array/function pointer parameter cannot have its address taken, but indexing,
+calling and addresses of referents remain valid. Prototype-only queries enforce
+the same address constraint without creating runtime local storage. Only register
+is permitted in parameter declaration specifiers; auto/typedef remain constraints.

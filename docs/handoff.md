@@ -2,6 +2,82 @@
 
 ## Current checkpoint
 
+M15c1 supports register parameter declarations in prototypes/definitions,
+nested callbacks and unnamed C23 parameter positions, including supported
+array/function adjustment and typedef/query bases. Read m15-register-parameters.md.
+The existing private declarator context reaches the shared scanner: only register
+is permitted in parameters; outer type-name storage and parameter auto/typedef
+remain forbidden. Concrete ast_parameter.is_register records written provenance,
+not a type qualifier or signature flag. Prototype objects retain the address
+restriction with no runtime slots; actual named spills use their OWN definition's
+flag. Register prototypes never poison ordinary definitions, or vice versa.
+Adjusted array/function parameters are register POINTER objects: index/call and
+pointee addresses work, but &parameter is forbidden even in sizeof/typeof/bounds.
+Source syntax caches, composites, captures and ordinary copied types remain
+unchanged. No physical-register allocation or type/QBE implementation change.
+
+Full make test passed with GCC 11.5, GCC 14.2.1 and Clang 18.1.8 as native
+comparison hosts; normal compiler/helpers were built serially with GCC 11/C11.
+Full QBE 1.2 make test-codegen passed with both modern native hosts. GCC 11 and
+Clang 15 ASan/UBSan lexer/sema plus 24 targeted suites passed in isolated trees;
+parameter, inferred-typedef, register-auto, auto and binding suites also passed
+with Clang 18 as native oracle. Frozen 378-file primary/isolated source/test/
+Makefile manifests matched before/after. Bounded sanitized compile-only fuzz:
+13,801 lexer / 43,173 pipeline inputs, 26 seconds each. No invalid curated or
+generated C executed. Logs/manifests /data/tools/m15c1-*, isolated trees
+/data/validation-m15c1/{gcc,clang}. The prior 6a07c0c sanitized compiler and this
+frozen compiler have byte-identical return codes/stdout/stderr on all 152 old
+compile corpus files (120 accepted / 32 rejected), excluding the new seed.
+
+Focused final four-host suite: 50 standard + 12 C23 unchanged originals;
+GCC 14/Clang 18 agree on all 62 and reject 29 required constraints. GCC 11/Clang 15
+agree on all 50 applicable originals and reject 21 constraints; exact independent
+C23 keyword absence is NOT an agreement. All hosts pass 24 both-direction
+mixed-width/full-value primitive-result ABI arrangements spanning six registers
+and two stack arguments, plus two row/callback arrangements. Eight subset forms
+compile only; five register-void forms are explicit conservative refusals, NOT
+required native constraints (GCC 14 and Clang 18 differ on unnamed register void).
+
+AST checks prove prototype type-only register identity without parameter.local,
+ordinary/register prototype-to-definition isolation both ways, immutable declared
+array/function versus adjusted pointer types and source caches, exact real spill
+slots/reverse lists, ordinary typeof copies without register flags, independent
+nested callback/outer query captures and failed address queries without completed
+function type/symbol/IL. Boundaries: 128/129 parameters, 256/257 locals including
+128 named spills, unnamed parameters not consuming locals, 1 MiB/overflow storage,
+4096/4097 items, 63/64 grouped parameter and nested function layers under the
+SHARED total 64 declarator nesting limit, and 128/129 expanded types. Generated
+boundary and invalid programs compile only, never execute.
+
+Five obsolete parameter subset refusals were replaced with positive coverage:
+register-scalars 3 -> 0, register-arrays 6 -> 5, binding-phases 3 -> 2. The old
+register-auto parameter refusal remains rejected with the precise auto diagnostic;
+it moved to required constraints (modern 34 -> 35, subset 9 -> 8). All affected
+suites and parameter/typedef scope regressions reran on all four native hosts;
+previous native keyword/macro/for-typedef gap counts remain separately classified.
+
+Register void (direct/query/alias) markers remain conservatively unsupported;
+plain and unregistered query-derived void markers retain zero-ABI normalization.
+Only supported complete scalar adjusted parameters are implemented: no K&R,
+variadics, VM/static/restrict array forms, aggregates or other parameter storage.
+Globals, static/extern/thread storage and real linkage expansion remain deferred.
+Existing register-array conversion refusal and inferred-auto limitations remain.
+Not full C23 conformance.
+
+M23e3 exact-commit CI run 38988250769 completed/success with all three jobs green.
+M15c1 exact-commit CI is pending until independently checked after push. Local
+validation never implies a remote pass.
+
+User authorizes continuous work and supersedes historical STOP. No subagents,
+stashes discarded, historical snapshot regeneration, force pushes or credentials
+in source. Verify worktree, tools and origin/development after resets. Completion
+was applied only after frozen final validation; no source edits during validation.
+The next researched increment is explicit file-scope extern function spelling;
+it still needs its design copied/recorded against this pushed checkpoint before
+implementation. No globals/linkage implementation is implied by that research.
+
+## Earlier M23e3 checkpoint (historical)
+
 M23e3 inferred identifiers may hide outer typedef names at block/for scope,
 bare or parenthesized, including register inference. Read
 m23-inferred-typedef-shadowing.md and the latest ledger/contracts/coverage/limits.

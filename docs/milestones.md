@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; parameters/other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -2859,3 +2859,73 @@ M23e2 CI run 38984165289 completed/success, all three jobs green.
 New M23e3 exact-commit CI is pending until checked after push; local passes
 never imply remote success. No subagents, discarded stashes, historical snapshot
 regeneration, forced push or committed credentials. User authorizes continuous work.
+
+## M15c1 register parameters and adjusted spill identity
+
+Design recorded before implementation against validated/pushed 6a07c0c.
+
+M15c1 supports register parameter declarations in prototypes/definitions,
+nested callbacks and unnamed C23 parameter positions, including supported
+array/function adjustment and typedef/query bases. Read m15-register-parameters.md.
+The existing private declarator context reaches the shared scanner: only register
+is permitted in parameters; outer type-name storage and parameter auto/typedef
+remain forbidden. Concrete ast_parameter.is_register records written provenance,
+not a type qualifier or signature flag. Prototype objects retain the address
+restriction with no runtime slots; actual named spills use their OWN definition's
+flag. Register prototypes never poison ordinary definitions, or vice versa.
+Adjusted array/function parameters are register POINTER objects: index/call and
+pointee addresses work, but &parameter is forbidden even in sizeof/typeof/bounds.
+Source syntax caches, composites, captures and ordinary copied types remain
+unchanged. No physical-register allocation or type/QBE implementation change.
+
+Full make test passed with GCC 11.5, GCC 14.2.1 and Clang 18.1.8 as native
+comparison hosts; normal compiler/helpers were built serially with GCC 11/C11.
+Full QBE 1.2 make test-codegen passed with both modern native hosts. GCC 11 and
+Clang 15 ASan/UBSan lexer/sema plus 24 targeted suites passed in isolated trees;
+parameter, inferred-typedef, register-auto, auto and binding suites also passed
+with Clang 18 as native oracle. Frozen 378-file primary/isolated source/test/
+Makefile manifests matched before/after. Bounded sanitized compile-only fuzz:
+13,801 lexer / 43,173 pipeline inputs, 26 seconds each. No invalid curated or
+generated C executed. Logs/manifests /data/tools/m15c1-*, isolated trees
+/data/validation-m15c1/{gcc,clang}. The prior 6a07c0c sanitized compiler and this
+frozen compiler have byte-identical return codes/stdout/stderr on all 152 old
+compile corpus files (120 accepted / 32 rejected), excluding the new seed.
+
+Focused final four-host suite: 50 standard + 12 C23 unchanged originals;
+GCC 14/Clang 18 agree on all 62 and reject 29 required constraints. GCC 11/Clang 15
+agree on all 50 applicable originals and reject 21 constraints; exact independent
+C23 keyword absence is NOT an agreement. All hosts pass 24 both-direction
+mixed-width/full-value primitive-result ABI arrangements spanning six registers
+and two stack arguments, plus two row/callback arrangements. Eight subset forms
+compile only; five register-void forms are explicit conservative refusals, NOT
+required native constraints (GCC 14 and Clang 18 differ on unnamed register void).
+
+AST checks prove prototype type-only register identity without parameter.local,
+ordinary/register prototype-to-definition isolation both ways, immutable declared
+array/function versus adjusted pointer types and source caches, exact real spill
+slots/reverse lists, ordinary typeof copies without register flags, independent
+nested callback/outer query captures and failed address queries without completed
+function type/symbol/IL. Boundaries: 128/129 parameters, 256/257 locals including
+128 named spills, unnamed parameters not consuming locals, 1 MiB/overflow storage,
+4096/4097 items, 63/64 grouped parameter and nested function layers under the
+SHARED total 64 declarator nesting limit, and 128/129 expanded types. Generated
+boundary and invalid programs compile only, never execute.
+
+Five obsolete parameter subset refusals were replaced with positive coverage:
+register-scalars 3 -> 0, register-arrays 6 -> 5, binding-phases 3 -> 2. The old
+register-auto parameter refusal remains rejected with the precise auto diagnostic;
+it moved to required constraints (modern 34 -> 35, subset 9 -> 8). All affected
+suites and parameter/typedef scope regressions reran on all four native hosts;
+previous native keyword/macro/for-typedef gap counts remain separately classified.
+
+Register void (direct/query/alias) markers remain conservatively unsupported;
+plain and unregistered query-derived void markers retain zero-ABI normalization.
+Only supported complete scalar adjusted parameters are implemented: no K&R,
+variadics, VM/static/restrict array forms, aggregates or other parameter storage.
+Globals, static/extern/thread storage and real linkage expansion remain deferred.
+Existing register-array conversion refusal and inferred-auto limitations remain.
+Not full C23 conformance.
+
+M23e3 exact-commit CI run 38988250769 completed/success with all three jobs green.
+M15c1 exact-commit CI is pending until independently checked after push. Local
+validation never implies a remote pass.

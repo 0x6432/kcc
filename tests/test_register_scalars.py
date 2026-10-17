@@ -69,9 +69,6 @@ c23_constraints = [
     ('int main(void) { register int x=0; typeof_unqual(&x) p; return 0; }', 'cannot take the address'),
 ]
 subset_errors = [
-    ('int f(register int x) { return x; }', 'register storage is not supported in this context'),
-    ('int f(register int);', 'register storage is not supported in this context'),
-    ('int f(register int a[2]);', 'register storage is not supported in this context'),
 ]
 def native_keyword_macro_gap(text, status, diagnostics):
     # C permits keyword-named macros outside the standard-header restrictions.

@@ -4742,8 +4742,161 @@ static void test_inferred_typedef_unavailable_tree(void)
 	}
 }
 
+static void test_register_parameter_tree(void)
+{
+	const char *text = "int proto(register int x,typeof(x) y); "
+		"int plain(register int); int plain(int x) { int *p=&x; return *p; } "
+		"int f(int); int f(register int x) { typeof(x) copy=x; return copy; } "
+		"int adjusted(register int a[2][3],register int cb(int),register int) { return a[0][0]+cb(0); } "
+		"int nested(register int x,int (*cb)(register char x,typeof(x) y),typeof(x) y) { return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_function_declaration *plain_prototype;
+	struct ast_function_declaration *register_prototype;
+	struct ast_function *plain;
+	struct ast_function *function;
+	struct ast_function *adjusted;
+	struct ast_function *nested;
+	struct ast_parameter *parameter;
+	struct ast_parameter *array;
+	struct ast_parameter *callback;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_function_type_syntax *inner;
+	struct ast_name_expression *captured;
+	struct ast_local_declaration *copy;
+	struct ast_address_expression *address;
+	const struct array_type *declared;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "register-parameters.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	plain_prototype = (struct ast_function_declaration *)prototype->external.next;
+	plain = (struct ast_function *)plain_prototype->external.next;
+	register_prototype = (struct ast_function_declaration *)plain->external.next;
+	function = (struct ast_function *)register_prototype->external.next;
+	adjusted = (struct ast_function *)function->external.next;
+	nested = (struct ast_function *)adjusted->external.next;
+	assert(prototype->parameters->is_register && !prototype->parameters->local);
+	assert(!prototype->parameters->next->is_register);
+	assert(plain_prototype->parameters->is_register && !plain->declaration->parameters->is_register);
+	assert(!register_prototype->parameters->is_register && function->declaration->parameters->is_register);
+	assert(!prototype->parameters->type && !function->declaration->parameters->type);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	query = (struct ast_typeof_expression_syntax *)prototype->parameters->next->type_syntax;
+	assert(query->syntax.kind == type_syntax_typeof_expression && query->syntax.type == &type_int);
+	captured = (struct ast_name_expression *)query->operand;
+	assert(captured->expression.kind == expression_name && captured->declaration);
+	assert(captured->declaration->is_register && captured->declaration->type == &type_int);
+	assert(!captured->declaration->next_local && !prototype->parameters->local);
+	assert(!prototype->parameters->next->local);
+	parameter = plain->declaration->parameters;
+	assert(!parameter->local->is_register && parameter->local->slot == 0);
+	assert(plain->declaration->symbol == plain_prototype->symbol);
+	copy = (struct ast_local_declaration *)plain->body->items;
+	address = (struct ast_address_expression *)copy->initializer;
+	assert(address->expression.kind == expression_address && address->operand->kind == expression_name);
+	assert(((struct ast_name_expression *)address->operand)->declaration == parameter->local);
+	assert(copy->slot == 1 && copy->next_local == parameter->local && plain->locals == copy);
+	parameter = function->declaration->parameters;
+	assert(parameter->local->is_register && parameter->local->type == &type_int && parameter->local->slot == 0);
+	assert(function->declaration->symbol == register_prototype->symbol);
+	assert(type_compatible(function->declaration->symbol->type->parameters->type,
+		plain->declaration->symbol->type->parameters->type));
+	copy = (struct ast_local_declaration *)function->body->items;
+	assert(!copy->is_register && copy->slot == 1 && copy->type == &type_int);
+	query = (struct ast_typeof_expression_syntax *)copy->type_syntax;
+	assert(((struct ast_name_expression *)query->operand)->declaration == parameter->local);
+	assert(copy->next_local == parameter->local && !parameter->local->next_local);
+	assert(function->locals == copy);
+	array = adjusted->declaration->parameters;
+	callback = array->next;
+	assert(array->is_register && array->local->is_register && array->local->slot == 0);
+	assert(array->type_syntax->kind == type_syntax_array);
+	declared = (const struct array_type *)array->type_syntax->type;
+	assert(declared->type.kind == type_kind_array && declared->count == 2);
+	assert(type_object_size(&declared->type) == 24 && type_object_size(array->type) == 8);
+	assert(array->type->kind == type_kind_pointer && array->local->type == array->type);
+	assert(array->local->type_syntax == array->type_syntax && array->type != &declared->type);
+	assert(((const struct pointer_type *)array->type)->referent == declared->element);
+	assert(callback->type_syntax->kind == type_syntax_function && callback->is_register);
+	assert(callback->type_syntax->type->kind == type_kind_function && callback->type->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)callback->type)->referent == callback->type_syntax->type);
+	assert(callback->local->is_register && callback->local->slot == 1);
+	assert(callback->next->is_register && !callback->next->has_name && !callback->next->local);
+	assert(adjusted->locals == callback->local && callback->local->next_local == array->local);
+	assert(!array->local->next_local);
+	parameter = nested->declaration->parameters;
+	callback = parameter->next;
+	inner = (struct ast_function_type_syntax *)((struct ast_pointer_type_syntax *)callback->type_syntax)->referent;
+	assert(inner->parameters->is_register && !inner->parameters->local);
+	query = (struct ast_typeof_expression_syntax *)inner->parameters->next->type_syntax;
+	captured = (struct ast_name_expression *)query->operand;
+	assert(captured->declaration->is_register && captured->declaration->type == &type_char);
+	assert(captured->declaration != parameter->local && !captured->declaration->next_local);
+	query = (struct ast_typeof_expression_syntax *)callback->next->type_syntax;
+	captured = (struct ast_name_expression *)query->operand;
+	assert(captured->declaration->is_register && captured->declaration->type == &type_int);
+	assert(captured->declaration != parameter->local && !captured->declaration->next_local);
+	assert(parameter->local->is_register && parameter->local->slot == 0);
+	assert(!callback->local->is_register && !callback->next->local->is_register);
+	assert(nested->locals == callback->next->local && nested->locals->slot == 2);
+	assert(nested->locals->next_local == callback->local && callback->local->next_local == parameter->local);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
+static void test_register_prototype_address_tree(void)
+{
+	const char *text = "int f(register int x,typeof(&x) y);";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_function_declaration *prototype;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_address_expression *address;
+	struct ast_name_expression *captured;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "register-prototype.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	prototype = (struct ast_function_declaration *)unit->declarations;
+	assert(!sema_translation_unit(unit, &arena, &diagnostics) && diagnostics.errors == 1);
+	assert(prototype->parameters->is_register && !prototype->parameters->local);
+	assert(!prototype->parameters->next->local);
+	query = (struct ast_typeof_expression_syntax *)prototype->parameters->next->type_syntax;
+	address = (struct ast_address_expression *)query->operand;
+	assert(address->expression.kind == expression_address && address->operand->kind == expression_name);
+	captured = (struct ast_name_expression *)address->operand;
+	assert(captured->declaration && captured->declaration->is_register);
+	assert(captured->declaration->type == &type_int && !captured->declaration->next_local);
+	assert(!query->syntax.type && !prototype->type_syntax->syntax.type && !prototype->symbol);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_register_parameter_tree();
+	test_register_prototype_address_tree();
 	test_inferred_typedef_shadowing_tree();
 	test_inferred_typedef_unavailable_tree();
 	test_register_auto_inference_tree();

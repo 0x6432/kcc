@@ -1014,3 +1014,32 @@ are recorded separately, as are legacy basic-inference absence and cross-object
 ABI linkage. No syntax-gap rejection is counted as semantic constraint agreement;
 no UB acceptance is called a missing diagnostic. Read the ledger for exact
 classifier/AST/boundary/full frozen local validation and independent remote CI.
+
+## M15c1 register parameters (N3096 6.7.6.3p2/p12, 6.5.3.2p1)
+
+M15c1 supports register parameter declarations in prototypes/definitions,
+nested callbacks and unnamed C23 parameter positions, including supported
+array/function adjustment and typedef/query bases. Read m15-register-parameters.md.
+The existing private declarator context reaches the shared scanner: only register
+is permitted in parameters; outer type-name storage and parameter auto/typedef
+remain forbidden. Concrete ast_parameter.is_register records written provenance,
+not a type qualifier or signature flag. Prototype objects retain the address
+restriction with no runtime slots; actual named spills use their OWN definition's
+flag. Register prototypes never poison ordinary definitions, or vice versa.
+Adjusted array/function parameters are register POINTER objects: index/call and
+pointee addresses work, but &parameter is forbidden even in sizeof/typeof/bounds.
+Source syntax caches, composites, captures and ordinary copied types remain
+unchanged. No physical-register allocation or type/QBE implementation change.
+
+Register void (direct/query/alias) markers remain conservatively unsupported;
+plain and unregistered query-derived void markers retain zero-ABI normalization.
+Only supported complete scalar adjusted parameters are implemented: no K&R,
+variadics, VM/static/restrict array forms, aggregates or other parameter storage.
+Globals, static/extern/thread storage and real linkage expansion remain deferred.
+Existing register-array conversion refusal and inferred-auto limitations remain.
+Not full C23 conformance.
+
+The storage hint ignored for non-definition function type compatibility is not a
+permission to take the address of a prototype object declared register. Native
+query comparisons, AST identity, cross-object ABI and shared resource budgets
+are recorded in the ledger, separately from grammar absence and remote CI.

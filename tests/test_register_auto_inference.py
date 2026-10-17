@@ -54,6 +54,7 @@ for specifiers in ['auto register', 'register auto']:
     for initializer in ['x', 'sizeof(x)', '(typeof(x))0', '0?x:42', '1?42:x', 'x()']:
         unavailable.append(f'int x(void) {{ return 42; }} int main(void) {{ {specifiers} x={initializer}; return 0; }}')
 constraints = [
+    ('int f(register auto x);', 'auto is not permitted'),
     ('int main(void) { register x=42; return 0; }', 'expected type specifier with qualifier'),
     ('int main(void) { register const x=42; return 0; }', 'expected type specifier with qualifier'),
     ('int main(void) { auto register x=42; return sizeof(&x); }', 'cannot take the address'),
@@ -91,7 +92,6 @@ subset_errors = [
     ('int main(void) { register auto x(void)=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { auto register x={42}; return 0; }', 'expected integer literal'),
     ('int main(void) { register auto x=(void)42; return 0; }', 'complete scalar initializer type'),
-    ('int f(register auto x);', 'register storage is not supported in this context'),
     ('int main(void) { register int a[2]; auto register p=a; return 0; }', 'register array-to-pointer conversion'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc register auto ') as directory:

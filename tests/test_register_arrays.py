@@ -64,7 +64,6 @@ subset_errors = [
     ('int f(int n) { register int a[n]; return 0; }', 'variable-length arrays'),
     ('int main(void) { register int a[]; return 0; }', 'must be complete'),
     ('int main(void) { register int a[2]=0; return 0; }', 'array initializers are not supported'),
-    ('int f(register int a[2]);', 'register storage is not supported in this context'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc register arrays ') as directory:
     directory = Path(directory)

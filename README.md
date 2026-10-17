@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15C1: Written `register` is now supported on named/unnamed parameters, prototypes
+and nested callbacks. Each actual parameter spill retains its own definition's
+address restriction; prototype-only names allocate no runtime storage. Array and
+function parameters are adjusted pointer objects, not register arrays/functions;
+ordinary copied types and compatible signatures carry no register flag. Read
+docs/m15-register-parameters.md for source/AST/ABI/budget evidence and the explicit
+register-void subset refusal. Other storage/globals/linkage remain incomplete.
+
 M23E3: Inferred `auto T = ...` and `auto (T) = ...` may now hide an outer typedef
 T at block/for scope, including register inference. One demand peek disambiguates
 bare names; a dedicated balanced-identifier grammar preserves nesting limits.
