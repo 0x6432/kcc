@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters implemented; other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 explicit extern file-scope functions implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -2929,3 +2929,70 @@ Not full C23 conformance.
 M23e3 exact-commit CI run 38988250769 completed/success with all three jobs green.
 M15c1 exact-commit CI is pending until independently checked after push. Local
 validation never implies a remote pass.
+
+## M15d1 explicit extern file-scope functions
+
+Design recorded before implementation against validated/pushed 15abaaf.
+
+M15d1 supports explicit extern on single file-scope function declarations and
+definitions at any specifier position, including typedef/query-derived function
+prototypes, callbacks, adjusted/register parameters and ordinary compatible
+redeclarations. Read m15-extern-functions.md. All supported functions already
+have external linkage: explicit extern reuses that exact existing symbol/type/
+QBE export policy, not a new linkage model. New token_extern is converted only
+after preprocessing; raw identifiers and keyword-macro conversion stay intact.
+The private scanner diagnoses duplicates/mutually exclusive classes, preserves
+valid auto+extern inference grammar as a subset refusal, and rejects typed
+combined auto for its actual inference constraint. Local extern fails before
+name publication/runtime locals, including consumed-alias/inferred-name starts.
+Parameter/type-name extern remains forbidden. No public AST flag, semantic/type/
+backend implementation changes or alias storage.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 native comparison
+hosts; compiler/normal C11 helpers were built serially with GCC 11 before parallel
+validation. Full QBE 1.2 make test-codegen passed with both modern native hosts.
+Both GCC 11/Clang 15 ASan/UBSan lex/raw-pp/sema plus 25 targeted suites passed in
+isolated trees; extern, register-parameter, inferred-typedef, register-auto, auto
+and binding suites also passed with Clang 18 as native oracle. Frozen 381-file
+primary/isolated source/test/Makefile manifests matched before/after. Bounded
+sanitized compile-only fuzz: 13,934 lexer / 45,071 pipeline inputs, 26 seconds
+each. No invalid curated/generated C executed. Logs/manifests /data/tools/m15d1-*,
+isolated trees /data/validation-m15d1/{gcc,clang}. Prior 15abaaf sanitized compiler
+and this frozen compiler have identical return codes/stdout/stderr on 153 old
+compile corpus files (121 accepted / 32 rejected), excluding the new extern seed.
+
+Focused four-host suite: 46 unchanged standard + 8 C23 originals. Both modern
+hosts strictly agree on all 54 and reject 21 required constraints; legacy hosts
+agree on 46 applicable originals and reject 15 constraints, with exact independent
+C23 keyword absence not counted as agreement. Twelve subset probes compile only,
+including file-scope objects, inferred extern objects, local extern, multiple
+function declarators and static/inline forms. No claim that these valid but
+unsupported C forms require native diagnostics. All hosts pass 24 both-direction
+mixed-stack/full-width primitive ABI arrangements plus two row/callback
+arrangements. QBE/object nm inspection verifies defined functions exported as T
+and unresolved external references as U, without duplicate prototype exports.
+
+AST checks verify alias/direct/query/implicit declarations share one canonical
+function symbol while source alias/unknown-array-bound caches stay immutable and
+the composite retains known bound three. Function designators/decays capture that
+exact symbol; own register definition and ordinary later definition keep correct
+spill identity. Prototypes/aliases add no runtime storage or IL definitions.
+Exact 512/513 external declarations, 256/257 functions, 128/129 parameters,
+256/257 locals including 128 spills, 1 MiB storage, 4096 items, shared 64 nested
+declarator and 128 expanded-type budgets pass; generated boundaries compile only.
+Demand keyword conversion and raw preprocessing identifiers have focused C tests.
+Shared register-auto, register-parameter, typedef-placement and queried-function
+suites reran on all four hosts with existing native gap classifications unchanged.
+
+Only single file-scope function declarations/definitions are added. Global or
+local extern objects, tentative definitions, block-scope function declarations,
+static/internal linkage, inline/thread storage, multiple function declarators
+and inferred extern objects remain unsupported. No function storage/type flag is
+needed while explicit/implicit declarations have identical external semantics;
+future linkage work must separately design provenance and visibility. Existing
+register-void, scalar inference, qualifier/VM/aggregate and resource restrictions
+remain. Not full C23 conformance.
+
+M15c1 exact-commit CI run 39009008993 is pending; no remote pass claimed.
+New M15d1 exact-commit CI is pending until independently checked after push.
+Local validation never implies a remote pass.

@@ -456,8 +456,17 @@ static void test_auto_keyword(void)
 	assert(strcmp(token_kind_name(token_auto), "auto") == 0);
 }
 
+static void test_extern_keyword(void)
+{
+	const enum token_kind kinds[] = { token_extern, token_identifier, token_int };
+
+	check_tokens("#define STORE extern\nSTORE name\n#define extern int\nextern", kinds, 3, 0);
+	assert(strcmp(token_kind_name(token_extern), "extern") == 0);
+}
+
 int main(void)
 {
+	test_extern_keyword();
 	test_auto_keyword();
 	test_register_keyword();
 	test_typedef_keyword();

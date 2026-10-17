@@ -2026,3 +2026,23 @@ inheritance. Unnamed parameters remain ABI slots without source binding/storage.
 Existing unary address checks enforce direct-object provenance, including queries;
 adjusted pointer referent indexing/calls/addresses remain ordinary operations.
 Const, source caches, captures, signatures, return types, QBE and budgets remain.
+
+## M15d1 explicit external function storage spelling
+
+lex.c converts preprocessing identifiers to token_extern only at the existing
+final keyword boundary. Raw pp tokens, macro names and demand-peek identity stay
+unchanged. Shared declaration_head stores one ordinary class plus independent
+auto; token_eof in the zero-initialized class token denotes no class. Duplicate
+classes and incompatible ordinary classes reject; auto+typedef still rejects,
+auto+register/extern requires inferred syntax. Parameters permit only register,
+outer type names no storage; each nested parameter has an independent head.
+
+Extern block declarations fail at the shared local tail BEFORE declarator name
+publication/item count/storage, including consumed alias/inferred-name paths.
+External extern proceeds through existing concrete function or alias/query type
+declarations; nonfunction objects still fail classification. Class spelling does
+not alter canonical function types/symbols, composites, captured bindings or
+ordinary/register definition provenance. All supported functions have the same
+external linkage, so no new public flag, sema/type/backend interface or storage
+is introduced merely for explicit extern. QBE exports definitions exactly once;
+prototypes/aliases emit nothing. Future static/internal linkage is not implied.

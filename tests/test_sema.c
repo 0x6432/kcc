@@ -4893,8 +4893,99 @@ static void test_register_prototype_address_tree(void)
 	fclose(stream);
 }
 
+static void test_extern_function_tree(void)
+{
+	const char *text = "typedef int F(int (*)[]); extern F f; "
+		"extern int f(int (*p)[3]); int f(register int (*p)[]) { return (*p)[2]; } "
+		"extern typeof(f) f; extern int g(register int); "
+		"int g(int x) { int *p=&x; return *p; } "
+		"extern int caller(void) { int (*p)(int (*)[3])=f; int a[3]; a[2]=42; return p(&a); }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_typedef_declaration *alias;
+	struct ast_external_type_declaration *alias_prototype;
+	struct ast_function_declaration *prototype;
+	struct ast_function *definition;
+	struct ast_external_type_declaration *query_prototype;
+	struct ast_function_declaration *other_prototype;
+	struct ast_function *other;
+	struct ast_function *caller;
+	const struct function_type *aliased;
+	const struct function_type *canonical;
+	const struct array_type *unknown;
+	const struct array_type *known;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_function_designator_expression *designator;
+	struct ast_function_decay_expression *decay;
+	struct ast_local_declaration *local;
+	struct ast_address_expression *address;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "extern-functions.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	alias = ((struct ast_external_typedef_declaration *)unit->declarations)->declaration;
+	alias_prototype = (struct ast_external_type_declaration *)unit->declarations->next;
+	assert(alias_prototype->external.kind == external_type_declaration);
+	prototype = (struct ast_function_declaration *)alias_prototype->external.next;
+	definition = (struct ast_function *)prototype->external.next;
+	query_prototype = (struct ast_external_type_declaration *)definition->external.next;
+	other_prototype = (struct ast_function_declaration *)query_prototype->external.next;
+	other = (struct ast_function *)other_prototype->external.next;
+	caller = (struct ast_function *)other->external.next;
+	assert(caller->external.kind == external_function_definition && !caller->external.next);
+	assert(!alias_prototype->symbol && !prototype->symbol && !definition->locals);
+	assert(definition->declaration->parameters->is_register);
+	assert(other_prototype->parameters->is_register && !other->declaration->parameters->is_register);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(alias->type == alias_prototype->type && alias->type->kind == type_kind_function);
+	aliased = (const struct function_type *)alias->type;
+	unknown = (const struct array_type *)((const struct pointer_type *)aliased->parameters->type)->referent;
+	assert(unknown->type.kind == type_kind_array && !unknown->count);
+	canonical = definition->declaration->symbol->type;
+	known = (const struct array_type *)((const struct pointer_type *)canonical->parameters->type)->referent;
+	assert(known->type.kind == type_kind_array && known->count == 3 && known->element == &type_int);
+	assert(alias_prototype->symbol == prototype->symbol && prototype->symbol == definition->declaration->symbol);
+	assert(query_prototype->symbol == prototype->symbol && prototype->symbol->definition == definition);
+	assert(alias->type != &canonical->type && type_compatible(alias->type, &canonical->type));
+	assert(((const struct array_type *)((const struct pointer_type *)
+		definition->declaration->parameters->type_syntax->type)->referent)->count == 0);
+	assert(definition->declaration->parameters->local->is_register);
+	assert(definition->locals == definition->declaration->parameters->local);
+	assert(definition->locals->slot == 0 && !definition->locals->next_local);
+	query = (struct ast_typeof_expression_syntax *)query_prototype->type_syntax;
+	assert(query->syntax.kind == type_syntax_typeof_expression && query->syntax.type == &canonical->type);
+	designator = (struct ast_function_designator_expression *)query->operand;
+	assert(designator->expression.kind == expression_function_designator && designator->function == prototype->symbol);
+	assert(other_prototype->symbol == other->declaration->symbol);
+	assert(!other->declaration->parameters->local->is_register);
+	local = (struct ast_local_declaration *)other->body->items;
+	address = (struct ast_address_expression *)local->initializer;
+	assert(address->expression.kind == expression_address);
+	assert(((struct ast_name_expression *)address->operand)->declaration == other->declaration->parameters->local);
+	local = (struct ast_local_declaration *)caller->body->items;
+	assert(local->slot == 0 && !local->is_register);
+	decay = (struct ast_function_decay_expression *)local->initializer;
+	assert(decay->expression.kind == expression_function_decay);
+	designator = (struct ast_function_designator_expression *)decay->operand;
+	assert(designator->expression.kind == expression_function_designator && designator->function == prototype->symbol);
+	assert(caller->locals->slot == 1 && caller->locals->next_local == local && !local->next_local);
+	assert(!unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_extern_function_tree();
 	test_register_parameter_tree();
 	test_register_prototype_address_tree();
 	test_inferred_typedef_shadowing_tree();

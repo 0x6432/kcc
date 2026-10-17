@@ -1043,3 +1043,28 @@ The storage hint ignored for non-definition function type compatibility is not a
 permission to take the address of a prototype object declared register. Native
 query comparisons, AST identity, cross-object ABI and shared resource budgets
 are recorded in the ledger, separately from grammar absence and remote CI.
+
+## M15d1 explicit extern functions (6.2.2p4/p5; 6.7.1p2/p4)
+
+M15d1 supports explicit extern on single file-scope function declarations and
+definitions at any specifier position, including typedef/query-derived function
+prototypes, callbacks, adjusted/register parameters and ordinary compatible
+redeclarations. Read m15-extern-functions.md. All supported functions already
+have external linkage: explicit extern reuses that exact existing symbol/type/
+QBE export policy, not a new linkage model. New token_extern is converted only
+after preprocessing; raw identifiers and keyword-macro conversion stay intact.
+The private scanner diagnoses duplicates/mutually exclusive classes, preserves
+valid auto+extern inference grammar as a subset refusal, and rejects typed
+combined auto for its actual inference constraint. Local extern fails before
+name publication/runtime locals, including consumed-alias/inferred-name starts.
+Parameter/type-name extern remains forbidden. No public AST flag, semantic/type/
+backend implementation changes or alias storage.
+
+Only single file-scope function declarations/definitions are added. Global or
+local extern objects, tentative definitions, block-scope function declarations,
+static/internal linkage, inline/thread storage, multiple function declarators
+and inferred extern objects remain unsupported. No function storage/type flag is
+needed while explicit/implicit declarations have identical external semantics;
+future linkage work must separately design provenance and visibility. Existing
+register-void, scalar inference, qualifier/VM/aggregate and resource restrictions
+remain. Not full C23 conformance.

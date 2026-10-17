@@ -95,7 +95,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 {
 	enum token_kind kind = token.kind;
 
-	return kind == token_typedef || kind == token_register || kind == token_auto ||
+	return kind == token_typedef || kind == token_register || kind == token_extern || kind == token_auto ||
 		kind == token_void || kind == token_const ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
@@ -134,12 +134,13 @@ struct declaration_head {
 };
 
 /* declaration-specifiers ::= permutation of storage-specifiers, qualifiers and builtin-type
- * storage-specifiers ::= [ "typedef" | "register" | "auto" | "register" "auto" | "auto" "register" ]
+ * storage-specifiers ::= [ "typedef" | "register" | "extern" | "auto" ]
+ * Auto may additionally accompany register/extern only for an inferred type.
  * builtin-type ::= integer-type | "void" | typeof-specifier | typedef-name
  * integer-type ::= permutation of ['signed' | 'unsigned'] ['long' ['long']] ['int']
  *                | permutation of ['signed' | 'unsigned'] 'char'
  *                | permutation of ['signed' | 'unsigned'] 'short' ['int'] | '_Bool' | 'bool'
- * Only auto may omit the type; combining auto with register requires inference.
+ * Only auto may omit the type; context checks limit external and block storage.
  * Void cannot combine with integer specifiers; qualifiers do not hide conflicts.
  */
 static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *parser,
@@ -164,7 +165,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		struct token token = preprocess_peek(parser->preprocessor);
 
-		if (token.kind == token_typedef || token.kind == token_register || token.kind == token_auto) {
+		if (token.kind == token_typedef || token.kind == token_register ||
+			token.kind == token_extern || token.kind == token_auto) {
 			struct token *slot;
 
 			if (!head || (context == declarator_parameter && token.kind != token_register)) {
@@ -174,6 +176,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 					message = "typedef is not permitted in a type name or parameter declaration";
 				else if (token.kind == token_auto)
 					message = "auto is not permitted in a type name or parameter declaration";
+				else if (token.kind == token_extern)
+					message = "extern is not permitted in a type name or parameter declaration";
 				diagnostic_error(parser->diagnostics, token.location, message);
 				return NULL;
 			}
@@ -185,12 +189,14 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 					message = "duplicate typedef storage-class specifier";
 				else if (token.kind == token_register)
 					message = "duplicate register storage-class specifier";
+				else if (token.kind == token_extern)
+					message = "duplicate extern storage-class specifier";
 				diagnostic_error(parser->diagnostics, token.location, message);
 				return NULL;
 			}
-			if (head->keyword.kind == token_typedef ||
-				(token.kind == token_typedef && (head->keyword.kind == token_register ||
-				head->auto_keyword.kind == token_auto))) {
+			if ((token.kind != token_auto && head->keyword.kind != token_eof) ||
+				(token.kind == token_typedef && head->auto_keyword.kind == token_auto) ||
+				(token.kind == token_auto && head->keyword.kind == token_typedef)) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"multiple storage-class specifiers in one declaration");
 				return NULL;
@@ -290,7 +296,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			unsigned_type = token.kind == token_unsigned;
 		}
 	}
-	if (head && head->keyword.kind == token_register && head->auto_keyword.kind == token_auto &&
+	if (head && (head->keyword.kind == token_register || head->keyword.kind == token_extern) &&
+		head->auto_keyword.kind == token_auto &&
 		(query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count)) {
 		diagnostic_error(parser->diagnostics, beginning->location,
 			"combined auto storage requires an inferred type");
@@ -2106,6 +2113,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
+	if (head.keyword.kind == token_extern) {
+		diagnostic_error(parser->diagnostics, head.keyword.location,
+			"block-scope extern declarations are not supported yet");
+		return NULL;
+	}
 	for (;;) {
 		struct token name;
 		struct ast_type_syntax *type_syntax;

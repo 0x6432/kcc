@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15D1: Explicit `extern` is supported on single file-scope function prototypes
+and definitions, including alias/query-derived declarations and register/adjusted
+parameters. It reuses existing external function symbols and QBE exports; no new
+linkage or global-object support is implied. Local extern, static/inline/thread
+storage, inferred extern objects and function declaration lists remain deferred.
+Read docs/m15-extern-functions.md for original-source, symbol/cache, ABI/export
+and frozen full-matrix evidence. Still not full C23 conformance.
+
 M15C1: Written `register` is now supported on named/unnamed parameters, prototypes
 and nested callbacks. Each actual parameter spill retains its own definition's
 address restriction; prototype-only names allocate no runtime storage. Array and

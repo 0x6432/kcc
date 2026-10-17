@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15C1 register parameter declarations. Read the latest entries together with README.md and
+Current milestone: M15D1 explicit extern file-scope functions. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2120,3 +2120,21 @@ array/function pointer parameter cannot have its address taken, but indexing,
 calling and addresses of referents remain valid. Prototype-only queries enforce
 the same address constraint without creating runtime local storage. Only register
 is permitted in parameter declaration specifiers; auto/typedef remain constraints.
+
+## M15d1 explicit extern functions
+
+Only single file-scope function declarations/definitions are added. Global or
+local extern objects, tentative definitions, block-scope function declarations,
+static/internal linkage, inline/thread storage, multiple function declarators
+and inferred extern objects remain unsupported. No function storage/type flag is
+needed while explicit/implicit declarations have identical external semantics;
+future linkage work must separately design provenance and visibility. Existing
+register-void, scalar inference, qualifier/VM/aggregate and resource restrictions
+remain. Not full C23 conformance.
+
+The prior extern exclusion is removed only for the file-scope function subset.
+Auto+extern is not inherently a forbidden storage combination under N3096
+6.7.1p2: inferred objects stay a subset refusal, while typed combined auto has
+p4's inference constraint. Local extern is rejected before publication/storage,
+not silently treated as an automatic object. Parameter and type-name extern are
+constraints. Existing native syntax gaps remain independent of ABI linkage.
