@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15D2: File-scope function declarations can share specifiers in comma lists,
+including extern and alias/query-derived prototypes. Each concrete declarator
+keeps its own syntax/parameter scope and counts once toward the existing budget;
+later queries see earlier function symbols without mutating shared type caches.
+Only a sole direct declarator may define a function. Read
+docs/m15-function-declaration-lists.md for native gap, AST/ABI and frozen matrix
+evidence. Global objects, block functions and new linkage remain deferred.
+
 M15D1: Explicit `extern` is supported on single file-scope function prototypes
 and definitions, including alias/query-derived declarations and register/adjusted
 parameters. It reuses existing external function symbols and QBE exports; no new

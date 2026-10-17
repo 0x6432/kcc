@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15D1 explicit extern file-scope functions. Read the latest entries together with README.md and
+Current milestone: M15D2 file-scope function declaration lists. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M00
@@ -2138,3 +2138,19 @@ Auto+extern is not inherently a forbidden storage combination under N3096
 p4's inference constraint. Local extern is rejected before publication/storage,
 not silently treated as an automatic object. Parameter and type-name extern are
 constraints. Existing native syntax gaps remain independent of ABI linkage.
+
+## M15d2 function prototype lists
+
+Only function prototypes form ordinary comma lists. No global objects/tentative
+definitions, mixed object/function lists, function bodies in lists, alias/query-
+derived function bodies, block function declarations, static/internal linkage,
+inline/thread storage or inferred extern objects. Existing register-void,
+qualifier/VM/aggregate/inference/resource restrictions remain. Shared bases are
+immutable; no token vector/replay or second semantic/cache owner. Not full C23.
+
+The prior single-function-declarator restriction is removed for prototype lists.
+Any unsupported member fails the whole translation before IL emission; no partial
+list output. Clang 15/18 top-level return-qualification redeclaration gaps are
+reported on exact original programs, not called kcc failures or fabricated native
+agreements. Query/alias-derived bodies remain explicitly unsupported with their
+old diagnostics. Definitions are not allowed inside prototype comma lists.

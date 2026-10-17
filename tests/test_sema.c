@@ -4983,8 +4983,101 @@ static void test_extern_function_tree(void)
 	fclose(stream);
 }
 
+static void test_function_declaration_list_tree(void)
+{
+	const char *text = "typedef long T; typedef int F(int); "
+		"extern int f(int T),g(T x),*p(void); F h,i; int seed(int); "
+		"typeof(seed) j,k; int first(int),second(typeof(first) *cb); "
+		"int first(register int x) { return x; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *nodes[13];
+	struct ast_external_declaration *item;
+	struct ast_typedef_declaration *alias;
+	struct ast_function_declaration *f;
+	struct ast_function_declaration *g;
+	struct ast_function_declaration *p;
+	struct ast_external_type_declaration *h;
+	struct ast_external_type_declaration *i;
+	struct ast_external_type_declaration *j;
+	struct ast_external_type_declaration *k;
+	struct ast_function_declaration *seed;
+	struct ast_function_declaration *first;
+	struct ast_function_declaration *second;
+	struct ast_function *definition;
+	struct ast_typeof_expression_syntax *query;
+	struct ast_function_designator_expression *captured;
+	size_t count = 0;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "function-lists.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors);
+	for (item = unit->declarations; item; item = item->next) {
+		assert(count < sizeof(nodes) / sizeof(nodes[0]));
+		nodes[count++] = item;
+	}
+	assert(count == 13);
+	alias = ((struct ast_external_typedef_declaration *)nodes[1])->declaration;
+	f = (struct ast_function_declaration *)nodes[2];
+	g = (struct ast_function_declaration *)nodes[3];
+	p = (struct ast_function_declaration *)nodes[4];
+	assert(f->external.kind == external_function_declaration && g->external.kind == external_function_declaration);
+	assert(f->type_syntax != g->type_syntax && f->return_syntax == g->return_syntax);
+	assert(p->return_syntax->kind == type_syntax_pointer);
+	assert(((struct ast_pointer_type_syntax *)p->return_syntax)->referent == f->return_syntax);
+	assert(f->parameters != g->parameters && g->parameters->type_syntax->kind == type_syntax_typedef_name);
+	h = (struct ast_external_type_declaration *)nodes[5];
+	i = (struct ast_external_type_declaration *)nodes[6];
+	assert(h->external.kind == external_type_declaration && i->external.kind == external_type_declaration);
+	assert(h->type_syntax == i->type_syntax && h->type_syntax->kind == type_syntax_typedef_name);
+	seed = (struct ast_function_declaration *)nodes[7];
+	j = (struct ast_external_type_declaration *)nodes[8];
+	k = (struct ast_external_type_declaration *)nodes[9];
+	assert(j->type_syntax == k->type_syntax && j->type_syntax->kind == type_syntax_typeof_expression);
+	first = (struct ast_function_declaration *)nodes[10];
+	second = (struct ast_function_declaration *)nodes[11];
+	assert(first->return_syntax == second->return_syntax && first->type_syntax != second->type_syntax);
+	definition = (struct ast_function *)nodes[12];
+	assert(definition->external.kind == external_function_definition && !definition->locals);
+	assert(!first->parameters->is_register && definition->declaration->parameters->is_register);
+	assert(sema_translation_unit(unit, &arena, &diagnostics) && !diagnostics.errors);
+	assert(f->parameters->type == &type_int && g->parameters->type == &type_long);
+	assert(!f->parameters->local && !g->parameters->local);
+	assert(f->symbol != g->symbol && g->symbol != p->symbol);
+	assert(h->type == alias->type && i->type == alias->type);
+	assert(h->symbol != i->symbol && &h->symbol->type->type == alias->type && &i->symbol->type->type == alias->type);
+	query = (struct ast_typeof_expression_syntax *)j->type_syntax;
+	captured = (struct ast_function_designator_expression *)query->operand;
+	assert(captured->expression.kind == expression_function_designator && captured->function == seed->symbol);
+	assert(j->type == query->syntax.type && k->type == query->syntax.type && j->symbol != k->symbol);
+	query = (struct ast_typeof_expression_syntax *)((struct ast_pointer_type_syntax *)second->parameters->type_syntax)->referent;
+	captured = (struct ast_function_designator_expression *)query->operand;
+	assert(captured->expression.kind == expression_function_designator && captured->function == first->symbol);
+	/* A later definition may replace the canonical composite, not this cache. */
+	assert(query->syntax.type == first->type_syntax->syntax.type);
+	assert(query->syntax.type == captured->expression.type);
+	assert(type_compatible(query->syntax.type, &first->symbol->type->type));
+	assert(definition->declaration->symbol == first->symbol && first->symbol->definition == definition);
+	assert(!first->parameters->local && !second->parameters->local);
+	assert(definition->locals == definition->declaration->parameters->local);
+	assert(definition->locals->is_register && definition->locals->slot == 0 && !definition->locals->next_local);
+	assert(!unit->strings);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	fclose(stream);
+}
+
 int main(void)
 {
+	test_function_declaration_list_tree();
 	test_extern_function_tree();
 	test_register_parameter_tree();
 	test_register_prototype_address_tree();

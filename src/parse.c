@@ -2500,10 +2500,10 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* named-external-declaration ::= declaration-specifiers declarator ";"
+/* Build an unresolved alias/query function prototype without consuming its delimiter.
  * The outer query or typedef name is unresolved; only sema classifies its type.
  */
-static struct ast_external_declaration *parse_external_type_declaration(struct parser *parser,
+static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name)
 {
 	struct ast_type_syntax *base = type_syntax;
@@ -2517,9 +2517,12 @@ static struct ast_external_declaration *parse_external_type_declaration(struct p
 			"file-scope object declarations are not supported yet");
 		return NULL;
 	}
-	if (!expect_token(parser, token_semicolon,
-		"query-derived external declarations require ';'", NULL))
+	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
+		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"query-derived external declarations require ';'");
 		return NULL;
+	}
 	declaration = ast_new_external_type_declaration(parser->arena,
 		beginning.location, type_syntax, name);
 	if (!declaration)
@@ -2601,20 +2604,85 @@ done:
 	return body;
 }
 
+/* external-declarator-tail ::= declarator compound-statement |
+ *     declarator { "," declarator } ";"
+ * Only a sole direct function declarator can introduce a definition.
+ * Each prototype has its own derived chain around the shared specifier base.
+ */
+static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
+	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base)
+{
+	struct ast_external_declaration *items = NULL;
+	struct ast_external_declaration **tail = &items;
+	size_t count = 0;
+
+	for (;;) {
+		struct token name;
+		struct ast_type_syntax *type_syntax;
+		struct ast_external_declaration *item;
+
+		if (count == remaining_declarations) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"translation unit exceeds declaration limit (512)");
+			return NULL;
+		}
+		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
+		if (!type_syntax)
+			return NULL;
+		if (type_syntax->kind != type_syntax_function)
+			item = new_external_type_declaration(parser, type_syntax, beginning, name);
+		else {
+			struct ast_function_declaration *declaration;
+			enum token_kind next;
+
+			declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
+			if (!declaration) {
+				allocation_error(parser, beginning.location);
+				return NULL;
+			}
+			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
+			/* Views of one outer function syntax, not reparsed copies. */
+			declaration->return_syntax = declaration->type_syntax->return_syntax;
+			declaration->parameters = declaration->type_syntax->parameters;
+			declaration->parameter_count = declaration->type_syntax->parameter_count;
+			next = preprocess_peek(parser->preprocessor).kind;
+			if (!items && next != token_comma && next != token_semicolon) {
+				struct ast_compound_statement *body = parse_function_body(parser, declaration);
+				struct ast_function *function;
+
+				if (!body)
+					return NULL;
+				function = ast_new_function(parser->arena, declaration, body);
+				if (!function)
+					allocation_error(parser, beginning.location);
+				return function ? &function->external : NULL;
+			}
+			item = &declaration->external;
+		}
+		if (!item)
+			return NULL;
+		*tail = item;
+		tail = &item->next;
+		count++;
+		if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+			preprocess_next(parser->preprocessor);
+			return items;
+		}
+		if (!expect_token(parser, token_comma,
+			"expected ',' or ';' after function declaration", NULL))
+			return NULL;
+	}
+}
+
 /* external-declaration ::= typedef-declaration | static-assert-declaration |
- *     declaration-specifiers declarator (";" | compound-statement)
+ *     declaration-specifiers external-declarator-tail
  */
 static struct ast_external_declaration *parse_external_declaration(struct parser *parser,
 	size_t remaining_declarations)
 {
-	struct ast_type_syntax *type_syntax;
 	struct ast_type_syntax *base;
 	struct token beginning;
-	struct token name;
 	struct declaration_head head = { 0 };
-	struct ast_function_declaration *declaration;
-	struct ast_compound_statement *body;
-	struct ast_function *function;
 
 	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		struct ast_static_assertion *assertion = parse_static_assertion(parser);
@@ -2642,34 +2710,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	}
 	if (head.keyword.kind == token_typedef)
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
-	type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
-	if (!type_syntax)
-		return NULL;
-	if (type_syntax->kind != type_syntax_function)
-		return parse_external_type_declaration(parser, type_syntax, beginning, name);
-	declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
-	if (!declaration) {
-		allocation_error(parser, beginning.location);
-		return NULL;
-	}
-	declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
-	/* These are views of the one outer function syntax, not reparsed copies. */
-	declaration->return_syntax = declaration->type_syntax->return_syntax;
-	declaration->parameters = declaration->type_syntax->parameters;
-	declaration->parameter_count = declaration->type_syntax->parameter_count;
-	if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
-		preprocess_next(parser->preprocessor);
-		return &declaration->external;
-	}
-	body = parse_function_body(parser, declaration);
-	if (!body)
-		return NULL;
-	function = ast_new_function(parser->arena, declaration, body);
-	if (!function) {
-		allocation_error(parser, beginning.location);
-		return NULL;
-	}
-	return &function->external;
+	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */
@@ -2697,7 +2738,7 @@ struct ast_translation_unit *parse_translation_unit(struct preprocessor *preproc
 		declaration = parse_external_declaration(&parser, ast_max_external_declarations - count);
 		if (!declaration)
 			return NULL;
-		/* A typedef group contributes one external item per concrete alias. */
+		/* Each concrete typedef/function declarator contributes one external item. */
 		while (declaration) {
 			*tail = declaration;
 			tail = &declaration->next;

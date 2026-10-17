@@ -1068,3 +1068,27 @@ needed while explicit/implicit declarations have identical external semantics;
 future linkage work must separately design provenance and visibility. Existing
 register-void, scalar inference, qualifier/VM/aggregate and resource restrictions
 remain. Not full C23 conformance.
+
+## M15d2 file-scope function prototype lists (6.7; 6.7.6.3; 6.9)
+
+M15d2 supports file-scope function declaration lists with one shared specifier
+base and distinct concrete declarators, including extern, builtin/typedef bases,
+query/alias-derived function prototypes, callbacks and pointer-returning functions.
+Read m15-function-declaration-lists.md. A private external-declarator tail counts
+and links each concrete name once, leaves the common base immutable, and keeps
+per-function parameter scopes separate. Each earlier function is registered by
+sema before later parameter/type queries, preserving source-order capture. Only
+a sole direct function declarator introduces a body; list members are prototypes.
+Existing single alias/query body/initializer diagnostics remain unchanged.
+No public AST/semantic/type/QBE interface changes or runtime prototype storage.
+
+Only function prototypes form ordinary comma lists. No global objects/tentative
+definitions, mixed object/function lists, function bodies in lists, alias/query-
+derived function bodies, block function declarations, static/internal linkage,
+inline/thread storage or inferred extern objects. Existing register-void,
+qualifier/VM/aggregate/inference/resource restrictions remain. Shared bases are
+immutable; no token vector/replay or second semantic/cache owner. Not full C23.
+
+Clause 6.7.6.3p4 removes top-level return qualifiers in C23 function typing; exact
+native diagnostic gaps are separate from original-source agreements. See the
+ledger for shared-cache/scope/ABI/resource evidence and independent CI status.

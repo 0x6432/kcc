@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 explicit extern file-scope functions implemented; other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -2996,3 +2996,74 @@ remain. Not full C23 conformance.
 M15c1 exact-commit CI run 39009008993 is pending; no remote pass claimed.
 New M15d1 exact-commit CI is pending until independently checked after push.
 Local validation never implies a remote pass.
+
+## M15d2 shared-specifier function declaration lists
+
+Design recorded before implementation against validated/pushed 0b5fcb4.
+
+M15d2 supports file-scope function declaration lists with one shared specifier
+base and distinct concrete declarators, including extern, builtin/typedef bases,
+query/alias-derived function prototypes, callbacks and pointer-returning functions.
+Read m15-function-declaration-lists.md. A private external-declarator tail counts
+and links each concrete name once, leaves the common base immutable, and keeps
+per-function parameter scopes separate. Each earlier function is registered by
+sema before later parameter/type queries, preserving source-order capture. Only
+a sole direct function declarator introduces a body; list members are prototypes.
+Existing single alias/query body/initializer diagnostics remain unchanged.
+No public AST/semantic/type/QBE interface changes or runtime prototype storage.
+
+Full make test passed with GCC 11.5/GCC 14.2.1/Clang 18.1.8 native comparison
+hosts; compiler/normal C11 helpers were built serially with GCC 11 before parallel
+runs. Full QBE 1.2 make test-codegen passed with both modern native hosts. GCC 11
+and Clang 15 ASan/UBSan lex/raw-pp/sema plus 26 targeted suites passed; list,
+extern, register-parameter, inferred-typedef, register-auto, auto and binding
+suites also passed with Clang 18 as native oracle. Frozen 384-file primary and
+isolated source/test/Makefile manifests matched before/after. Bounded sanitized
+compile-only fuzz: 13,575 lexer / 42,790 pipeline inputs, 26 seconds each.
+No invalid curated or generated C executed. Logs/manifests /data/tools/m15d2-*,
+isolated trees /data/validation-m15d2/{gcc,clang}. Prior 0b5fcb4 sanitized compiler
+and frozen current compiler have identical return codes/stdout/stderr on all 154
+old compile corpus files (122 accepted / 32 rejected), excluding the new list seed.
+
+Four-host focused list suite: 43 baseline + 8 C23-keyword unchanged originals.
+GCC 14 agrees on 51 and Clang 18 on 46 with five exact top-level return-qualifier
+gaps under N3096 6.7.6.3p4. GCC 11 agrees on 43; Clang 15 on 38 with those same
+five gaps, plus independently probed absence of eight C23-keyword originals.
+Modern hosts reject 12 constraints; legacy hosts reject nine applicable ones.
+Exact qualifier-gap classification requires membership in the five original
+sources, status 1 and the complete error/note sequence for f and g; wrong sources,
+exit codes/signals and extra warning/note/fatal/duplicate records are negative
+controls. Original programs are never rewritten to fake native agreement. Seven
+subset probes compile only; no required native rejection claim for valid but
+unsupported objects/local extern/alias bodies/static/inferred extern forms.
+
+All four hosts pass 24 both-direction mixed-width/full-value primitive ABI
+arrangements across six registers/two stack arguments plus two row/callback
+arrangements. AST asserts 13 concrete external nodes in exact order, one common
+return specifier base with separate derived graphs/parameter syntax, pointer
+return wrapping the same base, shared alias/query syntax caches with distinct
+symbols, restored outer typedef in sibling parameter lists, later query capture
+of the earlier function's exact symbol, own register definition spill and no
+prototype runtime storage. Existing extern composite-bound/cache AST checks stay.
+Plain/extern/alias/query prototype-only IL is empty, one definition exports once,
+and unsupported list members emit no partial IL.
+
+Exact 512/513 names in ONE list and 511/512 combined with one prior declaration,
+256/257 unique symbols versus 512 compatible repeated names, 128/129 parameters,
+256/257 locals including 128 spills, 1 MiB storage, 4096 items, shared 64 declarator
+nesting and 128 expanded-type limits pass; generated cases compile only. Removed
+only two obsolete list refusals with replacement positive coverage: extern subset
+12 -> 11 and queried-function subset 13 -> 12. All affected extern/query/typedef-
+foundation/typedef-placement/register-parameter suites passed on all four hosts;
+other native gap classifications remain separate.
+
+Only function prototypes form ordinary comma lists. No global objects/tentative
+definitions, mixed object/function lists, function bodies in lists, alias/query-
+derived function bodies, block function declarations, static/internal linkage,
+inline/thread storage or inferred extern objects. Existing register-void,
+qualifier/VM/aggregate/inference/resource restrictions remain. Shared bases are
+immutable; no token vector/replay or second semantic/cache owner. Not full C23.
+
+M15c1 exact-commit CI run 39009008993 and M15d1 run 39010665350 both completed
+successfully with all three jobs green. New M15d2 exact-commit CI is pending until
+checked after push; local passes never imply remote success.

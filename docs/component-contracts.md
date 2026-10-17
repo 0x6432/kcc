@@ -2046,3 +2046,24 @@ ordinary/register definition provenance. All supported functions have the same
 external linkage, so no new public flag, sema/type/backend interface or storage
 is introduced merely for explicit extern. QBE exports definitions exactly once;
 prototypes/aliases emit nothing. Future static/internal linkage is not implied.
+
+## M15d2 shared external specifiers and concrete prototype nodes
+
+parse_external_declarator_tail receives one already-scanned base and the remaining
+concrete external declaration budget. It checks that budget before each derived
+declarator, constructs an existing direct-function or unresolved alias/query
+external node, links source order and consumes only list comma/final semicolon.
+new_external_type_declaration validates an alias/query base and prototype delimiter
+without consuming it; body/initializer errors retain their previous diagnostic.
+Only a first sole direct declarator can continue into the existing function-body
+path. Later list members cannot contain definitions. Typedef list parsing remains
+separate and translation-unit counting walks both concrete list kinds once.
+
+One shared specifier cache is never rewritten; each derived function syntax owns
+its own parameter list and suffix scope. Sema registers each earlier concrete
+prototype before resolving later parameter queries, keeping exact captured symbol
+identity. Alias/query syntax may be shared, but declared functions get distinct
+symbols; compatible repeated names retain canonical composite types. Existing
+source unknown-bound/composite known-bound caches and per-definition register
+spills remain unchanged. No public AST, sema/type/backend changes, prototype
+storage or duplicate IL exports. Unsupported members prevent all partial IL.

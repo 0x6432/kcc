@@ -61,7 +61,6 @@ subset_errors = [
     ('int f(void); typeof(&f) p;','file-scope object declarations'),
     ('int f(void); typeof(f) *p;','file-scope object declarations'),
     ('typeof(int(void)) f { return 42; }',"query-derived external declarations require ';'"),
-    ('typeof(int(void)) f,g;',"query-derived external declarations require ';'"),
     ('typeof(int(void)) f=0;',"query-derived external declarations require ';'"),
     ('int f(void) { typeof(int(void)) g; return 0; }','block-scope function declarations'),
     ('const typeof(int(void)) f;','function type cannot be qualified'),
