@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15I3: Direct zero-addend pointer initializers name canonical objects/functions
+or stable string objects, using a distinct static address tag and ELF
+relocations. Null and integer initializers retain their own pure proofs and tags.
+Compatible pointer/ordinary void endpoints preserve origin type and qualifiers;
+void detours do not legalize incompatible reinterpretation. Pointer arithmetic,
+subscripts, conditionals, arbitrary reinterpretation and aggregate initializers
+remain deferred. Read `docs/m15-direct-address-initializers.md`.
+
 M15I2: Explicit pointer objects now accept proved null initializers: strict zero
 ICEs, `nullptr`, and semantically valid pointer/nullptr cast chains. A tagged
 static-data value keeps null separate from integer bits; existing definition

@@ -1,11 +1,10 @@
 # C23 coverage
 
-Current storage checkpoint: M15i2 adds explicit pointer definitions initialized
-by proved null constant expressions. M15i1 integer ICE definitions and M15h1–h2
+Current storage checkpoint: M15i3 adds direct zero-addend object/function/string
+address initializers; M15i2 supports proved null constant expressions. M15i1 integer ICE definitions and M15h1–h2
 internal tentative scalars/fixed arrays remain supported. Explicit-over-tentative
-ownership, immutable captures and internal/exported storage are shared. Symbolic
-addresses, pointer arithmetic/conditionals, nullptr_t targets, array/braced
-initializers and block storage remain absent. See m15-null-initializers.md,
+ownership, immutable captures and internal/exported storage are shared. Pointer arithmetic/conditionals, reinterpret casts, nullptr_t targets, array/braced
+initializers and block storage remain absent. See m15-direct-address-initializers.md, m15-null-initializers.md,
 m15-integer-initializers.md and m15-static-objects.md.
 This is still a subset, not ISO conformance.
 

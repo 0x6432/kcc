@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15I2 null-pointer initialized file-scope definitions. Read the latest entries together with README.md and
+Current milestone: M15I3 direct-address initialized file-scope definitions. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M15h1–h2 current storage scope
@@ -16,7 +16,10 @@ M15i1 additionally admits integer constant initializers for existing integer/boo
 file-scope objects, with exactly one explicit owner taking precedence over
 tentative storage. M15i2 extends explicit pointer targets to strict zero ICEs,
 nullptr and semantically checked pointer/nullptr cast chains, with tagged null
-storage. Broader arithmetic/address constants, pointer conditionals/arithmetic,
+storage. M15i3 additionally supports direct zero-addend addresses of canonical
+objects/functions and stable strings. Pointer conversions must preserve origin
+compatibility and qualifiers, including through void detours. Broader address
+constants, pointer conditionals/arithmetic and reinterpret casts,
 nullptr_t targets, array/braced initializers, static block objects, block extern, thread storage,
 VM/VLA, aggregates and new scalar kinds remain unsupported. Existing budgets
 remain unchanged. See m15-static-objects.md; chronological entries below describe

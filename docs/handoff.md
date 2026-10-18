@@ -2,6 +2,17 @@
 
 ## Current checkpoint
 
+M15i3 extends static pointer values to direct zero-addend object/function/string
+addresses. A distinct address tag stores stable canonical base identity, not a
+numeric address or fake integer bits. Pure value/address-context queries retain
+immutable source pointer types and validate compatible/void endpoints without
+allowing void detours to hide reinterpretation or qualifier loss. Assignment
+conversion and final source query precede canonical publication. Read
+m15-direct-address-initializers.md; independent tests/review and full frozen
+local/remote gates must complete before a release-success claim.
+
+### Previous M15i2 checkpoint
+
 M15i2 adds null-pointer initialized definitions using a pure source-form proof
 before assignment conversion. Literal nullptr, strict zero ICEs and semantically
 valid pointer/nullptr cast chains are admitted. Integer/bool conversions are
