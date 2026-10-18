@@ -592,6 +592,7 @@ struct ast_local_declaration {
 	struct token name;
 	struct ast_expression *initializer;
 	bool is_register;
+	bool is_auto; /* Written auto; explicit auto still requires an object. */
 	bool is_extern;
 	bool is_static;
 	bool is_inline;

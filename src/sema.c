@@ -1642,6 +1642,10 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 		diagnostic_error(sema->diagnostics, local->name.location, "inline requires a function declaration");
 		return false;
 	}
+	if (local->is_auto && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location, "auto storage requires an object type");
+		return false;
+	}
 	if (local->is_extern || local->is_static || type->kind == type_kind_function)
 		return sema_block_storage(sema, local, type);
 	if (!type_is_complete_object(type)) {

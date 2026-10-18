@@ -2216,6 +2216,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		node->type_syntax = type_syntax;
 		node->is_inline = head.inline_keyword.kind == token_inline;
 		node->is_register = head.keyword.kind == token_register;
+		node->is_auto = head.auto_keyword.kind == token_auto;
 		node->is_extern = head.keyword.kind == token_extern;
 		node->is_static = head.keyword.kind == token_static;
 		node->is_thread_local = head.thread_keyword.kind == token_thread_local;
