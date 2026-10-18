@@ -22,6 +22,11 @@ qbe = os.environ.get('QBE')
 CASES = json.loads(r'''
 [
   {
+    "origin": "test_static_arrays.py",
+    "text": "int main(void) { static int items[3]; return 0; }",
+    "exit": 0
+  },
+  {
     "origin": "test_function_declarators.py",
     "text": "int f(void) { int g(int); return 0; }",
     "exit": null

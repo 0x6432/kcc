@@ -101,7 +101,6 @@ acceptance_only = [
 subset_refusals = [
     'static int items[3]={1,2,3};',
     'static int items[3]={};',
-    'int main(void) { static int items[3]; return 0; }',
 ]
 
 
