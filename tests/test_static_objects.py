@@ -148,6 +148,14 @@ subset_errors = [
 ]
 
 
+parser_errors = [
+    'static int cell,;', 'static int cell,,other;', 'static int cell',
+    'static int cell f(void);', 'static int cell(void),other(void) { return 42; }',
+    'static int cell,fn(void) { return 42; }', 'static int (*cell)(int;',
+    'static int cell; int main(void) { return (static int)0; }',
+]
+
+
 def records(text):
     return re.findall(r'(fatal error|error|warning|note): ([^\n]+)',
                       text.replace('‘', "'").replace('’', "'"))
@@ -279,7 +287,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
             result = invoke([host, '-std=c2x', '-pedantic-errors', '-fno-common', '-c', native, '-o', native_obj])
             assert result.returncode == 1, (text, result.stderr)
             native_constraints += 1
-    for text in ub_refusals+subset_errors:
+    for text in ub_refusals+subset_errors+parser_errors:
         compile_source(text, False)
 
     # Same-named private datum in TWO TUs, plus a public datum with that same
@@ -349,6 +357,42 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
                 link_run([obj, peer_obj])
                 abi_runs += 1
 
+    # Native companion checks actual address alignment (not just IL spelling)
+    # and installs a callback through an exported slot before the first call.
+    alignment_owner = (
+        'extern int aligned(const void *,unsigned long); '
+        'static char c; static short s; static int i; static long l; '
+        'static int *p; static int (*fp)(int); static const long frozen; '
+        'int main(void) { return aligned(&c,_Alignof(char)) && '
+        'aligned(&s,_Alignof(short)) && aligned(&i,_Alignof(int)) && '
+        'aligned(&l,_Alignof(long)) && aligned(&p,_Alignof(int *)) && '
+        'aligned(&fp,_Alignof(int (*)(int))) && aligned(&frozen,_Alignof(long))?42:1; }')
+    alignment_peer = ('int aligned(const void *p,unsigned long alignment) { '
+                      'return (unsigned long)p%alignment==0; }')
+    callback_owner = ('static int (*cell)(int); int (**slot(void))(int) { return &cell; } '
+                      'int apply(int x) { return cell(x); }')
+    callback_peer = ('int (**slot(void))(int); int apply(int); int plus(int x) { return x+2; } '
+                     'int main(void) { if(*slot()) return 1; *slot()=plus; '
+                     'int result=apply(40); *slot()=0; return result; }')
+    extra_pairs = [(alignment_owner, alignment_peer, ('c', 's', 'i', 'l', 'p', 'fp', 'frozen')),
+                   (callback_owner, callback_peer, ('cell',)),
+                   (callback_peer, callback_owner, ())]
+    extra_runs = 0
+    for text, peer_text, owned_names in extra_pairs:
+        compile_source(text)
+        peer.write_text(peer_text+'\n')
+        native_compile(peer, peer_obj)
+        native.write_text(text+'\n')
+        native_compile(native, native_obj)
+        private_storage(native_obj, owned_names)
+        link_run([native_obj, peer_obj])
+        if qbe:
+            result = invoke([host, '-c', assembly, '-o', obj])
+            assert result.returncode == 0, result.stderr
+            private_storage(obj, owned_names)
+            link_run([obj, peer_obj])
+            extra_runs += 1
+
     # Query-only internal function must never become a missing definition/use.
     emitted = compile_source('static int seed(int); static typeof(&seed) cell; '
                              'extern int absent[3]; int query(void) { return sizeof cell+sizeof absent; }')
@@ -393,7 +437,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         compile_source(f'static int cell; int f(void) {{ char a[{amount}]; return cell; }}',
                        amount == 1048576, 'storage limit')
     for depth in [64, 65]:
-        compile_source('static int '+'*'*depth+'cell;', depth == 64, 'nesting limit (64)')
+        compile_source('static int '+'*'*depth+'cell;', depth == 64, 'depth limit (64)')
     source.write_text('static int cell;\n')
     with open('/dev/full', 'w') as full:
         result = subprocess.run([str(compiler), str(source)], stdout=full,
@@ -403,7 +447,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
 print(f'Static scalar objects passed: {len(programs)} defined originals, {native_programs} unchanged native agreements, '
       f'{gaps} exact keyword-gated originals, {len(layouts)} exact zero layouts, '
       f'{len(constraints)+len(c23_constraints)} constraints ({native_constraints} native), '
-      f'{len(ub_refusals)} compile-only UB refusals, {len(subset_errors)} subset refusals; '
-      f'2 native multi-TU and 24 native mixed-stack ABI pairs; budgets/no-extra-slots/output failure; '
+      f'{len(ub_refusals)} compile-only UB refusals, {len(subset_errors)} subset refusals, {len(parser_errors)} parser refusals; '
+      f'2 native multi-TU, 24 native mixed-stack ABI and 3 native alignment/callback pairs; budgets/no-extra-slots/output failure; '
       f'{host}; keywords {sorted(supported)}'
-      + (f'; QBE {runtime_programs} originals/{paired_runs} multi-TU/{abi_runs} mixed-stack ABI runs and nm local binding' if qbe else '; QBE not requested'))
+      + (f'; QBE {runtime_programs} originals/{paired_runs} multi-TU/{abi_runs} mixed-stack ABI/{extra_runs} alignment-callback runs and nm local binding' if qbe else '; QBE not requested'))

@@ -6329,7 +6329,7 @@ static void test_static_scalar_object_tree(void)
 		external_object_declaration, external_object_declaration, external_function_definition,
 		external_function_definition, external_function_definition, external_type_declaration,
 		external_type_declaration, external_typedef_declaration, external_type_declaration,
-		external_type_declaration,
+		external_object_declaration,
 	};
 	struct source source;
 	struct arena arena = { 0 };
@@ -6361,12 +6361,15 @@ static void test_static_scalar_object_tree(void)
 	for (external = unit->declarations; external; external = external->next) {
 		assert(count < sizeof(nodes) / sizeof(nodes[0]));
 		nodes[count] = external;
+		if (external->kind != kinds[count])
+			fprintf(stderr, "static scalar node %zu: kind %d, expected %d\n",
+				count, (int)external->kind, (int)kinds[count]);
 		assert(external->kind == kinds[count]);
 		if (external->kind == external_object_declaration) {
 			concrete = (struct ast_external_object_declaration *)external;
 			assert(!concrete->type && !concrete->symbol);
 			assert(concrete->is_static == (count == 0 || count == 2 || count == 8 ||
-				count == 12 || count == 16));
+				count == 12 || count == 16 || count == 27));
 			assert(concrete->is_extern == (count == 1 || count == 10 || count == 15 || count == 19));
 		} else if (external->kind == external_type_declaration) {
 			unresolved = (struct ast_external_type_declaration *)external;
@@ -6480,11 +6483,11 @@ static void test_static_scalar_object_tree(void)
 	unresolved = (struct ast_external_type_declaration *)nodes[26];
 	assert(unresolved->symbol && !unresolved->object_symbol && unresolved->symbol->is_internal);
 	assert(!unresolved->symbol->definition && !unresolved->symbol->is_referenced);
-	unresolved = (struct ast_external_type_declaration *)nodes[27];
-	assert(!unresolved->symbol && unresolved->object_symbol->is_internal);
-	assert(unresolved->object_symbol->tentative_definition == nodes[27]);
-	assert(unresolved->type->kind == type_kind_pointer);
-	assert(((const struct pointer_type *)unresolved->type)->referent->kind == type_kind_function);
+	concrete = (struct ast_external_object_declaration *)nodes[27];
+	assert(concrete->symbol->is_internal);
+	assert(concrete->symbol->tentative_definition == nodes[27]);
+	assert(concrete->type->kind == type_kind_pointer);
+	assert(((const struct pointer_type *)concrete->type)->referent->kind == type_kind_function);
 	/* TU finalization must not add synthetic declarations to the source chain. */
 	count = 0;
 	for (external = unit->declarations; external; external = external->next) {
