@@ -59,6 +59,16 @@ static struct ast_external_object_declaration *object(struct fixture *f, const c
  assert(!"missing object"); return NULL;
 }
 
+static const struct type *declared_type(struct fixture *f, const char *name)
+{
+ for (struct ast_external_declaration *d=f->unit->declarations;d;d=d->next)
+  if (d->kind==external_type_declaration) {
+   struct ast_external_type_declaration *o=(struct ast_external_type_declaration *)d;
+   if (named(&o->name,name)) return o->type;
+  }
+ return object(f,name,0)->type;
+}
+
 static const struct type *referent(const struct type *t)
 {
  assert(t && t->kind == type_kind_pointer);
@@ -90,7 +100,7 @@ static void canonical_identity(void)
  assert(identity && identity->complete && identity->size==16 && identity->alignment==8);
  assert(type_record_definition(early)==identity);
  assert(type_record_definition(q)==identity && (q->qualifiers&type_qualifier_const));
- assert(type_record_definition(referent(object(&f,"alias",0)->type))==identity);
+ assert(type_record_definition(referent(declared_type(&f,"alias")))==identity);
  assert(type_record_definition(referent(object(&f,"late",0)->type))==identity);
  assert(type_compatible(r,early));
  assert(!type_compatible(r,object(&f,"other",0)->type));
@@ -144,6 +154,42 @@ static void layout_transaction(void)
  before=*bad->definition;
  assert(!type_record_layout(bad->definition));
  assert(memcmp(&before,bad->definition,sizeof before)==0 && giant.offset==123);
+ arena_destroy(&a);
+}
+
+static void layout_boundaries(void)
+{
+ struct arena a={0};
+ struct record_type *u=type_new_record(&a,true);
+ struct array_type *bytes=type_new_array(&a,&type_char,9);
+ struct record_member first={0}, second={0};
+ assert(u && bytes);
+ first.type=&type_long; first.next=&second; second.type=&bytes->type;
+ u->definition->members=&first; u->definition->member_count=2;
+ assert(type_record_layout(u->definition));
+ assert(first.offset==0 && second.offset==0 && u->definition->size==16 && u->definition->alignment==8);
+ struct record_type *r=type_new_record(&a,false);
+ struct array_type *elements=type_new_array(&a,&u->type,3);
+ struct record_member nested={0}, tail={0};
+ nested.type=&elements->type; nested.next=&tail; tail.type=&type_char;
+ r->definition->members=&nested; r->definition->member_count=2;
+ assert(type_record_layout(r->definition));
+ assert(nested.offset==0 && tail.offset==48 && r->definition->size==56);
+ struct record_type *maximum=type_new_record(&a,false);
+ struct array_type *limit=type_new_array(&a,&type_char,type_max_record_size);
+ struct record_member full={0}; full.type=&limit->type;
+ maximum->definition->members=&full;
+ assert(type_record_layout(maximum->definition));
+ assert(maximum->definition->size==type_max_record_size);
+ struct record_type *excess=type_new_record(&a,false);
+ struct record_member too_full={0}, one_more={0};
+ too_full.type=&limit->type; too_full.offset=91; too_full.next=&one_more;
+ one_more.type=&type_char; one_more.offset=92;
+ excess->definition->members=&too_full;
+ struct record_definition before=*excess->definition;
+ assert(!type_record_layout(excess->definition));
+ assert(memcmp(&before,excess->definition,sizeof before)==0);
+ assert(too_full.offset==91 && one_more.offset==92);
  arena_destroy(&a);
 }
 
@@ -267,7 +313,7 @@ static void member_static_assertions(void)
 
 int main(void)
 {
- canonical_identity(); layout_transaction(); incomplete_at_sourcepoint(); failed_publication();
+ canonical_identity(); layout_transaction(); layout_boundaries(); incomplete_at_sourcepoint(); failed_publication();
  tag_scopes(); member_captures(); member_static_assertions();
  puts("Record AST canonical identity, layout transactions, sourcepoint guards and publication passed");
  return 0;
