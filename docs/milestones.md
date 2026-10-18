@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions and M15f1 extern scalar-object and M15f2 extern array declarations and M15g1 tentative scalar and M15g2 tentative array definitions implemented; other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15h1 internal tentative scalars and M15h2 complete internal tentative arrays; M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions and M15f1 extern scalar-object and M15f2 extern array declarations and M15g1 tentative scalar and M15g2 tentative array definitions implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -3500,3 +3500,19 @@ objects, 256 functions, 512 concrete declarations and local-storage/depth/query
 budgets remain separate. Maximal/invalid/resource/fuzz programs compile only.
 Initialized definitions need a separate precedence/duplicate-ownership design;
 static objects need distinct canonical linkage work.
+
+## M15h1–h2 internal-linkage tentative objects
+
+File-scope static tentative scalars and complete fixed arrays reuse canonical
+symbols, first storage anchors and existing QBE data lowering. Extern inherits
+prior internal linkage; unlike functions, unadorned objects do not. Mixed
+linkage is conservatively refused. Source-point composites permit omitted-bound
+redeclarations only when a prior visible bound is complete; TU-end completion
+never repairs an initially incomplete internal tentative declaration.
+
+Independent scalar tests and parent fixed-array/AST tests cover canonical
+identity, immutable snapshots, local binding, zero layout, private same-name TUs,
+both-direction ABI, constraints, unchanged budgets and output failure. See
+m15-static-objects.md for scope and the required frozen validation/remote CI gates.
+Explicit initializers, block storage and other deferred language areas remain
+separate increments; M15 as a whole remains in progress.

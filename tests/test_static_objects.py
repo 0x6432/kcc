@@ -129,16 +129,12 @@ ub_refusals = [
     'static int f(void),cell; int f(void),cell;',
     'static int (*cell)(int); int (*cell)(int);',
 ]
-# Unsupported/legal forms are subset-only checks. Keep all array and block
-# storage refusals through this scalar checkpoint, including typedef/query roots.
+# Unsupported forms are subset-only checks. Fixed-array acceptance and the
+# incomplete-internal-array constraint are covered by test_static_arrays.py.
 subset_errors = [
     'static int cell=0;', 'static int cell=42;', 'static int cell={};',
     'static const int cell=0;', 'static int *cell=0;', 'static int (*cell)(int)=0;',
     'typedef int T; static T cell=0;', 'static typeof(int) cell=0;',
-    'static int cell[3];', 'static int cell[];', 'static int cell[2][3];',
-    'typedef int A[3]; static A cell;', 'static typeof(int[3]) cell;',
-    'extern int cell[3]; static int cell[3];',
-    'static int cell,items[3];', 'static int items[3],cell;',
     'int main(void) { static int cell; return 0; }',
     'int main(void) { static int cell=0; return 0; }',
     'int main(void) { static int cell[3]; return 0; }',
@@ -240,8 +236,39 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
     source, native, il, assembly, obj, native_obj, peer, peer_obj, exe = [directory/name for name in
         ['k.c', 'native.c', 'p.ssa', 'p.s', 'p.o', 'native.o', 'peer.c', 'peer.o', 'p']]
 
-    def invoke(args):
-        return subprocess.run([str(x) for x in args], capture_output=True, text=True, timeout=20)
+    def invoke(args, runner=subprocess.run):
+        arguments = [str(x) for x in args]
+        output = Path(arguments[arguments.index('-o') + 1]) if '-o' in arguments else None
+        if output is not None:
+            output.unlink(missing_ok=True)
+        result = runner(arguments, capture_output=True, text=True, timeout=20)
+        if output is not None and result.returncode == 0:
+            assert (not result.stdout and not result.stderr and output.is_file()
+                    and output.stat().st_size > 0), (arguments, result)
+        return result
+
+    # Every output producer (including QBE, assembler and linker, not only the
+    # native source compiler) must establish a fresh artifact. Never permit
+    # status-zero/no-output shims to reuse a previous object's evidence.
+    freshness_control = directory / 'freshness-control.o'
+    for written, out, err in [(None, '', ''), (b'', '', ''),
+                              (b'fresh', 'unexpected stdout', ''),
+                              (b'fresh', '', 'unexpected stderr')]:
+        freshness_control.write_bytes(b'STALE-OBJECT')
+
+        def fake_producer(arguments, **kwargs):
+            assert not freshness_control.exists()
+            if written is not None:
+                freshness_control.write_bytes(written)
+            return subprocess.CompletedProcess(arguments, 0, out, err)
+
+        try:
+            invoke(['review-output-producer', '-o', freshness_control], runner=fake_producer)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('invalid output producer accepted')
+    freshness_control.unlink(missing_ok=True)
 
     def compile_source(text, success=True, message='error:'):
         source.write_text(text+'\n')

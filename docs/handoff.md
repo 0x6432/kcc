@@ -2,6 +2,33 @@
 
 ## Current checkpoint
 
+M15h1 adds file-scope static tentative scalar storage; M15h2 adds complete fixed
+static arrays. Read m15-static-objects.md. Written static/extern provenance is
+separate from canonical internal linkage and from immutable type captures.
+Existing first-tentative anchors emit one local aligned zero datum with no new
+runtime slots or backend operations.
+
+Object linkage deliberately differs from function inheritance. Extern after
+static preserves internal linkage; an unadorned object after static mixes
+linkages and is refused before canonical mutation. Complete prior composites
+permit later omitted-bound static array redeclarations. An initially incomplete
+internal tentative array is a source-point constraint, never a fallback-[1]
+candidate; incomplete pointer referents remain unchanged.
+
+Focused independent scalar and parent array tests have passed locally with
+GCC11/QBE1.2. The full frozen integration matrix and new remote CI must be
+checked independently; no pending run is a success claim. Neighbor regressions,
+AST/source captures, private same-name TUs, both-direction ABI, local storage
+layout, resource boundaries and output failures remain required gates.
+
+Explicit initializers, block storage, thread/inline, VM/VLA, aggregates and
+additional scalar kinds remain deferred. Do not weaken native diagnostic
+classifiers or count unsupported-host C23 syntax as agreement. The next bounded
+increment is checked integer-constant scalar initialization with a separate
+full-definition/duplicate-ownership design, not symbolic or runtime initialization.
+
+## Previous checkpoint: M15g2
+
 M15g2 extends tentative file-scope ownership to existing fixed arrays and arrays
 with unknown OUTER bounds. After the entire ordered TU and internal-function
 checks, a private semantic pass replaces only anchored, still-unknown canonical

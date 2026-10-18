@@ -6,6 +6,19 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15H2: Complete fixed file-scope `static` arrays now reuse canonical internal
+object linkage and one aligned zero-storage anchor. Visible prior composites
+allow a later omitted bound; an initially incomplete internal tentative array is
+rejected immediately, never repaired at TU end. Rows, pointer/callback elements,
+immutable captures and existing budgets remain intact. Read
+`docs/m15-static-objects.md` for scope and validation requirements.
+
+M15H1: File-scope static tentative scalars now emit local, non-exported data.
+`extern` inherits prior internal object linkage; an unadorned object declaration
+does not. Mixed-linkage chains are conservatively refused. Initializers and
+block storage remain separate work; this is still an incomplete C23 compiler.
+
+
 M15G2: Tentative fixed/unknown-outer arrays now own zero-initialized storage.
 TU-end completion creates one element only for still-unknown owned canonical
 arrays; known composites and immutable source captures remain distinct. Existing
@@ -454,8 +467,8 @@ int main(void) { return DESCRIBE(a + b); }
 ```
 
 This exits 42 through QBE: the generated string token is discarded before C
-language conversion. Using it directly as a C expression still diagnoses that
-string literals are unsupported. The test-only `build/pp_oracle --pp file.c`
+language conversion. The string token may also be used directly as an ordinary string-array
+expression in the current compiler. The test-only `build/pp_oracle --pp file.c`
 prints expanded preprocessing token kinds and spellings; `--pp-tokens` on the
 compiler remains the unexpanded raw inspection mode.
 

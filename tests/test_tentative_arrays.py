@@ -218,6 +218,7 @@ pair('pure extern unknown stays declaration-only beside owned scalar',
 # End-of-TU layout completion must not retroactively legalize earlier sizeof,
 # arithmetic on a pointer-to-incomplete-array, or captured unknown aliases.
 constraints = [
+    ('static int items[];', 'internal tentative object requires a complete type'),
     ('int items[]; int f(void) { return sizeof items; }', 'complete object type'),
     ('int items[]; int f(void) { return sizeof items; } int items[3];', 'complete object type'),
     ('int items[]; int f(void) { return &items+1==&items; }', 'complete object referent'),
@@ -258,8 +259,6 @@ subset_errors = [
     ('int items[]={40,2};', 'file-scope object initializers'),
     ('extern int items[3]={0,0,0};', 'extern object definitions'),
     ('typedef int Row[3]; Row items={0,0,0};', "query-derived external declarations require ';'"),
-    ('static int items[3];', 'file-scope object declarations'),
-    ('static int items[];', 'file-scope object declarations'),
     ('int f(void) { extern int items[]; return 0; }', 'block-scope extern declarations'),
     ('thread_local int items[3];', 'expected integer type specifier'),
     ('int main[1];', 'tentative main object is not supported on the Linux target'),

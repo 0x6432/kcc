@@ -2236,6 +2236,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	struct ast_external_declaration *tentative_definition, bool is_static, bool is_extern)
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
+	const struct type *composite = type;
 
 	if (tentative_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
 		name.spelling_location.offset, "main", 4) == 0) {
@@ -2246,11 +2247,6 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	if (!type_is_scalar(type) && type->kind != type_kind_array) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"only scalar or array file-scope objects are supported yet");
-		return NULL;
-	}
-	if (is_static && !type_is_scalar(type)) {
-		diagnostic_error(sema->diagnostics, name.location,
-			"file-scope object declarations of static arrays are not supported yet");
 		return NULL;
 	}
 	/* C23 6.2.2p4-5: only extern inherits prior object linkage. Unlike
@@ -2269,8 +2265,6 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 		return NULL;
 	}
 	if (symbol) {
-		const struct type *composite;
-
 		if (!type_compatible(symbol->type, type)) {
 			diagnostic_error(sema->diagnostics, name.location,
 				"incompatible external object declaration");
@@ -2282,6 +2276,19 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 				"out of memory creating composite external object type");
 			return NULL;
 		}
+	}
+	/* C23 6.9.2p3 requires internal tentative objects to be complete NOW,
+	 * using the composite with visible PRIOR declarations (6.2.7p4).
+	 * A later declaration or TU-end fallback cannot repair this constraint.
+	 * Keep both canonical state and captured written types untouched on error.
+	 */
+	if (tentative_definition && (symbol ? symbol->is_internal : is_static) &&
+		!type_is_complete_object(composite)) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"internal tentative object requires a complete type at its declaration");
+		return NULL;
+	}
+	if (symbol) {
 		symbol->type = composite;
 		if (tentative_definition && !symbol->tentative_definition)
 			symbol->tentative_definition = tentative_definition;
@@ -2494,6 +2501,7 @@ static bool finalize_tentative_objects(struct sema *sema)
 		array = (const struct array_type *)symbol->type;
 		if (array->count)
 			continue;
+		assert(!symbol->is_internal);
 		if (!type_is_complete_object(array->element) ||
 			type_object_size(array->element) > ast_max_local_storage) {
 			diagnostic_error(sema->diagnostics, symbol->tentative_definition->location,
