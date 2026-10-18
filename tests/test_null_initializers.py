@@ -143,6 +143,19 @@ def fixtures():
                 {'cell': (8, 0, False)},
                 'int *read(void); int check(void) { return read()==0?42:1; }'),
     ])
+    # Exact former subset original: &* cancels without dereferencing null.
+    cases.append(Fixture('promoted null address indirection', 'int *cell=&*(int *)0;',
+                         {'cell': (8, 0, True)},
+                         'extern int *cell; int main(void) { return cell==0?42:1; }'))
+    # Exact former subset originals; query-derived nullptr scalar storage is
+    # now supported by the storage milestone as well as pointer null slots.
+    for name, owner in [
+        ('promoted query nullptr value', 'typeof(nullptr) cell=nullptr;'),
+        ('promoted query nullptr zero', 'typeof(nullptr) cell=0;'),
+    ]:
+        cases.append(Fixture(name, owner, {'cell': (8, 0, True)},
+            'extern typeof(nullptr) cell; int main(void) { return cell==nullptr?42:1; }',
+            ('typeof', 'nullptr')))
     return cases
 
 
@@ -175,7 +188,6 @@ DEFERRED = [
     'typeof(nullptr) other; int *cell=other;',
     'int *cell=cell;',
     'void *cell=cell;',
-    'int *cell=&*(int *)0;',
     'int *cell=(int *)1;',
     'int *cell=(int *)(_Bool)nullptr;',
     'int *cell=(int *)(long)(void *)0;',
@@ -183,8 +195,6 @@ DEFERRED = [
     'typeof(nullptr) other; int *cell=(int *)(typeof(nullptr))other;',
     'typeof(nullptr) get(void); int *cell=(int *)(typeof(nullptr))get();',
     'int *get(void); int *cell=get();',
-    'typeof(nullptr) cell=nullptr;',  # Target deliberately deferred.
-    'typeof(nullptr) cell=0;',
     '_Bool cell=(int *)0;',  # Pointer support must not broaden integer ICEs.
     'long cell=(long)(int *)0;',
     'int *main=0;',
@@ -332,7 +342,16 @@ def main():
                 no_slot_relocations(obj, f.objects)
                 objects = [obj]
                 if f.companion:
-                    producer([HOST, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0',
+                    # These unchanged new companions themselves name the C23
+                    # nullptr type. Choose a proven-capable compiler, never
+                    # rewrite that type as an ABI-incompatible extern integer.
+                    companion_cc = HOST
+                    if f.name in ('promoted query nullptr value', 'promoted query nullptr zero'):
+                        companion_cc = next((cc for cc in compilers if set(f.features) <= supported[cc]), None)
+                        if companion_cc is None:
+                            print(f'{f.name}: QBE storage checked; runtime NOT counted (no C23 companion compiler)')
+                            continue
+                    producer([companion_cc, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0',
                               '-c', companion, '-o', other], other)
                     assert not (set(f.objects) & elf_objects(other).keys())
                     objects.append(other)

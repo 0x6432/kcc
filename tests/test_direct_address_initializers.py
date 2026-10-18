@@ -304,25 +304,19 @@ def check_il(text, case):
 
 # Valid C but beyond direct zero-addend forms, plus deliberately undefined null
 # arithmetic. None run and native acceptance is never scored as proof.
+# Seven exact originals promoted to test_address_offsets.py positive fixtures.
 DEFERRED = [
-    'int target; int *cell=&target+0;',
-    'int target[3]; int *cell=target+1;',
-    'int target[3]; int *cell=&target[0];',
-    'int target; int *cell=&*(&target);',
     'int target; int *cell=1?&target:&target;',
     'int target; int *cell=(0,&target);',
     'int target; int *base=&target; int *cell=base;',
     'int target; int *const base=&target; int *cell=base;',
     'int target; void *cell=cell;',
-    'int target; char *cell=(char *)&target;',
     'int target; int *cell=(int *)(long)&target;',
     'int target; _Bool cell=&target;',
     'int target; long cell=(long)&target;',
     'int target(int); void *cell=(void *)target;',
-    'int target(int); long (*cell)(long)=(long (*)(long))target;',
     'char target; int *cell=(int *)(void *)&target;',
     'char target; int *cell=(void *)&target;',
-    'const int target; int *cell=(int *)(const void *)&target;',
     'int *cell=(int *)0+0;',
     'int target[3]; int *cell=(target+4)-1;',
 ]
@@ -536,6 +530,8 @@ def main():
                     message = 'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)'
                 elif text == 'int target; _Bool cell=&target;':
                     message = 'file-scope initializer must be an integer constant expression'
+                if text == 'int target[3]; int *cell=(target+4)-1;':
+                    message = 'static pointer offset is outside its captured object bounds'
                 reject(owner, 'error: '+message+'\n')
                 refused += 1
         print(f'Direct addresses: {len(cases)} unchanged originals; KCC {kcc_count}; '

@@ -374,7 +374,7 @@ int main(void)
 	check_alias_and_origin();
 	check_function_reference();
 	check_string_identity();
-	check_failed_existing("int *cell; int *cell=(int *)&cell;", false, true, false);
+	/* Aligned explicit cast original promoted to test_address_offset_ast.c. */
 	check_failed_existing("extern int *cell; int *cell=(int *)0+0;", false, false, false);
 	check_failed_existing("void *cell=&cell; void *cell=&cell;", true, false, false);
 	check_failed_existing("int (*cell)[]; int (*cell)[3]=cell;", false, true, true);
