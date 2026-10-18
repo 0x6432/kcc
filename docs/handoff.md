@@ -3,15 +3,20 @@
 ## Current checkpoint
 
 M15i1 adds file-scope integer/bool initialized definitions using checked ICEs.
-Read m15-integer-initializers.md for the selected subset and pending validation.
+Read m15-integer-initializers.md for the selected subset and validation boundary.
 Canonical `definition` supersedes `tentative_definition` for emission without
 erasing the first tentative history. Zero is a real explicit definition too.
 Self sizeof uses normal declaration-point visibility; check original arithmetic
 before target conversion. Failed initializer checking restores canonical object
 state, not every private semantic cache, and the driver suppresses codegen.
 
-Independent source review and initial focused runtime/semantic probes have
-passed; full frozen integration and exact-commit remote CI are not yet claimed.
+Independent review and the frozen full normal/QBE and ASan/UBSan normal/QBE
+suites passed locally with GCC11/QBE1.2. The unchanged-source focused matrix
+passed 172 KCC/QBE/ELF/runtime cases, 156 GCC agreements plus 16 exact keyword
+gaps, and 172 Clang18 agreements. Twelve exact native constraints per host and
+68 KCC compile-only refusals/resources passed. Strict Clang18 source compilation,
+AST rollback checks, adversarial verifier controls and bounded sanitized
+libFuzzer runs also passed. Exact-commit remote CI remains pending until checked.
 Pointer/array/braced initializers, symbolic relocations, block storage and
 aggregate/ABI work remain deferred.
 

@@ -3517,7 +3517,7 @@ m15-static-objects.md for scope and the required frozen validation/remote CI gat
 Explicit initializers, block storage and other deferred language areas remain
 separate increments; M15 as a whole remains in progress.
 
-## M15i1 integer-constant file-scope definitions (integration)
+## M15i1 integer-constant file-scope definitions
 
 Existing integer/bool targets accept checked ICE initializers through direct,
 typedef and query-root declarations, with static/extern linkage and mixed lists.
@@ -3526,9 +3526,13 @@ extern-only declarations still allocate nothing. Self sizeof is visible after
 the declarator, original arithmetic is checked before conversion, and normalized
 target-width bits drive aligned QBE b/h/w/l data with no startup stores.
 
-Independent source review and focused semantic/runtime tests are underway.
-Frozen normal/backend/sanitizer suites and actual exact-commit remote CI remain
-required, not presumed. See m15-integer-initializers.md for object rollback,
+Independent source/test review and the frozen full normal/QBE and ASan/UBSan
+normal/QBE suites passed locally. Focused unchanged-source testing passed 172
+KCC/QBE/ELF/runtime cases, 156 GCC agreements plus 16 exact keyword gaps, and
+172 Clang18 agreements. Twelve exact native constraints per host, 68 KCC
+compile-only refusals/resources and adversarial verifier controls passed. Bounded
+sanitized libFuzzer runs completed without findings. Actual exact-commit remote
+CI remains required, not presumed. See m15-integer-initializers.md for object rollback,
 constraint-versus-UB taxonomy and explicitly deferred pointer/array/braced/
 aggregate/runtime initialization. M15 and the general M17 initializer roadmap
 remain incomplete.

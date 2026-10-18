@@ -65,10 +65,23 @@ parse/sema failure. No invalid, maximal-resource or fuzzed program is executed.
 
 ## Validation status and remaining work
 
-Implementation, independent AST/runtime/layout tests and standards review are
-being integrated. A focused pass is not a full integration pass or remote CI
-success. Required gates are frozen full normal and QBE suites, sanitizer runs,
-independent review and exact-commit GCC/Clang/fuzz GitHub CI.
+Independent implementation/standards review and the frozen full normal and QBE
+suites passed locally, both unsanitized and ASan/UBSan-instrumented, using
+GCC11/QBE1.2. Source/test/Makefile manifests matched before and after validation.
+Strict Clang18 source compilation and independent AST rollback checks passed.
+
+The focused unchanged-source matrix passed 172 KCC/QBE/actual-ELF/runtime cases;
+GCC passed 156 native agreements with 16 exact keyword gaps (not agreements),
+and Clang18 passed all 172. Both hosts passed 12 exact per-original constraints.
+The 68 KCC compile-only refusals/resources and initialized resource boundaries
+passed. Full-stream per-original/per-fixture diagnostic gates and fresh-output
+producers passed adversarial controls, including independent reproductions of
+previous false-pass cases.
+
+Sanitized coverage-guided libFuzzer runs completed 18,714 lexer and 104,703
+compiler inputs without findings in bounded 31-second runs each. Generated
+programs were not executed. Exact-commit GCC/Clang/fuzz GitHub CI remains pending
+until the pushed commit is checked; local passes do not imply remote success.
 
 M15 and M17 remain incomplete. Relocatable pointer constants and aggregate
 initialization require distinct designs, not silent extension of this payload.

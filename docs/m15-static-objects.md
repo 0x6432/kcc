@@ -8,8 +8,10 @@ same canonical symbols and storage emission to complete fixed arrays, including
 rows and arrays of qualified, pointer and callback elements. No new scalar kind,
 backend operation, runtime local slot or startup initialization code is added.
 
-The compiler still rejects explicit object initializers, block-scope storage,
-thread storage, variably modified arrays and aggregates.
+At the M15h checkpoint the compiler rejected explicit object initializers;
+M15i1 now supports the integer ICE slice described in m15-integer-initializers.md.
+Block-scope storage, thread storage, variably modified arrays and aggregates
+remain deferred.
 
 ## Linkage and source-point requirements
 
