@@ -21,7 +21,7 @@ values = ['1', '-7', '-7', '255', '-1234', '65535', '-1234567', '4294967295U',
           '4294967296L', '18446744073709551615UL', '4611686018427387904LL',
           '18446744073709551615ULL']
 sizes = [1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 8, 8]
-# text, expected local storage names, required modern keywords
+# text, expected local storage names, required modern keywords, optional readonly names
 programs = []
 for typ, value in zip(integers, values):
     programs.append((f'static {typ} cell; extern {typ} cell; static {typ} cell; '
@@ -33,7 +33,7 @@ for typ, value in zip(integers, values):
 for index in range(5):
     specs = ['unsigned', 'long', 'long', 'const']
     specs.insert(index, 'static')
-    programs.append((' '.join(specs)+' cell; int main(void) { return cell==0?42:1; }', ('cell',), ()))
+    programs.append((' '.join(specs)+' cell; int main(void) { return cell==0?42:1; }', ('cell',), (), ('cell',)))
 programs += [
     ('static int cell,cell; extern int cell,cell; static int cell; '
      'int main(void) { return cell==0?42:1; }', ('cell',), ()),
@@ -42,9 +42,9 @@ programs += [
     ('static _Bool cell; int main(void) { if(cell || cell++!=0 || ++cell!=1) return 1; '
      'return cell?42:2; }', ('cell',), ()),
     ('static const int cell; extern const int cell; static const int cell; '
-     'int main(void) { const int *p=&cell; return *p==0 && p==&cell?42:1; }', ('cell',), ()),
+     'int main(void) { const int *p=&cell; return *p==0 && p==&cell?42:1; }', ('cell',), (), ('cell',)),
     ('static int *const cell; extern int *const cell; '
-     'int main(void) { return cell==0 && *(&cell)==0?42:1; }', ('cell',), ()),
+     'int main(void) { return cell==0 && *(&cell)==0?42:1; }', ('cell',), (), ('cell',)),
     ('static int *p; static void *vp; int main(void) { if(p || vp) return 1; '
      'int x=42; p=&x; vp=p; int result=p==vp?*p:1; p=0; vp=0; return result; }', ('p', 'vp'), ()),
     ('static int (*cell)[]; extern int (*cell)[3]; static int (*cell)[]; '
@@ -73,7 +73,7 @@ programs += [
     ('static int cell; static typeof(cell) cell; extern typeof(cell) cell; '
      'int main(void) { cell=42; return cell; }', ('cell',), ('typeof',)),
     ('static const long frozen; static typeof_unqual(frozen) cell; '
-     'int main(void) { if(frozen || cell) return 1; cell=42; return cell; }', ('frozen', 'cell'), ('typeof_unqual',)),
+     'int main(void) { if(frozen || cell) return 1; cell=42; return cell; }', ('frozen', 'cell'), ('typeof_unqual',), ('frozen',)),
     ('static bool cell; int main(void) { if(cell) return 1; cell=true; return cell?42:2; }', ('cell',), ('bool',)),
     ('static typeof(nullptr) cell; extern typeof(nullptr) cell; '
      'int main(void) { typeof(nullptr) *p=&cell; if(cell!=nullptr || *p!=nullptr) return 1; '
@@ -166,7 +166,7 @@ def records(text):
 probes = {'typeof': 'typeof(int) value;', 'typeof_unqual': 'typeof_unqual(int) value;',
           'nullptr': 'int *p=nullptr;', 'bool': 'bool value;'}
 
-def legacy_gap(feature, text, result):
+def legacy_gap(feature, text, result, source_path):
     expected = {
         'typeof': [[('error', "return type defaults to 'int' [-Wimplicit-int]"),
                     ('error', "expected declaration specifiers before 'value'"),
@@ -179,7 +179,60 @@ def legacy_gap(feature, text, result):
                   ('note', "'bool' is defined in header '<stdbool.h>'; did you forget to '#include <stdbool.h>'?")]],
     }
     expected['typeof_unqual'] = expected['typeof']
-    return text == probes[feature] and result.returncode == 1 and records(result.stderr) in expected[feature]
+    if (text != probes[feature] or result.returncode != 1 or result.stdout or
+            records(result.stderr) not in expected[feature]):
+        return False
+    # Account for EVERY stderr line, not just records harvested by a regex.
+    # Only known source/caret renderings of this exact one-line probe are legal.
+    normalized = result.stderr.replace('‘', "'").replace('’', "'")
+    location = re.escape(str(source_path)) + r':\d+(?::\d+)?: (?:error|note): [^\n]+'
+    seen = []
+    for line in normalized.splitlines():
+        if re.fullmatch(location, line):
+            seen.extend(records(line))
+        elif re.fullmatch(r'\s*\d+ \| ?' + re.escape(text), line):
+            pass
+        elif re.fullmatch(r'\s*\d+ \| ?', line):
+            pass  # EOF line after a probe which GCC parsed as a declaration.
+        elif re.fullmatch(r'[ \t]*\|[ ~^]*', line):
+            pass
+        elif line == text or re.fullmatch(r'[ ~^]+', line):
+            pass  # Older Clang's source/caret rendering without gutters.
+        elif feature == 'bool' and re.fullmatch(r' *\+\+\+ \|\+#include <stdbool.h>', line):
+            pass
+        elif line == str(source_path) + ": In function '" + feature + "':":
+            pass  # GCC's old implicit-int parse of the exact keyword probe.
+        else:
+            return False
+    return seen == records(normalized)
+
+
+def native_constraint(result, source_path):
+    """A failed compiler invocation is not by itself a native constraint oracle."""
+    if result.returncode != 1 or result.stdout:
+        return False
+    forbidden = (r'internal compiler error|please submit|bug report|stack dump|'
+                 r'segmentation fault|unable to execute|cannot execute|'
+                 r'unrecognized command.line option|unsupported option|'
+                 r'killed signal|error trying to exec|fatal error:|'
+                 r'(?:^|\n)(?:[^\n]*[/\\])?(?:cc1|collect2|cc|gcc|clang):')
+    if re.search(forbidden, result.stderr, re.I):
+        return False
+    # Require a genuine error attached to this unchanged original source, not
+    # a driver failure, note-only output, arbitrary status 1, or signal status.
+    return bool(re.search(r'^' + re.escape(str(source_path)) +
+                          r':\d+(?::\d+)?: error: [^\n]+', result.stderr, re.M))
+
+
+def storage_records(syms, exported, names, readonly=(), qbe_owned=False):
+    """Mutable native objects cannot be readonly; QBE zero data must be BSS."""
+    for name in names:
+        kinds = [kind for kind, symbol in syms if symbol == name]
+        permitted = ['b'] if qbe_owned else ['b', 'd'] + (['r'] if name in readonly else [])
+        if (len(kinds) != 1 or kinds[0] not in permitted or
+                any(symbol == name for _, symbol in exported)):
+            return False
+    return True
 
 
 with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directory:
@@ -203,9 +256,11 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
             assert result.returncode == 1 and not result.stdout and message in result.stderr, (text[:1600], result)
         return result.stdout
 
-    def native_compile(path, output):
-        result = invoke([host, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0', '-c', path, '-o', output])
-        assert result.returncode == 0, (path.read_text(), result.stderr)
+    def native_compile(path, output, runner=invoke):
+        output.unlink(missing_ok=True)
+        result = runner([host, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0', '-c', path, '-o', output])
+        assert (result.returncode == 0 and not result.stdout and not result.stderr and
+                output.is_file() and output.stat().st_size > 0), (path.read_text(), result)
 
     def symbols(path, global_only=False):
         result = invoke(['nm', *(['-g'] if global_only else []), path])
@@ -213,13 +268,10 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         return [(parts[-2], parts[-1]) for line in result.stdout.splitlines()
                 if len(parts := line.split()) >= 2]
 
-    def private_storage(path, names):
+    def private_storage(path, names, readonly=(), qbe_owned=False):
         syms = symbols(path)
         exported = symbols(path, True)
-        for name in names:
-            kinds = [kind for kind, symbol in syms if symbol == name]
-            assert len(kinds) == 1 and kinds[0] in ['b', 'd', 'r'], (name, syms)
-            assert not any(symbol == name for _, symbol in exported), (name, exported)
+        assert storage_records(syms, exported, names, readonly, qbe_owned), (names, readonly, syms, exported)
         return syms
 
     def link_run(objects):
@@ -234,12 +286,68 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         if result.returncode == 0:
             supported.add(feature)
         else:
-            assert legacy_gap(feature, text, result), (feature, result.stderr)
-            assert not legacy_gap(feature, 'int unrelated;', result)
+            assert legacy_gap(feature, text, result, native), (feature, result.stderr)
+            assert not legacy_gap(feature, 'int unrelated;', result, native)
             for status in [0, -6, -9, -11, 2, 127]:
-                assert not legacy_gap(feature, text, subprocess.CompletedProcess([], status, '', result.stderr))
+                assert not legacy_gap(feature, text, subprocess.CompletedProcess([], status, '', result.stderr), native)
             for extra in ['warning: extra', 'note: extra', 'error: extra', 'fatal error: extra']:
-                assert not legacy_gap(feature, text, subprocess.CompletedProcess([], 1, '', result.stderr+'\n'+extra))
+                assert not legacy_gap(feature, text, subprocess.CompletedProcess([], 1, '', result.stderr+'\n'+extra), native)
+            assert not legacy_gap(feature, text, subprocess.CompletedProcess([], 1, 'unexpected stdout', result.stderr), native)
+            assert not legacy_gap(feature, text, subprocess.CompletedProcess([], 1, '', result.stderr+'unparsed garbage\n'), native)
+
+    # Ownership negative controls: readonly is explicit per object, not a
+    # blanket permission that could hide incorrect placement of mutable data.
+    assert storage_records([('b', 'cell')], [], ['cell'])
+    assert storage_records([('d', 'cell')], [], ['cell'])
+    assert not storage_records([('r', 'cell')], [], ['cell'])
+    assert storage_records([('r', 'cell')], [], ['cell'], ['cell'])
+    assert not storage_records([('r', 'cell')], [], ['cell'], ['cell'], True)
+    for syms, exported in [([], []), ([('b', 'cell'), ('b', 'cell')], []),
+                           ([('B', 'cell')], [('B', 'cell')]),
+                           ([('U', 'cell')], []), ([('C', 'cell')], []),
+                           ([('b', 'cell')], [('b', 'cell')])]:
+        assert not storage_records(syms, exported, ['cell'])
+        assert not storage_records(syms, exported, ['cell'], ['cell'], True)
+
+    # Classifier controls are synthetic and compile/run no invalid C.
+    synthetic = subprocess.CompletedProcess([], 1, '', str(native)+':1:1: error: invalid type\n')
+    assert native_constraint(synthetic, native)
+    for status, stdout, stderr in [
+        (0, '', synthetic.stderr), (-11, '', synthetic.stderr), (2, '', synthetic.stderr),
+        (1, 'unexpected stdout', synthetic.stderr), (1, '', ''),
+        (1, '', 'cc: error: unsupported option -std=c2x\n'),
+        (1, '', str(native)+':1:1: internal compiler error: crash\n'),
+        (1, '', synthetic.stderr+'internal compiler error: crash\n'),
+        (1, '', synthetic.stderr+'PLEASE submit a bug report\n'),
+        (1, '', synthetic.stderr+'clang: error: unable to execute command\n'),
+        (1, '', str(native)+':1:1: fatal error: cannot open source\n'),
+        (1, '', str(native)+':1:1: note: not an error\n'),
+    ]:
+        assert not native_constraint(subprocess.CompletedProcess([], status, stdout, stderr), native)
+    for feature, text in probes.items():
+        message = "unknown type name 'bool'" if feature == 'bool' else (
+            "'nullptr' undeclared here (not in a function)" if feature == 'nullptr' else
+            'expected function body after function declarator')
+        exact = subprocess.CompletedProcess([], 1, '', str(native)+':1:1: error: '+message+'\n')
+        assert legacy_gap(feature, text, exact, native)
+        for stdout, suffix in [('garbage', ''), ('', 'garbage\n'), ('', '\x00'),
+                               ('', 'cc: error: driver failure\n'), ('', 'internal compiler error: crash\n')]:
+            assert not legacy_gap(feature, text, subprocess.CompletedProcess([], 1, stdout, exact.stderr+suffix), native)
+    native.write_text('int valid;\n')
+    for status, stdout, stderr in [(0, '', ''), (0, 'unexpected stdout', ''),
+                                   (1, '', 'cc: error: driver failed\n'),
+                                   (1, '', 'internal compiler error: crash\n')]:
+        # A preexisting object must be removed even when the fake driver claims
+        # success without producing a replacement. No stale object can be reused.
+        native_obj.write_bytes(b'stale object sentinel')
+        try:
+            native_compile(native, native_obj,
+                           lambda args: subprocess.CompletedProcess(args, status, stdout, stderr))
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('native compile accepted missing/stale object or driver failure')
+        assert not native_obj.exists()
 
     # Exact LP64 zero layout, no exports, no duplicate data, even unused objects.
     layouts = [(f'static {typ} cell; extern {typ} cell; static {typ} cell;', size)
@@ -254,10 +362,11 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         if qbe:
             result = invoke([host, '-c', assembly, '-o', obj])
             assert result.returncode == 0, result.stderr
-            private_storage(obj, ['cell'])
+            private_storage(obj, ['cell'], qbe_owned=True)
 
     native_programs = runtime_programs = gaps = 0
-    for text, names, features in programs:
+    for text, names, features, *metadata in programs:
+        readonly = metadata[0] if metadata else ()
         emitted = compile_source(text)
         for name in names:
             assert len(re.findall(r'(?m)^data \$'+re.escape(name)+r'\b', emitted)) == 1, (text, emitted)
@@ -265,7 +374,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         if qbe:
             result = invoke([host, '-c', assembly, '-o', obj])
             assert result.returncode == 0, result.stderr
-            private_storage(obj, names)
+            private_storage(obj, names, qbe_owned=True)
             link_run([obj])
             runtime_programs += 1
         if not set(features) <= supported:
@@ -273,7 +382,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
             continue
         native.write_text(text+'\n')
         native_compile(native, native_obj)
-        private_storage(native_obj, names)
+        private_storage(native_obj, names, readonly)
         link_run([native_obj])
         native_programs += 1
 
@@ -284,8 +393,9 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
             if not set(features) <= supported:
                 continue
             native.write_text(text+'\n')
+            native_obj.unlink(missing_ok=True)
             result = invoke([host, '-std=c2x', '-pedantic-errors', '-fno-common', '-c', native, '-o', native_obj])
-            assert result.returncode == 1, (text, result.stderr)
+            assert native_constraint(result, native) and not native_obj.exists(), (text, result)
             native_constraints += 1
     for text in ub_refusals+subset_errors+parser_errors:
         compile_source(text, False)
@@ -309,7 +419,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         if qbe:
             result = invoke([host, '-c', assembly, '-o', obj])
             assert result.returncode == 0, result.stderr
-            private_storage(obj, ['cell'])
+            private_storage(obj, ['cell'], qbe_owned=True)
             link_run([obj, peer_obj])
             paired_runs += 1
         native.write_text(owner+'\n')
@@ -353,7 +463,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
                 result = invoke([host, '-c', assembly, '-o', obj])
                 assert result.returncode == 0, result.stderr
                 if owned:
-                    private_storage(obj, owned)
+                    private_storage(obj, owned, qbe_owned=True)
                 link_run([obj, peer_obj])
                 abi_runs += 1
 
@@ -384,12 +494,12 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         native_compile(peer, peer_obj)
         native.write_text(text+'\n')
         native_compile(native, native_obj)
-        private_storage(native_obj, owned_names)
+        private_storage(native_obj, owned_names, ('frozen',) if text == alignment_owner else ())
         link_run([native_obj, peer_obj])
         if qbe:
             result = invoke([host, '-c', assembly, '-o', obj])
             assert result.returncode == 0, result.stderr
-            private_storage(obj, owned_names)
+            private_storage(obj, owned_names, qbe_owned=True)
             link_run([obj, peer_obj])
             extra_runs += 1
 
