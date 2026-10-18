@@ -149,7 +149,8 @@ def exact_legacy_probe(feature, text, result, path):
                     ["use of undeclared identifier 'nullptr'"]],
     }
     messages = []
-    for line in normalized.splitlines():
+    lines = normalized.splitlines()
+    for index, line in enumerate(lines):
         match = re.fullmatch(re.escape(str(path)) + r':\d+(?::\d+)?: error: (.+)', line)
         if match:
             messages.append(match.group(1))
@@ -162,6 +163,9 @@ def exact_legacy_probe(feature, text, result, path):
         elif line == text or re.fullmatch(r'[ ~^]+', line):
             pass
         elif feature == 'typeof' and line == str(path) + ": In function 'typeof':":
+            pass
+        elif (index == len(lines) - 1
+              and line == f"{len(messages)} error{'s' if len(messages) != 1 else ''} generated."):
             pass
         else:
             return False
@@ -264,6 +268,21 @@ def layout_controls():
 
 
 layout_controls()
+
+# Exact legacy footers are syntactically supported, not evidence that a
+# particular unavailable Clang version was tested here.
+for feature, text in feature_probes.items():
+    path = Path('/synthetic/probe.c')
+    message = ('expected function body after function declarator' if feature == 'typeof'
+               else "use of undeclared identifier 'nullptr'")
+    diagnostic = f'{path}:1:1: error: {message}\n'
+    assert exact_legacy_probe(feature, text, subprocess.CompletedProcess(
+        [], 1, '', diagnostic + '1 error generated.\n'), path)
+    for footer in ['2 errors generated.\n', '1 errors generated.\n',
+                   '1 error generated.\n1 error generated.\n',
+                   '1 error generated.\nunparsed failure\n']:
+        assert not exact_legacy_probe(feature, text, subprocess.CompletedProcess(
+            [], 1, '', diagnostic + footer), path)
 
 
 with tempfile.TemporaryDirectory(prefix='kcc static arrays ') as directory:

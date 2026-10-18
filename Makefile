@@ -53,6 +53,7 @@ fuzz-compile: build/fuzz_compile
 	cp tests/corpus/compile/* build/corpus-compile/
 	./build/fuzz_compile build/corpus-compile -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
 
+test-codegen: export QBE := $(QBE)
 test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static_array_ast
 	./build/test_static_array_ast
 	QBE="$(QBE)" python3 tests/test_compile.py

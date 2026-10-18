@@ -183,7 +183,10 @@ def legacy_gap(feature, text, result, source_path):
     normalized = result.stderr.replace('‘', "'").replace('’', "'")
     location = re.escape(str(source_path)) + r':\d+(?::\d+)?: (?:error|note): [^\n]+'
     seen = []
-    for line in normalized.splitlines():
+    lines = normalized.splitlines()
+    error_count = sum(kind == 'error' for kind, _ in records(normalized))
+    summary = f"{error_count} error{'s' if error_count != 1 else ''} generated."
+    for index, line in enumerate(lines):
         if re.fullmatch(location, line):
             seen.extend(records(line))
         elif re.fullmatch(r'\s*\d+ \| ?' + re.escape(text), line):
@@ -198,6 +201,8 @@ def legacy_gap(feature, text, result, source_path):
             pass
         elif line == str(source_path) + ": In function '" + feature + "':":
             pass  # GCC's old implicit-int parse of the exact keyword probe.
+        elif index == len(lines) - 1 and line == summary:
+            pass  # Exact Clang footer; count must match the accepted errors.
         else:
             return False
     return seen == records(normalized)
@@ -311,6 +316,7 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
         native.write_text(text+'\n')
         result = invoke([host, '-std=c2x', '-pedantic-errors', '-fsyntax-only', native])
         if result.returncode == 0:
+            assert not result.stdout and not result.stderr, (feature, result)
             supported.add(feature)
         else:
             assert legacy_gap(feature, text, result, native), (feature, result.stderr)
@@ -357,8 +363,13 @@ with tempfile.TemporaryDirectory(prefix='kcc static scalar objects ') as directo
             'expected function body after function declarator')
         exact = subprocess.CompletedProcess([], 1, '', str(native)+':1:1: error: '+message+'\n')
         assert legacy_gap(feature, text, exact, native)
+        assert legacy_gap(feature, text, subprocess.CompletedProcess(
+            [], 1, '', exact.stderr + '1 error generated.\n'), native)
         for stdout, suffix in [('garbage', ''), ('', 'garbage\n'), ('', '\x00'),
-                               ('', 'cc: error: driver failure\n'), ('', 'internal compiler error: crash\n')]:
+                               ('', 'cc: error: driver failure\n'), ('', 'internal compiler error: crash\n'),
+                               ('', '2 errors generated.\n'), ('', '1 errors generated.\n'),
+                               ('', '1 error generated.\n1 error generated.\n'),
+                               ('', '1 error generated.\nunparsed failure\n')]:
             assert not legacy_gap(feature, text, subprocess.CompletedProcess([], 1, stdout, exact.stderr+suffix), native)
     native.write_text('int valid;\n')
     for status, stdout, stderr in [(0, '', ''), (0, 'unexpected stdout', ''),
