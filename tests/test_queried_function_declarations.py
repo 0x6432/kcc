@@ -55,7 +55,7 @@ constraints = [
     ('typeof(int(void)) f; int f(void) { return 42; } int f(void) { return 42; }','redefinition'),
 ]
 subset_errors = [
-    ('typeof(void) x;','only scalar or array file-scope objects'),
+    ('typeof(void) x;','file-scope declaration requires a scalar, array or record object type'),
     ('typeof(int(void)) f { return 42; }',"query-derived external declarations require ';'"),
     ('typeof(int(void)) f=0;',"query-derived external declarations require ';'"),
     ('const typeof(int(void)) f;','function type cannot be qualified'),

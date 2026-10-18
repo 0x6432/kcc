@@ -245,7 +245,7 @@ c23_constraints = [
     ('extern int f(void); extern typeof(&f) f;', 'external object conflicts with prior ordinary'),
 ]
 subset_errors = [
-    ('extern void x;', 'only scalar or array file-scope objects'),
+    ('extern void x;', 'file-scope declaration requires a scalar, array or record object type'),
     ('extern auto x=42;', 'file-scope auto declarations'),
     ('extern inline int x;', 'error:'),
 ]

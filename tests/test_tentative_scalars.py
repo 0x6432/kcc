@@ -210,7 +210,7 @@ constraints = [
     ('typedef int cell; int cell;', 'conflicts with prior ordinary'),
     ('int cell; typedef int cell;', 'conflicts with prior ordinary'),
     ('int cell,cell(void);', 'function name conflicts'),
-    ('void cell;', 'only scalar or array file-scope objects'),
+    ('void cell;', 'file-scope declaration requires a scalar, array or record object type'),
     ('const int cell; int f(void) { cell=42; return 0; }', 'modifiable lvalue'),
     ('const int cell; int f(void) { ++cell; return 0; }', 'modifiable'),
     ('int *const cell; int f(void) { cell=0; return 0; }', 'modifiable lvalue'),
