@@ -234,7 +234,6 @@ subset_errors = [
     ('extern int cell=0;', 'extern object definitions'),
     ('typedef int T; T cell=0;', "query-derived external declarations require ';'"),
     ('typeof(int) cell=0;', "query-derived external declarations require ';'"),
-    ('static int cell;', 'file-scope object declarations'),
     ('extern int cell; int f(void) { extern int cell; return 0; }', 'block-scope extern declarations'),
     ('thread_local int cell;', 'expected integer type specifier'),
 ]

@@ -245,7 +245,6 @@ c23_constraints = [
 ]
 subset_errors = [
     ('int x=42;', 'file-scope object initializers'),
-    ('static int x;', 'file-scope object declarations'),
     ('extern int x=42;', 'extern object definitions'),
     ('extern int (*fp)(int)=0;', 'extern object definitions'),
     ('typedef int T; extern T x=42;', "query-derived external declarations require ';'"),

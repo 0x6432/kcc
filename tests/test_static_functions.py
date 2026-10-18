@@ -96,10 +96,7 @@ c23_constraints = [
     ('int f(static typeof(missing) x);','static is not permitted'),
 ]
 subset_errors = [
-    ('static int x;','file-scope object declarations'),
-    ('static int x=42;','file-scope object declarations'),
-    ('static int (*p)(int);','file-scope object declarations'),
-    ('typedef int T; T static x;','file-scope object declarations'),
+    ('static int x=42;','file-scope object initializers'),
     ('static auto x=42;','file-scope auto declarations'),
     ('auto static x=42;','file-scope auto declarations'),
     ('int main(void) { static int x; return 0; }','block-scope static declarations'),
