@@ -300,3 +300,94 @@ struct null_initializer_result evaluate_null_initializer(const struct ast_expres
 		"file-scope pointer initializer requires a supported null constant expression",
 	};
 }
+
+/* Address context names storage without reading it. In particular, rejecting
+ * indirection here deliberately leaves &* and lowered subscripts for P2.
+ * The query neither registers strings nor marks functions referenced.
+ */
+static struct address_initializer_result direct_address(const struct ast_expression *expression,
+	const struct type *origin_type)
+{
+	struct address_initializer_result result = {
+		.status = constant_value, .location = expression->location, .origin_type = origin_type,
+	};
+
+	switch (expression->kind) {
+	case expression_external_object:
+		result.address.kind = static_address_object;
+		result.address.base.object = ((const struct ast_external_object_expression *)expression)->object;
+		return result;
+	case expression_function_designator:
+		result.address.kind = static_address_function;
+		result.address.base.function = ((const struct ast_function_designator_expression *)expression)->function;
+		return result;
+	case expression_string:
+		result.address.kind = static_address_string;
+		result.address.base.string = (const struct ast_string_expression *)expression;
+		return result;
+	default:
+		return (struct address_initializer_result) {
+			.status = constant_not_constant, .location = expression->location,
+			.message = "file-scope pointer initializer requires a supported null or direct address constant expression",
+		};
+	}
+}
+
+/* Use captured expression types, not a canonical symbol's later composite.
+ * No reinterpret casts (including incompatible function signatures), qualifier
+ * removal, integer detours or object/function cross-conversions are admitted.
+ */
+static bool direct_pointer_conversion(const struct type *source, const struct type *target)
+{
+	const struct type *a;
+	const struct type *b;
+
+	if (source->kind != type_kind_pointer || target->kind != type_kind_pointer)
+		return false;
+	a = ((const struct pointer_type *)source)->referent;
+	b = ((const struct pointer_type *)target)->referent;
+	if (a->qualifiers & ~b->qualifiers)
+		return false;
+	return type_unqualified_compatible(a, b) ||
+		(a->kind == type_kind_void && type_is_object(b)) ||
+		(b->kind == type_kind_void && type_is_object(a));
+}
+
+struct address_initializer_result evaluate_address_initializer(const struct ast_expression *expression)
+{
+	const struct ast_expression *operand;
+	struct address_initializer_result result;
+
+	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
+	switch (expression->kind) {
+	case expression_address:
+		return direct_address(((const struct ast_address_expression *)expression)->operand, expression->type);
+	case expression_array_decay:
+		return direct_address(((const struct ast_array_decay_expression *)expression)->operand, expression->type);
+	case expression_function_decay:
+		return direct_address(((const struct ast_function_decay_expression *)expression)->operand, expression->type);
+	case expression_cast:
+	case expression_conversion:
+		operand = expression->kind == expression_cast ?
+			((const struct ast_cast_expression *)expression)->operand :
+			((const struct ast_conversion_expression *)expression)->operand;
+		if (!direct_pointer_conversion(operand->type, expression->type))
+			break;
+		result = evaluate_address_initializer(operand);
+		if (result.status != constant_value)
+			return result;
+		/* Ordinary void conversions must not launder an incompatible base
+		 * into a different object type with unproved alignment. Preserve the
+		 * direct source-point pointer type even through multiple void casts.
+		 */
+		if (direct_pointer_conversion(result.origin_type, expression->type))
+			return result;
+		break;
+	default:
+		break;
+	}
+	return (struct address_initializer_result) {
+		.status = constant_not_constant, .location = expression->location,
+		.message = "file-scope pointer initializer requires a supported null or direct address constant expression",
+	};
+}

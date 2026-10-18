@@ -1,17 +1,19 @@
 #ifndef KCC_SEMA_H
 #define KCC_SEMA_H
 
-#include "ast.h"
+#include "consteval.h"
 
 enum static_data_kind {
 	static_data_integer,
 	static_data_null_pointer,
+	static_data_address,
 };
 
 /* A validated target data value, never a host pointer or a relocation sentinel. */
 struct static_data_value {
 	enum static_data_kind kind;
 	uint64_t integer_bits; /* Used only by static_data_integer. */
+	struct static_address address; /* Used only by static_data_address. */
 };
 
 struct external_object_symbol {

@@ -2330,6 +2330,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct external_object_symbol saved = { 0 };
 	struct external_object_symbol *symbol;
 	struct constant_result value;
+	struct address_initializer_result address_value;
+	bool is_address = false;
 	const struct type *target;
 
 	if (*initializer) {
@@ -2366,9 +2368,17 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (type->kind == type_kind_pointer) {
 		struct null_initializer_result null_value = evaluate_null_initializer(*initializer);
 
-		if (null_value.status != constant_value) {
+		if (null_value.status == constant_invalid) {
 			diagnostic_error(sema->diagnostics, null_value.location, null_value.message);
 			goto rollback;
+		}
+		if (null_value.status != constant_value) {
+			address_value = evaluate_address_initializer(*initializer);
+			if (address_value.status != constant_value) {
+				diagnostic_error(sema->diagnostics, address_value.location, address_value.message);
+				goto rollback;
+			}
+			is_address = true;
 		}
 	} else {
 		value = evaluate_integer_constant(*initializer);
@@ -2383,8 +2393,23 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (!target || !convert_expression(sema, initializer, target))
 		goto rollback;
 	if (type->kind == type_kind_pointer) {
-		/* This target's null encoding is selected by codegen, not by an ICE. */
-		symbol->initializer_value = (struct static_data_value) { .kind = static_data_null_pointer };
+		if (is_address) {
+			/* Assignment conversion remains authoritative, but its ordinary
+			 * void-pointer rule cannot widen this bounded static-data proof.
+			 * Check the final type against the captured direct origin too.
+			 */
+			address_value = evaluate_address_initializer(*initializer);
+			if (address_value.status != constant_value) {
+				diagnostic_error(sema->diagnostics, address_value.location, address_value.message);
+				goto rollback;
+			}
+			symbol->initializer_value = (struct static_data_value) {
+				.kind = static_data_address, .address = address_value.address,
+			};
+		} else {
+			/* Codegen selects the target's null encoding, not an ICE. */
+			symbol->initializer_value = (struct static_data_value) { .kind = static_data_null_pointer };
+		}
 	} else {
 		value = evaluate_integer_constant(*initializer);
 		if (value.status != constant_value) {

@@ -1163,6 +1163,25 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 					emit(&data_codegen, "%s %ju }\n", encoding,
 						(uintmax_t)object->initializer_value.integer_bits);
 					break;
+				case static_data_address: {
+					const struct static_address *address = &object->initializer_value.address;
+					struct token base_name;
+
+					assert(object->type->kind == type_kind_pointer && size == 8);
+					switch (address->kind) {
+					case static_address_string:
+						emit(&data_codegen, "l $.Lkcc.string.%zu }\n", address->base.string->object_id);
+						break;
+					case static_address_object:
+					case static_address_function:
+						base_name = address->kind == static_address_object ?
+							address->base.object->name : address->base.function->name;
+						emit(&data_codegen, "l $%.*s }\n", (int)base_name.length,
+							(const char *)base_name.spelling_location.source->data + base_name.spelling_location.offset);
+						break;
+					}
+					break;
+				}
 				case static_data_null_pointer:
 					/* Linux amd64 pointer storage has an eight-byte zero null encoding. */
 					assert(object->type->kind == type_kind_pointer && size == 8);
