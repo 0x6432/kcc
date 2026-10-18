@@ -1,3 +1,12 @@
+# M15 integrated storage/linkage handoff
+
+Current release scope: docs/m15-completion.md. All new block/TLS/inline/address
+Python and AST suites are wired into both full targets; no old test lane or fuzz
+budget is removed. Semantic source candidates and independent review evidence
+are frozen before release; exact final CI is a separate delivery gate. General
+M17 initialization dependencies remain explicit. Earlier handoffs below are
+historical, not current unsupported-feature inventories.
+
 # Handoff
 
 ## Current checkpoint

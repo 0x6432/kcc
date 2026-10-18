@@ -6,6 +6,16 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15 storage/linkage closure: block extern objects/functions, persistent static
+locals, real thread-local storage, TU-end inline linkage, and checked symbolic
+address offsets for existing types are integrated. Lexical visibility remains
+separate from canonical identities and immutable source-point types. No test or
+sanitizer lane is removed. Read `docs/m15-completion.md` for exact target coverage,
+quality gates and the explicit M17/general-initializer and later-type dependencies.
+This remains an incomplete C23 compiler, not all initialization syntax or hosted
+conformance. Earlier checkpoints below are historical.
+
+
 M15I3: Direct zero-addend pointer initializers name canonical objects/functions
 or stable string objects, using a distinct static address tag and ELF
 relocations. Null and integer initializers retain their own pure proofs and tags.

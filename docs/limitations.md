@@ -1,29 +1,16 @@
 # Implementation limitations
 
-Current milestone: M15I3 direct-address initialized file-scope definitions. Read the latest entries together with README.md and
-c23-coverage.md; earlier chronological entries describe their own checkpoints.
-
-## M15h1–h2 current storage scope
-
-File-scope static tentative scalars and complete fixed arrays are supported.
-Extern declarations inherit prior canonical object linkage; unadorned object
-redeclarations do not and mixed-linkage UB chains are refused. A visible prior
-complete composite may supply an omitted array bound; an initially incomplete
-internal tentative array is conservatively refused as UB even if later declarations complete it.
-Earlier captured types and incomplete pointer referents are not rewritten.
-
-M15i1 additionally admits integer constant initializers for existing integer/bool
-file-scope objects, with exactly one explicit owner taking precedence over
-tentative storage. M15i2 extends explicit pointer targets to strict zero ICEs,
-nullptr and semantically checked pointer/nullptr cast chains, with tagged null
-storage. M15i3 additionally supports direct zero-addend addresses of canonical
-objects/functions and stable strings. Pointer conversions must preserve origin
-compatibility and qualifiers, including through void detours. Broader address
-constants, pointer conditionals/arithmetic and reinterpret casts,
-nullptr_t targets, array/braced initializers, static block objects, block extern, thread storage,
-VM/VLA, aggregates and new scalar kinds remain unsupported. Existing budgets
-remain unchanged. See m15-static-objects.md; chronological entries below describe
-their own historical checkpoints, not the current feature inventory.
+Current milestone: M15 storage/linkage closure for existing supported types.
+Read m15-completion.md for the current normative project scope; earlier entries
+below are historical. Block extern/functions, static locals, TLS, inline linkage,
+nullptr_t static null storage, and checked array/subobject/string address offsets
+are implemented. General initializer syntax/domain handling remains M17, including
+remaining pointer conditional/comma forms and unproved cast alignment/new typed
+reinterpret arithmetic domains. No complete scalar-initializer or C23-conformance
+claim is made. Further types/qualifiers/inference and hosted ABI work retain their
+original milestone ownership. Linux amd64 TLS is tested local-exec executable ABI,
+not shared-library dynamic TLS. Resource limits and fail-fast semantic behavior
+remain explicit; canonical object-state rollback is not whole-sema recovery.
 
 ## M00
 

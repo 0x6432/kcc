@@ -54,11 +54,15 @@ fuzz-compile: build/fuzz_compile
 	./build/fuzz_compile build/corpus-compile -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
 
 test-codegen: export QBE := $(QBE)
-test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast
+test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast
 	./build/test_static_array_ast
 	./build/test_integer_initializer_ast
 	./build/test_null_initializer_ast
 	./build/test_direct_address_initializer_ast
+	./build/test_block_storage_ast
+	./build/test_thread_storage_ast
+	./build/test_inline_linkage_ast
+	./build/test_address_offset_ast
 	QBE="$(QBE)" python3 tests/test_compile.py
 	QBE="$(QBE)" python3 tests/test_abi.py
 	QBE="$(QBE)" python3 tests/test_diagnostics.py
@@ -151,6 +155,11 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	python3 tests/test_integer_initializers.py
 	python3 tests/test_null_initializers.py
 	python3 tests/test_direct_address_initializers.py
+	python3 tests/test_block_storage.py
+	python3 tests/test_thread_storage.py
+	python3 tests/test_inline_linkage.py
+	python3 tests/test_address_offsets.py
+	python3 tests/test_storage_promotions.py
 	python3 tests/test_function_declaration_lists.py
 	python3 tests/test_auto_explicit.py
 	python3 tests/test_local_binding_phases.py
@@ -184,7 +193,7 @@ build/test_direct_address_initializer_ast: tests/test_direct_address_initializer
 build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pp_oracle.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
-test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast
+test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
@@ -198,6 +207,10 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	./build/test_integer_initializer_ast
 	./build/test_null_initializer_ast
 	./build/test_direct_address_initializer_ast
+	./build/test_block_storage_ast
+	./build/test_thread_storage_ast
+	./build/test_inline_linkage_ast
+	./build/test_address_offset_ast
 	python3 tests/test_compile.py
 	python3 tests/test_diagnostics.py
 	python3 tests/test_conditions.py
@@ -289,6 +302,11 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_integer_initializers.py
 	python3 tests/test_null_initializers.py
 	python3 tests/test_direct_address_initializers.py
+	python3 tests/test_block_storage.py
+	python3 tests/test_thread_storage.py
+	python3 tests/test_inline_linkage.py
+	python3 tests/test_address_offsets.py
+	python3 tests/test_storage_promotions.py
 	python3 tests/test_function_declaration_lists.py
 	python3 tests/test_auto_explicit.py
 	python3 tests/test_local_binding_phases.py
@@ -300,3 +318,15 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 
 clean:
 	rm -rf build
+
+build/test_block_storage_ast: tests/test_block_storage_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_block_storage_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/test_thread_storage_ast: tests/test_thread_storage_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_thread_storage_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/test_inline_linkage_ast: tests/test_inline_linkage_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_inline_linkage_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/test_address_offset_ast: tests/test_address_offset_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_address_offset_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@

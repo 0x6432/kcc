@@ -1,12 +1,12 @@
 # C23 coverage
 
-Current storage checkpoint: M15i3 adds direct zero-addend object/function/string
-address initializers; M15i2 supports proved null constant expressions. M15i1 integer ICE definitions and M15h1–h2
-internal tentative scalars/fixed arrays remain supported. Explicit-over-tentative
-ownership, immutable captures and internal/exported storage are shared. Pointer arithmetic/conditionals, reinterpret casts, nullptr_t targets, array/braced
-initializers and block storage remain absent. See m15-direct-address-initializers.md, m15-null-initializers.md,
-m15-integer-initializers.md and m15-static-objects.md.
-This is still a subset, not ISO conformance.
+Current storage checkpoint: M15 storage/linkage closure for existing supported
+types: block extern/function bindings, static locals, explicit thread storage,
+inline TU-end ownership and checked address offsets/subobjects/character views.
+Static null storage includes typeof(nullptr) targets. Existing tentative and
+explicit ownership rules remain. General initializer syntax/expression domains
+are still M17; further types/qualifiers/environment are their recorded milestones.
+See m15-completion.md for precise boundaries. This is not ISO conformance.
 
 Status vocabulary: absent, subset, implemented, validated. Implemented means
 code exists, not that conformance has been established. Validated requires
@@ -21,6 +21,7 @@ of complete ISO conformance.
 | Expressions/statements | subset (integer arithmetic/conversions/casts; object-pointer lvalues, scaled arithmetic and comparisons; M13d; sequenced comma/conditional expressions, integer compound assignments and updates; direct goto and integer switch/case/default through M19f2) | M03-M08, M13, M19 |
 | Constraint diagnostics | subset (M08c) | every semantic milestone |
 | Preprocessing | subset (null/define/undef, object + fixed/variadic function macros, __VA_ARGS__/__VA_OPT__, raw parameter and optional-operand #/%:, ##/%:%: with placemarkers, #error/#warning, macro-existence groups and intmax/uintmax #if/#elif expressions, numeric spellings and narrow characters and direct/computed quoted/basic angle includes and explicit -I search subset; M11m) | M09-M11, M25 |
+| Storage/linkage/multiple TUs | implemented for existing types: static/extern/block/thread duration, canonical lexical composites, inline external-definition ownership; Linux amd64 local-exec TLS; general initializer dependencies remain | M15, M17, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
 | C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); bool/true/false, alignof/static_assert and distinct nullptr constant/type implemented; typeof/typeof_unqual type and expression operands, C23 for-typedefs and bounded block/for auto inference (including register and outer typedef hiding) implemented; standard header support incomplete | M10-M11, M23a-M23h, M24a-M24g |
 | Required library/header environment | absent | M25a-M25d |
