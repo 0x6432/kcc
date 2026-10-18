@@ -386,6 +386,9 @@ struct ast_member_expression {
 struct ast_tag_declaration {
 	struct ast_type_syntax *type_syntax;
 	struct source_location location;
+	/* Exactly unqualified/unprefixed `struct-or-union tag;`. Unlike a
+	 * prefixed reference, this form declares/shadows in the current scope. */
+	bool plain_forward;
 };
 
 struct ast_typedef_name_type_syntax {

@@ -2372,6 +2372,10 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		preprocess_next(parser->preprocessor);
 		declaration = ast_new_tag_declaration(parser->arena, &record->syntax, beginning.location);
+		if (declaration)
+			declaration->plain_forward = !record->has_definition && base == &record->syntax &&
+				head.keyword.kind == token_eof && head.auto_keyword.kind == token_eof &&
+				head.thread_keyword.kind == token_eof && head.inline_keyword.kind == token_eof;
 		node = declaration ? ast_new_block_tag_declaration(parser->arena, declaration) : NULL;
 		if (!node)
 			allocation_error(parser, beginning.location);
@@ -3069,6 +3073,10 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		}
 		preprocess_next(parser->preprocessor);
 		declaration = ast_new_tag_declaration(parser->arena, &record->syntax, beginning.location);
+		if (declaration)
+			declaration->plain_forward = !record->has_definition && base == &record->syntax &&
+				head.keyword.kind == token_eof && head.auto_keyword.kind == token_eof &&
+				head.thread_keyword.kind == token_eof && head.inline_keyword.kind == token_eof;
 		node = declaration ? ast_new_external_tag_declaration(parser->arena, declaration) : NULL;
 		if (!node)
 			allocation_error(parser, beginning.location);
