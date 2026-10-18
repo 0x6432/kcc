@@ -32,7 +32,22 @@ struct binding {
 	struct binding *next;
 };
 
+struct record_state {
+	struct record_definition *definition;
+	bool defining;
+	bool has_const;
+	unsigned depth;
+	struct record_state *next;
+};
+
+struct tag_binding {
+	struct token name;
+	struct record_type *type;
+	struct tag_binding *next;
+};
+
 struct scope {
+	struct tag_binding *tags;
 	struct scope *parent;
 	struct binding *bindings;
 };
@@ -57,6 +72,13 @@ struct sema {
 	struct diagnostics *diagnostics;
 	struct ast_function *function;
 	struct scope *scope;
+	struct tag_binding *file_tags;
+	struct ast_function_type_syntax *definition_syntax;
+	struct tag_binding *definition_tags;
+	struct record_state *records;
+	size_t record_count;
+	size_t member_count;
+	unsigned record_nesting;
 	struct control_context *control;
 	struct label_binding *labels;
 	size_t label_count;
@@ -236,6 +258,275 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	struct ast_function_type_syntax *function);
 
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax);
+static bool sema_static_assertion(struct sema *sema, struct ast_static_assertion *node);
+
+/* Records are nominal leaves in ordinary type graphs. Only this bounded,
+ * acyclic by-value member walk inspects their contents; pointers stop it. */
+enum record_limits {
+	sema_max_records = 512,
+	sema_max_record_members = 512,
+	sema_max_total_members = 4096,
+	sema_max_record_nesting = 64,
+	sema_max_promoted_members = 4096,
+};
+
+static struct tag_binding *find_tag(struct sema *sema, struct token name, bool current)
+{
+	struct scope *scope = sema->scope;
+
+	while (scope) {
+		for (struct tag_binding *tag = scope->tags; tag; tag = tag->next)
+			if (same_name(tag->name, name))
+				return tag;
+		if (current)
+			return NULL;
+		scope = scope->parent;
+	}
+	for (struct tag_binding *tag = sema->file_tags; tag; tag = tag->next)
+		if (same_name(tag->name, name))
+			return tag;
+	return NULL;
+}
+
+static struct record_state *record_state(struct sema *sema, const struct type *type)
+{
+	struct record_definition *definition = type_record_definition(type);
+	for (struct record_state *state = sema->records; state; state = state->next)
+		if (state->definition == definition)
+			return state;
+	return NULL;
+}
+
+static bool has_const_subobject(struct sema *sema, const struct type *type)
+{
+	if (type->qualifiers & type_qualifier_const)
+		return true;
+	if (type->kind == type_kind_array)
+		return has_const_subobject(sema, ((const struct array_type *)type)->element);
+	if (type_is_record(type)) {
+		struct record_state *state = record_state(sema, type);
+		return state && state->has_const;
+	}
+	return false;
+}
+
+/* This path carries qualification through anonymous containers as well as
+ * accumulating offsets. The final member identity is never synthesized. */
+static const struct record_member *find_record_member(const struct type *type,
+	struct token name, uint64_t *offset, unsigned *qualifiers)
+{
+	for (const struct record_member *member = type_record_definition(type)->members;
+		member; member = member->next) {
+		if (!member->anonymous && same_name(member->name, name)) {
+			*offset = member->offset;
+			*qualifiers = type->qualifiers;
+			return member;
+		}
+		if (member->anonymous) {
+			uint64_t inner_offset;
+			unsigned inner_qualifiers;
+			const struct record_member *found = find_record_member(member->type, name,
+				&inner_offset, &inner_qualifiers);
+			if (found) {
+				*offset = member->offset + inner_offset;
+				*qualifiers = type->qualifiers | inner_qualifiers;
+				return found;
+			}
+		}
+	}
+	return NULL;
+}
+
+struct promoted_member_name {
+	struct token name;
+	struct promoted_member_name *next;
+};
+
+static bool check_promoted_names(struct sema *sema, const struct record_definition *definition,
+	struct promoted_member_name **names, size_t *count, unsigned depth,
+	struct source_location location)
+{
+	if (depth == sema_max_record_nesting) {
+		diagnostic_error(sema->diagnostics, location, "record member nesting exceeds limit (64)");
+		return false;
+	}
+	for (const struct record_member *member = definition->members; member; member = member->next) {
+		struct promoted_member_name *entry;
+		if (member->anonymous) {
+			if (!check_promoted_names(sema, type_record_definition(member->type), names,
+				count, depth + 1, location))
+				return false;
+			continue;
+		}
+		for (entry = *names; entry; entry = entry->next)
+			if (same_name(entry->name, member->name)) {
+				diagnostic_error(sema->diagnostics, member->name.location,
+					"duplicate or ambiguous record member name");
+				return false;
+			}
+		if (*count == sema_max_promoted_members) {
+			diagnostic_error(sema->diagnostics, location, "record promoted member limit exceeded (4096)");
+			return false;
+		}
+		entry = arena_alloc(sema->arena, sizeof(*entry));
+		if (!entry) {
+			diagnostic_error(sema->diagnostics, location, "out of memory checking record members");
+			return false;
+		}
+		*entry = (struct promoted_member_name) { .name = member->name, .next = *names };
+		*names = entry;
+		(*count)++;
+	}
+	return true;
+}
+
+static const struct type *resolve_record_syntax(struct sema *sema,
+	struct ast_record_type_syntax *syntax, bool standalone)
+{
+	struct tag_binding *tag = NULL;
+	struct record_type *record;
+	struct record_definition *definition;
+	struct record_state *state;
+	struct record_member **tail;
+	struct promoted_member_name *names = NULL;
+	size_t promoted_count = 0;
+	bool success = false;
+
+	if (syntax->syntax.type)
+		return syntax->syntax.type;
+	if (syntax->tag.length)
+		tag = find_tag(sema, syntax->tag, standalone || syntax->has_definition);
+	if (tag) {
+		record = tag->type;
+		if (record->definition->is_union != syntax->is_union) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location,
+				"tag declared with a different record kind");
+			return NULL;
+		}
+	} else {
+		if (sema->record_count == sema_max_records) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location,
+				"translation unit exceeds record type limit (512)");
+			return NULL;
+		}
+		record = type_new_record(sema->arena, syntax->is_union);
+		if (!record)
+			goto allocation_failure;
+		state = arena_alloc(sema->arena, sizeof(*state));
+		if (!state)
+			goto allocation_failure;
+		*state = (struct record_state) { .definition = record->definition, .next = sema->records };
+		sema->records = state;
+		sema->record_count++;
+		if (syntax->tag.length) {
+			struct tag_binding **head = sema->scope ? &sema->scope->tags : &sema->file_tags;
+			tag = arena_alloc(sema->arena, sizeof(*tag));
+			if (!tag)
+				goto allocation_failure;
+			*tag = (struct tag_binding) { .name = syntax->tag, .type = record, .next = *head };
+			*head = tag;
+		}
+	}
+	definition = record->definition;
+	state = record_state(sema, &record->type);
+	assert(state);
+	/* Publish the identity before walking members, allowing recursive pointers. */
+	syntax->syntax.type = &record->type;
+	if (!syntax->has_definition)
+		return &record->type;
+	if (definition->complete || state->defining) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of record tag");
+		return NULL;
+	}
+	if (sema->record_nesting == sema_max_record_nesting) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "record definition nesting exceeds limit (64)");
+		return NULL;
+	}
+	sema->record_nesting++;
+	state->defining = true;
+	state->depth = 1;
+	tail = &definition->members;
+	for (struct ast_record_member_declaration *member = syntax->members; member; member = member->next) {
+		const struct type *type;
+		struct record_member *resolved;
+		if (member->static_assertion) {
+			if (!sema_static_assertion(sema, member->static_assertion))
+				goto done;
+			continue;
+		}
+		if (!member->anonymous && !member->name.length) {
+			if (member->type_syntax->kind != type_syntax_record ||
+				!resolve_record_syntax(sema, (struct ast_record_type_syntax *)member->type_syntax, true))
+				goto done;
+			continue;
+		}
+		type = resolve_type_syntax(sema, member->type_syntax);
+		if (!type)
+			goto done;
+		struct ast_type_syntax *written = member->type_syntax;
+		while (written->kind == type_syntax_qualified)
+			written = ((struct ast_qualified_type_syntax *)written)->base;
+		if (member->anonymous && (!type_is_record(type) ||
+			written->kind != type_syntax_record ||
+			((struct ast_record_type_syntax *)written)->tag.length ||
+			!((struct ast_record_type_syntax *)written)->has_definition)) {
+			diagnostic_error(sema->diagnostics, member->type_syntax->location,
+				"anonymous member requires an untagged struct or union definition");
+			goto done;
+		}
+		if (!type_is_complete_object(type)) {
+			diagnostic_error(sema->diagnostics, member->type_syntax->location,
+				"record member must have complete object type (no void, function or incomplete member)");
+			goto done;
+		}
+		if (definition->member_count == sema_max_record_members ||
+			sema->member_count == sema_max_total_members) {
+			diagnostic_error(sema->diagnostics, member->type_syntax->location,
+				"record member limit exceeded (512 per record, 4096 per translation unit)");
+			goto done;
+		}
+		const struct type *element = type;
+		while (element->kind == type_kind_array)
+			element = ((const struct array_type *)element)->element;
+		if (type_is_record(element)) {
+			struct record_state *child = record_state(sema, element);
+			assert(child && child->depth);
+			if (child->depth >= sema_max_record_nesting) {
+				diagnostic_error(sema->diagnostics, member->type_syntax->location,
+					"record by-value nesting exceeds limit (64)");
+				goto done;
+			}
+			if (state->depth < child->depth + 1)
+				state->depth = child->depth + 1;
+		}
+		state->has_const |= has_const_subobject(sema, type);
+		resolved = arena_alloc(sema->arena, sizeof(*resolved));
+		if (!resolved) {
+			diagnostic_error(sema->diagnostics, member->type_syntax->location, "out of memory creating record member");
+			goto done;
+		}
+		*resolved = (struct record_member) { .name = member->name, .type = type, .anonymous = member->anonymous };
+		*tail = resolved;
+		tail = &resolved->next;
+		definition->member_count++;
+		sema->member_count++;
+	}
+	if (!check_promoted_names(sema, definition, &names, &promoted_count, 0, syntax->syntax.location))
+		goto done;
+	if (!type_record_layout(definition)) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location,
+			"record must contain members and fit record layout storage limit (1 MiB)");
+		goto done;
+	}
+	success = true;
+done:
+	state->defining = false;
+	sema->record_nesting--;
+	return success ? &record->type : NULL;
+allocation_failure:
+	diagnostic_error(sema->diagnostics, syntax->syntax.location, "out of memory creating record type");
+	return NULL;
+}
 
 /* Non-VM queries retain constraints without creating evaluated function uses. */
 static bool sema_unevaluated_expression(struct sema *sema,
@@ -268,6 +559,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_record:
+		return resolve_record_syntax(sema, (struct ast_record_type_syntax *)syntax, false);
 	case type_syntax_inferred:
 		diagnostic_error(sema->diagnostics, syntax->location,
 			"inferred type requires an initialized local definition");
@@ -443,7 +736,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 
 	if (!return_type || !sema_parameter_names(sema, function->parameters))
 		return NULL;
-	if (!type_is_scalar(return_type) && return_type->kind != type_kind_void) {
+	if (!type_is_scalar(return_type) && !type_is_record(return_type) && return_type->kind != type_kind_void) {
 		diagnostic_error(sema->diagnostics, function->syntax.location,
 			"function return type must be void or an implemented scalar type");
 		return NULL;
@@ -483,6 +776,8 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	if (!type)
 		diagnostic_error(sema->diagnostics, function->syntax.location, "out of memory creating function type");
 done:
+	if (function == sema->definition_syntax)
+		sema->definition_tags = scope.tags;
 	sema->scope = scope.parent;
 	return type ? &type->type : NULL;
 }
@@ -623,6 +918,15 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 {
 	struct ast_conversion_expression *conversion;
 
+	if (type_is_record((*slot)->type) || type_is_record(target)) {
+		if (type_is_record((*slot)->type) && type_is_record(target) &&
+			type_unqualified_compatible((*slot)->type, target) &&
+			type_is_complete_object(target))
+			return true;
+		diagnostic_error(sema->diagnostics, (*slot)->location,
+			"aggregate copy requires the same complete struct or union type");
+		return false;
+	}
 	/* C23's normative assignment constraint admits a null pointer constant
 	 * for nullptr_t as well as pointer targets. Keep the source-form check.
 	 */
@@ -875,6 +1179,18 @@ static struct function_symbol *visible_file_function(struct sema *sema, struct t
 	return symbol && symbol->file_type ? symbol : NULL;
 }
 
+static bool has_register_root(const struct ast_expression *expression)
+{
+	while (expression->kind == expression_member) {
+		const struct ast_member_expression *member = (const struct ast_member_expression *)expression;
+		if (member->indirect)
+			return false;
+		expression = member->operand;
+	}
+	return expression->kind == expression_name &&
+		((const struct ast_name_expression *)expression)->declaration->is_register;
+}
+
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required)
 {
@@ -882,6 +1198,41 @@ static bool sema_expression(struct sema *sema,
 	const struct type *result_type = &type_int;
 
 	switch (expression->kind) {
+	case expression_member: {
+		struct ast_member_expression *node = (struct ast_member_expression *)expression;
+		const struct type *base;
+		unsigned qualifiers;
+
+		if (!sema_expression(sema, &node->operand, node->indirect))
+			return false;
+		base = node->operand->type;
+		if (node->indirect) {
+			if (base->kind != type_kind_pointer) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"arrow member access requires a pointer to struct or union");
+				return false;
+			}
+			base = ((const struct pointer_type *)base)->referent;
+		}
+		if (!type_is_record(base) || !type_is_complete_object(base)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"member access requires a complete struct or union type");
+			return false;
+		}
+		node->member = find_record_member(base, node->name, &node->offset, &qualifiers);
+		if (!node->member) {
+			diagnostic_error(sema->diagnostics, node->name.location, "no member with this name in struct or union");
+			return false;
+		}
+		result_type = type_qualified(sema->arena, node->member->type, qualifiers);
+		if (!result_type) {
+			diagnostic_error(sema->diagnostics, expression->location, "out of memory qualifying member type");
+			return false;
+		}
+		expression->is_lvalue = node->indirect || node->operand->is_lvalue;
+		expression->depth = node->operand->depth + 1;
+		break;
+	}
 	case expression_call: {
 		struct ast_call_expression *node = (struct ast_call_expression *)expression;
 		const struct pointer_type *pointer;
@@ -918,12 +1269,30 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		result_type = node->signature->return_type;
+		if (type_is_record(result_type)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"aggregate function returns are not supported yet (M21)");
+			return false;
+		}
+		for (parameter = node->signature->parameters; parameter; parameter = parameter->next) {
+			if (type_is_record(parameter->type)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"aggregate function arguments are not supported yet (M21)");
+				return false;
+			}
+		}
 		parameter = node->signature->parameters;
 		expression->depth = node->callee->depth + 1;
 		for (struct ast_argument *argument = node->arguments; argument;
 			argument = argument->next) {
-			if (!sema_expression(sema, &argument->value, true) ||
-				!convert_expression(sema, &argument->value, parameter->type))
+			if (!sema_expression(sema, &argument->value, true))
+				return false;
+			if (type_is_record(argument->value->type)) {
+				diagnostic_error(sema->diagnostics, argument->value->location,
+					"aggregate function arguments are not supported yet (M21)");
+				return false;
+			}
+			if (!convert_expression(sema, &argument->value, parameter->type))
 				return false;
 			parameter = parameter->next;
 			if (argument->value->depth + 1 > expression->depth)
@@ -942,8 +1311,7 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
 			return false;
 		}
-		if (node->operand->kind == expression_name &&
-			((struct ast_name_expression *)node->operand)->declaration->is_register) {
+		if (has_register_root(node->operand)) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"cannot take the address of a register object");
 			return false;
@@ -1281,6 +1649,10 @@ static bool sema_expression(struct sema *sema,
 		b = node->else_value->type;
 		if (type_is_integer(a) && type_is_integer(b)) {
 			result_type = type_usual_arithmetic(a, b);
+		} else if (type_is_record(a) && type_is_record(b) && type_unqualified_compatible(a, b)) {
+			result_type = unqualified_type(sema, a, expression->location);
+			if (!result_type)
+				return false;
 		} else if (a->kind == type_kind_nullptr && b->kind == type_kind_nullptr) {
 			result_type = &type_nullptr;
 		} else if (a->kind == type_kind_void && b->kind == type_kind_void) {
@@ -1408,7 +1780,7 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->left, false))
 			return false;
 		if (!node->left->is_lvalue || node->left->type->kind == type_kind_array ||
-			(node->left->type->qualifiers & type_qualifier_const)) {
+			has_const_subobject(sema, node->left->type) || !type_is_complete_object(node->left->type)) {
 			diagnostic_error(sema->diagnostics, node->left->location,
 				"assignment requires a modifiable lvalue");
 			return false;
@@ -1416,7 +1788,9 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->right, true) ||
 			!convert_expression(sema, &node->right, node->left->type))
 			return false;
-		result_type = node->left->type;
+		result_type = unqualified_type(sema, node->left->type, expression->location);
+		if (!result_type)
+			return false;
 		depth = node->left->depth > node->right->depth ?
 			node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
@@ -1460,8 +1834,7 @@ static bool sema_expression(struct sema *sema,
 		struct ast_array_decay_expression *decay;
 
 		/* Direct sizeof/typeof operands never enter value conversion. */
-		if (!sema->unevaluated && expression->kind == expression_name &&
-			((struct ast_name_expression *)expression)->declaration->is_register) {
+		if (!sema->unevaluated && has_register_root(expression)) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"register array-to-pointer conversion is not supported");
 			return false;
@@ -1480,7 +1853,13 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		*expression_slot = &decay->expression;
 	} else if (value_required && expression->is_lvalue) {
-		struct ast_load_expression *load = ast_new_load(sema->arena, expression);
+		struct ast_load_expression *load;
+
+		if (type_is_record(expression->type) && !type_is_complete_object(expression->type)) {
+			diagnostic_error(sema->diagnostics, expression->location, "aggregate value requires a complete object type");
+			return false;
+		}
+		load = ast_new_load(sema->arena, expression);
 
 		if (!load) {
 			diagnostic_error(sema->diagnostics, expression->location,
@@ -1492,6 +1871,23 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!check_expression_depth(sema, &load->expression))
 			return false;
+		if (type_is_record(expression->type) && !sema->unevaluated && sema->function) {
+			uint64_t size = type_object_size(expression->type);
+			if (sema->function->record_temporary_count == ast_max_record_temporaries) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"function exceeds record value temporary limit (256)");
+				return false;
+			}
+			if (size > ast_max_local_storage - sema->local_storage) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"function exceeds local object and record temporary storage limit (1 MiB)");
+				return false;
+			}
+			sema->local_storage += size;
+			load->record_temporary_slot = sema->function->record_temporary_count++;
+			load->next_record_temporary = sema->function->record_temporaries;
+			sema->function->record_temporaries = load;
+		}
 		*expression_slot = &load->expression;
 	}
 	return true;
@@ -1598,9 +1994,9 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if (!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true))
 		return false;
 	type = local->initializer->type;
-	if (!type_is_scalar(type) || !type_is_complete_object(type)) {
+	if ((!type_is_scalar(type) && !type_is_record(type)) || !type_is_complete_object(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
-			"inferred auto requires a complete scalar initializer type");
+			"inferred auto requires a complete scalar or aggregate initializer type");
 		return false;
 	}
 	type = type_qualified(sema->arena, type, syntax->qualifiers);
@@ -2080,6 +2476,13 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 {
 	while (item) {
 		switch (item->kind) {
+		case block_item_tag_declaration: {
+			struct ast_tag_declaration *declaration = ((struct ast_block_tag_declaration *)item)->declaration;
+			if (declaration->type_syntax->kind != type_syntax_record ||
+				!resolve_record_syntax(sema, (struct ast_record_type_syntax *)declaration->type_syntax, true))
+				return false;
+			break;
+		}
 		case block_item_case:
 			if (!sema_case_label(sema, ((struct ast_block_case *)item)->label))
 				return false;
@@ -2132,7 +2535,7 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 
 static bool sema_function_body(struct sema *sema, struct ast_function *definition)
 {
-	struct scope scope = { 0 };
+	struct scope scope = { .tags = sema->definition_tags };
 	struct typedef_binding *saved_typedefs = sema->typedefs;
 	bool success = false;
 
@@ -2295,9 +2698,9 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 			"tentative main object is not supported on the Linux target");
 		return NULL;
 	}
-	if (!type_is_scalar(type) && type->kind != type_kind_array) {
+	if (!type_is_scalar(type) && type->kind != type_kind_array && !type_is_record(type)) {
 		diagnostic_error(sema->diagnostics, name.location,
-			"only scalar or array file-scope objects are supported yet");
+			"file-scope declaration requires a scalar, array or record object type");
 		return NULL;
 	}
 	/* C23 6.2.2p4-5: only extern inherits prior object linkage. Unlike
@@ -2583,7 +2986,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 
 		while (qualified->kind == type_kind_array)
 			qualified = ((const struct array_type *)qualified)->element;
-		if (!(qualified->qualifiers & type_qualifier_const)) {
+		if (!has_const_subobject(sema, qualified)) {
 			sema->function->inline_has_modifiable_static = true;
 			sema->function->inline_static_location = local->name.location;
 		}
@@ -2756,8 +3159,11 @@ static bool sema_function_declaration(struct sema *sema,
 	 * including unevaluated references in return/parameter type syntax.
 	 */
 	sema->function = definition;
+	sema->definition_syntax = definition ? declaration->type_syntax : NULL;
+	sema->definition_tags = NULL;
 	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
 	sema->function = NULL;
+	sema->definition_syntax = NULL;
 	if (!resolved)
 		return false;
 	assert(resolved->kind == type_kind_function);
@@ -2775,6 +3181,19 @@ static bool sema_function_declaration(struct sema *sema,
 		return false;
 	if (!definition)
 		return true;
+	const struct function_type *signature = (const struct function_type *)resolved;
+	if (type_is_record(signature->return_type)) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"aggregate function returns are not supported yet (M21)");
+		return false;
+	}
+	for (const struct function_parameter_type *parameter = signature->parameters; parameter; parameter = parameter->next) {
+		if (type_is_record(parameter->type)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"aggregate function arguments are not supported yet (M21)");
+			return false;
+		}
+	}
 	/* Install the definition before its body: direct recursion is visible. */
 	symbol->definition = definition;
 	definition->return_type = symbol->type->return_type;
@@ -2898,7 +3317,14 @@ static bool finalize_tentative_objects(struct sema *sema)
 		const struct array_type *array;
 		struct array_type *completed;
 
-		if (symbol->definition || !symbol->tentative_definition || symbol->type->kind != type_kind_array)
+		if (symbol->definition || !symbol->tentative_definition)
+			continue;
+		if (type_is_record(symbol->type) && !type_is_complete_object(symbol->type)) {
+			diagnostic_error(sema->diagnostics, symbol->tentative_definition->location,
+				"tentative record object requires completion before end of translation unit");
+			return false;
+		}
+		if (symbol->type->kind != type_kind_array)
 			continue;
 		array = (const struct array_type *)symbol->type;
 		if (array->count)
@@ -2936,6 +3362,14 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		struct ast_function *definition = NULL;
 		struct ast_function_declaration *declaration;
 
+		if (external->kind == external_declaration_tag) {
+			struct ast_tag_declaration *tag = ((struct ast_external_tag_declaration *)external)->declaration;
+			if (tag->type_syntax->kind != type_syntax_record ||
+				!resolve_record_syntax(&sema, (struct ast_record_type_syntax *)tag->type_syntax, true))
+				return false;
+			external = external->next;
+			continue;
+		}
 		if (external->kind == external_typedef_declaration) {
 			if (!sema_typedef_declaration(&sema,
 				((struct ast_external_typedef_declaration *)external)->declaration))
