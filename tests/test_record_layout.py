@@ -178,6 +178,38 @@ def native_constraints(tools, source, output):
     print(f'Native exact constraint rejections: {len(tools)*len(CONSTRAINTS)}')
 
 
+KCC_CONSTRAINT_ERRORS = {
+    'duplicate-member': 'duplicate or ambiguous record member name',
+    'anonymous-duplicate': 'duplicate or ambiguous record member name',
+    'void-member': 'record member must have complete object type (no void, function or incomplete member)',
+    'function-member': 'record member must have complete object type (no void, function or incomplete member)',
+    'self-by-value': 'record member must have complete object type (no void, function or incomplete member)',
+    'incomplete-member': 'record member must have complete object type (no void, function or incomplete member)',
+    'tag-kind': 'tag declared with a different record kind',
+    'tag-redefinition': 'redefinition of record tag',
+    'nominal-incompatible': 'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)',
+    'member-assert-false': 'static assertion failed: "record false"',
+    'member-assert-forward': 'sizeof requires a complete object type',
+    'member-assert-self': 'sizeof requires a complete object type',
+}
+KCC_FUTURE_ERRORS = {
+    'M17 braced initializer': 'file-scope object initializers are not supported yet',
+    'M21 by-value argument': 'aggregate function arguments are not supported yet (M21)',
+    'M21 by-value return': 'aggregate function returns are not supported yet (M21)',
+    'M22 bitfield': 'bit-fields are not supported yet (M22)',
+    'M22 flexible array': 'flexible array members are not supported yet (M22)',
+}
+
+
+def kcc_reject(source, text, expected):
+    source.write_text(text+'\n')
+    result = invoke([KCC, source])
+    assert result.returncode == 1 and not result.stdout, (text, result)
+    pattern = re.escape(str(source))+r':1:([0-9]+): error: '+re.escape(expected)+r'\n'
+    match = re.fullmatch(pattern, result.stderr)
+    assert match and 1 <= int(match[1]) <= len(text), (text, expected, result.stderr)
+
+
 def check_storage(path, case, qbe=False):
     records = elf_objects(path, {'cell': case.size, 'private_cell': case.size} if qbe else None)
     for name, binding in [('cell', 1), ('private_cell', 0)]:
@@ -218,9 +250,14 @@ def compilers():
     values = [os.environ.get('HOST_CC', 'gcc'), os.environ.get('GCC13_CC', '/data/kcc-gcc13/gcc13'),
               os.environ.get('CLANG_CC', '/data/kcc-init-clang18/usr/bin/clang-18')]
     assert len(set(os.path.realpath(shutil.which(c) or c) for c in values)) == 3, values
-    for cc in values:
+    for major, cc in zip((11, 13, 18), values):
         version = invoke([cc, '--version'])
         assert version.returncode == 0 and not version.stderr, (cc, version.stderr)
+        if major == 18:
+            assert re.search(r'clang version 18[.]', version.stdout), (cc, version.stdout)
+        else:
+            identity = invoke([cc, '-dumpversion'])
+            assert identity.returncode == 0 and not identity.stderr and identity.stdout.split('.')[0].strip() == str(major), (cc, identity)
         print(cc, version.stdout.splitlines()[0], flush=True)
     return values
 
@@ -265,11 +302,13 @@ def main():
             r = invoke([exe]); assert (r.returncode, r.stdout, r.stderr) == (42, '', ''), (case.name, r)
         scope_runs = 0
         for name, text in SCOPE_ORIGINALS.items():
-            if name == 'definition-parameter-tag-scope':
-                continue  # Covered by AST: native warns about external invisibility.
             owner.write_text(text+'\n')
             for cc in tools:
-                producer([cc, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0', '-c', owner, '-o', obj], obj)
+                expected = ()
+                if name == 'definition-parameter-tag-scope':
+                    expected = (('warning', "declaration of 'struct T' will not be visible outside of this function [-Wvisibility]" if clang_style(cc)
+                                 else "'struct T' declared inside parameter list will not be visible outside of this definition or declaration"),)
+                producer([cc, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0', '-c', owner, '-o', obj], obj, expected)
                 producer([cc, obj, '-o', exe], exe)
                 r = invoke([exe]); assert (r.returncode, r.stdout, r.stderr) == (42, '', ''), (name, r)
                 scope_runs += 1
@@ -287,6 +326,14 @@ def main():
             owner.write_text(text+'\n')
             for cc in tools:
                 producer([cc, '-std=c2x', '-pedantic-errors', '-fno-common', '-c', owner, '-o', obj], obj)
+        if not args.native_only:
+            assert set(KCC_CONSTRAINT_ERRORS) == set(CONSTRAINTS)
+            assert set(KCC_FUTURE_ERRORS) == set(UNSUPPORTED)
+            for name, text in CONSTRAINTS.items():
+                kcc_reject(owner, text, KCC_CONSTRAINT_ERRORS[name])
+            for name, text in UNSUPPORTED.items():
+                kcc_reject(owner, text, KCC_FUTURE_ERRORS[name])
+            print(f'KCC exact constraints: {len(CONSTRAINTS)}; valid unsupported: {len(UNSUPPORTED)} (separate, NOT agreements)')
         print(f'Native valid-future-milestone acceptances: {len(tools)*len(UNSUPPORTED)} (NOT M16 agreements)')
         print(f'Native defined original runs: {total}; KCC layout cases: {0 if args.native_only else len(cases())}', flush=True)
 
