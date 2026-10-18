@@ -175,9 +175,6 @@ DEFERRED = [
     'typeof(nullptr) other; int *cell=other;',
     'int *cell=cell;',
     'void *cell=cell;',
-    'int target; int *cell=&target;',
-    'int f(void); int (*cell)(void)=f;',
-    'char *cell="x";',
     'int *cell=&*(int *)0;',
     'int *cell=(int *)1;',
     'int *cell=(int *)(_Bool)nullptr;',
@@ -345,7 +342,7 @@ def main():
         for text, message, gcc_error, clang_error in CONSTRAINTS:
             owner.write_text(text+'\n')
             if not args.native_only:
-                reject(owner, 'error: '+('unsupported pointer conversion (incompatible pointers or integer/pointer conversion)' if message == 'pointer conversion' else 'file-scope pointer initializer requires a supported null constant expression')+'\n')
+                reject(owner, 'error: '+('unsupported pointer conversion (incompatible pointers or integer/pointer conversion)' if message == 'pointer conversion' else 'file-scope pointer initializer requires a supported null or direct address constant expression')+'\n')
                 rejected += 1
             for cc in compilers:
                 native.unlink(missing_ok=True)
@@ -356,7 +353,7 @@ def main():
         if not args.native_only:
             for text in DUPLICATES + DEFERRED + ARITHMETIC:
                 owner.write_text(text+'\n')
-                message = 'file-scope pointer initializer requires a supported null constant expression'
+                message = 'file-scope pointer initializer requires a supported null or direct address constant expression'
                 if text in DUPLICATES:
                     message = 'multiple initialized definitions of object'
                 elif text in (
