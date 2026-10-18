@@ -21,7 +21,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M12 | Integer types/literals/conversions/casts/bitwise | Promotions, signedness, limits and target-model tests | complete within baseline M12a-j integer/character subset; recorded host/sanitizer matrices and exact-source CI passed |
 | M13 | Pointers/strings/arrays/subscripts | Declarator/type checks, pointer arithmetic, executable cases | in progress (M13a-k pointers/arrays/subscripts/strings/parameter adjustment and M13l1 fixed ICE bounds and M13m traditional null constants implemented; later verification pending) |
 | M14 | Full declarators, typedef scopes, qualifiers, function pointers | Declarator trees and typedef ambiguity cases | in progress (M14a-i and M14j1-j2 const qualification and M14l1-l4 scoped typedef/ordinary-name bindings including parameters and typedef specifier placement; declarators, lists, incomplete pointers/composites, unnamed definitions, callbacks and void functions; conversion/typedef/qualifier work remains) |
-| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15i1 integer-constant initialized file objects integrating; M15h1 internal tentative scalars and M15h2 complete internal tentative arrays; M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions and M15f1 extern scalar-object and M15f2 extern array declarations and M15g1 tentative scalar and M15g2 tentative array definitions implemented; other storage/globals/linkage remain) |
+| M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | in progress (M15i2 null-pointer initialized file objects integrating; M15i1 integer-constant initialized file objects complete; M15h1 internal tentative scalars and M15h2 complete internal tentative arrays; M15a1 scalar register objects, M15b1 non-decaying fixed register arrays and M15a2 explicit auto objects; inferred auto starts in M23e1; M15c1 register parameters and M15d1 extern file-scope functions and M15d2 function prototype lists and M15e1 static functions and M15f1 extern scalar-object and M15f2 extern array declarations and M15g1 tentative scalar and M15g2 tentative array definitions implemented; other storage/globals/linkage remain) |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host ABI comparisons | planned |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | planned |
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
@@ -3536,3 +3536,14 @@ CI remains required, not presumed. See m15-integer-initializers.md for object ro
 constraint-versus-UB taxonomy and explicitly deferred pointer/array/braced/
 aggregate/runtime initialization. M15 and the general M17 initializer roadmap
 remain incomplete.
+
+## M15i2 null-pointer initialized file-scope definitions (integration)
+
+Explicit pointer targets accept strict zero ICEs, literal nullptr and checked
+pointer/nullptr cast chains. A pure source query precedes assignment conversion;
+object reads, pointer arithmetic/conditionals and evaluated comma forms do not
+become constants through null-valued types. Canonical integer/null data tags
+preserve explicit ownership, tentative history and rollback. Linux amd64 null
+storage uses eight zero bytes and no relocation. See m15-null-initializers.md.
+Frozen full normal/backend/sanitizer and exact-commit remote CI are required,
+not presumed; broader pointer addresses/offsets and M15/M17 remain incomplete.

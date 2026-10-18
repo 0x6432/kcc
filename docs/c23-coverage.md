@@ -1,10 +1,12 @@
 # C23 coverage
 
-Current storage checkpoint: M15i1 adds integer-constant initialized definitions
-with explicit-over-tentative ownership, existing integer/bool conversions and
-exported/internal aligned data. M15h1–h2 internal tentative scalars/fixed arrays
-remain supported. Pointer/array/braced initializers and block storage remain
-absent. See m15-integer-initializers.md and m15-static-objects.md.
+Current storage checkpoint: M15i2 adds explicit pointer definitions initialized
+by proved null constant expressions. M15i1 integer ICE definitions and M15h1–h2
+internal tentative scalars/fixed arrays remain supported. Explicit-over-tentative
+ownership, immutable captures and internal/exported storage are shared. Symbolic
+addresses, pointer arithmetic/conditionals, nullptr_t targets, array/braced
+initializers and block storage remain absent. See m15-null-initializers.md,
+m15-integer-initializers.md and m15-static-objects.md.
 This is still a subset, not ISO conformance.
 
 Status vocabulary: absent, subset, implemented, validated. Implemented means

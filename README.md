@@ -6,6 +6,14 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15I2: Explicit pointer objects now accept proved null initializers: strict zero
+ICEs, `nullptr`, and semantically valid pointer/nullptr cast chains. A tagged
+static-data value keeps null separate from integer bits; existing definition
+ownership and rollback remain unchanged. Linux amd64 data uses eight zero bytes
+without relocations or runtime stores. Addresses, pointer arithmetic, pointer
+conditionals, nullptr_t targets and aggregate initialization remain deferred.
+Read `docs/m15-null-initializers.md` for the precise source and validation gates.
+
 M15I1: File-scope integer objects now support checked integer constant
 initializers, including `static`, initialized `extern`, qualified/typedef/query
 types and mixed lists. One explicit definition supersedes tentative storage in

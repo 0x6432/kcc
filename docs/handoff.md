@@ -2,6 +2,17 @@
 
 ## Current checkpoint
 
+M15i2 adds null-pointer initialized definitions using a pure source-form proof
+before assignment conversion. Literal nullptr, strict zero ICEs and semantically
+valid pointer/nullptr cast chains are admitted. Integer/bool conversions are
+not transparent null proofs. Canonical data has an integer/null tag; explicit
+ownership and object-only rollback are unchanged. Source-point casts/captures
+remain immutable; codegen chooses Linux amd64 eight-byte zero null storage.
+Read m15-null-initializers.md. Source review and initial focused probes passed;
+full frozen integration and exact-commit remote CI remain pending, not presumed.
+
+### Previous M15i1 checkpoint
+
 M15i1 adds file-scope integer/bool initialized definitions using checked ICEs.
 Read m15-integer-initializers.md for the selected subset and validation boundary.
 Canonical `definition` supersedes `tentative_definition` for emission without
