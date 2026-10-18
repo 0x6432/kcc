@@ -232,7 +232,7 @@ c23_constraints = [
 ]
 # Deferred definitions/storage probes make no native-constraint claims.
 subset_errors = [
-    ('static int a[2];', 'file-scope object declarations'),
+    ('static int a[2]={40,2};', 'file-scope object initializers'),
     ('int a[2]={40,2};', 'file-scope object initializers'),
     ('extern int a[2]={40,2};', 'extern object definitions'),
     ('extern int a[]={40,2};', 'extern object definitions'),
