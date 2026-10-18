@@ -346,9 +346,9 @@ static struct address_initializer_result direct_address(const struct ast_express
 	}
 }
 
-/* Use captured expression types, not a canonical symbol's later composite.
- * No reinterpret casts (including incompatible function signatures), qualifier
- * removal, integer detours or object/function cross-conversions are admitted.
+/* Assignment-like pointer edges preserve immediate referent qualifiers.
+ * Checked explicit casts are handled separately with guaranteed alignment and
+ * no invented arithmetic domain; integer/object-function detours stay excluded.
  */
 static bool direct_pointer_conversion(const struct type *source, const struct type *target)
 {
@@ -367,7 +367,8 @@ static bool direct_pointer_conversion(const struct type *source, const struct ty
 }
 
 /* Private provenance survives pointer/void casts, but a cast never creates a
- * domain or changes its stride. One-past is a position, not a new object.
+ * domain through a void detour. Character views explicitly capture the pointed
+ * object's byte extent. One-past is a position, not a new object.
  */
 struct address_proof {
 	struct address_initializer_result result;
@@ -377,6 +378,8 @@ struct address_proof {
 	uint64_t position;
 	uint64_t start;
 	bool known_extent;
+	unsigned base_alignment;
+	bool explicit_cast;
 };
 
 static struct address_proof address_failure(const struct ast_expression *expression,
@@ -387,6 +390,13 @@ static struct address_proof address_failure(const struct ast_expression *express
 	} };
 }
 
+static unsigned address_alignment(const struct type *type)
+{
+	while (type->kind == type_kind_array)
+		type = ((const struct array_type *)type)->element;
+	return type_is_complete_object(type) ? type_object_alignment(type) : 1;
+}
+
 static struct address_proof address_base(const struct ast_expression *expression,
 	const struct ast_expression *operand, bool decay)
 {
@@ -395,6 +405,7 @@ static struct address_proof address_base(const struct ast_expression *expression
 
 	if (proof.result.status != constant_value)
 		return proof;
+	proof.base_alignment = address_alignment(type);
 	if (decay && type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)type;
 
@@ -463,18 +474,70 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 			return prove_address(((const struct ast_indirection_expression *)operand)->operand);
 		return address_base(expression, operand, false);
 	case expression_cast:
-	case expression_conversion:
-		operand = expression->kind == expression_cast ?
-			((const struct ast_cast_expression *)expression)->operand :
+	case expression_conversion: {
+		const struct type *source;
+		const struct type *target;
+		unsigned alignment;
+		bool explicit_cast = expression->kind == expression_cast;
+
+		operand = explicit_cast ? ((const struct ast_cast_expression *)expression)->operand :
 			((const struct ast_conversion_expression *)expression)->operand;
-		if (!direct_pointer_conversion(operand->type, expression->type))
+		if (operand->type->kind != type_kind_pointer || expression->type->kind != type_kind_pointer)
+			break;
+		source = ((const struct pointer_type *)operand->type)->referent;
+		target = ((const struct pointer_type *)expression->type)->referent;
+		if (!explicit_cast && !direct_pointer_conversion(operand->type, expression->type))
+			break;
+		if ((source->kind == type_kind_function) != (target->kind == type_kind_function))
 			break;
 		proof = prove_address(operand);
 		if (proof.result.status != constant_value)
 			return proof;
-		if (direct_pointer_conversion(proof.result.origin_type, expression->type))
+		/* Function-to-function casts preserve one function identity, not a
+		 * promise that an incompatible signature can safely be called.
+		 */
+		if (target->kind == type_kind_function) {
+			proof.explicit_cast |= explicit_cast;
 			return proof;
-		break;
+		}
+		alignment = address_alignment(target);
+		if (proof.base_alignment < alignment ||
+			(uint64_t)proof.result.address.byte_addend % alignment != 0)
+			break;
+		/* An implicit void detour cannot silently discard the original
+		 * type/qualifier proof. A checked explicit object cast may do so,
+		 * but must satisfy the target's guaranteed alignment.
+		 */
+		if (!explicit_cast && !proof.explicit_cast &&
+			!direct_pointer_conversion(proof.result.origin_type, expression->type))
+			break;
+		proof.explicit_cast |= explicit_cast;
+		if (target->kind == type_kind_void)
+			return proof;
+		if (proof.element && !type_unqualified_compatible(proof.element, target)) {
+			bool character = target->kind == type_kind_char || target->kind == type_kind_schar ||
+				target->kind == type_kind_uchar;
+
+			if (character && type_is_complete_object(proof.element) &&
+				(!proof.known_extent || proof.position < proof.extent)) {
+				/* A character view covers the pointed object, not an invented
+				 * larger enclosing array. &array legitimately views all its bytes.
+				 */
+				proof.extent = type_object_size(proof.element);
+				proof.known_extent = true;
+				proof.start = (uint64_t)proof.result.address.byte_addend;
+				proof.position = 0;
+				proof.stride = 1;
+				proof.element = target;
+			} else {
+				/* Reinterpreting an address does not manufacture an array of
+				 * the new type. Direct storage is legal; arithmetic needs a domain.
+				 */
+				proof.element = NULL;
+			}
+		}
+		return proof;
+	}
 	case expression_pointer_offset: {
 		const struct ast_pointer_offset_expression *offset =
 			(const struct ast_pointer_offset_expression *)expression;
