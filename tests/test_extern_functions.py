@@ -78,7 +78,6 @@ c23_constraints = [
     ('int f(extern typeof(missing) x);','extern is not permitted'),
 ]
 subset_errors = [
-    ('extern int *x=0;','extern object definitions'),
     ('extern auto x=42;','file-scope auto declarations'),
     ('auto extern x=42;','file-scope auto declarations'),
     ('int main(void) { extern int f(void); return 0; }','block-scope extern declarations'),

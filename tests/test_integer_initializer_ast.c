@@ -85,7 +85,8 @@ static void check_anchor_and_self_binding(void)
 	assert(first->symbol == definition->symbol && first->symbol == last->symbol);
 	assert(first->symbol->tentative_definition == &first->external);
 	assert(first->symbol->definition == &definition->external);
-	assert(first->symbol->initializer_bits == 42);
+	assert(first->symbol->initializer_value.kind == static_data_integer);
+	assert(first->symbol->initializer_value.integer_bits == 42);
 	assert(!first->symbol->is_internal && definition->is_extern);
 	assert(type_is_integer(definition->initializer->type));
 	assert(type_object_size(first->symbol->type) == 4);
@@ -108,11 +109,13 @@ static void check_explicit_zero_and_private_linkage(void)
 	assert(zero->initializer && zero->symbol == pure->symbol);
 	assert(zero->symbol->definition == &zero->external);
 	assert(zero->symbol->tentative_definition == NULL);
-	assert(zero->symbol->initializer_bits == 0);
+	assert(zero->symbol->initializer_value.kind == static_data_integer);
+	assert(zero->symbol->initializer_value.integer_bits == 0);
 	assert(first->symbol == definition->symbol && first->symbol->is_internal);
 	assert(first->symbol->tentative_definition == &first->external);
 	assert(first->symbol->definition == &definition->external);
-	assert(first->symbol->initializer_bits == 1);
+	assert(first->symbol->initializer_value.kind == static_data_integer);
+	assert(first->symbol->initializer_value.integer_bits == 1);
 	assert(type_object_size(first->symbol->type) == 1);
 	close_fixture(&f);
 }
@@ -138,11 +141,13 @@ static void check_alias_query_anchors(void)
 	assert(first->object_symbol->is_internal);
 	assert(first->object_symbol->tentative_definition == &first->external);
 	assert(first->object_symbol->definition == &definition->external);
-	assert(first->object_symbol->initializer_bits == 42);
+	assert(first->object_symbol->initializer_value.kind == static_data_integer);
+	assert(first->object_symbol->initializer_value.integer_bits == 42);
 	assert(type_object_size(first->object_symbol->type) == 8);
 	assert(truth->object_symbol->definition == &truth->external);
 	assert(truth->object_symbol->tentative_definition == NULL);
-	assert(truth->object_symbol->initializer_bits == 1);
+	assert(truth->object_symbol->initializer_value.kind == static_data_integer);
+	assert(truth->object_symbol->initializer_value.integer_bits == 1);
 	assert(type_object_size(truth->object_symbol->type) == 1);
 	close_fixture(&f);
 }
@@ -161,7 +166,8 @@ static void check_target_bits(void)
 
 		assert(d->symbol->definition == &d->external);
 		assert(d->symbol->tentative_definition == NULL);
-		assert(d->symbol->initializer_bits == bits[i]);
+		assert(d->symbol->initializer_value.kind == static_data_integer);
+		assert(d->symbol->initializer_value.integer_bits == bits[i]);
 	}
 	close_fixture(&f);
 }
@@ -180,7 +186,8 @@ static void check_failed_publication(const char *text, bool had_definition, bool
 	assert(failed->initializer && failed->symbol == NULL && failed->type == NULL);
 	assert(first->symbol->definition == (had_definition ? &first->external : NULL));
 	assert(first->symbol->tentative_definition == (had_tentative ? &first->external : NULL));
-	assert(first->symbol->initializer_bits == (had_definition ? 42 : 0));
+	assert(first->symbol->initializer_value.kind == static_data_integer);
+	assert(first->symbol->initializer_value.integer_bits == (had_definition ? 42 : 0));
 	assert(first->symbol->type == first->type);
 	assert(!first->symbol->is_internal);
 	close_fixture(&f);

@@ -233,7 +233,7 @@ ARITHMETIC = [('1/0', 'division by zero'), ('1%0', 'division by zero'),
               ('1ULL<<64', 'invalid shift count'), ('1<<-1', 'invalid shift count'),
               ('-1<<1', 'negative left operand'), ('1<<31', 'signed overflow')]
 DEFERRED = [
-    'int *cell=0;', 'int (*cell)(int)=0;', 'int cell[2]={1,2};',
+    'int cell[2]={1,2};',
     'int cell[]={1,2};', 'int cell={42};', 'int cell={};',
     'int other; int *cell=&other;', 'char *cell="x";',
     'int f(int); int (*cell)(int)=f;', 'typeof(nullptr) cell=nullptr;',
