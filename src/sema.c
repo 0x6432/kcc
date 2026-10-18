@@ -1270,12 +1270,19 @@ static bool sema_expression(struct sema *sema,
 		}
 		result_type = node->signature->return_type;
 		if (type_is_record(result_type)) {
-			diagnostic_error(sema->diagnostics, expression->location,
-				"aggregate function returns are not supported yet (M21)");
-			return false;
+			if (!sema->unevaluated) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"aggregate function returns are not supported yet (M21)");
+				return false;
+			}
+			if (!type_is_complete_object(result_type)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"function call requires a complete return object type");
+				return false;
+			}
 		}
 		for (parameter = node->signature->parameters; parameter; parameter = parameter->next) {
-			if (type_is_record(parameter->type)) {
+			if (!sema->unevaluated && type_is_record(parameter->type)) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"aggregate function arguments are not supported yet (M21)");
 				return false;
@@ -1287,7 +1294,7 @@ static bool sema_expression(struct sema *sema,
 			argument = argument->next) {
 			if (!sema_expression(sema, &argument->value, true))
 				return false;
-			if (type_is_record(argument->value->type)) {
+			if (!sema->unevaluated && type_is_record(argument->value->type)) {
 				diagnostic_error(sema->diagnostics, argument->value->location,
 					"aggregate function arguments are not supported yet (M21)");
 				return false;
