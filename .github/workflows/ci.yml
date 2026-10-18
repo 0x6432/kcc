@@ -14,19 +14,26 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
+        instrumentation: [normal, sanitized]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Build and test
-        run: HOST_CC=${{ matrix.compiler }} make test CC=${{ matrix.compiler }}
-      - name: Build pinned QBE and test generated executables
+      - name: Build pinned QBE
+        run: sh scripts/build_qbe.sh "$RUNNER_TEMP/kcc-qbe"
+      - name: Build and test, including generated executables
+        shell: bash
+        env:
+          HOST_CC: ${{ matrix.compiler }}
+          INSTRUMENTATION: ${{ matrix.instrumentation }}
         run: |
-          sh scripts/build_qbe.sh "$RUNNER_TEMP/kcc-qbe"
-          HOST_CC=${{ matrix.compiler }} make test-codegen QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
-      - name: Address and undefined-behavior sanitizers
-        run: |
-          make clean
-          HOST_CC=${{ matrix.compiler }} make test CC=${{ matrix.compiler }} CFLAGS='-std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer' LDFLAGS='-fsanitize=address,undefined'
-          HOST_CC=${{ matrix.compiler }} make test-codegen QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
+          make_args=("CC=$HOST_CC")
+          if [ "$INSTRUMENTATION" = sanitized ]; then
+            make_args+=(
+              'CFLAGS=-std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer'
+              'LDFLAGS=-fsanitize=address,undefined'
+            )
+          fi
+          make test "${make_args[@]}"
+          make test-codegen "${make_args[@]}" QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
   fuzz:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
