@@ -749,14 +749,15 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			struct ast_record_type_syntax *nested = record_specifier_base(base);
 			struct token name = { 0 };
 
-			if (!nested) {
+			/* 6.7.2.1p2: a tag declaration alone is not a member. Only
+			 * an untagged definition can omit its member declarator list. */
+			if (!nested || !nested->has_definition || nested->tag.kind == token_identifier) {
 				diagnostic_error(parser->diagnostics, beginning.location,
-					"member declaration requires a declarator or record specifier");
+					"member declaration requires a declarator or anonymous record definition");
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name,
-				nested->has_definition && nested->tag.kind != token_identifier))
+			if (!append_record_member(parser, record, &tail, base, name, true))
 				return false;
 			continue;
 		}
@@ -2353,16 +2354,24 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct ast_tag_declaration *declaration;
 		struct ast_block_tag_declaration *node;
 
-		if (head.keyword.kind != token_eof || head.auto_keyword.kind != token_eof ||
-			head.thread_keyword.kind != token_eof || head.inline_keyword.kind != token_eof) {
+		struct ast_record_type_syntax *record = record_specifier_base(base);
+
+		/* Storage/qualifier spellings describe no ordinary entity here.
+		 * Specifier combination constraints were already checked above. */
+		if (record->tag.kind != token_identifier) {
 			diagnostic_error(parser->diagnostics, beginning.location,
-				"standalone tag declaration cannot have storage or function specifiers");
+				"declaration without a declarator requires a tag name");
+			return NULL;
+		}
+		if (head.inline_keyword.kind != token_eof) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"inline requires a function identifier declaration");
 			return NULL;
 		}
 		if (!count_block_item(parser, beginning.location))
 			return NULL;
 		preprocess_next(parser->preprocessor);
-		declaration = ast_new_tag_declaration(parser->arena, base, beginning.location);
+		declaration = ast_new_tag_declaration(parser->arena, &record->syntax, beginning.location);
 		node = declaration ? ast_new_block_tag_declaration(parser->arena, declaration) : NULL;
 		if (!node)
 			allocation_error(parser, beginning.location);
@@ -2451,7 +2460,8 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 
 	if (!base)
 		return NULL;
-	if (head.keyword.kind == token_typedef)
+	if (head.keyword.kind == token_typedef &&
+		!(preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)))
 		return parse_block_typedef_declaration_tail(parser, head.keyword, base);
 	return parse_local_declaration_tail(parser, beginning, base, head);
 }
@@ -3045,14 +3055,20 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		struct ast_tag_declaration *declaration;
 		struct ast_external_tag_declaration *node;
 
-		if (head.keyword.kind != token_eof || head.thread_keyword.kind != token_eof ||
-			head.inline_keyword.kind != token_eof) {
+		struct ast_record_type_syntax *record = record_specifier_base(base);
+
+		if (record->tag.kind != token_identifier) {
 			diagnostic_error(parser->diagnostics, beginning.location,
-				"standalone tag declaration cannot have storage or function specifiers");
+				"declaration without a declarator requires a tag name");
+			return NULL;
+		}
+		if (head.inline_keyword.kind != token_eof) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"inline requires a function identifier declaration");
 			return NULL;
 		}
 		preprocess_next(parser->preprocessor);
-		declaration = ast_new_tag_declaration(parser->arena, base, beginning.location);
+		declaration = ast_new_tag_declaration(parser->arena, &record->syntax, beginning.location);
 		node = declaration ? ast_new_external_tag_declaration(parser->arena, declaration) : NULL;
 		if (!node)
 			allocation_error(parser, beginning.location);
