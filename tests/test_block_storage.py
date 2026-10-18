@@ -24,6 +24,21 @@ from test_null_initializers import native_compilers, compiler_selection_self_tes
 from test_direct_address_initializers import Reference, ElfRelocations
 
 
+# Exact unchanged originals only. GCC13 supports typeof but still diagnoses
+# register-array decay inside this unevaluated query (GCC11 takes the separate
+# keyword-gap path). Neither rejection is a native runtime agreement.
+REGISTER_ARRAY_DIVERGENCES = {
+    'int main(void) { register int a[2]; return sizeof(a[0])==4?42:1; }': {
+        'gcc': (('error', "ISO C forbids subscripting 'register' array [-Wpedantic]"),),
+        'clang': (('error', 'address of register variable requested'),),
+    },
+    'int main(void) { register int a[2]; typeof(a+0) p=0; return p==0?42:1; }': {
+        'gcc': (('error', "address of register variable 'a' requested"),),
+        'clang': (('error', 'address of register variable requested'),),
+    },
+}
+
+
 @dataclass(frozen=True)
 class Storage:
     stem: str
@@ -238,9 +253,9 @@ def fixtures():
     add('register void', 'int target(register void) { return 42; } int main(void) { return target(); }', features=())
     cases[-1].native_gaps = {'gcc': (('error', "'void' as only parameter may not be qualified"),)}
     add('register array unevaluated', 'int main(void) { register int a[2]; return sizeof(a[0])==4?42:1; }', features=())
-    cases[-1].native_gaps = {'gcc': (('error', "ISO C forbids subscripting 'register' array [-Wpedantic]"),), 'clang': (('error', 'address of register variable requested'),)}
+    cases[-1].native_gaps = REGISTER_ARRAY_DIVERGENCES[cases[-1].owner]
     add('register array typeof', 'int main(void) { register int a[2]; typeof(a+0) p=0; return p==0?42:1; }', features=('typeof',))
-    cases[-1].native_gaps = {'clang': (('error', 'address of register variable requested'),)}
+    cases[-1].native_gaps = REGISTER_ARRAY_DIVERGENCES[cases[-1].owner]
     return cases
 
 
@@ -414,6 +429,54 @@ def native_refusal(text, result, source, output, expected, clang):
             and native_diagnostics(result.stderr,source,text,clang) == tuple(expected))
 
 
+def register_array_refusal(text, result, source, output, clang):
+    """Allow only a fixed original + family + complete diagnostic transcript."""
+    family = 'clang' if clang else 'gcc'
+    expected = REGISTER_ARRAY_DIVERGENCES.get(text, {}).get(family)
+    return (expected is not None and
+            native_refusal(text, result, source, output, expected, clang))
+
+
+def register_array_controls(directory):
+    """Replay GCC13 CI evidence and poison every verdict path; execute no C."""
+    import subprocess
+    source, output = directory/'register-original.c', directory/'register-original.o'
+    for text, families in REGISTER_ARRAY_DIVERGENCES.items():
+        source.write_text(text+'\n')
+        for family, expected in families.items():
+            clang = family == 'clang'
+            message = expected[0][1]
+            # Match the actual GCC13 In-function/source/caret rendering, not a
+            # keyword-unsupported error or a flag-only diagnostic exception.
+            context = '' if clang else f"{source}: In function ‘main’:\n"
+            rendered = (context+f'{source}:1:1: error: {message}\n'
+                        f'    1 | {text}\n      | ^~~\n')
+            if clang:
+                rendered += '1 error generated.\n'
+            good = subprocess.CompletedProcess([],1,'',rendered)
+            output.unlink(missing_ok=True)
+            assert register_array_refusal(text,good,source,output,clang)
+            assert not register_array_refusal(text+' ',good,source,output,clang)
+            assert not register_array_refusal('int unrelated;',good,source,output,clang)
+            poisoned = [rendered+'unrecognized tool output\n',
+                        rendered+'internal compiler error: broken\n',
+                        rendered.replace('error:', 'fatal error:', 1),
+                        rendered.replace(message, 'unrelated register failure'),
+                        rendered.replace(text, text.replace('a[2]', 'a[3]')),
+                        rendered+'1 error generated.\n']
+            poisoned += [rendered+f'{source}:1:1: {kind}: extra\n'
+                         for kind in ('warning','error','note')]
+            for stderr in poisoned:
+                assert not register_array_refusal(text,subprocess.CompletedProcess([],1,'',stderr),source,output,clang)
+            for status in (0,2,127,-6,-9,-11):
+                assert not register_array_refusal(text,subprocess.CompletedProcess([],status,'',rendered),source,output,clang)
+            assert not register_array_refusal(text,subprocess.CompletedProcess([],1,'unexpected stdout',rendered),source,output,clang)
+            output.write_bytes(b'stale')
+            assert not register_array_refusal(text,good,source,output,clang)
+    output.unlink(missing_ok=True)
+    print('Register-array controls: exact GCC13/Clang originals, full-stream evidence and poison/stale rejection')
+
+
 def controls(directory):
     """Storage-specific adversarial tests, in addition to imported harness gates."""
     source, output = directory/'storage-control.c',directory/'storage-control.o'
@@ -479,6 +542,7 @@ def main():
         harness_self_test(d)
         compiler_selection_self_test(d)
         controls(d)
+        register_array_controls(d)
         if options.harness_self_test:
             return
         compilers = native_compilers(HOST,os.environ.get('CLANG_CC') or shutil.which('clang'))
@@ -501,7 +565,10 @@ def main():
                 if gap:
                     native.unlink(missing_ok=True)
                     result = invoke([cc,'-std=c2x','-pedantic-errors','-fno-common','-O0','-c',source,'-o',native])
-                    assert native_refusal(case.owner,result,source,native,gap,clang_style(cc)), (case.name,cc,result)
+                    if case.owner in REGISTER_ARRAY_DIVERGENCES:
+                        assert register_array_refusal(case.owner,result,source,native,clang_style(cc)), (case.name,cc,result)
+                    else:
+                        assert native_refusal(case.owner,result,source,native,gap,clang_style(cc)), (case.name,cc,result)
                     counts[cc][3] += 1
                     continue
                 expected_warnings = ()
