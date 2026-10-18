@@ -471,7 +471,7 @@ with tempfile.TemporaryDirectory(prefix='kcc storage promotions ') as directory:
     lane = 'clang' if 'clang' in version.stdout.lower() else 'gcc'
     agreements = executed = native_executed = object_proofs = 0
     exceptions = {'keyword gap': 0, 'divergence': 0}
-    assert len(CASES) == 34 and len({(c['origin'], c['text']) for c in CASES}) == len(CASES)
+    assert len(CASES) == 35 and len({(c['origin'], c['text']) for c in CASES}) == len(CASES)
     for case in CASES:
         text = case['text']
         # The exact recorded original is used in BOTH producers. Only an ending
