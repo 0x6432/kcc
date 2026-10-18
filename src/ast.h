@@ -41,9 +41,14 @@ enum expression_kind {
 	expression_sizeof_type,
 	expression_alignof,
 	expression_call,
+	expression_member,
 };
 
 enum {
+	ast_max_record_nesting = 64,
+	ast_max_record_temporaries = 256,
+	ast_max_record_members = 1024,
+	ast_max_record_declarations = 4096,
 	ast_max_expression_depth = 128,
 	ast_max_statement_nesting = 128,
 	ast_max_type_queries = 64,
@@ -300,6 +305,8 @@ struct ast_compound_assignment_expression {
 struct ast_load_expression {
 	struct ast_expression expression;
 	struct ast_expression *operand;
+	size_t record_temporary_slot;
+	struct ast_load_expression *next_record_temporary;
 };
 
 /* Inserted by sema in ordinary array value contexts, never an array load. */
@@ -340,12 +347,45 @@ enum type_syntax_kind {
 	type_syntax_pointer,
 	type_syntax_array,
 	type_syntax_function,
+	type_syntax_record,
 };
 
 struct ast_type_syntax {
 	enum type_syntax_kind kind;
 	struct source_location location;
 	const struct type *type;
+};
+
+/* Syntax only: tags belong to sema's separate namespace, never parser aliases. */
+struct ast_record_type_syntax {
+	struct ast_type_syntax syntax;
+	struct token tag;
+	bool is_union;
+	bool has_definition;
+	struct ast_record_member_declaration *members;
+	size_t member_declaration_count;
+};
+
+struct ast_record_member_declaration {
+	struct ast_type_syntax *type_syntax;
+	struct token name;
+	bool anonymous;
+	struct ast_record_member_declaration *next;
+	struct ast_static_assertion *static_assertion;
+};
+
+struct ast_member_expression {
+	struct ast_expression expression;
+	struct ast_expression *operand;
+	struct token name;
+	bool indirect;
+	uint64_t offset;
+	const struct record_member *member;
+};
+
+struct ast_tag_declaration {
+	struct ast_type_syntax *type_syntax;
+	struct source_location location;
 };
 
 struct ast_typedef_name_type_syntax {
@@ -552,6 +592,7 @@ enum block_item_kind {
 	block_item_statement,
 	block_item_static_assertion,
 	block_item_typedef_declaration,
+	block_item_tag_declaration,
 };
 
 struct ast_block_item {
@@ -584,6 +625,11 @@ struct ast_block_static_assertion {
 struct ast_block_typedef_declaration {
 	struct ast_block_item item;
 	struct ast_typedef_declaration *declaration;
+};
+
+struct ast_block_tag_declaration {
+	struct ast_block_item item;
+	struct ast_tag_declaration *declaration;
 };
 
 struct ast_local_declaration {
@@ -621,12 +667,18 @@ enum external_declaration_kind {
 	external_type_declaration,
 	external_object_declaration,
 	external_typedef_declaration,
+	external_declaration_tag,
 };
 
 struct ast_external_declaration {
 	enum external_declaration_kind kind;
 	struct source_location location;
 	struct ast_external_declaration *next;
+};
+
+struct ast_external_tag_declaration {
+	struct ast_external_declaration external;
+	struct ast_tag_declaration *declaration;
 };
 
 struct ast_typedef_declaration {
@@ -712,6 +764,8 @@ struct ast_function {
 	struct ast_local_declaration *locals;
 	size_t label_count;
 	size_t switch_label_count;
+	struct ast_load_expression *record_temporaries;
+	size_t record_temporary_count;
 };
 
 struct ast_translation_unit {
@@ -720,6 +774,17 @@ struct ast_translation_unit {
 	struct ast_external_declaration *declarations;
 	struct ast_string_expression *strings;
 };
+
+struct ast_record_type_syntax *ast_new_record_type_syntax(struct arena *arena,
+	struct token keyword, struct token tag);
+struct ast_member_expression *ast_new_member(struct arena *arena,
+	struct ast_expression *operand, struct token operation, struct token name);
+struct ast_tag_declaration *ast_new_tag_declaration(struct arena *arena,
+	struct ast_type_syntax *type_syntax, struct source_location location);
+struct ast_block_tag_declaration *ast_new_block_tag_declaration(struct arena *arena,
+	struct ast_tag_declaration *declaration);
+struct ast_external_tag_declaration *ast_new_external_tag_declaration(struct arena *arena,
+	struct ast_tag_declaration *declaration);
 
 struct ast_static_assertion *ast_new_static_assertion(struct arena *arena,
 	struct source_location location, struct ast_expression *condition,

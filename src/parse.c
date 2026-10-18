@@ -25,6 +25,8 @@ struct parser {
 	unsigned statement_nesting;
 	unsigned declarator_nesting;
 	unsigned type_query_nesting;
+	unsigned record_nesting;
+	size_t record_declarations;
 	size_t block_items;
 	size_t string_bytes;
 	size_t string_count;
@@ -97,7 +99,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 
 	return kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
-		kind == token_void || kind == token_const ||
+		kind == token_void || kind == token_const || kind == token_struct || kind == token_union ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
@@ -118,6 +120,8 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 }
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
+static struct ast_type_syntax *parse_record_specifier(struct parser *parser, struct token keyword);
+static struct ast_static_assertion *parse_static_assertion(struct parser *parser);
 
 enum declarator_context {
 	declarator_local,
@@ -266,6 +270,16 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		preprocess_next(parser->preprocessor);
+		if (token.kind == token_struct || token.kind == token_union) {
+			if (query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+				diagnostic_error(parser->diagnostics, token.location, "record cannot combine with other type specifiers");
+				return NULL;
+			}
+			query = parse_record_specifier(parser, token);
+			if (!query)
+				return NULL;
+			continue;
+		}
 		if (token.kind == token_typeof || token.kind == token_typeof_unqual) {
 			if (query) {
 				diagnostic_error(parser->diagnostics, token.location, "duplicate typeof type specifier");
@@ -656,6 +670,165 @@ static struct ast_type_syntax *parse_derived_type(struct parser *parser,
 	if (has_name)
 		*has_name = declarator.has_name;
 	return declarator.syntax;
+}
+
+/* Record member names are not ordinary-identifier bindings. Tags likewise
+ * remain unresolved syntax; sema visits these in source order in its tag scope. */
+static struct ast_record_type_syntax *record_specifier_base(struct ast_type_syntax *syntax)
+{
+	while (syntax && syntax->kind == type_syntax_qualified)
+		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	return syntax && syntax->kind == type_syntax_record ?
+		(struct ast_record_type_syntax *)syntax : NULL;
+}
+
+static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
+	struct ast_record_member_declaration ***tail, struct ast_type_syntax *syntax,
+	struct token name, bool anonymous)
+{
+	struct ast_record_member_declaration *member;
+
+	if (record->member_declaration_count == ast_max_record_members ||
+		parser->record_declarations == ast_max_record_declarations) {
+		diagnostic_error(parser->diagnostics, syntax->location,
+			"record member declaration resource limit exceeded");
+		return false;
+	}
+	member = arena_alloc(parser->arena, sizeof(*member));
+	if (!member) {
+		allocation_error(parser, syntax->location);
+		return false;
+	}
+	*member = (struct ast_record_member_declaration) {
+		.type_syntax = syntax, .name = name, .anonymous = anonymous,
+	};
+	**tail = member;
+	*tail = &member->next;
+	record->member_declaration_count++;
+	parser->record_declarations++;
+	return true;
+}
+
+static bool parse_record_members(struct parser *parser, struct ast_record_type_syntax *record)
+{
+	struct ast_record_member_declaration **tail = &record->members;
+
+	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
+		struct token beginning;
+		struct ast_type_syntax *base;
+
+		if (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
+			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert) {
+			struct ast_static_assertion *assertion = parse_static_assertion(parser);
+			struct ast_record_member_declaration *member;
+
+			if (!assertion)
+				return false;
+			if (record->member_declaration_count == ast_max_record_members ||
+				parser->record_declarations == ast_max_record_declarations) {
+				diagnostic_error(parser->diagnostics, assertion->location,
+					"record member declaration resource limit exceeded");
+				return false;
+			}
+			member = arena_alloc(parser->arena, sizeof(*member));
+			if (!member) {
+				allocation_error(parser, assertion->location);
+				return false;
+			}
+			*member = (struct ast_record_member_declaration) { .static_assertion = assertion };
+			*tail = member;
+			tail = &member->next;
+			record->member_declaration_count++;
+			parser->record_declarations++;
+			continue;
+		}
+		base = parse_declaration_specifiers(parser, &beginning, NULL, declarator_parameter);
+		if (!base)
+			return false;
+		if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+			struct ast_record_type_syntax *nested = record_specifier_base(base);
+			struct token name = { 0 };
+
+			if (!nested) {
+				diagnostic_error(parser->diagnostics, beginning.location,
+					"member declaration requires a declarator or record specifier");
+				return false;
+			}
+			preprocess_next(parser->preprocessor);
+			if (!append_record_member(parser, record, &tail, base, name,
+				nested->has_definition && nested->tag.kind != token_identifier))
+				return false;
+			continue;
+		}
+		for (;;) {
+			struct token name = { 0 };
+			bool has_name = false;
+			struct ast_type_syntax *syntax;
+
+			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
+				diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+					"bit-fields are not supported yet (M22)");
+				return false;
+			}
+			syntax = parse_derived_type(parser, base, &name, &has_name, declarator_parameter);
+			if (!syntax)
+				return false;
+			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
+				diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+					"bit-fields are not supported yet (M22)");
+				return false;
+			}
+			if (!has_name) {
+				diagnostic_error(parser->diagnostics, beginning.location, "expected member name");
+				return false;
+			}
+			if (syntax->kind == type_syntax_array &&
+				!((struct ast_array_type_syntax *)syntax)->bound) {
+				diagnostic_error(parser->diagnostics, syntax->location,
+					"flexible array members are not supported yet (M22)");
+				return false;
+			}
+			if (!append_record_member(parser, record, &tail, syntax, name, false))
+				return false;
+			if (preprocess_peek(parser->preprocessor).kind != token_comma)
+				break;
+			preprocess_next(parser->preprocessor);
+		}
+		if (!expect_token(parser, token_semicolon, "expected ';' after record member declaration", NULL))
+			return false;
+	}
+	return expect_token(parser, token_right_brace, "expected '}' after record definition", NULL);
+}
+
+static struct ast_type_syntax *parse_record_specifier(struct parser *parser, struct token keyword)
+{
+	struct token tag = { 0 };
+	struct ast_record_type_syntax *record;
+
+	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
+		tag = preprocess_next(parser->preprocessor);
+	record = ast_new_record_type_syntax(parser->arena, keyword, tag);
+	if (!record) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
+		if (tag.kind != token_identifier) {
+			diagnostic_error(parser->diagnostics, keyword.location, "expected tag name or record definition");
+			return NULL;
+		}
+		return &record->syntax;
+	}
+	if (parser->record_nesting == ast_max_record_nesting) {
+		diagnostic_error(parser->diagnostics, keyword.location, "record definition exceeds nesting limit (64)");
+		return NULL;
+	}
+	preprocess_next(parser->preprocessor);
+	record->has_definition = true;
+	parser->record_nesting++;
+	bool success = parse_record_members(parser, record);
+	parser->record_nesting--;
+	return success ? &record->syntax : NULL;
 }
 
 /* type-name ::= declaration-specifiers [ declarator ]
@@ -1064,6 +1237,18 @@ static struct ast_expression *parse_postfix_suffix(struct parser *parser,
 			expression = parse_call_suffix(parser, expression);
 		else if (token.kind == token_left_bracket)
 			expression = parse_subscript_suffix(parser, expression);
+		else if (token.kind == token_dot || token.kind == token_arrow) {
+			struct token name;
+			struct ast_member_expression *member;
+
+			preprocess_next(parser->preprocessor);
+			if (!expect_token(parser, token_identifier, "expected member name after '.' or '->'", &name))
+				return NULL;
+			member = ast_new_member(parser->arena, expression, token, name);
+			if (!member)
+				allocation_error(parser, token.location);
+			expression = member ? &member->expression : NULL;
+		}
 		else if (token.kind == token_increment || token.kind == token_decrement)
 			expression = parse_postfix_update_suffix(parser, expression);
 		else
@@ -2164,6 +2349,25 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
+		struct ast_tag_declaration *declaration;
+		struct ast_block_tag_declaration *node;
+
+		if (head.keyword.kind != token_eof || head.auto_keyword.kind != token_eof ||
+			head.thread_keyword.kind != token_eof || head.inline_keyword.kind != token_eof) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"standalone tag declaration cannot have storage or function specifiers");
+			return NULL;
+		}
+		if (!count_block_item(parser, beginning.location))
+			return NULL;
+		preprocess_next(parser->preprocessor);
+		declaration = ast_new_tag_declaration(parser->arena, base, beginning.location);
+		node = declaration ? ast_new_block_tag_declaration(parser->arena, declaration) : NULL;
+		if (!node)
+			allocation_error(parser, beginning.location);
+		return node ? &node->item : NULL;
+	}
 	if (head.thread_keyword.kind == token_thread_local &&
 		head.keyword.kind != token_static && head.keyword.kind != token_extern) {
 		diagnostic_error(parser->diagnostics, beginning.location,
@@ -2836,6 +3040,23 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		diagnostic_error(parser->diagnostics, head.auto_keyword.location,
 			"file-scope auto declarations are not supported yet");
 		return NULL;
+	}
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
+		struct ast_tag_declaration *declaration;
+		struct ast_external_tag_declaration *node;
+
+		if (head.keyword.kind != token_eof || head.thread_keyword.kind != token_eof ||
+			head.inline_keyword.kind != token_eof) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"standalone tag declaration cannot have storage or function specifiers");
+			return NULL;
+		}
+		preprocess_next(parser->preprocessor);
+		declaration = ast_new_tag_declaration(parser->arena, base, beginning.location);
+		node = declaration ? ast_new_external_tag_declaration(parser->arena, declaration) : NULL;
+		if (!node)
+			allocation_error(parser, beginning.location);
+		return node ? &node->external : NULL;
 	}
 	if (head.keyword.kind == token_typedef)
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);

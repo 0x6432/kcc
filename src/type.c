@@ -1,6 +1,7 @@
 #include "type.h"
 
 #include <assert.h>
+#include <string.h>
 
 const struct type type_nullptr = { .kind = type_kind_nullptr };
 const struct type type_void = { .kind = type_kind_void };
@@ -57,12 +58,14 @@ bool type_is_scalar(const struct type *type)
 
 bool type_is_object(const struct type *type)
 {
-	return type_is_scalar(type) || type->kind == type_kind_array ||
+	return type_is_scalar(type) || type_is_record(type) || type->kind == type_kind_array ||
 		type->kind == type_kind_void;
 }
 
 bool type_is_complete_object(const struct type *type)
 {
+	if (type_is_record(type))
+		return type_record_definition(type)->complete;
 	if (type->kind == type_kind_array)
 		return ((const struct array_type *)type)->count != 0;
 	return type_is_scalar(type);
@@ -78,6 +81,8 @@ unsigned type_value_width(const struct type *type)
 uint64_t type_object_size(const struct type *type)
 {
 	assert(type_is_complete_object(type));
+	if (type_is_record(type))
+		return type_record_definition(type)->size;
 	if (type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)type;
 
@@ -89,6 +94,8 @@ uint64_t type_object_size(const struct type *type)
 unsigned type_object_alignment(const struct type *type)
 {
 	assert(type_is_complete_object(type));
+	if (type_is_record(type))
+		return type_record_definition(type)->alignment;
 	if (type->kind == type_kind_array)
 		return type_object_alignment(((const struct array_type *)type)->element);
 	return type_value_width(type) / 8;
@@ -289,6 +296,15 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 		copy->type.qualifiers = qualifiers;
 		return &copy->type;
 	}
+	if (type_is_record(type)) {
+		struct record_type *copy = arena_alloc(arena, sizeof(*copy));
+
+		if (copy) {
+			*copy = *(const struct record_type *)type;
+			copy->type.qualifiers = qualifiers;
+		}
+		return copy ? &copy->type : NULL;
+	}
 	assert(type_is_integer(type) || type->kind == type_kind_void || type->kind == type_kind_nullptr);
 	leaf = arena_alloc(arena, sizeof(*leaf));
 	if (leaf)
@@ -322,6 +338,8 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	if (left->kind != right->kind ||
 		(!ignore_root_qualifiers && left->qualifiers != right->qualifiers))
 		return false;
+	if (type_is_record(left))
+		return type_record_definition(left) == type_record_definition(right);
 	if (type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return true;
 	if (left->kind == type_kind_pointer) {
@@ -374,7 +392,7 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right)
 {
 	assert(type_compatible(left, right));
-	if (left == right || type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
+	if (left == right || type_is_record(left) || type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return left;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;
@@ -441,4 +459,181 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	}
 	assert(0 && "unknown composite type");
 	return NULL;
+}
+
+bool type_is_record(const struct type *type)
+{
+	return type->kind == type_kind_struct || type->kind == type_kind_union;
+}
+
+struct record_definition *type_record_definition(const struct type *type)
+{
+	return type_is_record(type) ? ((const struct record_type *)type)->definition : NULL;
+}
+
+struct record_type *type_new_record(struct arena *arena, bool is_union)
+{
+	struct record_type *record = arena_alloc(arena, sizeof(*record));
+	struct record_definition *definition = arena_alloc(arena, sizeof(*definition));
+
+	if (!record || !definition)
+		return NULL;
+	*definition = (struct record_definition) { .is_union = is_union };
+	*record = (struct record_type) {
+		.type = { .kind = is_union ? type_kind_union : type_kind_struct },
+		.definition = definition,
+	};
+	return record;
+}
+
+/* Checked storage walk stops at nominal records and pointer objects; it never
+ * follows referents. Nested arrays are checked before multiplying. */
+static bool checked_member_layout(const struct type *type, unsigned depth,
+	uint64_t *size, unsigned *alignment)
+{
+	if (depth > 64)
+		return false;
+	if (type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+		uint64_t element_size;
+
+		if (!array->count || !checked_member_layout(array->element, depth + 1,
+			&element_size, alignment) || !element_size ||
+			array->count > UINT64_MAX / element_size ||
+			array->count > type_max_record_size / element_size)
+			return false;
+		*size = element_size * array->count;
+		return true;
+	}
+	if (!type_is_complete_object(type))
+		return false;
+	*size = type_object_size(type);
+	*alignment = type_object_alignment(type);
+	return *size && *size <= type_max_record_size && *alignment &&
+		!(*alignment & (*alignment - 1)) && *alignment <= 8;
+}
+
+static bool checked_align(uint64_t value, unsigned alignment, uint64_t *result)
+{
+	uint64_t padding = (alignment - value % alignment) % alignment;
+
+	if (value > UINT64_MAX - padding || value + padding > type_max_record_size)
+		return false;
+	*result = value + padding;
+	return true;
+}
+
+bool type_record_layout(struct record_definition *definition)
+{
+	uint64_t size = 0;
+	unsigned alignment = 1;
+	size_t count = 0;
+
+	/* First pass is transactional: invalid input changes no published layout. */
+	for (struct record_member *member = definition->members; member; member = member->next) {
+		uint64_t member_size;
+		unsigned member_alignment;
+
+		if (++count > 1024 || !checked_member_layout(member->type, 0,
+			&member_size, &member_alignment))
+			return false;
+		if (member_alignment > alignment)
+			alignment = member_alignment;
+		if (definition->is_union) {
+			if (member_size > size)
+				size = member_size;
+		} else {
+			if (!checked_align(size, member_alignment, &size) ||
+				member_size > UINT64_MAX - size || member_size > type_max_record_size - size)
+				return false;
+			size += member_size;
+		}
+	}
+	if (!count || !checked_align(size, alignment, &size))
+		return false;
+	uint64_t cursor = 0;
+	for (struct record_member *member = definition->members; member; member = member->next) {
+		uint64_t member_size;
+		unsigned member_alignment;
+		bool valid = checked_member_layout(member->type, 0, &member_size, &member_alignment);
+
+		assert(valid);
+		(void)valid;
+		if (definition->is_union)
+			member->offset = 0;
+		else {
+			valid = checked_align(cursor, member_alignment, &cursor);
+			assert(valid);
+			member->offset = cursor;
+			cursor += member_size;
+		}
+	}
+	definition->size = size;
+	definition->alignment = alignment;
+	definition->member_count = count;
+	definition->complete = true;
+	return true;
+}
+
+static bool member_name_equal(const struct token *left, const struct token *right)
+{
+	return left->kind == token_identifier && right->kind == token_identifier &&
+		left->length == right->length &&
+		memcmp(left->spelling_location.source->data + left->spelling_location.offset,
+			right->spelling_location.source->data + right->spelling_location.offset,
+			left->length) == 0;
+}
+
+static const struct record_member *find_record_member(const struct type *type,
+	const struct token *name, uint64_t *offset, unsigned depth, size_t *budget,
+	bool *ambiguous)
+{
+	struct record_definition *definition = type_record_definition(type);
+	const struct record_member *found = NULL;
+	uint64_t found_offset = 0;
+
+	if (!definition || !definition->complete || depth > 64)
+		return NULL;
+	for (const struct record_member *member = definition->members; member; member = member->next) {
+		const struct record_member *candidate = NULL;
+		uint64_t candidate_offset = 0;
+
+		if (!*budget) {
+			*ambiguous = true;
+			return NULL;
+		}
+		--*budget;
+		if (member_name_equal(&member->name, name))
+			candidate = member;
+		else if (member->anonymous)
+			candidate = find_record_member(member->type, name, &candidate_offset,
+				depth + 1, budget, ambiguous);
+		if (candidate) {
+			if (found || candidate_offset > UINT64_MAX - member->offset) {
+				*ambiguous = true;
+				return NULL;
+			}
+			found = candidate;
+			found_offset = member->offset + candidate_offset;
+		}
+	}
+	if (found)
+		*offset = found_offset;
+	return found;
+}
+
+const struct record_member *type_record_find_member(const struct type *type,
+	const struct token *name, uint64_t *offset)
+{
+	uint64_t result_offset = 0;
+	size_t budget = 65536;
+	bool ambiguous = false;
+	const struct record_member *member = find_record_member(type, name, &result_offset,
+		0, &budget, &ambiguous);
+
+	if (ambiguous)
+		return NULL;
+	if (member && offset)
+		*offset = result_offset;
+	return member;
 }

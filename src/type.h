@@ -2,6 +2,7 @@
 #define KCC_TYPE_H
 
 #include "arena.h"
+#include "lex.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -24,6 +25,8 @@ enum type_kind {
 	type_kind_pointer,
 	type_kind_array,
 	type_kind_function,
+	type_kind_struct,
+	type_kind_union,
 };
 
 enum type_qualifier {
@@ -34,6 +37,38 @@ struct type {
 	enum type_kind kind;
 	unsigned qualifiers;
 };
+
+/* Stable nominal identity shared by every qualified wrapper. */
+struct record_member {
+	struct token name;
+	const struct type *type;
+	uint64_t offset;
+	bool anonymous;
+	struct record_member *next;
+};
+
+struct record_definition {
+	bool is_union;
+	bool complete;
+	struct record_member *members;
+	size_t member_count;
+	uint64_t size;
+	unsigned alignment;
+};
+
+struct record_type {
+	struct type type;
+	struct record_definition *definition;
+};
+
+enum { type_max_record_size = 1024 * 1024 };
+bool type_is_record(const struct type *type);
+struct record_definition *type_record_definition(const struct type *type);
+struct record_type *type_new_record(struct arena *arena, bool is_union);
+/* No allocation/diagnostics; failure leaves layout and completeness unchanged. */
+bool type_record_layout(struct record_definition *definition);
+const struct record_member *type_record_find_member(const struct type *type,
+	const struct token *name, uint64_t *offset);
 
 struct pointer_type {
 	struct type type;

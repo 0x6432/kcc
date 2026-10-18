@@ -348,6 +348,7 @@ struct keyword {
 };
 
 static const struct keyword keywords[] = {
+	{ "struct", token_struct }, { "union", token_union },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
@@ -655,6 +656,7 @@ struct language_punctuator {
 };
 
 static const struct language_punctuator language_punctuators[] = {
+	{ ".", token_dot }, { "->", token_arrow },
 	{ "(", token_left_paren }, { ")", token_right_paren },
 	{ "[", token_left_bracket }, { "]", token_right_bracket },
 	{ "<:", token_left_bracket }, { ":>", token_right_bracket },
@@ -822,6 +824,10 @@ const char *token_kind_name(enum token_kind kind)
 	case token_shift_right: return ">>";
 	case token_and_and: return "&&";
 	case token_or_or: return "||";
+	case token_struct: return "struct";
+	case token_union: return "union";
+	case token_dot: return ".";
+	case token_arrow: return "->";
 	}
 	return "unknown";
 }

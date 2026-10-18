@@ -1187,3 +1187,66 @@ struct ast_external_typedef_declaration *ast_new_external_typedef_declaration(st
 		};
 	return node;
 }
+
+struct ast_record_type_syntax *ast_new_record_type_syntax(struct arena *arena,
+	struct token keyword, struct token tag)
+{
+	struct ast_record_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_record_type_syntax) {
+			.syntax = { .kind = type_syntax_record, .location = keyword.location },
+			.tag = tag, .is_union = keyword.kind == token_union,
+		};
+	return node;
+}
+
+struct ast_member_expression *ast_new_member(struct arena *arena,
+	struct ast_expression *operand, struct token operation, struct token name)
+{
+	struct ast_member_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_member_expression) {
+			.expression = { .kind = expression_member, .location = operation.location,
+				.depth = operand->depth + 1 },
+			.operand = operand, .name = name, .indirect = operation.kind == token_arrow,
+		};
+	return node;
+}
+
+struct ast_tag_declaration *ast_new_tag_declaration(struct arena *arena,
+	struct ast_type_syntax *type_syntax, struct source_location location)
+{
+	struct ast_tag_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_tag_declaration) { .type_syntax = type_syntax, .location = location };
+	return node;
+}
+
+struct ast_block_tag_declaration *ast_new_block_tag_declaration(struct arena *arena,
+	struct ast_tag_declaration *declaration)
+{
+	struct ast_block_tag_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_block_tag_declaration) {
+			.item = { .kind = block_item_tag_declaration, .location = declaration->location },
+			.declaration = declaration,
+		};
+	return node;
+}
+
+struct ast_external_tag_declaration *ast_new_external_tag_declaration(struct arena *arena,
+	struct ast_tag_declaration *declaration)
+{
+	struct ast_external_tag_declaration *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_external_tag_declaration) {
+			.external = { .kind = external_declaration_tag, .location = declaration->location },
+			.declaration = declaration,
+		};
+	return node;
+}

@@ -96,6 +96,10 @@ enum token_kind {
 	token_shift_right,
 	token_and_and,
 	token_or_or,
+	token_struct,
+	token_union,
+	token_dot,
+	token_arrow,
 };
 
 /* Spelling only: target type selection belongs to sema/preprocessing. */
