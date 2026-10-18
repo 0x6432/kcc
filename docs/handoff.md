@@ -2,6 +2,21 @@
 
 ## Current checkpoint
 
+M15i1 adds file-scope integer/bool initialized definitions using checked ICEs.
+Read m15-integer-initializers.md for the selected subset and pending validation.
+Canonical `definition` supersedes `tentative_definition` for emission without
+erasing the first tentative history. Zero is a real explicit definition too.
+Self sizeof uses normal declaration-point visibility; check original arithmetic
+before target conversion. Failed initializer checking restores canonical object
+state, not every private semantic cache, and the driver suppresses codegen.
+
+Independent source review and initial focused runtime/semantic probes have
+passed; full frozen integration and exact-commit remote CI are not yet claimed.
+Pointer/array/braced initializers, symbolic relocations, block storage and
+aggregate/ABI work remain deferred.
+
+### Previous M15h1–h2 checkpoint
+
 M15h1 adds file-scope static tentative scalar storage; M15h2 adds complete fixed
 static arrays. Read m15-static-objects.md. Written static/extern provenance is
 separate from canonical internal linkage and from immutable type captures.
@@ -22,7 +37,7 @@ still be checked independently; no pending run is a success claim. Neighbor regr
 AST/source captures, private same-name TUs, both-direction ABI, local storage
 layout, resource boundaries and output failures remain required gates.
 
-Explicit initializers, block storage, thread/inline, VM/VLA, aggregates and
+At that checkpoint explicit initializers, block storage, thread/inline, VM/VLA, aggregates and
 additional scalar kinds remain deferred. Do not weaken native diagnostic
 classifiers or count unsupported-host C23 syntax as agreement. The next bounded
 increment is checked integer-constant scalar initialization with a separate

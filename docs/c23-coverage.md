@@ -1,9 +1,11 @@
 # C23 coverage
 
-Current storage checkpoint: M15h1–h2 adds file-scope internal-linkage tentative
-scalars and complete fixed arrays, inherited-internal extern declarations and
-source-point completeness checks. Initializers and block storage remain absent.
-See m15-static-objects.md. This is still a subset, not ISO conformance.
+Current storage checkpoint: M15i1 adds integer-constant initialized definitions
+with explicit-over-tentative ownership, existing integer/bool conversions and
+exported/internal aligned data. M15h1–h2 internal tentative scalars/fixed arrays
+remain supported. Pointer/array/braced initializers and block storage remain
+absent. See m15-integer-initializers.md and m15-static-objects.md.
+This is still a subset, not ISO conformance.
 
 Status vocabulary: absent, subset, implemented, validated. Implemented means
 code exists, not that conformance has been established. Validated requires

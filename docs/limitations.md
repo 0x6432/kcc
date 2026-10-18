@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current milestone: M15H2 internal-linkage tentative scalar and fixed-array definitions. Read the latest entries together with README.md and
+Current milestone: M15I1 integer-constant file-scope initialized definitions. Read the latest entries together with README.md and
 c23-coverage.md; earlier chronological entries describe their own checkpoints.
 
 ## M15h1–h2 current storage scope
@@ -9,10 +9,13 @@ File-scope static tentative scalars and complete fixed arrays are supported.
 Extern declarations inherit prior canonical object linkage; unadorned object
 redeclarations do not and mixed-linkage UB chains are refused. A visible prior
 complete composite may supply an omitted array bound; an initially incomplete
-internal tentative array is a constraint even if later declarations complete it.
+internal tentative array is conservatively refused as UB even if later declarations complete it.
 Earlier captured types and incomplete pointer referents are not rewritten.
 
-Explicit initializers, static block objects, block extern, thread storage,
+M15i1 additionally admits integer constant initializers for existing integer/bool
+file-scope objects, with exactly one explicit owner taking precedence over
+tentative storage. Broader arithmetic/address constants, pointer/nullptr/array/
+braced initializers, static block objects, block extern, thread storage,
 VM/VLA, aggregates and new scalar kinds remain unsupported. Existing budgets
 remain unchanged. See m15-static-objects.md; chronological entries below describe
 their own historical checkpoints, not the current feature inventory.

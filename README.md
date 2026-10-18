@@ -6,6 +6,13 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M15I1: File-scope integer objects now support checked integer constant
+initializers, including `static`, initialized `extern`, qualified/typedef/query
+types and mixed lists. One explicit definition supersedes tentative storage in
+either source order; cached target-width bits drive aligned data emission.
+Symbolic pointers, arrays, braces and block storage remain separate increments.
+Read `docs/m15-integer-initializers.md` for scope and validation status.
+
 M15H2: Complete fixed file-scope `static` arrays now reuse canonical internal
 object linkage and one aligned zero-storage anchor. Visible prior composites
 allow a later omitted bound; an initially incomplete internal tentative array is
@@ -15,8 +22,8 @@ immutable captures and existing budgets remain intact. Read
 
 M15H1: File-scope static tentative scalars now emit local, non-exported data.
 `extern` inherits prior internal object linkage; an unadorned object declaration
-does not. Mixed-linkage chains are conservatively refused. Initializers and
-block storage remain separate work; this is still an incomplete C23 compiler.
+does not. Mixed-linkage chains are conservatively refused. Broader initializers
+and block storage remain separate work; this is still an incomplete C23 compiler.
 
 
 M15G2: Tentative fixed/unknown-outer arrays now own zero-initialized storage.

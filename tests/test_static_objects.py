@@ -134,11 +134,11 @@ ub_refusals = [
     'static int (*cell)(int); int (*cell)(int);',
 ]
 # Unsupported forms are subset-only checks. Fixed-array acceptance and the
-# incomplete-internal-array constraint are covered by test_static_arrays.py.
+# incomplete-internal-array UB refusal are covered by test_static_arrays.py.
+# Integer initializers now have independent acceptance/ownership coverage.
 subset_errors = [
-    'static int cell=0;', 'static int cell=42;', 'static int cell={};',
-    'static const int cell=0;', 'static int *cell=0;', 'static int (*cell)(int)=0;',
-    'typedef int T; static T cell=0;', 'static typeof(int) cell=0;',
+    'static int cell={};',
+    'static int *cell=0;', 'static int (*cell)(int)=0;',
     'int main(void) { static int cell; return 0; }',
     'int main(void) { static int cell=0; return 0; }',
     'int main(void) { static int cell[3]; return 0; }',
