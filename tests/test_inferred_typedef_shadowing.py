@@ -80,7 +80,7 @@ subset_errors = [
     ('typedef long T; int main(void) { auto (T[2])=0; return 0; }', 'single identifier declarator'),
     ('typedef long T; int main(void) { auto (T)(void)=0; return 0; }', 'single identifier declarator'),
     ('typedef long T; int main(void) { auto (T)={42}; return 0; }', 'expected integer literal'),
-    ('typedef long T; int main(void) { auto T=(void)42; return 0; }', 'complete scalar initializer type'),
+    ('typedef long T; int main(void) { auto T=(void)42; return 0; }', 'complete scalar or aggregate initializer type'),
     ('typedef long T; int main(void) { register int a[2]; auto T=a; return 0; }', 'register array-to-pointer conversion'),
     ('typedef long T; int main(void) { auto (T=42; return 0; }', "expected ')' after inferred identifier"),
 ]
