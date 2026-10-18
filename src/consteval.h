@@ -35,8 +35,8 @@ struct null_initializer_result {
  */
 struct null_initializer_result evaluate_null_initializer(const struct ast_expression *expression);
 
-/* Stable identities published by sema; a direct address always has zero addend.
- * No numeric address bits, storage ownership, or eventual bound is inferred.
+/* Stable identities plus a checked byte addend, never numeric pointer bits.
+ * Bounds come only from immutable source-point expression types.
  */
 enum static_address_base_kind {
 	static_address_object,
@@ -46,6 +46,7 @@ enum static_address_base_kind {
 
 struct static_address {
 	enum static_address_base_kind kind;
+	int64_t byte_addend;
 	union {
 		const struct external_object_symbol *object;
 		const struct function_symbol *function;
@@ -62,7 +63,8 @@ struct address_initializer_result {
 };
 
 /* Pure checked-AST query. Only direct address/decay bases and compatible,
- * qualifier-preserving pointer conversions; no loads or address arithmetic.
+ * qualifier-preserving conversions and bounded strict-ICE pointer offsets.
+ * No loads, inferred later bounds, or unproved pointer reinterpretations.
  */
 struct address_initializer_result evaluate_address_initializer(const struct ast_expression *expression);
 

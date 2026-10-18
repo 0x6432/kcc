@@ -285,6 +285,13 @@ struct null_initializer_result evaluate_null_initializer(const struct ast_expres
 			return (struct null_initializer_result) { value.status, value.location, value.message };
 		if (value.status == constant_value && value.bits == 0)
 			return (struct null_initializer_result) { constant_value, expression->location, NULL };
+	} else if (expression->kind == expression_address &&
+		((const struct ast_address_expression *)expression)->operand->kind == expression_indirection) {
+		const struct ast_indirection_expression *indirection =
+			(const struct ast_indirection_expression *)((const struct ast_address_expression *)expression)->operand;
+
+		/* &* cancels without accessing the pointed object, even for null. */
+		return evaluate_null_initializer(indirection->operand);
 	} else if (expression->kind == expression_nullptr) {
 		return (struct null_initializer_result) { constant_value, expression->location, NULL };
 	} else if ((expression->kind == expression_cast || expression->kind == expression_conversion) &&
@@ -302,7 +309,7 @@ struct null_initializer_result evaluate_null_initializer(const struct ast_expres
 }
 
 /* Address context names storage without reading it. In particular, rejecting
- * indirection here deliberately leaves &* and lowered subscripts for P2.
+ * indirection here is handled by the separate checked cancellation proof.
  * The query neither registers strings nor marks functions referenced.
  */
 static struct address_initializer_result direct_address(const struct ast_expression *expression,
@@ -353,19 +360,95 @@ static bool direct_pointer_conversion(const struct type *source, const struct ty
 		(b->kind == type_kind_void && type_is_object(a));
 }
 
-struct address_initializer_result evaluate_address_initializer(const struct ast_expression *expression)
+/* Private provenance survives pointer/void casts, but a cast never creates a
+ * domain or changes its stride. One-past is a position, not a new object.
+ */
+struct address_proof {
+	struct address_initializer_result result;
+	const struct type *element;
+	uint64_t extent;
+	uint64_t stride;
+	uint64_t position;
+	uint64_t start;
+};
+
+static struct address_proof address_failure(const struct ast_expression *expression,
+	enum constant_status status, const char *message)
+{
+	return (struct address_proof) { .result = {
+		.status = status, .location = expression->location, .message = message,
+	} };
+}
+
+static struct address_proof address_base(const struct ast_expression *expression,
+	const struct ast_expression *operand, bool decay)
+{
+	struct address_proof proof = { .result = direct_address(operand, expression->type) };
+	const struct type *type = operand->type;
+
+	if (proof.result.status != constant_value)
+		return proof;
+	if (decay && type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+
+		if (array->count && type_is_complete_object(array->element)) {
+			proof.element = array->element;
+			proof.extent = array->count;
+			proof.stride = type_object_size(array->element);
+		}
+	} else if (!decay && operand->kind == expression_external_object &&
+		type_is_complete_object(type)) {
+		proof.element = type;
+		proof.extent = 1;
+		proof.stride = type_object_size(type);
+	}
+	return proof;
+}
+
+static struct address_proof prove_address(const struct ast_expression *expression)
 {
 	const struct ast_expression *operand;
-	struct address_initializer_result result;
+	struct address_proof proof;
 
-	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
 	switch (expression->kind) {
 	case expression_address:
-		return direct_address(((const struct ast_address_expression *)expression)->operand, expression->type);
+		operand = ((const struct ast_address_expression *)expression)->operand;
+		/* Subscripts are already lowered to *(base + index). The address
+		 * operator cancels that indirection; one-past needs no dereference.
+		 */
+		if (operand->kind == expression_indirection)
+			return prove_address(((const struct ast_indirection_expression *)operand)->operand);
+		return address_base(expression, operand, false);
 	case expression_array_decay:
-		return direct_address(((const struct ast_array_decay_expression *)expression)->operand, expression->type);
+		operand = ((const struct ast_array_decay_expression *)expression)->operand;
+		if (operand->kind == expression_indirection) {
+			const struct array_type *array = (const struct array_type *)operand->type;
+
+			proof = prove_address(((const struct ast_indirection_expression *)operand)->operand);
+			if (proof.result.status != constant_value)
+				return proof;
+			/* A row/subarray must actually exist: unlike &*, decay forms
+			 * an address of its first element. Never turn a one-past row
+			 * into a new in-bounds array domain.
+			 */
+			if (!proof.element)
+				break;
+			if (proof.position == proof.extent)
+				return address_failure(expression, constant_invalid,
+					"static pointer decay requires an existing array subobject");
+			if (!array->count || !type_is_complete_object(array->element))
+				break;
+			proof.start = (uint64_t)proof.result.address.byte_addend;
+			proof.position = 0;
+			proof.extent = array->count;
+			proof.element = array->element;
+			proof.stride = type_object_size(array->element);
+			proof.result.origin_type = expression->type;
+			return proof;
+		}
+		return address_base(expression, operand, true);
 	case expression_function_decay:
-		return direct_address(((const struct ast_function_decay_expression *)expression)->operand, expression->type);
+		return address_base(expression, ((const struct ast_function_decay_expression *)expression)->operand, false);
 	case expression_cast:
 	case expression_conversion:
 		operand = expression->kind == expression_cast ?
@@ -373,21 +456,67 @@ struct address_initializer_result evaluate_address_initializer(const struct ast_
 			((const struct ast_conversion_expression *)expression)->operand;
 		if (!direct_pointer_conversion(operand->type, expression->type))
 			break;
-		result = evaluate_address_initializer(operand);
-		if (result.status != constant_value)
-			return result;
-		/* Ordinary void conversions must not launder an incompatible base
-		 * into a different object type with unproved alignment. Preserve the
-		 * direct source-point pointer type even through multiple void casts.
-		 */
-		if (direct_pointer_conversion(result.origin_type, expression->type))
-			return result;
+		proof = prove_address(operand);
+		if (proof.result.status != constant_value)
+			return proof;
+		if (direct_pointer_conversion(proof.result.origin_type, expression->type))
+			return proof;
 		break;
+	case expression_pointer_offset: {
+		const struct ast_pointer_offset_expression *offset =
+			(const struct ast_pointer_offset_expression *)expression;
+		struct constant_result index;
+		uint64_t magnitude;
+		bool negative = false;
+		bool backward;
+		const struct type *referent = ((const struct pointer_type *)offset->base->type)->referent;
+
+		proof = prove_address(offset->base);
+		if (proof.result.status != constant_value)
+			return proof;
+		index = evaluate_integer_constant(offset->index);
+		if (index.status != constant_value) {
+			proof.result.status = index.status;
+			proof.result.location = index.location;
+			proof.result.message = index.message;
+			return proof;
+		}
+		/* Neither a later composite nor a cast-to-complete type can supply
+		 * missing source extent. Nested decay preserves each subobject's own
+		 * captured bound, not the larger enclosing storage extent.
+		 */
+		if (!proof.element || !type_unqualified_compatible(proof.element, referent) ||
+			proof.stride != offset->element_size)
+			break;
+		magnitude = index.bits;
+		if (!type_is_unsigned(index.type)) {
+			uint64_t sign = UINT64_C(1) << (type_integer_width(index.type) - 1);
+
+			negative = (index.bits & sign) != 0;
+			if (negative)
+				magnitude = (integer_mask(index.type) - index.bits) + 1;
+		}
+		backward = offset->subtract != negative;
+		if ((backward && magnitude > proof.position) ||
+			(!backward && magnitude > proof.extent - proof.position))
+			return address_failure(expression, constant_invalid,
+				"static pointer offset is outside its captured object bounds");
+		proof.position = backward ? proof.position - magnitude : proof.position + magnitude;
+		if (proof.position > ((uint64_t)INT64_MAX - proof.start) / proof.stride)
+			return address_failure(expression, constant_invalid,
+				"static pointer offset exceeds the relocation addend limit");
+		proof.result.address.byte_addend = (int64_t)(proof.start + proof.position * proof.stride);
+		return proof;
+	}
 	default:
 		break;
 	}
-	return (struct address_initializer_result) {
-		.status = constant_not_constant, .location = expression->location,
-		.message = "file-scope pointer initializer requires a supported null or direct address constant expression",
-	};
+	return address_failure(expression, constant_not_constant,
+		"file-scope pointer initializer requires a supported null or direct address constant expression");
+}
+
+struct address_initializer_result evaluate_address_initializer(const struct ast_expression *expression)
+{
+	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
+	return prove_address(expression).result;
 }

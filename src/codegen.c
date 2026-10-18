@@ -1170,16 +1170,19 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 					assert(object->type->kind == type_kind_pointer && size == 8);
 					switch (address->kind) {
 					case static_address_string:
-						emit(&data_codegen, "l $.Lkcc.string.%zu }\n", address->base.string->object_id);
+						emit(&data_codegen, "l $.Lkcc.string.%zu", address->base.string->object_id);
 						break;
 					case static_address_object:
 					case static_address_function:
 						base_name = address->kind == static_address_object ?
 							address->base.object->name : address->base.function->name;
-						emit(&data_codegen, "l $%.*s }\n", (int)base_name.length,
+						emit(&data_codegen, "l $%.*s", (int)base_name.length,
 							(const char *)base_name.spelling_location.source->data + base_name.spelling_location.offset);
 						break;
 					}
+					if (address->byte_addend)
+						emit(&data_codegen, " + %jd", (intmax_t)address->byte_addend);
+					emit(&data_codegen, " }\n");
 					break;
 				}
 				case static_data_null_pointer:
