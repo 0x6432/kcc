@@ -101,13 +101,38 @@ static void test_string_spelling(void)
 	assert(length == 2 && output[0] == 255 && output[1] == 'g');
 }
 
+/* M16 exact lexical promotions: the original "->" invalid-token case and
+ * "struct" unsupported-keyword case remain mandatory unchanged positives.
+ * Full driver-mode copies, with origin mapping, live in test_record_promotions.py.
+ */
+static void test_record_tokens(void)
+{
+	const enum token_kind arrow[] = { token_arrow };
+	const enum token_kind structure[] = { token_struct };
+	const enum token_kind kinds[] = {
+		token_struct, token_union, token_dot, token_arrow,
+		token_identifier, token_identifier, token_identifier, token_dot,
+		token_identifier, token_identifier, token_arrow, token_identifier,
+	};
+
+	check_tokens("->", arrow, 1, 0);
+	check_tokens("struct", structure, 1, 0);
+	check_tokens("struct union . -> structure unionized p.x p->x", kinds,
+		sizeof(kinds) / sizeof(kinds[0]), 0);
+	check_tokens("#define JOIN(a,b) a##b\nJOIN(str,uct)", structure, 1, 0);
+	assert(strcmp(token_kind_name(token_struct), "struct") == 0);
+	assert(strcmp(token_kind_name(token_union), "union") == 0);
+	assert(strcmp(token_kind_name(token_dot), ".") == 0);
+	assert(strcmp(token_kind_name(token_arrow), "->") == 0);
+}
+
 static void test_errors(void)
 {
 	const enum token_kind invalid[] = { token_invalid };
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
 		"/*", "/* *", "09", "0xg", "0b2", "12.5", "3.5", "@",
-		"18446744073709551616", "->",
+		"18446744073709551616",
 	};
 
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
@@ -117,7 +142,6 @@ static void test_errors(void)
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };
 
-		check_tokens("struct", keyword, 1, 0);
 		check_tokens("constexpr", keyword, 1, 0);
 		check_tokens("=", equal, 1, 0);
 	}
@@ -514,6 +538,7 @@ int main(void)
 	test_string_spelling();
 	test_basic();
 	test_bracket_tokens();
+	test_record_tokens();
 	test_errors();
 	test_binary_and_values();
 	test_condition_tokens();
