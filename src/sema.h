@@ -33,6 +33,9 @@ struct external_object_symbol {
 };
 
 struct function_symbol {
+	bool has_inline_declaration;
+	bool has_noninline_file_declaration;
+	bool is_inline_only;
 	struct token name;
 	const struct function_type *type;
 	const struct function_type *file_type;

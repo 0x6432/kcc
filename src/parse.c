@@ -96,7 +96,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 	enum token_kind kind = token.kind;
 
 	return kind == token_typedef || kind == token_register || kind == token_extern ||
-		kind == token_static || kind == token_thread_local || kind == token_auto ||
+		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
 		kind == token_void || kind == token_const ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
@@ -129,6 +129,7 @@ enum declarator_context {
 
 /* Preserve storage spellings and an inferred name consumed during disambiguation. */
 struct declaration_head {
+	struct token inline_keyword;
 	struct token thread_keyword;
 	struct token keyword;
 	struct token auto_keyword;
@@ -167,6 +168,15 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		struct token token = preprocess_peek(parser->preprocessor);
 
+		if (token.kind == token_inline) {
+			if (!head || context == declarator_parameter || head->keyword.kind == token_typedef) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"inline is not permitted in a type name, typedef, or parameter declaration");
+				return NULL;
+			}
+			head->inline_keyword = preprocess_next(parser->preprocessor);
+			continue;
+		}
 		if (token.kind == token_thread_local) {
 			if (!head || context == declarator_parameter) {
 				diagnostic_error(parser->diagnostics, token.location,
@@ -179,6 +189,10 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			}
 			head->thread_keyword = preprocess_next(parser->preprocessor);
 			continue;
+		}
+		if (token.kind == token_typedef && head && head->inline_keyword.kind == token_inline) {
+			diagnostic_error(parser->diagnostics, token.location, "inline is not permitted in a typedef declaration");
+			return NULL;
 		}
 		if (token.kind == token_typedef || token.kind == token_register ||
 			token.kind == token_extern || token.kind == token_static || token.kind == token_auto) {
@@ -2200,6 +2214,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		}
 		node->type_syntax = type_syntax;
+		node->is_inline = head.inline_keyword.kind == token_inline;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_extern = head.keyword.kind == token_extern;
 		node->is_static = head.keyword.kind == token_static;
@@ -2570,7 +2585,7 @@ static bool parse_external_initializer(struct parser *parser,
 /* object-declaration-tail ::= declarator [ "=" assignment-expression ] */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
 {
 	struct ast_external_object_declaration *declaration;
 	struct ast_expression *initializer = NULL;
@@ -2584,6 +2599,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
 	if (!declaration)
 		allocation_error(parser, beginning.location);
 	else {
+		declaration->is_inline = is_inline;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->initializer = initializer;
@@ -2596,7 +2612,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
@@ -2606,7 +2622,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name)
-		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local);
+		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline);
 	if (!parse_external_initializer(parser, &initializer,
 		"query-derived external declarations require ';'"))
 		return NULL;
@@ -2615,6 +2631,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 	if (!declaration)
 		allocation_error(parser, beginning.location);
 	else {
+		declaration->is_inline = is_inline;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->is_extern = is_extern;
@@ -2706,7 +2723,7 @@ done:
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
-	bool is_static, bool is_extern, bool is_thread_local)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -2731,7 +2748,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		if (!publish_parser_name(parser, name, parser_name_object))
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -2741,6 +2758,8 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 				allocation_error(parser, beginning.location);
 				return NULL;
 			}
+			declaration->is_extern = is_extern;
+			declaration->is_inline = is_inline;
 			declaration->is_thread_local = is_thread_local;
 			declaration->is_static = is_static;
 			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
@@ -2821,7 +2840,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
-		head.thread_keyword.kind == token_thread_local);
+		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

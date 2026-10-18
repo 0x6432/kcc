@@ -1,5 +1,6 @@
 #include "consteval.h"
 #include "type.h"
+#include "sema.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -321,6 +322,11 @@ static struct address_initializer_result direct_address(const struct ast_express
 
 	switch (expression->kind) {
 	case expression_external_object:
+		if (((const struct ast_external_object_expression *)expression)->object->is_thread_local)
+			return (struct address_initializer_result) {
+				.status = constant_not_constant, .location = expression->location,
+				.message = "thread-local object address is not a static address constant",
+			};
 		result.address.kind = static_address_object;
 		result.address.base.object = ((const struct ast_external_object_expression *)expression)->object;
 		return result;

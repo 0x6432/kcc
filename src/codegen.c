@@ -1209,6 +1209,7 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 				return false;
 		}
 		if (external->kind == external_function_definition &&
+			!((const struct ast_function *)external)->declaration->symbol->is_inline_only &&
 			!codegen_function(stream, (const struct ast_function *)external))
 			return false;
 		external = external->next;

@@ -1048,6 +1048,10 @@ static bool sema_expression(struct sema *sema,
 		node->declaration = find_local(sema, node->name);
 		object = node->declaration ? node->declaration->object_symbol :
 			visible_file_object(sema, node->name);
+		if (sema->function && object && object->is_internal && !object->is_block_static) {
+				sema->function->inline_has_internal_reference = true;
+				sema->function->inline_reference_location = expression->location;
+			}
 		if (object) {
 			struct ast_external_object_expression *reference =
 				ast_new_external_object(sema->arena, expression->location, object);
@@ -1076,6 +1080,10 @@ static bool sema_expression(struct sema *sema,
 			if (!function) {
 				diagnostic_error(sema->diagnostics, expression->location, "use of undeclared identifier");
 				return false;
+			}
+			if (sema->function && function->is_internal) {
+				sema->function->inline_has_internal_reference = true;
+				sema->function->inline_reference_location = expression->location;
 			}
 			designator = ast_new_function_designator(sema->arena, expression->location, function);
 			if (!designator) {
@@ -1615,6 +1623,10 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
 
+	if (local->is_inline && local->type_syntax->kind == type_syntax_inferred) {
+		diagnostic_error(sema->diagnostics, local->name.location, "inline requires a function declaration");
+		return false;
+	}
 	if (local->type_syntax->kind == type_syntax_inferred) {
 		if (local->is_static || local->is_extern) {
 			diagnostic_error(sema->diagnostics, local->name.location,
@@ -1626,6 +1638,10 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 	type = resolve_type_syntax(sema, local->type_syntax);
 	if (!type)
 		return false;
+	if (local->is_inline && type->kind != type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location, "inline requires a function declaration");
+		return false;
+	}
 	if (local->is_extern || local->is_static || type->kind == type_kind_function)
 		return sema_block_storage(sema, local, type);
 	if (!type_is_complete_object(type)) {
@@ -2382,6 +2398,11 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	bool zero_definition = !is_extern && !*initializer && (is_thread_local || sema->scope);
 	const struct type *target;
 
+	if (zero_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
+		name.spelling_location.offset, "main", 4) == 0) {
+		diagnostic_error(sema->diagnostics, name.location, "main object definition is not supported on the Linux target");
+		return NULL;
+	}
 	if (zero_definition && previous && previous->definition) {
 		diagnostic_error(sema->diagnostics, name.location, "multiple definitions of thread_local object");
 		return NULL;
@@ -2497,6 +2518,24 @@ rollback:
 	return NULL;
 }
 
+/* File declarations alone decide whether a body supplies an external
+ * definition. Block declarations can request inline, but never change that
+ * all-file-declarations predicate. No inline substitution is performed.
+ */
+static bool record_inline(struct sema *sema, struct function_symbol *symbol,
+	bool is_inline, bool is_extern, bool at_file_scope, struct source_location location)
+{
+	if (is_inline && symbol->name.length == 4 && memcmp(symbol->name.spelling_location.source->data +
+		symbol->name.spelling_location.offset, "main", 4) == 0) {
+		diagnostic_error(sema->diagnostics, location, "inline is not permitted on hosted main");
+		return false;
+	}
+	symbol->has_inline_declaration |= is_inline;
+	if (at_file_scope && (!is_inline || is_extern))
+		symbol->has_noninline_file_declaration = true;
+	return true;
+}
+
 /* A block binding carries a source-point composite independently of the
  * canonical entity. Leaving its scope never publishes that composite elsewhere.
  */
@@ -2536,6 +2575,14 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		return false;
 	}
 	if (local->is_static) {
+		const struct type *qualified = type;
+
+		while (qualified->kind == type_kind_array)
+			qualified = ((const struct array_type *)qualified)->element;
+		if (!(qualified->qualifiers & type_qualifier_const)) {
+			sema->function->inline_has_modifiable_static = true;
+			sema->function->inline_static_location = local->name.location;
+		}
 		struct source *source = arena_alloc(sema->arena, sizeof(*source));
 		unsigned char *spelling = arena_alloc(sema->arena, 64);
 		struct ast_external_object_declaration *definition;
@@ -2611,6 +2658,9 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 			(const struct function_type *)type, NULL, inherited_internal);
 		if (!local->function_symbol)
 			return false;
+		if (!record_inline(sema, local->function_symbol, local->is_inline, local->is_extern,
+			false, local->name.location))
+			return false;
 	} else {
 		local->object_symbol = register_external_object(sema, local->name, type,
 			NULL, inherited_internal, true, local->is_thread_local);
@@ -2639,6 +2689,10 @@ static bool sema_external_object_declaration(struct sema *sema,
 
 	if (!type)
 		return false;
+	if (declaration->is_inline) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "inline requires a function declaration");
+		return false;
+	}
 	declaration->symbol = sema_file_object(sema, &declaration->external,
 		declaration->name, type, &declaration->initializer,
 		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local);
@@ -2656,6 +2710,10 @@ static bool sema_external_type_declaration(struct sema *sema,
 	if (!type)
 		return false;
 	if (type->kind != type_kind_function) {
+		if (declaration->is_inline) {
+			diagnostic_error(sema->diagnostics, declaration->name.location, "inline requires a function declaration");
+			return false;
+		}
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
 			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local);
@@ -2677,6 +2735,9 @@ static bool sema_external_type_declaration(struct sema *sema,
 		(const struct function_type *)type, NULL, declaration->is_static);
 	if (!declaration->symbol)
 		return false;
+	if (!record_inline(sema, declaration->symbol, declaration->is_inline, declaration->is_extern,
+		true, declaration->name.location))
+		return false;
 	declaration->type = type;
 	return true;
 }
@@ -2684,9 +2745,15 @@ static bool sema_external_type_declaration(struct sema *sema,
 static bool sema_function_declaration(struct sema *sema,
 	struct ast_function_declaration *declaration, struct ast_function *definition)
 {
-	const struct type *resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
+	const struct type *resolved;
 	struct function_symbol *symbol;
 
+	/* Queries in a definition's declarator are part of that definition too,
+	 * including unevaluated references in return/parameter type syntax.
+	 */
+	sema->function = definition;
+	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
+	sema->function = NULL;
 	if (!resolved)
 		return false;
 	assert(resolved->kind == type_kind_function);
@@ -2699,6 +2766,9 @@ static bool sema_function_declaration(struct sema *sema,
 	if (!symbol)
 		return false;
 	declaration->symbol = symbol;
+	if (!record_inline(sema, symbol, declaration->is_inline, declaration->is_extern,
+		true, declaration->name.location))
+		return false;
 	if (!definition)
 		return true;
 	/* Install the definition before its body: direct recursion is visible. */
@@ -2902,6 +2972,23 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		external = external->next;
 	}
 	for (struct function_symbol *symbol = sema.functions; symbol; symbol = symbol->next) {
+		symbol->is_inline_only = !symbol->is_internal && symbol->has_inline_declaration &&
+			!symbol->has_noninline_file_declaration;
+		if (!symbol->is_internal && symbol->has_inline_declaration && !symbol->definition) {
+			diagnostic_error(diagnostics, symbol->name.location,
+				"external inline function requires a definition in this translation unit");
+			return false;
+		}
+		if (symbol->is_inline_only && symbol->definition->inline_has_modifiable_static) {
+			diagnostic_error(diagnostics, symbol->definition->inline_static_location,
+				"external inline definition cannot define a modifiable static or thread object");
+			return false;
+		}
+		if (symbol->is_inline_only && symbol->definition->inline_has_internal_reference) {
+			diagnostic_error(diagnostics, symbol->definition->inline_reference_location,
+				"external inline definition cannot reference an internal-linkage identifier");
+			return false;
+		}
 		if (symbol->is_internal && symbol->is_referenced && !symbol->definition) {
 			diagnostic_error(diagnostics, symbol->name.location,
 				"referenced internal function requires a definition");

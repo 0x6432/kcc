@@ -594,6 +594,7 @@ struct ast_local_declaration {
 	bool is_register;
 	bool is_extern;
 	bool is_static;
+	bool is_inline;
 	bool is_thread_local;
 	struct external_object_symbol *object_symbol;
 	struct function_symbol *function_symbol;
@@ -647,6 +648,7 @@ struct ast_external_static_assertion {
 struct ast_external_object_declaration {
 	struct ast_external_declaration external;
 	bool is_extern;
+	bool is_inline;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the object type. */
 	struct ast_type_syntax *type_syntax;
@@ -661,6 +663,7 @@ struct ast_external_type_declaration {
 	struct ast_external_declaration external;
 	bool is_extern;
 	struct external_object_symbol *object_symbol;
+	bool is_inline;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_type_syntax *type_syntax;
@@ -684,6 +687,8 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
+	bool is_extern;
+	bool is_inline;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_function_type_syntax *type_syntax;
@@ -696,6 +701,10 @@ struct ast_function_declaration {
 
 struct ast_function {
 	struct ast_external_declaration external;
+	bool inline_has_internal_reference;
+	bool inline_has_modifiable_static;
+	struct source_location inline_reference_location;
+	struct source_location inline_static_location;
 	struct ast_function_declaration *declaration;
 	const struct type *return_type;
 	struct ast_compound_statement *body;
