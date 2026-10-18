@@ -13,6 +13,7 @@ arithmetic or mixed-linkage UB is never counted as native rejection evidence.
 """
 import argparse
 from dataclasses import dataclass
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 from pathlib import Path
 import re
@@ -235,7 +236,6 @@ ARITHMETIC = [('1/0', 'division by zero'), ('1%0', 'division by zero'),
 DEFERRED = [
     'int cell[2]={1,2};',
     'int cell[]={1,2};', 'int cell={42};', 'int cell={};',
-    'typeof(nullptr) cell=nullptr;',
     'int cell=(1,42);', 'int other; int cell=1?42:other;',
     'int f(void); int cell=1||f();',
     'static int cell; int cell=42;',

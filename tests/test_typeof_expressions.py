@@ -1,4 +1,5 @@
 """C23 expression type queries preserve root types without runtime evaluation."""
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -84,7 +85,6 @@ constraints = [
 syntax_errors = ['int f(void) { typeof(1+ ) x; }','int f(void) { typeof(1;2) x; }',
                  'int f(void) { typeof(1,) x; }','int f(void) { typeof(1 x; }']
 subset_errors = [
-    ('int f(void); int g(void) { typeof(f) h; return 0; }','block-scope function declarations'),
     ('int f(void) { int a[2]; typeof(a) b=a; return 0; }','array initializers are not supported yet'),
     ('int f(int n) { int a[n]; typeof(a) b; return 0; }','variable-length'),
 ]

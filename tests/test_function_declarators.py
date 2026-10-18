@@ -1,4 +1,5 @@
 """Fixed function declarators share the general chain and resolved signature."""
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import subprocess
 import tempfile
@@ -98,7 +99,6 @@ with tempfile.TemporaryDirectory(prefix='kcc function declarators ') as director
         ('int f(void) { int a[2](void); return 0; }', 'array element type must be complete'),
         ('int f(void) { int (*p)(int)=1; return 0; }', 'pointer conversion'),
         ('int f(int (int)[3]);', 'function return type'),
-        ('int f(void) { int g(int); return 0; }', 'block-scope function declarations'),
         ('int f(void) { return (int ())0; }', 'cast target must be a scalar type'),
         ('int (*row(int (*)[3]))[3]; int (*row(int (*)[3]))[4];', 'incompatible function'),
         ('int (*row(int (*)[]))[]; int (*row(int (*)[]))[3]; int (*row(int (*)[]))[4];', 'incompatible function'),

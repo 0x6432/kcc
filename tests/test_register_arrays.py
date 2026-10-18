@@ -1,4 +1,5 @@
 """Fixed register arrays permit direct queries, never implicit address computation."""
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -59,8 +60,6 @@ decay_refusals = [
     'int main(void) { register int a[2]; int *p=1?a:0; return 0; }',
 ]
 subset_errors = [
-    ('int main(void) { register int a[2]; return sizeof(a[0]); }', 'register array-to-pointer conversion'),
-    ('int main(void) { register int a[2]; typeof(a+0) p; return 0; }', 'register array-to-pointer conversion'),
     ('int f(int n) { register int a[n]; return 0; }', 'variable-length arrays'),
     ('int main(void) { register int a[]; return 0; }', 'must be complete'),
     ('int main(void) { register int a[2]=0; return 0; }', 'array initializers are not supported'),

@@ -13,6 +13,7 @@ subscripted, dereferenced, updated or used in pointer arithmetic. Invalid and
 resource-generated programs compile only. Native objects use -fno-common so a
 mistaken second definition cannot hide behind legacy common-symbol merging.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -227,8 +228,6 @@ c23_constraints = [
 ]
 # No native-rejection claim for these legal/deferred forms. All compile only.
 subset_errors = [
-    ('extern int cell; int f(void) { extern int cell; return 0; }', 'block-scope extern declarations'),
-    ('thread_local int cell;', 'expected integer type specifier'),
 ]
 unavailable_initializers = [
     'int cell; int f(void) { auto cell='+initializer+'; return 0; }'

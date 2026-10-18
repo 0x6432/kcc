@@ -5,6 +5,7 @@ execute. Mixed-linkage UB refusals and unsupported forms compile only; no claim
 that native compilers must diagnose UB. No test rewrites an oracle original.
 Run: [KCC=...] [HOST_CC=...] [QBE=...] python3 tests/test_static_objects.py
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -138,11 +139,7 @@ ub_refusals = [
 # Integer initializers now have independent acceptance/ownership coverage.
 subset_errors = [
     'static int cell={};',
-    'int main(void) { static int cell; return 0; }',
-    'int main(void) { static int cell=0; return 0; }',
-    'int main(void) { static int cell[3]; return 0; }',
-    'typedef int T; int main(void) { T static cell; return 0; }',
-    'static auto cell=42;', 'auto static cell=42;', 'static thread_local int cell;',
+    'static auto cell=42;', 'auto static cell=42;',
     'int f(int cell[static 3]);',
 ]
 

@@ -2,6 +2,7 @@
 
 Only defined curated positives execute; generated boundaries and refusals compile.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -92,11 +93,6 @@ c23_constraints = [
 constraints += [('int f(register int x,int a[sizeof(&x)]);','cannot take the address'),
                 ('int f(int x); int f(register int x) { return sizeof(&x); }','cannot take the address')]
 subset_errors = [
-    ('int f(register void);', 'register void parameters are not supported'),
-    ('int f(register void) { return 42; }', 'register void parameters are not supported'),
-    ('int f(register typeof(void));', 'register void parameters are not supported'),
-    ('typedef void V; int f(V register);', 'register void parameters are not supported'),
-    ('int f(int (*cb)(register void));', 'register void parameters are not supported'),
     ('int f(register int n,int a[n]);', 'variable-length arrays'),
     ('int f(register int a[static 2]);', 'error:'),
     ('int f(register int a[const 2]);', 'error:'),

@@ -1,4 +1,5 @@
 """Explicit auto storage uses ordinary object semantics, separately from C23 inference."""
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -60,7 +61,7 @@ constraints = [
     ('auto int value;', 'file-scope auto declarations'),
     ('auto int f(void);', 'file-scope auto declarations'),
     ('int main(void) { auto int f(void); return 0; }', 'auto storage requires an object type'),
-    ('typedef int F(void); int main(void) { auto F f; return 0; }', 'block-scope function declarations'),
+    ('typedef int F(void); int main(void) { auto F f; return 0; }', 'auto storage requires an object type'),
     ('int main(void) { auto auto int x; return 0; }', 'duplicate auto storage-class'),
     ('int main(void) { auto typedef int T; return 0; }', 'multiple storage-class'),
     ('int main(void) { typedef int auto T; return 0; }', 'multiple storage-class'),

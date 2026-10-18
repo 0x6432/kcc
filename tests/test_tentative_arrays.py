@@ -35,6 +35,7 @@ this draft does not duplicate that original or add a new waiver.
 #           2 storage bugs and 4 keyword-gated pairs.
 # Independent future kcc/QBE: 74 pairs modern / 73 legacy (one companion gap).
 # Constraints: 29 modern / 26 legacy. Unknown native messages are not waived.
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -258,8 +259,6 @@ subset_errors = [
     ('int items[]={40,2};', 'file-scope object initializers'),
     ('extern int items[3]={0,0,0};', 'extern object definitions'),
     ('typedef int Row[3]; Row items={0,0,0};', "query-derived external declarations require ';'"),
-    ('int f(void) { extern int items[]; return 0; }', 'block-scope extern declarations'),
-    ('thread_local int items[3];', 'expected integer type specifier'),
     ('int main[1];', 'tentative main object is not supported on the Linux target'),
 ]
 unavailable_initializers = [

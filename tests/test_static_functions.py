@@ -2,6 +2,7 @@
 
 Only defined curated originals run. Constraints/subsets/boundaries compile only.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -98,13 +99,10 @@ c23_constraints = [
 subset_errors = [
     ('static auto x=42;','file-scope auto declarations'),
     ('auto static x=42;','file-scope auto declarations'),
-    ('int main(void) { static int x; return 0; }','block-scope static declarations'),
-    ('typedef int F(int); int main(void) { F static f; return 0; }','block-scope static declarations'),
-    ('typedef int T; int main(void) { static auto T=42; return 0; }','block-scope static declarations'),
+    ('typedef int F(int); int main(void) { F static f; return 0; }','block-scope static function declaration is not permitted'),
+    ('typedef int T; int main(void) { static auto T=42; return 0; }','static or extern auto inference is not supported yet'),
     ('static int main(void) { return 42; }','static main'),
-    ('static inline int f(void) { return 42; }','error:'),
     ('int f(int a[static 3]);','error:'),
-    ('thread_local int x;','error:'),
     ('static int f(void); int main(void) { return sizeof(int[1?2:f()]); }','array bound must be an integer constant expression'),
 ]
 ub_refusals = [

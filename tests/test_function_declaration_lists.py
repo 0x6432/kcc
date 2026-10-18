@@ -2,6 +2,7 @@
 
 Only curated defined originals execute; invalid and generated boundaries compile.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -71,7 +72,6 @@ c23_constraints = [
 subset_errors = [
     ('typeof(int(void)) f,g=0;',"query-derived external declarations require ';'"),
     ('typedef int F(void); extern F f,g { return 42; }',"query-derived external declarations require ';'"),
-    ('int main(void) { extern int f(void),g(void); return 0; }','block-scope extern declarations'),
     ('extern auto f=42,g=2;','file-scope auto declarations'),
 ]
 def native_return_qualifier_gap(text, status, diagnostics):

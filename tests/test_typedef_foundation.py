@@ -1,4 +1,5 @@
 """Unshadowed file-scope typedefs retain syntax and immutable type identity."""
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -77,7 +78,6 @@ constraints = [
 subset_errors = [
     ('typedef int T=42;','cannot have initializers'),
     ('typedef int F(void); F f { return 42; }',"query-derived external declarations require ';'"),
-    ('typedef int F(void); int main(void) { F f; return 42; }','block-scope function declarations'),
     ('typedef int F(void); const F f;','function type cannot be qualified'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc typedef foundation ') as directory:

@@ -5,6 +5,7 @@ The native oracle compiles the unchanged kcc translation unit separately from
 its owner. Only defined curated pairs execute; constraints, subset refusals and
 generated resource boundaries compile only. No build outputs are modified.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -245,11 +246,8 @@ c23_constraints = [
 ]
 subset_errors = [
     ('extern void x;', 'only scalar or array file-scope objects'),
-    ('int f(void) { extern int x; return 0; }', 'block-scope extern declarations'),
-    ('extern int x; int f(void) { extern int x; return 0; }', 'block-scope extern declarations'),
     ('extern auto x=42;', 'file-scope auto declarations'),
     ('extern inline int x;', 'error:'),
-    ('extern thread_local int x;', 'error:'),
 ]
 
 

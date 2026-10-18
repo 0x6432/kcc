@@ -1,4 +1,5 @@
 """Query-derived file-scope function declarations preserve written syntax."""
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -57,7 +58,6 @@ subset_errors = [
     ('typeof(void) x;','only scalar or array file-scope objects'),
     ('typeof(int(void)) f { return 42; }',"query-derived external declarations require ';'"),
     ('typeof(int(void)) f=0;',"query-derived external declarations require ';'"),
-    ('int f(void) { typeof(int(void)) g; return 0; }','block-scope function declarations'),
     ('const typeof(int(void)) f;','function type cannot be qualified'),
     ('typeof(int(int)) main;','only zero-parameter main'),
     ('typeof(long(void)) main;','main must return int'),

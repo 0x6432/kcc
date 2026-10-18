@@ -2,6 +2,7 @@
 
 Only defined curated originals run. Constraints/subsets/boundaries compile only.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -80,10 +81,7 @@ c23_constraints = [
 subset_errors = [
     ('extern auto x=42;','file-scope auto declarations'),
     ('auto extern x=42;','file-scope auto declarations'),
-    ('int main(void) { extern int f(void); return 0; }','block-scope extern declarations'),
-    ('typedef int F(int); int main(void) { F extern f; return 0; }','block-scope extern declarations'),
-    ('typedef int T; int main(void) { extern auto T=42; return 0; }','block-scope extern declarations'),
-    ('extern inline int f(void) { return 42; }','error:'),
+    ('typedef int T; int main(void) { extern auto T=42; return 0; }','static or extern auto inference is not supported yet'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc extern functions ') as directory:
     directory = Path(directory)

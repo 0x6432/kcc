@@ -5,6 +5,7 @@ Run from the repository:
 Only curated initialized owner pairs execute. Every invalid/subset/resource
 source compiles only, and the native oracle always uses unchanged kcc source.
 """
+# Exact newly supported originals moved to test_storage_promotions.py.
 import os
 import re
 import subprocess
@@ -237,9 +238,6 @@ subset_errors = [
     ('extern int a[2]={40,2};', 'extern object definitions'),
     ('extern int a[]={40,2};', 'extern object definitions'),
     ('typedef int Row[2]; extern Row a={40,2};', "query-derived external declarations require ';'"),
-    ('extern int a[2]; int f(void) { extern int a[2]; return 0; }', 'block-scope extern declarations'),
-    ('int f(void) { extern int a[]; return 0; }', 'block-scope extern declarations'),
-    ('extern thread_local int a[2];', 'error:'),
 ]
 unavailable_initializers = [
     'extern int a[3]; int f(void) { auto a='+initializer+'; return 0; }'
