@@ -370,6 +370,7 @@ struct address_proof {
 	uint64_t stride;
 	uint64_t position;
 	uint64_t start;
+	bool known_extent;
 };
 
 static struct address_proof address_failure(const struct ast_expression *expression,
@@ -391,15 +392,17 @@ static struct address_proof address_base(const struct ast_expression *expression
 	if (decay && type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)type;
 
-		if (array->count && type_is_complete_object(array->element)) {
+		if (type_is_complete_object(array->element)) {
 			proof.element = array->element;
 			proof.extent = array->count;
+			proof.known_extent = array->count != 0;
 			proof.stride = type_object_size(array->element);
 		}
-	} else if (!decay && operand->kind == expression_external_object &&
+	} else if (!decay && (operand->kind == expression_external_object || operand->kind == expression_string) &&
 		type_is_complete_object(type)) {
 		proof.element = type;
 		proof.extent = 1;
+		proof.known_extent = true;
 		proof.stride = type_object_size(type);
 	}
 	return proof;
@@ -431,9 +434,9 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 			 * an address of its first element. Never turn a one-past row
 			 * into a new in-bounds array domain.
 			 */
-			if (!proof.element)
+			if (!proof.element || !type_unqualified_compatible(proof.element, operand->type))
 				break;
-			if (proof.position == proof.extent)
+			if (proof.known_extent && proof.position == proof.extent)
 				return address_failure(expression, constant_invalid,
 					"static pointer decay requires an existing array subobject");
 			if (!array->count || !type_is_complete_object(array->element))
@@ -441,6 +444,7 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 			proof.start = (uint64_t)proof.result.address.byte_addend;
 			proof.position = 0;
 			proof.extent = array->count;
+			proof.known_extent = true;
 			proof.element = array->element;
 			proof.stride = type_object_size(array->element);
 			proof.result.origin_type = expression->type;
@@ -448,7 +452,10 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		}
 		return address_base(expression, operand, true);
 	case expression_function_decay:
-		return address_base(expression, ((const struct ast_function_decay_expression *)expression)->operand, false);
+		operand = ((const struct ast_function_decay_expression *)expression)->operand;
+		if (operand->kind == expression_indirection)
+			return prove_address(((const struct ast_indirection_expression *)operand)->operand);
+		return address_base(expression, operand, false);
 	case expression_cast:
 	case expression_conversion:
 		operand = expression->kind == expression_cast ?
@@ -498,9 +505,12 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		}
 		backward = offset->subtract != negative;
 		if ((backward && magnitude > proof.position) ||
-			(!backward && magnitude > proof.extent - proof.position))
+			(!backward && proof.known_extent && magnitude > proof.extent - proof.position))
 			return address_failure(expression, constant_invalid,
 				"static pointer offset is outside its captured object bounds");
+		if (!backward && magnitude > UINT64_MAX - proof.position)
+			return address_failure(expression, constant_invalid,
+				"static pointer offset exceeds the relocation addend limit");
 		proof.position = backward ? proof.position - magnitude : proof.position + magnitude;
 		if (proof.position > ((uint64_t)INT64_MAX - proof.start) / proof.stride)
 			return address_failure(expression, constant_invalid,
