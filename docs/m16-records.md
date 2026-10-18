@@ -7,7 +7,13 @@ Struct and union definitions, forward tags, tag scopes, anonymous members and
 qualification, storage and query features. Record identity is shared by qualified
 views and forward references. Completion is sequential: a later definition does
 not rescue an earlier invalid `sizeof`, member access or pointer operation.
-Member-list static assertions are checked at their declaration point.
+Member-list static assertions are checked at their declaration point. Plain
+standalone forward declarations retain current-scope shadowing semantics.
+Storage/qualifier-decorated tag-only forms introduce fresh tags when none is
+visible, but do not redeclare a visible tag and are then diagnosed as declaring
+no entity. Definitions declare a tag independently of vacuous decorations.
+Tagged no-declarator member declarations are rejected; anonymous record members
+are distinct valid syntax.
 
 Linux amd64 layout uses natural member alignment, struct padding/tail padding and
 union maximum member size/alignment. No bit-fields, packed layout or flexible

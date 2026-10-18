@@ -349,7 +349,8 @@ Requires a C11 compiler, Make and Python 3 for tests.
 
 ```sh
 make
-make test
+sh scripts/build_qbe.sh tools
+make test QBE="$PWD/tools/qbe-1.2/qbe"
 ./build/kcc --help
 # Explicit include directories (no default system headers):
 # ./build/kcc -I include -Ivendor/include example.c
@@ -361,7 +362,9 @@ make fuzz-compile FUZZ_SECONDS=10
 
 The implementation initially targets Linux x86-64, System V ABI, LP64.
 QBE 1.2 is the backend baseline. Build it with `sh scripts/build_qbe.sh tools`.
-Run executable tests with `make test-codegen QBE="$PWD/tools/qbe-1.2/qbe"`.
+Both full gates now include mandatory M16 executable/ELF evidence. Run
+`make test QBE="$PWD/tools/qbe-1.2/qbe"` and
+`make test-codegen QBE="$PWD/tools/qbe-1.2/qbe"`.
 The compiler itself will not depend on LLVM. CI may use Clang and libFuzzer.
 
 ## Reading order

@@ -2188,3 +2188,15 @@ first tentative anchor. Failure prevents IL; prior finalized symbols need no
 rollback because the whole failed unit is discarded. Codegen consumes final
 complete canonical layout, not an incomplete anchor cache. Extern-only arrays
 and unknown pointer referents are never defaulted to one.
+
+## M16 record boundary
+
+The parser preserves written standalone-tag provenance; sema owns scoped tag
+identities, sequential completion and transactional member layout publication.
+Qualified record views share their definition identity. Member expressions retain
+written arrow/dot, actual leaf member and cumulative anonymous offset. Evaluated
+record loads link bounded entry-allocated snapshots to their owning function;
+unevaluated queries do not allocate these. Codegen consumes checked layout and
+uses address-backed record values without pretending aggregate ABI support.
+Static member proofs retain canonical relocation bases and start a selected
+subobject domain, not a fabricated enclosing-object domain. See m16-records.md.
