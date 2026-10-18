@@ -25,6 +25,7 @@ class InlineFixture:
     source: str
     ownership: str = 'inline'  # inline-only, external definition, or static definition
     features: tuple = ()
+    functions: tuple = ('call',)
 
 
 BODY = 'inline int target(int x) { return x+2; }'
@@ -49,11 +50,11 @@ def fixtures():
         InlineFixture('inline declaration ordinary definition',
                       'inline int target(int); int target(int x) { return x+2; }', 'external'),
         InlineFixture('block extern does not count', BODY+
-                      ' int block(void) { extern int target(int); return target(40); }'),
+                      ' int block(void) { extern int target(int); return target(40); }', functions=('call', 'block')),
         InlineFixture('block plain does not count', BODY+
-                      ' int block(void) { int target(int); return target(40); }'),
+                      ' int block(void) { int target(int); return target(40); }', functions=('call', 'block')),
         InlineFixture('block inline participates in definition requirement only', BODY+
-                      ' int block(void) { inline int target(int); return target(40); }'),
+                      ' int block(void) { inline int target(int); return target(40); }', functions=('call', 'block')),
         InlineFixture('static inline', 'static inline int target(int x) { return x+2; }', 'static'),
         InlineFixture('static repeated inline', 'inline static inline int target(int x) { return x+2; }', 'static'),
         InlineFixture('internal inherited extern', 'static inline int target(int); '
@@ -78,12 +79,12 @@ def fixtures():
         InlineFixture('internal inline permits mutable static',
                       'static inline int target(int x) { static int n=2; return x+n; }', 'static'),
         InlineFixture('unrelated private identifier is not a body reference',
-                      'static int n=91; '+BODY+' int unrelated(void) { return n; }'),
+                      'static int n=91; '+BODY+' int unrelated(void) { return n; }', functions=('call', 'unrelated')),
         InlineFixture('external object reference allowed',
                       'int n=2; inline int target(int x) { return x+n; }'),
         InlineFixture('automatic shadow does not reference internal identifier',
                       'static int n=91; inline int target(int x) { int n=2; return x+n; } '
-                      'int unrelated(void) { return n; }'),
+                      'int unrelated(void) { return n; }', functions=('call', 'unrelated')),
         InlineFixture('automatic local allowed',
                       'inline int target(int x) { int n=2; return x+n; }'),
     ]
@@ -139,19 +140,66 @@ def symbol_records(path):
     return records
 
 
-def ownership_evidence(path, ownership, kcc=False):
-    records = symbol_records(path)
-    # KCC may give internal functions private generated labels, not C spelling.
+def check_ownership_records(records, ownership, functions=('call',)):
+    """Exact public/internal definitions: no weak owner or hidden body clone."""
+    assert ownership in ('inline', 'external', 'static'), ownership
     matches = [r for r in records if r[0] == 'target']
-    if ownership == 'inline':
-        assert len(matches) == 1 and matches[0][1] == 'U', (path, records)
-    elif ownership == 'external':
-        assert len(matches) == 1 and matches[0][1] == 'T', (path, records)
-    elif not kcc:
-        assert len(matches) == 1 and matches[0][1] == 't', (path, records)
-    else:
-        assert not any(r[0] == 'target' and r[1] in ('T', 'U') for r in records), (path, records)
-        assert any(r[1] == 't' for r in records), (path, records)
+    expected_kind = {'inline': 'U', 'external': 'T', 'static': 't'}[ownership]
+    assert len(matches) == 1 and matches[0][1] == expected_kind, records
+    expected = {name: 'T' for name in functions}
+    if ownership != 'inline':
+        expected['target'] = expected_kind
+    # Include weak definitions and indirect functions so alternate ownership
+    # cannot disappear from the oracle simply by changing the symbol binding.
+    definitions = [r for r in records if r[1] in 'tTwWiI']
+    assert len(definitions) == len(expected), (definitions, expected)
+    assert {r[0]: r[1] for r in definitions} == expected, (definitions, expected)
+
+
+def ownership_evidence(path, ownership, kcc=False, functions=('call',)):
+    # kcc intentionally uses the identical oracle: backend preserves spelling.
+    check_ownership_records(symbol_records(path), ownership, functions)
+
+
+def ownership_self_test():
+    good = [['target', 'U'], ['call', 'T', '0', '10']]
+    check_ownership_records(good, 'inline')
+    for ownership, kind in (('external', 'T'), ('static', 't')):
+        check_ownership_records([['target', kind, '0', '10'], ['call', 'T', '10', '10']], ownership)
+    mutations = {
+        'missing': good[1:],
+        'duplicate undefined': good+[good[0]],
+        'duplicate definition': good+[['target', 'T', '0', '10']],
+        'global owner': [['target', 'T', '0', '10'], good[1]],
+        'weak owner': [['target', 'W', '0', '10'], good[1]],
+        'weak undefined': [['target', 'w'], good[1]],
+        'local owner': [['target', 't', '0', '10'], good[1]],
+        'private clone': good+[['target.inline.0', 't', '0', '10']],
+        'anonymous private clone': good+[['hidden_body', 't', '0', '10']],
+        'public clone': good+[['hidden_body', 'T', '0', '10']],
+        'weak clone': good+[['hidden_body', 'W', '0', '10']],
+        'missing wrapper': good[:1],
+        'duplicate wrapper': good+[good[1]],
+    }
+    for name, damaged in mutations.items():
+        try:
+            check_ownership_records(damaged, 'inline')
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('inline ownership oracle accepted '+name)
+    for damaged in ([['other', 't', '0', '10'], good[1]],
+                    [['target', 'T', '0', '10'], good[1]],
+                    [['target', 'W', '0', '10'], good[1]],
+                    [['target', 'U'], ['other', 't', '0', '10'], good[1]],
+                    [['target', 't', '0', '10'], ['target', 't', '10', '10'], good[1]]):
+        try:
+            check_ownership_records(damaged, 'static')
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError('static ownership oracle accepted missing/nonlocal/duplicate exact target')
+    print('Ownership negative controls passed: missing/duplicate/global/weak/local/private-clone; exact static target')
 
 
 def companion(ownership):
@@ -181,7 +229,7 @@ def shared_header_identity(directory, compilers, native_only):
         for source, obj in zip(sources, objects):
             producer([cc, '-std=c2x', '-pedantic-errors', '-O0', '-fno-inline',
                       '-c', source, '-o', obj], obj)
-            ownership_evidence(obj, 'inline')
+            ownership_evidence(obj, 'inline', functions=('call_'+('a' if source == sources[0] else 'b'),))
         producer([cc, '-std=c2x', '-pedantic-errors', '-c', peer, '-o', other], other)
         run_program(cc, [*objects, other], exe)
     if not native_only:
@@ -194,7 +242,7 @@ def shared_header_identity(directory, compilers, native_only):
                 il.write_text(result.stdout)
                 producer([QBE, '-t', 'amd64_sysv', '-o', assembly, il], assembly)
                 producer([HOST, '-c', assembly, '-o', obj], obj)
-                ownership_evidence(obj, 'inline', kcc=True)
+                ownership_evidence(obj, 'inline', kcc=True, functions=('call_'+('a' if index == 0 else 'b'),))
         if QBE:
             for cc in compilers:
                 producer([cc, '-std=c2x', '-pedantic-errors', '-c', peer, '-o', other], other)
@@ -241,6 +289,7 @@ def main():
         d = Path(td)
         harness_self_test(d)
         compiler_selection_self_test(d)
+        ownership_self_test()
         clang = os.environ.get('CLANG_CC') or shutil.which('clang')
         compilers = native_compilers(HOST, clang)
         if not clang:
@@ -264,7 +313,7 @@ def main():
                     continue
                 producer([*flags, '-c', source, '-o', native], native, expected)
                 assert source.read_text() == original, 'native original was rewritten'
-                ownership_evidence(native, case.ownership)
+                ownership_evidence(native, case.ownership, functions=case.functions)
                 producer([*flags, '-c', peer, '-o', other], other)
                 run_program(cc, [native, other], exe)
                 counts[cc][0] += 1
@@ -279,7 +328,7 @@ def main():
                 il.write_text(result.stdout)
                 producer([QBE, '-t', 'amd64_sysv', '-o', assembly, il], assembly)
                 producer([HOST, '-c', assembly, '-o', obj], obj)
-                ownership_evidence(obj, case.ownership, kcc=True)
+                ownership_evidence(obj, case.ownership, kcc=True, functions=case.functions)
                 # Every selected native toolchain supplies its own external body
                 # and identity observer to the very same KCC-produced owner.
                 for cc in compilers:
