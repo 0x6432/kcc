@@ -219,6 +219,24 @@ int main(void) { pthread_t t; void *r; struct P *p=slot(); if(p!=&target || p->c
     cases.append(Case('TLS zero record and pthread isolation', tls_header+
         '_Thread_local struct P target; struct P *slot(void) { return &target; }',
         tls_host, tls=(('target',24,0,True),), pthread=True))
+    local('all existing integer and object pointer member families',
+          'struct Scalar { _Bool b; signed char sc; unsigned char uc; short sh; '
+          'unsigned short us; int i; unsigned int ui; long l; unsigned long ul; '
+          'long long ll; unsigned long long ull; void *v; const int *ci; int (*pa)[2]; }; ',
+          'struct Scalar s; int x=42; int a[2]; a[0]=19; a[1]=23; '
+          's.b=2; s.sc=-7; s.uc=250; s.sh=-12345; s.us=60000; s.i=-123456; '
+          's.ui=4000000000U; s.l=-4294967297L; s.ul=18446744073709551615UL; '
+          's.ll=-9223372036854775807LL; s.ull=18446744073709551615ULL; '
+          's.v=&x; s.ci=&x; s.pa=&a; struct Scalar c=s; '
+          'return sizeof c==72 && _Alignof(struct Scalar)==8 && c.b==1 && c.sc==-7 && '
+          'c.uc==250 && c.sh==-12345 && c.us==60000 && c.i==-123456 && '
+          'c.ui==4000000000U && c.l==-4294967297L && c.ul==18446744073709551615UL && '
+          'c.ll==-9223372036854775807LL && c.ull==18446744073709551615ULL && '
+          'c.v==&x && *c.ci==42 && (*c.pa)[0]+(*c.pa)[1]==42?42:1;')
+    local('recursive record pointer member chains',
+          'struct Node { int x; struct Node *next; }; ',
+          'struct Node a; struct Node b; a.x=40; b.x=2; a.next=&b; b.next=&a; '
+          'return a.next->next==&a && a.next->x+b.next->x==42?42:1;')
     for size in (70,129,1048576):
         header=f'struct Large {{ unsigned char a[{size}]; }}; '
         cases.append(Case(f'large {size} byte global copy with tail',

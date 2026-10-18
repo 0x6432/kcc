@@ -301,7 +301,7 @@ static void check_paths_and_qualification(void)
 	struct fixture f;
 	open_fixture(&f,
 		"struct Leaf { const int fixed; int a[2]; }; "
-		"struct R { char lead; struct Leaf in; union { struct { short low; int high; }; long wide; }; int *p; }; "
+		"struct R { char lead; struct Leaf in; union { struct { short low; int high; }; long wide; }; int *p; struct R *next; }; "
 		"struct R target; const struct R frozen; "
 		"int *cell=&target.in.a[1]; const int *fixed=&target.in.fixed; "
 		"const int *cq=&frozen.in.a[0]; int *promoted=&target.high;");
@@ -311,7 +311,7 @@ static void check_paths_and_qualification(void)
 	struct ast_external_object_declaration *frozen = object(&f, 3);
 	assert(type_record_definition(target->type) == type_record_definition(frozen->type));
 	assert(target->type != frozen->type && frozen->type->qualifiers == type_qualifier_const);
-	assert(type_object_size(target->type) == 32 && type_object_alignment(target->type) == 8);
+	assert(type_object_size(target->type) == 40 && type_object_alignment(target->type) == 8);
 	const int64_t offsets[] = {12,4,8,20};
 	for (unsigned i = 0; i < 4; ++i) {
 		struct ast_external_object_declaration *d = object(&f, i+4);
