@@ -311,10 +311,51 @@ static void member_static_assertions(void)
  }
 }
 
+static void failed_record_completion(void)
+{
+ const char *texts[]={
+  "struct R; struct R *early; struct R { int ok; void bad; };",
+  "struct R; struct R *early; struct R { int duplicate; int duplicate; };",
+  "struct R; struct R *early; struct R { int ok; _Static_assert(0, \"fail\"); };",
+  "struct R; struct R *early; struct R { char bytes[1048576]; char extra; };",
+ };
+ for (size_t i=0;i<sizeof texts/sizeof texts[0];i++) {
+  struct fixture f; open_fixture(&f,texts[i]);
+  assert(!sema_translation_unit(f.unit,&f.arena,&f.diagnostics));
+  assert(f.diagnostics.errors==1);
+  const struct type *early=referent(object(&f,"early",0)->type);
+  struct record_definition *d=type_record_definition(early);
+  assert(d && !d->is_union && !d->complete);
+  /* Identity may be published to resolve self pointers; its FAILED definition
+   * may not publish partial members, layout, or consume committed member budget. */
+  assert(!d->members && !d->member_count && !d->size && !d->alignment);
+  assert(!type_is_complete_object(early));
+  close_fixture(&f);
+ }
+}
+
+static void failed_temporary_budget(void)
+{
+ struct fixture f;
+ open_fixture(&f,"struct Big { char bytes[1048576]; }; struct Big origin; "
+  "int f(void) { struct Big local; local=origin; return 0; }");
+ assert(!sema_translation_unit(f.unit,&f.arena,&f.diagnostics));
+ assert(f.diagnostics.errors==1);
+ struct ast_function *fn=NULL;
+ for (struct ast_external_declaration *d=f.unit->declarations;d;d=d->next)
+  if (d->kind==external_function_definition) fn=(struct ast_function *)d;
+ assert(fn && fn->locals && named(&fn->locals->name,"local"));
+ assert(fn->locals->slot==0 && !fn->locals->next_local);
+ assert(!fn->record_temporary_count && !fn->record_temporaries);
+ assert(type_object_size(fn->locals->type)==1048576);
+ close_fixture(&f);
+}
+
 int main(void)
 {
  canonical_identity(); layout_transaction(); layout_boundaries(); incomplete_at_sourcepoint(); failed_publication();
  tag_scopes(); member_captures(); member_static_assertions();
+ failed_record_completion(); failed_temporary_budget();
  puts("Record AST canonical identity, layout transactions, sourcepoint guards and publication passed");
  return 0;
 }
