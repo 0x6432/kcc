@@ -386,7 +386,10 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	struct tag_binding *tag = NULL;
 	struct record_type *record;
 	struct record_definition *definition;
+	struct record_definition saved_definition;
 	struct record_state *state;
+	struct record_state saved_state;
+	size_t saved_member_count;
 	struct record_member **tail;
 	struct promoted_member_name *names = NULL;
 	size_t promoted_count = 0;
@@ -442,6 +445,12 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		diagnostic_error(sema->diagnostics, syntax->syntax.location, "record definition nesting exceeds limit (64)");
 		return NULL;
 	}
+	/* Completion is a transaction on the existing nominal identity. In
+	 * particular a failed definition must not publish members through a
+	 * previously captured forward pointer or qualified wrapper. */
+	saved_definition = *definition;
+	saved_state = *state;
+	saved_member_count = sema->member_count;
 	sema->record_nesting++;
 	state->defining = true;
 	state->depth = 1;
@@ -520,7 +529,13 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	}
 	success = true;
 done:
-	state->defining = false;
+	if (!success) {
+		*definition = saved_definition;
+		*state = saved_state;
+		sema->member_count = saved_member_count;
+	} else {
+		state->defining = false;
+	}
 	sema->record_nesting--;
 	return success ? &record->type : NULL;
 allocation_failure:
