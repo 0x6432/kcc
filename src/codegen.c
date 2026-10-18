@@ -189,7 +189,8 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 		struct token name = object->object->name;
 		size_t result = codegen->next_temporary++;
 
-		emit(codegen, "\t%%t%zu =l copy $%.*s\n", result, (int)name.length,
+		emit(codegen, "\t%%t%zu =l copy %s$%.*s\n", result,
+			object->object->is_thread_local ? "thread " : "", (int)name.length,
 			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 		return result;
 	}
@@ -1042,7 +1043,8 @@ static bool codegen_block_items(struct codegen *codegen,
 				emit_label(codegen, new_label(codegen));
 				terminated = false;
 			}
-			codegen_local_initializer(codegen, local);
+			if (!local->object_symbol && !local->function_symbol)
+				codegen_local_initializer(codegen, local);
 			break;
 		}
 		case block_item_statement: {
@@ -1137,7 +1139,14 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 	}
 	if (!data_codegen.output_ok)
 		return false;
-	while (external) {
+	bool emitting_statics = false;
+	while (external || !emitting_statics) {
+		if (!external) {
+			emitting_statics = true;
+			external = unit->static_declarations;
+			if (!external)
+				break;
+		}
 		const struct external_object_symbol *object = NULL;
 
 		if (external->kind == external_object_declaration)
@@ -1149,8 +1158,8 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 
 			/* Explicit definitions supersede the first tentative anchor. */
 			assert(type_is_complete_object(object->type));
-			emit(&data_codegen, "%sdata $%.*s = align %u { ",
-				object->is_internal ? "" : "export ", (int)name.length,
+			emit(&data_codegen, "%s%sdata $%.*s = align %u { ",
+				object->is_internal ? "" : "export ", object->is_thread_local ? "thread " : "", (int)name.length,
 				(const char *)name.spelling_location.source->data + name.spelling_location.offset,
 				type_object_alignment(object->type));
 			if (object->definition) {
@@ -1158,6 +1167,9 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 				const char *encoding = size == 1 ? "b" : size == 2 ? "h" : size == 4 ? "w" : "l";
 
 				switch (object->initializer_value.kind) {
+				case static_data_zero:
+					emit(&data_codegen, "z %ju }\n", (uintmax_t)size);
+					break;
 				case static_data_integer:
 					assert(type_is_integer(object->type));
 					emit(&data_codegen, "%s %ju }\n", encoding,
@@ -1187,7 +1199,7 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 				}
 				case static_data_null_pointer:
 					/* Linux amd64 pointer storage has an eight-byte zero null encoding. */
-					assert(object->type->kind == type_kind_pointer && size == 8);
+					assert((object->type->kind == type_kind_pointer || object->type->kind == type_kind_nullptr) && size == 8);
 					emit(&data_codegen, "l 0 }\n");
 					break;
 				}

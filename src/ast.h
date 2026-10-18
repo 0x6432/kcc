@@ -592,6 +592,11 @@ struct ast_local_declaration {
 	struct token name;
 	struct ast_expression *initializer;
 	bool is_register;
+	bool is_extern;
+	bool is_static;
+	bool is_thread_local;
+	struct external_object_symbol *object_symbol;
+	struct function_symbol *function_symbol;
 	const struct type *type;
 	size_t slot;
 	struct ast_local_declaration *next_local;
@@ -642,6 +647,7 @@ struct ast_external_static_assertion {
 struct ast_external_object_declaration {
 	struct ast_external_declaration external;
 	bool is_extern;
+	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the object type. */
 	struct ast_type_syntax *type_syntax;
 	struct token name;
@@ -655,6 +661,7 @@ struct ast_external_type_declaration {
 	struct ast_external_declaration external;
 	bool is_extern;
 	struct external_object_symbol *object_symbol;
+	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_type_syntax *type_syntax;
 	struct token name;
@@ -677,6 +684,7 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
+	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_function_type_syntax *type_syntax;
 	struct ast_type_syntax *return_syntax;
@@ -697,6 +705,8 @@ struct ast_function {
 };
 
 struct ast_translation_unit {
+	/* Synthetic static-duration local definitions, emitted after source declarations. */
+	struct ast_external_declaration *static_declarations;
 	struct ast_external_declaration *declarations;
 	struct ast_string_expression *strings;
 };

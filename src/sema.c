@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
 /* Aliases share type DAGs. Cache shape metrics without expanding repeated edges.
  * The expanded size/depth bounds keep existing recursive type operations safe.
@@ -73,6 +74,8 @@ struct sema {
 	size_t function_count;
 	size_t string_count;
 	struct ast_string_expression **string_tail;
+	struct ast_external_declaration **static_tail;
+	size_t static_count;
 };
 
 static bool same_name(struct token left, struct token right)
@@ -452,11 +455,6 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		if (!declared)
 			goto done;
 		if (declared->kind == type_kind_void) {
-			if (parameter->is_register) {
-				diagnostic_error(sema->diagnostics, parameter->location,
-					"register void parameters are not supported yet");
-				goto done;
-			}
 			/* Resolve query-derived void without removing its written syntax. */
 			if (function->parameter_count == 1 && !parameter->has_name && !declared->qualifiers) {
 				parameter->type = declared;
@@ -865,6 +863,18 @@ static const struct type *sema_update_operand(struct sema *sema,
 	return result_type;
 }
 
+static struct external_object_symbol *visible_file_object(struct sema *sema, struct token name)
+{
+	struct external_object_symbol *symbol = find_external_object(sema, name);
+	return symbol && symbol->file_type ? symbol : NULL;
+}
+
+static struct function_symbol *visible_file_function(struct sema *sema, struct token name)
+{
+	struct function_symbol *symbol = find_function(sema, name);
+	return symbol && symbol->file_type ? symbol : NULL;
+}
+
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required)
 {
@@ -882,7 +892,7 @@ static bool sema_expression(struct sema *sema,
 			struct ast_name_expression *name = (struct ast_name_expression *)node->callee;
 
 			if (!find_typedef(sema, name->name) && !find_local(sema, name->name) &&
-				!find_function(sema, name->name) && !find_external_object(sema, name->name)) {
+				!visible_file_function(sema, name->name) && !visible_file_object(sema, name->name)) {
 				diagnostic_error(sema->diagnostics, name->expression.location, "call to undeclared function");
 				return false;
 			}
@@ -1036,8 +1046,21 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		node->declaration = find_local(sema, node->name);
-		object = find_external_object(sema, node->name);
-		if (node->declaration) {
+		object = node->declaration ? node->declaration->object_symbol :
+			visible_file_object(sema, node->name);
+		if (object) {
+			struct ast_external_object_expression *reference =
+				ast_new_external_object(sema->arena, expression->location, object);
+
+			if (!reference) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"out of memory creating external object reference");
+				return false;
+			}
+			*expression_slot = expression = &reference->expression;
+			expression->is_lvalue = true;
+			result_type = node->declaration ? node->declaration->type : object->file_type;
+		} else if (node->declaration && !node->declaration->function_symbol) {
 			if (!node->declaration->type) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"inferred name is unavailable in its initializer");
@@ -1045,21 +1068,9 @@ static bool sema_expression(struct sema *sema,
 			}
 			result_type = node->declaration->type;
 			expression->is_lvalue = true;
-		} else if (object) {
-			struct ast_external_object_expression *reference;
-
-			reference = ast_new_external_object(sema->arena, expression->location, object);
-			if (!reference) {
-				diagnostic_error(sema->diagnostics, expression->location,
-					"out of memory creating external object reference");
-				return false;
-			}
-			expression = &reference->expression;
-			*expression_slot = expression;
-			expression->is_lvalue = true;
-			result_type = object->type;
 		} else {
-			struct function_symbol *function = find_function(sema, node->name);
+			struct function_symbol *function = node->declaration ?
+				node->declaration->function_symbol : visible_file_function(sema, node->name);
 			struct ast_function_designator_expression *designator;
 
 			if (!function) {
@@ -1073,9 +1084,8 @@ static bool sema_expression(struct sema *sema,
 			}
 			if (!sema->unevaluated)
 				function->is_referenced = true;
-			expression = &designator->expression;
-			*expression_slot = expression;
-			result_type = &function->type->type;
+			*expression_slot = expression = &designator->expression;
+			result_type = node->declaration ? node->declaration->type : &function->file_type->type;
 		}
 		break;
 	}
@@ -1442,7 +1452,7 @@ static bool sema_expression(struct sema *sema,
 		struct ast_array_decay_expression *decay;
 
 		/* Direct sizeof/typeof operands never enter value conversion. */
-		if (expression->kind == expression_name &&
+		if (!sema->unevaluated && expression->kind == expression_name &&
 			((struct ast_name_expression *)expression)->declaration->is_register) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"register array-to-pointer conversion is not supported");
@@ -1506,11 +1516,6 @@ static bool reserve_local_name(struct sema *sema, struct ast_local_declaration *
 			"redeclaration of local in this scope");
 		return false;
 	}
-	if (sema->local_count == ast_max_locals) {
-		diagnostic_error(sema->diagnostics, local->name.location,
-			"function exceeds local limit (256)");
-		return false;
-	}
 
 	binding = arena_alloc(sema->arena, sizeof(*binding));
 	if (!binding) {
@@ -1528,6 +1533,11 @@ static bool complete_local_storage(struct sema *sema, struct ast_local_declarati
 	const struct type *effective_type)
 {
 	assert(type_is_complete_object(effective_type));
+	if (sema->local_count == ast_max_locals) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"function exceeds local limit (256)");
+		return false;
+	}
 	local->type = effective_type;
 	if (type_object_size(local->type) > ast_max_local_storage - sema->local_storage) {
 		diagnostic_error(sema->diagnostics, local->name.location,
@@ -1598,25 +1608,26 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	return target && convert_expression(sema, &local->initializer, target);
 }
 
+static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *type);
+
 static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
 
-	if (local->type_syntax->kind == type_syntax_inferred)
+	if (local->type_syntax->kind == type_syntax_inferred) {
+		if (local->is_static || local->is_extern) {
+			diagnostic_error(sema->diagnostics, local->name.location,
+				"static or extern auto inference is not supported yet");
+			return false;
+		}
 		return sema_inferred_local(sema, local);
+	}
 	type = resolve_type_syntax(sema, local->type_syntax);
 	if (!type)
 		return false;
-	if (local->is_register && type->kind == type_kind_function) {
-		diagnostic_error(sema->diagnostics, local->name.location,
-			"register storage requires an object type");
-		return false;
-	}
-	if (type->kind == type_kind_function) {
-		diagnostic_error(sema->diagnostics, local->name.location,
-			"block-scope function declarations are not supported yet");
-		return false;
-	}
+	if (local->is_extern || local->is_static || type->kind == type_kind_function)
+		return sema_block_storage(sema, local, type);
 	if (!type_is_complete_object(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
 		return false;
@@ -1726,6 +1737,16 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 	sema->scope = &scope;
 	if (node->initializer_declarations)
 		success = sema_block_items(sema, node->initializer_declarations);
+	for (struct ast_block_item *item = node->initializer_declarations; success && item; item = item->next) {
+		if (item->kind == block_item_declaration) {
+			struct ast_local_declaration *local = (struct ast_local_declaration *)item;
+			if (local->object_symbol || local->function_symbol) {
+				diagnostic_error(sema->diagnostics, local->name.location,
+					"for declaration requires an automatic or register object");
+				success = false;
+			}
+		}
+	}
 	if (success && node->initializer_expression)
 		success = sema_expression(sema, &node->initializer_expression, true);
 	if (success && node->condition)
@@ -2147,6 +2168,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	const struct function_type *type, struct ast_function *definition, bool is_static)
 {
 	struct function_symbol *symbol = find_function(sema, name);
+	bool canonical_is_visible = symbol && symbol->file_type == symbol->type;
 	const struct type *return_type;
 
 	if (find_external_object(sema, name)) {
@@ -2154,7 +2176,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 			"function name conflicts with external object");
 		return NULL;
 	}
-	if (find_typedef(sema, name)) {
+	if (!sema->scope && find_typedef(sema, name)) {
 		diagnostic_error(sema->diagnostics, name.location, "function name conflicts with typedef name");
 		return NULL;
 	}
@@ -2227,13 +2249,22 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 		}
 		symbol->type = (const struct function_type *)composite;
 	}
+	if (!sema->scope) {
+		const struct type *visible = canonical_is_visible ? &symbol->type->type : symbol->file_type ?
+			type_composite(sema->arena, &symbol->file_type->type, &type->type) : &type->type;
+		if (!visible) {
+			diagnostic_error(sema->diagnostics, name.location, "out of memory creating visible function type");
+			return NULL;
+		}
+		symbol->file_type = (const struct function_type *)visible;
+	}
 	return symbol;
 }
 
 /* A tentative anchor owns storage once; extern-only symbols own none. */
 static struct external_object_symbol *register_external_object(struct sema *sema,
 	struct token name, const struct type *type,
-	struct ast_external_declaration *tentative_definition, bool is_static, bool is_extern)
+	struct ast_external_declaration *tentative_definition, bool is_static, bool is_extern, bool is_thread_local)
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 	const struct type *composite = type;
@@ -2259,9 +2290,14 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 			"object declaration conflicts with prior linkage");
 		return NULL;
 	}
-	if (find_typedef(sema, name) || find_function(sema, name)) {
+	if ((!sema->scope && find_typedef(sema, name)) || find_function(sema, name)) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"external object conflicts with prior ordinary declaration");
+		return NULL;
+	}
+	if (symbol && symbol->is_thread_local != is_thread_local) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"thread_local declaration conflicts with prior storage duration");
 		return NULL;
 	}
 	if (symbol) {
@@ -2289,6 +2325,15 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 		return NULL;
 	}
 	if (symbol) {
+		if (!sema->scope) {
+			const struct type *visible = symbol->file_type == symbol->type ? composite : symbol->file_type ?
+				type_composite(sema->arena, symbol->file_type, type) : type;
+			if (!visible) {
+				diagnostic_error(sema->diagnostics, name.location, "out of memory creating visible object type");
+				return NULL;
+			}
+			symbol->file_type = visible;
+		}
 		symbol->type = composite;
 		if (tentative_definition && !symbol->tentative_definition)
 			symbol->tentative_definition = tentative_definition;
@@ -2309,6 +2354,8 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 		.name = name,
 		.type = type,
 		.tentative_definition = tentative_definition,
+		.file_type = sema->scope ? NULL : type,
+		.is_thread_local = is_thread_local,
 		.is_internal = is_static,
 		.next = sema->external_objects,
 	};
@@ -2324,7 +2371,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct ast_external_declaration *external, struct token name,
 	const struct type *type, struct ast_expression **initializer,
-	bool is_static, bool is_extern, bool is_query)
+	bool is_static, bool is_extern, bool is_query, bool is_thread_local)
 {
 	struct external_object_symbol *previous = find_external_object(sema, name);
 	struct external_object_symbol saved = { 0 };
@@ -2332,10 +2379,15 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct constant_result value;
 	struct address_initializer_result address_value;
 	bool is_address = false;
+	bool zero_definition = !is_extern && !*initializer && (is_thread_local || sema->scope);
 	const struct type *target;
 
+	if (zero_definition && previous && previous->definition) {
+		diagnostic_error(sema->diagnostics, name.location, "multiple definitions of thread_local object");
+		return NULL;
+	}
 	if (*initializer) {
-		if (!type_is_integer(type) && type->kind != type_kind_pointer) {
+		if (!type_is_integer(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) {
 			diagnostic_error(sema->diagnostics, (*initializer)->location,
 				is_query ? "query-derived external declarations require ';' for non-integer initializers" :
 				is_extern ? "non-integer extern object definitions are not supported yet" :
@@ -2357,15 +2409,27 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (previous)
 		saved = *previous;
 	symbol = register_external_object(sema, name, type,
-		!is_extern && !*initializer ? external : NULL, is_static, is_extern);
-	if (!symbol || !*initializer)
+		!is_extern && !*initializer && !zero_definition ? external : NULL, is_static, is_extern, is_thread_local);
+	if (!symbol)
+		return NULL;
+	if (zero_definition) {
+		const struct type *visible = sema->scope ? type : symbol->file_type;
+		if (!type_is_complete_object(visible)) {
+			diagnostic_error(sema->diagnostics, name.location, "thread_local definition requires a complete object type");
+			goto rollback;
+		}
+		symbol->definition = external;
+		symbol->initializer_value = (struct static_data_value) { .kind = static_data_zero };
+		return symbol;
+	}
+	if (!*initializer)
 		return symbol;
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
 	/* Check the original expression before narrowing (notably to _Bool).
 	 * An implicit conversion cannot hide evaluated invalid ICE arithmetic.
 	 */
-	if (type->kind == type_kind_pointer) {
+	if (type->kind == type_kind_pointer || type->kind == type_kind_nullptr) {
 		struct null_initializer_result null_value = evaluate_null_initializer(*initializer);
 
 		if (null_value.status == constant_invalid) {
@@ -2392,7 +2456,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	target = unqualified_type(sema, type, name.location);
 	if (!target || !convert_expression(sema, initializer, target))
 		goto rollback;
-	if (type->kind == type_kind_pointer) {
+	if (type->kind == type_kind_pointer || type->kind == type_kind_nullptr) {
 		if (is_address) {
 			/* Assignment conversion remains authoritative, but its ordinary
 			 * void-pointer rule cannot widen this bounded static-data proof.
@@ -2433,6 +2497,141 @@ rollback:
 	return NULL;
 }
 
+/* A block binding carries a source-point composite independently of the
+ * canonical entity. Leaving its scope never publishes that composite elsewhere.
+ */
+static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *type)
+{
+	struct ast_local_declaration *prior = find_local(sema, local->name);
+	struct ast_local_declaration *same = find_in_scope(sema->scope, local->name);
+	struct typedef_binding *alias = find_typedef_binding(sema, local->name);
+	const struct type *visible_type = NULL;
+	bool inherited_internal = false;
+	struct external_object_symbol *object = find_external_object(sema, local->name);
+	struct function_symbol *function = find_function(sema, local->name);
+
+	if (type->kind == type_kind_function) {
+		if (local->is_thread_local || local->is_static || local->is_register) {
+			diagnostic_error(sema->diagnostics, local->name.location,
+				local->is_thread_local ? "thread_local requires an object type" :
+				local->is_static ? "block-scope static function declaration is not permitted" :
+				"register storage requires an object type");
+			return false;
+		}
+	} else if (local->is_static && !type_is_complete_object(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location, "static local object type must be complete");
+		return false;
+	}
+	if ((alias && alias->scope == sema->scope) ||
+		(same && (local->is_static || (!same->object_symbol && !same->function_symbol) || same->is_static))) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			alias && alias->scope == sema->scope ? "ordinary declaration conflicts with typedef name" :
+			"redeclaration of local in this scope");
+		return false;
+	}
+	if (!local->is_static && local->initializer) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"block-scope extern declaration cannot have an initializer");
+		return false;
+	}
+	if (local->is_static) {
+		struct source *source = arena_alloc(sema->arena, sizeof(*source));
+		unsigned char *spelling = arena_alloc(sema->arena, 64);
+		struct ast_external_object_declaration *definition;
+		struct token name = local->name;
+
+		if (!source || !spelling)
+			goto allocation_failure;
+		int length = snprintf((char *)spelling, 64, ".Lkcc.static.%zu", sema->static_count++);
+		assert(length > 0 && length < 64);
+		*source = (struct source) { .data = spelling, .length = (size_t)length };
+		name.spelling_location = (struct source_location) { .source = source };
+		name.length = (size_t)length;
+		definition = ast_new_external_object_declaration(sema->arena,
+			local->name.location, local->type_syntax, name, false);
+		if (!definition)
+			goto allocation_failure;
+		definition->is_static = true;
+		definition->is_thread_local = local->is_thread_local;
+		definition->type = type;
+		local->type = type;
+		local->object_symbol = register_external_object(sema, name, type, NULL,
+			true, false, local->is_thread_local);
+		if (!local->object_symbol || !reserve_local_name(sema, local))
+			return false;
+		local->object_symbol->is_block_static = true;
+		definition->symbol = sema_file_object(sema, &definition->external, name,
+			type, &local->initializer, true, false, false, local->is_thread_local);
+		if (!definition->symbol)
+			return false;
+		definition->initializer = local->initializer;
+		*sema->static_tail = &definition->external;
+		sema->static_tail = &definition->external.next;
+		return true;
+	}
+	/* Only a lexically visible declaration with linkage contributes to the
+	 * local composite and inherited linkage. An automatic/static-local/typedef
+	 * hiding an internal entity must not silently inherit its linkage.
+	 */
+	if (!alias) {
+		if (prior) {
+			if (!prior->is_static && (prior->object_symbol || prior->function_symbol)) {
+				visible_type = prior->type;
+				inherited_internal = prior->object_symbol ? prior->object_symbol->is_internal :
+					prior->function_symbol->is_internal;
+			}
+		} else if (object && object->file_type) {
+			visible_type = object->file_type;
+			inherited_internal = object->is_internal;
+		} else if (function && function->file_type) {
+			visible_type = &function->file_type->type;
+			inherited_internal = function->is_internal;
+		}
+	}
+	if ((object && object->is_internal && !inherited_internal) ||
+		(function && function->is_internal && !inherited_internal)) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"block extern declaration conflicts with hidden internal linkage");
+		return false;
+	}
+	if (visible_type) {
+		if (!type_compatible(visible_type, type)) {
+			diagnostic_error(sema->diagnostics, local->name.location,
+				type->kind == type_kind_function ? "incompatible function declaration" :
+				"incompatible external object declaration");
+			return false;
+		}
+		type = type_composite(sema->arena, visible_type, type);
+		if (!type)
+			goto allocation_failure;
+	}
+	if (type->kind == type_kind_function) {
+		local->function_symbol = register_function(sema, local->name,
+			(const struct function_type *)type, NULL, inherited_internal);
+		if (!local->function_symbol)
+			return false;
+	} else {
+		local->object_symbol = register_external_object(sema, local->name, type,
+			NULL, inherited_internal, true, local->is_thread_local);
+		if (!local->object_symbol)
+			return false;
+	}
+	local->type = type;
+	if (same) {
+		struct binding *binding = arena_alloc(sema->arena, sizeof(*binding));
+		if (!binding)
+			goto allocation_failure;
+		*binding = (struct binding) { local, sema->scope->bindings };
+		sema->scope->bindings = binding;
+		return true;
+	}
+	return reserve_local_name(sema, local);
+allocation_failure:
+	diagnostic_error(sema->diagnostics, local->name.location, "out of memory binding block storage");
+	return false;
+}
+
 static bool sema_external_object_declaration(struct sema *sema,
 	struct ast_external_object_declaration *declaration)
 {
@@ -2442,7 +2641,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 		return false;
 	declaration->symbol = sema_file_object(sema, &declaration->external,
 		declaration->name, type, &declaration->initializer,
-		declaration->is_static, declaration->is_extern, false);
+		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = type;
@@ -2459,7 +2658,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 	if (type->kind != type_kind_function) {
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
-			declaration->is_static, declaration->is_extern, true);
+			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local);
 		if (!declaration->object_symbol)
 			return false;
 		declaration->type = type;
@@ -2468,6 +2667,10 @@ static bool sema_external_type_declaration(struct sema *sema,
 	if (declaration->initializer) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"query-derived external declarations require ';'; functions cannot have initializers");
+		return false;
+	}
+	if (declaration->is_thread_local) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "thread_local requires an object type");
 		return false;
 	}
 	declaration->symbol = register_function(sema, declaration->name,
@@ -2487,6 +2690,10 @@ static bool sema_function_declaration(struct sema *sema,
 	if (!resolved)
 		return false;
 	assert(resolved->kind == type_kind_function);
+	if (declaration->is_thread_local) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "thread_local requires an object type");
+		return false;
+	}
 	symbol = register_function(sema, declaration->name,
 		(const struct function_type *)resolved, definition, declaration->is_static);
 	if (!symbol)
@@ -2569,8 +2776,8 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 
 	if (!type)
 		return false;
-	if (!sema->scope && (find_function(sema, declaration->name) ||
-		find_external_object(sema, declaration->name))) {
+	if (!sema->scope && (visible_file_function(sema, declaration->name) ||
+		visible_file_object(sema, declaration->name))) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"typedef name conflicts with prior ordinary declaration");
 		return false;
@@ -2647,6 +2854,7 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		.arena = arena,
 		.diagnostics = diagnostics,
 		.string_tail = &unit->strings,
+		.static_tail = &unit->static_declarations,
 	};
 	struct ast_external_declaration *external = unit->declarations;
 
