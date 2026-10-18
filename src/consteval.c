@@ -270,3 +270,33 @@ struct constant_result evaluate_integer_constant(const struct ast_expression *ex
 {
 	return evaluate(expression, true);
 }
+
+/* The source is checked before assignment conversion. Arbitrary nullptr_t
+ * values, pointer loads, address expressions and pointer arithmetic are not
+ * proved constant merely because their runtime value might be null.
+ */
+struct null_initializer_result evaluate_null_initializer(const struct ast_expression *expression)
+{
+	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
+	if (type_is_integer(expression->type)) {
+		struct constant_result value = evaluate_integer_constant(expression);
+
+		if (value.status == constant_invalid)
+			return (struct null_initializer_result) { value.status, value.location, value.message };
+		if (value.status == constant_value && value.bits == 0)
+			return (struct null_initializer_result) { constant_value, expression->location, NULL };
+	} else if (expression->kind == expression_nullptr) {
+		return (struct null_initializer_result) { constant_value, expression->location, NULL };
+	} else if ((expression->kind == expression_cast || expression->kind == expression_conversion) &&
+		(expression->type->kind == type_kind_pointer || expression->type->kind == type_kind_nullptr)) {
+		const struct ast_expression *operand = expression->kind == expression_cast ?
+			((const struct ast_cast_expression *)expression)->operand :
+			((const struct ast_conversion_expression *)expression)->operand;
+
+		return evaluate_null_initializer(operand);
+	}
+	return (struct null_initializer_result) {
+		constant_not_constant, expression->location,
+		"file-scope pointer initializer requires a supported null constant expression",
+	};
+}

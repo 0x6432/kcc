@@ -23,4 +23,16 @@ struct constant_result {
  */
 struct constant_result evaluate_integer_constant(const struct ast_expression *expression);
 
+/* A null proof has no integer bits or numeric address representation. */
+struct null_initializer_result {
+	enum constant_status status;
+	struct source_location location;
+	const char *message;
+};
+
+/* Pure, narrow source-form query: nullptr, strict zero ICE, or checked
+ * pointer/nullptr casts thereof. Not a general address-constant evaluator.
+ */
+struct null_initializer_result evaluate_null_initializer(const struct ast_expression *expression);
+
 #endif

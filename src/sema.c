@@ -2333,7 +2333,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	const struct type *target;
 
 	if (*initializer) {
-		if (!type_is_integer(type)) {
+		if (!type_is_integer(type) && type->kind != type_kind_pointer) {
 			diagnostic_error(sema->diagnostics, (*initializer)->location,
 				is_query ? "query-derived external declarations require ';' for non-integer initializers" :
 				is_extern ? "non-integer extern object definitions are not supported yet" :
@@ -2363,23 +2363,39 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	/* Check the original expression before narrowing (notably to _Bool).
 	 * An implicit conversion cannot hide evaluated invalid ICE arithmetic.
 	 */
-	value = evaluate_integer_constant(*initializer);
-	if (value.status != constant_value) {
-		diagnostic_error(sema->diagnostics, value.location,
-			value.status == constant_not_constant ?
-			"file-scope initializer must be an integer constant expression" : value.message);
-		goto rollback;
+	if (type->kind == type_kind_pointer) {
+		struct null_initializer_result null_value = evaluate_null_initializer(*initializer);
+
+		if (null_value.status != constant_value) {
+			diagnostic_error(sema->diagnostics, null_value.location, null_value.message);
+			goto rollback;
+		}
+	} else {
+		value = evaluate_integer_constant(*initializer);
+		if (value.status != constant_value) {
+			diagnostic_error(sema->diagnostics, value.location,
+				value.status == constant_not_constant ?
+				"file-scope initializer must be an integer constant expression" : value.message);
+			goto rollback;
+		}
 	}
 	target = unqualified_type(sema, type, name.location);
 	if (!target || !convert_expression(sema, initializer, target))
 		goto rollback;
-	value = evaluate_integer_constant(*initializer);
-	if (value.status != constant_value) {
-		diagnostic_error(sema->diagnostics, value.location, value.message);
-		goto rollback;
+	if (type->kind == type_kind_pointer) {
+		/* This target's null encoding is selected by codegen, not by an ICE. */
+		symbol->initializer_value = (struct static_data_value) { .kind = static_data_null_pointer };
+	} else {
+		value = evaluate_integer_constant(*initializer);
+		if (value.status != constant_value) {
+			diagnostic_error(sema->diagnostics, value.location, value.message);
+			goto rollback;
+		}
+		symbol->initializer_value = (struct static_data_value) {
+			.kind = static_data_integer, .integer_bits = value.bits,
+		};
 	}
 	symbol->definition = external;
-	symbol->initializer_bits = value.bits;
 	return symbol;
 rollback:
 	if (previous)

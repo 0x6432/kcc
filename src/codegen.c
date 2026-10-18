@@ -1157,8 +1157,18 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 				uint64_t size = type_object_size(object->type);
 				const char *encoding = size == 1 ? "b" : size == 2 ? "h" : size == 4 ? "w" : "l";
 
-				assert(type_is_integer(object->type));
-				emit(&data_codegen, "%s %ju }\n", encoding, (uintmax_t)object->initializer_bits);
+				switch (object->initializer_value.kind) {
+				case static_data_integer:
+					assert(type_is_integer(object->type));
+					emit(&data_codegen, "%s %ju }\n", encoding,
+						(uintmax_t)object->initializer_value.integer_bits);
+					break;
+				case static_data_null_pointer:
+					/* Linux amd64 pointer storage has an eight-byte zero null encoding. */
+					assert(object->type->kind == type_kind_pointer && size == 8);
+					emit(&data_codegen, "l 0 }\n");
+					break;
+				}
 			} else
 				emit(&data_codegen, "z %ju }\n", (uintmax_t)type_object_size(object->type));
 			if (!data_codegen.output_ok)
