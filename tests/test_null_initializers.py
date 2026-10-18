@@ -20,6 +20,44 @@ from test_integer_initializers import (
 )
 
 
+def native_compilers(host, clang=None):
+    """Run each selected executable once; an explicit invalid path is an error."""
+    primary = shutil.which(host)
+    assert primary, ('native compiler unavailable', host)
+    result = [host]
+    if clang:
+        candidate = shutil.which(clang)
+        assert candidate, ('additional native compiler unavailable', clang)
+        if os.path.realpath(primary) != os.path.realpath(candidate):
+            result.append(clang)
+    return result
+
+
+def compiler_selection_self_test(directory):
+    # Canonical executable identity, not spelling, determines duplicate or style.
+    clang = directory/'clang-selection-fixture'
+    gcc = directory/'gcc-selection-fixture'
+    for executable in (clang, gcc):
+        executable.write_text('#!/bin/sh\nexit 0\n')
+        executable.chmod(0o755)
+    alias = directory/'primary-cc'
+    alias.symlink_to(clang)
+    assert native_compilers(str(clang), str(clang)) == [str(clang)]
+    assert native_compilers(str(alias), str(clang)) == [str(alias)]
+    assert native_compilers(str(clang), str(alias)) == [str(clang)]
+    assert native_compilers(str(alias)) == [str(alias)]
+    assert native_compilers(str(gcc), str(clang)) == [str(gcc), str(clang)]
+    assert clang_style(str(alias)) and not clang_style(str(gcc))
+    for host, additional in ((str(clang), str(directory/'missing-clang')),
+                             (str(directory/'missing-primary'), str(clang))):
+        try:
+            native_compilers(host, additional)
+        except AssertionError as error:
+            assert 'unavailable' in str(error), error
+        else:
+            raise AssertionError('invalid explicit compiler silently ignored')
+
+
 def fixtures():
     cases = []
     # Deliberately selected coverage, not a target/source/storage cross product.
@@ -222,6 +260,7 @@ def main():
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='kcc null initializers ') as tmp:
         d = Path(tmp)
+        compiler_selection_self_test(d)
         harness_self_test(d)
         owner, companion, native, other, il, assembly, obj, exe = [d/n for n in
             ('owner.c', 'companion.c', 'native.o', 'other.o', 'k.ssa', 'k.s', 'k.o', 'program')]
@@ -240,9 +279,8 @@ def main():
             print('Null relocation trap and imported hardened harness self-tests passed')
             return
         clang = os.environ.get('CLANG_CC') or shutil.which('clang')
-        assert clang, 'Clang required for the two-native null oracle'
-        compilers = [HOST, clang]
-        assert os.path.realpath(shutil.which(HOST) or HOST) != os.path.realpath(shutil.which(clang) or clang)
+        compilers = native_compilers(HOST, clang)
+        print('Native compilers:', ', '.join(compilers), flush=True)
         supported = {cc: features_for(cc, owner, native) for cc in compilers}
         counts = {cc: [0, 0, 0] for cc in compilers}
         kcc_count = qbe_count = rejected = 0

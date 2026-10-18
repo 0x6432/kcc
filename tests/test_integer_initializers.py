@@ -262,7 +262,7 @@ def producer(args, output, expected=()):
 
 
 def clang_style(cc):
-    return 'clang' in Path(cc).name
+    return 'clang' in Path(os.path.realpath(shutil.which(cc) or cc)).name
 
 
 def expected_warnings(fixture, clang):
