@@ -132,6 +132,38 @@ CONSTRAINTS = [
 ]
 
 
+
+# Each refusal must come from the intended language rule, not merely any error.
+CONSTRAINT_MESSAGES = {}
+for names, message in [
+    (('inline object', 'inline initialized object', 'inline pointer object',
+      'inline object alias', 'inline pointer alias', 'inline local object'),
+     'inline requires a function declaration'),
+    (('inline typedef', 'inline parameter', 'inline type name'),
+     'inline is not permitted in a type name, typedef, or parameter declaration'),
+    (('undefined unused inline', 'undefined inline after plain', 'undefined inline before extern',
+      'undefined inline function alias', 'undefined inline function query', 'undefined block inline'),
+     'external inline function requires a definition in this translation unit'),
+    (('inline main', 'main later inline'), 'inline is not permitted on hosted main'),
+    (('modifiable static in inline-only', 'modifiable static in nested block',
+      'const pointer is not const object', 'thread object in inline-only'),
+     'external inline definition cannot define a modifiable static or thread object'),
+    (('internal reference in unreachable body', 'internal object reference', 'internal const object reference',
+      'internal object sizeof reference', 'internal function reference', 'internal function sizeof reference',
+      'internal object typeof reference'),
+     'external inline definition cannot reference an internal-linkage identifier'),
+    (('omitted body undeclared name',), 'use of undeclared identifier'),
+    (('omitted body incompatible return',),
+     'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)'),
+    (('omitted body invalid call',), 'called expression is not a function pointer'),
+    (('duplicate inline bodies',), 'redefinition of function'),
+    (('incompatible inline declarations',), 'incompatible function declaration'),
+]:
+    for name in names:
+        assert name not in CONSTRAINT_MESSAGES
+        CONSTRAINT_MESSAGES[name] = message
+assert set(CONSTRAINT_MESSAGES) == {name for name, _ in CONSTRAINTS}
+
 def symbol_records(path):
     result = invoke(['nm', '--format=posix', path])
     assert result.returncode == 0 and not result.stderr, (path, result)
@@ -341,7 +373,7 @@ def main():
             for name, text in CONSTRAINTS:
                 source.write_text(text+'\n')
                 try:
-                    reject(source)
+                    reject(source, 'error: '+CONSTRAINT_MESSAGES[name]+'\n')
                 except AssertionError as error:
                     raise AssertionError((name, text, error)) from error
                 rejected += 1
