@@ -45,7 +45,8 @@ static void emit_label(struct codegen *codegen, size_t label)
 
 static char qbe_type(const struct type *type)
 {
-	return type_value_width(type) == 64 ? 'l' : 'w';
+	/* Aggregate expression values are addresses of captured object bytes. */
+	return type_is_record(type) || type_value_width(type) == 64 ? 'l' : 'w';
 }
 
 static const char *qbe_abi_type(const struct type *type)
@@ -171,7 +172,7 @@ static size_t codegen_pointer_index(struct codegen *codegen,
 static size_t codegen_address(struct codegen *codegen, const struct ast_expression *expression)
 {
 	assert(expression->is_lvalue || expression->type->kind == type_kind_function ||
-		expression->kind == expression_indirection);
+		expression->kind == expression_indirection || expression->kind == expression_member);
 	switch (expression->kind) {
 	case expression_function_designator: {
 		const struct ast_function_designator_expression *function =
@@ -209,6 +210,19 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 		emit(codegen, "\t%%t%zu =l copy %%v%zu\n", result, name->declaration->slot);
 		return result;
 	}
+	case expression_member: {
+		const struct ast_member_expression *node = (const struct ast_member_expression *)expression;
+		size_t base = node->indirect ? codegen_expression(codegen, node->operand) :
+			node->operand->is_lvalue ? codegen_address(codegen, node->operand) :
+			codegen_expression(codegen, node->operand);
+		size_t result;
+
+		if (!node->offset)
+			return base;
+		result = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l add %%t%zu, %ju\n", result, base, (uintmax_t)node->offset);
+		return result;
+	}
 	case expression_indirection: {
 		const struct ast_indirection_expression *node =
 			(const struct ast_indirection_expression *)expression;
@@ -218,6 +232,59 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 	default:
 		assert(0 && "unsupported lvalue address");
 		return 0;
+	}
+}
+
+/* Large QBE blits expand into proportional machine instructions. Keep IL and
+ * backend resource use bounded: large record copies use a fixed-size loop,
+ * without a libc helper, dynamic stack allocation, or reading past the object. */
+static void codegen_record_copy(struct codegen *codegen, size_t source,
+	size_t destination, uint64_t bytes)
+{
+	uint64_t bulk = bytes & ~UINT64_C(7);
+	size_t predecessor;
+	size_t loop;
+	size_t done;
+	size_t index;
+	size_t next;
+	size_t source_address;
+	size_t destination_address;
+	size_t value;
+	size_t condition;
+
+	if (bytes <= 64) {
+		emit(codegen, "\tblit %%t%zu, %%t%zu, %ju\n", source, destination, (uintmax_t)bytes);
+		return;
+	}
+	predecessor = codegen->current_label;
+	loop = new_label(codegen);
+	done = new_label(codegen);
+	index = codegen->next_temporary++;
+	next = codegen->next_temporary++;
+	source_address = codegen->next_temporary++;
+	destination_address = codegen->next_temporary++;
+	value = codegen->next_temporary++;
+	condition = codegen->next_temporary++;
+	emit(codegen, "\tjmp @b%zu\n", loop);
+	emit_label(codegen, loop);
+	emit(codegen, "\t%%t%zu =l phi @b%zu 0, @b%zu %%t%zu\n", index,
+		predecessor, loop, next);
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %%t%zu\n", source_address, source, index);
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %%t%zu\n", destination_address, destination, index);
+	emit(codegen, "\t%%t%zu =l loadl %%t%zu\n", value, source_address);
+	emit(codegen, "\tstorel %%t%zu, %%t%zu\n", value, destination_address);
+	emit(codegen, "\t%%t%zu =l add %%t%zu, 8\n", next, index);
+	emit(codegen, "\t%%t%zu =w cultl %%t%zu, %ju\n", condition, next, (uintmax_t)bulk);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", condition, loop, done);
+	emit_label(codegen, done);
+	for (uint64_t offset = bulk; offset < bytes; offset++) {
+		source_address = codegen->next_temporary++;
+		destination_address = codegen->next_temporary++;
+		value = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l add %%t%zu, %ju\n", source_address, source, (uintmax_t)offset);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, %ju\n", destination_address, destination, (uintmax_t)offset);
+		emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", value, source_address);
+		emit(codegen, "\tstoreb %%t%zu, %%t%zu\n", value, destination_address);
 	}
 }
 
@@ -246,6 +313,10 @@ static size_t codegen_convert_value(struct codegen *codegen, size_t value,
 	size_t result;
 	const char *instruction = "copy";
 
+	if (type_is_record(target)) {
+		assert(type_is_record(source) && type_unqualified_compatible(source, target));
+		return value;
+	}
 	if (target->kind == type_kind_bool)
 		return codegen_truth_value(codegen, value, source);
 	if (type_value_width(target) < 32)
@@ -469,7 +540,7 @@ static size_t codegen_expression(struct codegen *codegen,
 {
 	size_t temporary;
 
-	assert(type_is_scalar(expression->type));
+	assert(type_is_scalar(expression->type) || type_is_record(expression->type));
 	switch (expression->kind) {
 	case expression_sizeof:
 		return codegen_layout_constant(codegen, ((const struct ast_sizeof_expression *)expression)->size);
@@ -618,6 +689,13 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t address = codegen_address(codegen, node->operand);
 
 		temporary = codegen->next_temporary++;
+		if (type_is_record(expression->type)) {
+			/* Captures live in entry-allocated slots, never loop allocations.
+			 * Later writes to the original cannot rewrite this value. */
+			emit(codegen, "\t%%t%zu =l copy %%r%zu\n", temporary, node->record_temporary_slot);
+			codegen_record_copy(codegen, address, temporary, type_object_size(expression->type));
+			return temporary;
+		}
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
 		return temporary;
@@ -645,8 +723,21 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t value = codegen_expression(codegen, node->right);
 		size_t address = codegen_address(codegen, node->left);
 
-		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
+		if (type_is_record(node->left->type))
+			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
+		else
+			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 		return value;
+	}
+	case expression_member: {
+		size_t address = codegen_address(codegen, expression);
+
+		if (type_is_record(expression->type))
+			return address;
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
+			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
+		return temporary;
 	}
 	case expression_function_designator:
 	case expression_external_object:
@@ -861,7 +952,13 @@ static void codegen_local_initializer(struct codegen *codegen,
 	if (local->initializer) {
 		size_t value = codegen_expression(codegen, local->initializer);
 
-		emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(local->type), value, local->slot);
+		if (type_is_record(local->type)) {
+			size_t address = codegen->next_temporary++;
+
+			emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
+			codegen_record_copy(codegen, value, address, type_object_size(local->type));
+		} else
+			emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(local->type), value, local->slot);
 	}
 }
 
@@ -1030,6 +1127,7 @@ static bool codegen_block_items(struct codegen *codegen,
 			codegen_named_label(codegen, ((const struct ast_block_label *)item)->label, terminated);
 			terminated = false;
 			break;
+		case block_item_tag_declaration:
 		case block_item_typedef_declaration:
 		case block_item_static_assertion:
 			/* Fully checked at translation time; no runtime effect or datum. */
@@ -1102,6 +1200,15 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 			alignment = 4;
 		emit(&codegen, "\t%%v%zu =l alloc%u %ju\n", local->slot, alignment, (uintmax_t)bytes);
 		local = local->next_local;
+	}
+	for (const struct ast_load_expression *capture = function->record_temporaries; capture;
+		capture = capture->next_record_temporary) {
+		unsigned alignment = type_object_alignment(capture->expression.type);
+
+		if (alignment < 4)
+			alignment = 4;
+		emit(&codegen, "\t%%r%zu =l alloc%u %ju\n", capture->record_temporary_slot,
+			alignment, (uintmax_t)type_object_size(capture->expression.type));
 	}
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;

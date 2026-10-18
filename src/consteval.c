@@ -464,6 +464,71 @@ static bool restore_address_domain(struct address_proof *proof, const struct typ
 	return true;
 }
 
+/* Member selection forms a NEW actual subobject domain. It never reuses an
+ * enclosing array/record extent, even if adjacent members share an address. */
+static struct address_proof prove_address(const struct ast_expression *expression);
+
+static struct address_proof prove_member_address(const struct ast_expression *expression,
+	const struct ast_member_expression *member, bool decay)
+{
+	const struct ast_expression *operand = member->operand;
+	const struct type *record = operand->type;
+	const struct type *selected = member->expression.type;
+	struct address_proof proof;
+	uint64_t addend;
+
+	if (member->indirect) {
+		record = ((const struct pointer_type *)record)->referent;
+		proof = prove_address(operand);
+	} else if (operand->kind == expression_indirection) {
+		proof = prove_address(((const struct ast_indirection_expression *)operand)->operand);
+	} else if (operand->kind == expression_member) {
+		proof = prove_member_address(expression,
+			(const struct ast_member_expression *)operand, false);
+	} else {
+		proof = (struct address_proof) { .result = direct_address(operand, expression->type) };
+		proof.base_alignment = address_alignment(record);
+		if (type_is_complete_object(record)) {
+			proof.element = record;
+			proof.stride = type_object_size(record);
+			proof.extent = 1;
+			proof.known_extent = true;
+		}
+	}
+	if (proof.result.status != constant_value)
+		return proof;
+	if (!type_is_record(record) || !type_is_complete_object(record) || !proof.element ||
+		!type_unqualified_compatible(proof.element, record))
+		return address_failure(expression, constant_not_constant,
+			"static member address requires a proven record subobject");
+	if (proof.known_extent && proof.position >= proof.extent)
+		return address_failure(expression, constant_invalid,
+			"static member address requires an existing record subobject");
+	addend = (uint64_t)proof.result.address.byte_addend;
+	if (member->offset > (uint64_t)INT64_MAX - addend)
+		return address_failure(expression, constant_invalid,
+			"static pointer offset exceeds the relocation addend limit");
+	addend += member->offset;
+	proof.result.address.byte_addend = (int64_t)addend;
+	proof.result.origin_type = expression->type;
+	proof.original_domain = (struct address_domain) { 0 };
+	proof.start = addend;
+	proof.position = 0;
+	proof.known_extent = true;
+	proof.element = selected;
+	proof.extent = 1;
+	proof.stride = type_object_size(selected);
+	if (decay) {
+		const struct array_type *array = (const struct array_type *)selected;
+
+		assert(selected->kind == type_kind_array && array->count);
+		proof.element = array->element;
+		proof.extent = array->count;
+		proof.stride = type_object_size(array->element);
+	}
+	return proof;
+}
+
 static struct address_proof prove_address(const struct ast_expression *expression)
 {
 	const struct ast_expression *operand;
@@ -477,9 +542,13 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		 */
 		if (operand->kind == expression_indirection)
 			return prove_address(((const struct ast_indirection_expression *)operand)->operand);
+		if (operand->kind == expression_member)
+			return prove_member_address(expression, (const struct ast_member_expression *)operand, false);
 		return address_base(expression, operand, false);
 	case expression_array_decay:
 		operand = ((const struct ast_array_decay_expression *)expression)->operand;
+		if (operand->kind == expression_member)
+			return prove_member_address(expression, (const struct ast_member_expression *)operand, true);
 		if (operand->kind == expression_indirection) {
 			const struct array_type *array = (const struct array_type *)operand->type;
 
