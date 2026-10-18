@@ -26,6 +26,10 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     programs = [(f"int main(void) {{ return {expression}; }}\n", value)
                 for expression, value in cases]
     programs += [
+        # Former initialized-global rejection: definitions after a function
+        # are now supported, including uses through a prior extern declaration.
+        ("int main(void) { return 0; } int x=42;", 0),
+        ("extern int x; int main(void) { return x; } int x=42;", 42),
         ("int f(int) { return 42; } int main(void) { return f(7); }", 42),
         ("int main(void) { int x=3; int y=x*4; return y+2; }", 14),
         ("int main(void) { int x; x=42; return x; }", 42),
@@ -505,7 +509,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     invalid = [
         "", "int main(void) { return; }", "int main(void) { return 0 }",
         "int main(void) { return 9223372036854775808; }",
-        "int main(void) { return 0xg; }", "int main(void) { return 0; } int x=42;",
+        "int main(void) { return 0xg; }", "int main(void) { return 0; } int *x=0;",
         "int main(void) { return 1 + ; }",
         "int main(void) { return ++1; }", "int main(void) { return (1; }",
         "int main(void) { return 1 / ; }", "#define X 0\n",
