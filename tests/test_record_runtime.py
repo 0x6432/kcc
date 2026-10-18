@@ -255,7 +255,7 @@ def zero_evidence(elf, zeros, qbe=False):
     used = set()
     for name, (width, alignment, public, fields) in zeros.items():
         candidates = [s for s in elf.symbols if s['section'] and s['name'] not in used and
-                      (s['name']==name if name is not None else s['binding']==0 and s['kind'] in (0,1))]
+                      (s['name']==name if name is not None else s['binding']==0 and s['kind'] in (0,1) and elf.sections[s['section']][2]&3==3)]
         matches = []
         for s in candidates:
             if s['binding'] != int(public):
@@ -482,7 +482,7 @@ def main():
             assert result.returncode==0 and not result.stderr and result.stdout,(case.name,result)
             check_il(result.stdout,case); il.write_text(result.stdout)
             producer([QBE,'-t','amd64_sysv','-o',assembly,il],assembly)
-            producer([HOST,'-c',assembly,'-o',obj],obj); check_object(obj,case,True)
+            producer([HOST,'-Wa,-L','-c',assembly,'-o',obj],obj); check_object(obj,case,True)
             compile_native(HOST,host,other)
             run_program(HOST,[obj,other]+(['-pthread'] if case.pthread else []),exe)
             kcc_count+=1
