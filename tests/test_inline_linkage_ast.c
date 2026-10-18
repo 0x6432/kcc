@@ -7,8 +7,42 @@
 #include "type.h"
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+
+/* Every polymorphic declaration/block header must remain the first member.
+ * Inline tracking fields once displaced ast_function.external transiently;
+ * enforce the invariant at compile time, before any cast can hide that bug.
+ */
+_Static_assert(offsetof(struct ast_function, external) == 0,
+	"ast_function.external must be first");
+_Static_assert(offsetof(struct ast_function_declaration, external) == 0,
+	"ast_function_declaration.external must be first");
+_Static_assert(offsetof(struct ast_external_type_declaration, external) == 0,
+	"ast_external_type_declaration.external must be first");
+_Static_assert(offsetof(struct ast_external_object_declaration, external) == 0,
+	"ast_external_object_declaration.external must be first");
+_Static_assert(offsetof(struct ast_external_typedef_declaration, external) == 0,
+	"ast_external_typedef_declaration.external must be first");
+_Static_assert(offsetof(struct ast_external_static_assertion, external) == 0,
+	"ast_external_static_assertion.external must be first");
+_Static_assert(offsetof(struct ast_local_declaration, item) == 0,
+	"ast_local_declaration.item must be first");
+_Static_assert(offsetof(struct ast_statement_item, item) == 0,
+	"ast_statement_item.item must be first");
+_Static_assert(offsetof(struct ast_block_case, item) == 0,
+	"ast_block_case.item must be first");
+_Static_assert(offsetof(struct ast_block_default, item) == 0,
+	"ast_block_default.item must be first");
+_Static_assert(offsetof(struct ast_block_label, item) == 0,
+	"ast_block_label.item must be first");
+_Static_assert(offsetof(struct ast_block_static_assertion, item) == 0,
+	"ast_block_static_assertion.item must be first");
+_Static_assert(offsetof(struct ast_block_typedef_declaration, item) == 0,
+	"ast_block_typedef_declaration.item must be first");
+_Static_assert(offsetof(struct ast_compound_statement, statement) == 0,
+	"ast_compound_statement.statement must be first");
 
 struct fixture {
 	struct source source;
