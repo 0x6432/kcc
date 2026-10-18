@@ -53,10 +53,21 @@ arena caches/reference/string side effects may remain after a failed TU.
 
 ## Validation gates
 
-Independent source/standards review and focused runtime probes are complete;
-independent storage/AST tests and the frozen full normal/QBE/sanitizer matrix
-are required. Exact-commit GCC/Clang/fuzz CI is checked after push, never inferred
-from local success. Null storage evidence must check actual bytes, width,
+Independent immutable source/standards/test review passed. The focused suite
+passed 38 KCC/QBE/ELF/no-relocation/runtime originals and 44 compile-only refusals.
+GCC11 passed 28 unchanged native agreements with 10 exact keyword gaps (not
+agreements). Clang18 passed 36 agreements with two exact compile-only nullptr
+conversion discrepancies (not agreements). Each host passed three exact native
+constraints. Null/integer AST checks, immutable captures, object rollback, pure
+queries and 14 independent storage/relocation/IL negative controls passed, in
+addition to the imported diagnostic/fresh-output adversarial controls.
+
+Frozen full normal/QBE/sanitizer integration and exact-commit GCC/Clang/fuzz CI
+remain release gates, never inferred from focused success. The CI matrix now
+runs compiler x instrumentation as four independent fresh-checkout jobs, each
+retaining both full test targets and all strict flags; fuzz budgets are unchanged.
+Local full validation and remote CI can run concurrently on the SAME frozen
+source/tests/Makefile commit. No pending job is a success claim. Null storage evidence must check actual bytes, width,
 alignment, binding, sole definition and NO relocation, including observable
 native const storage and multi-TU value observation. Existing integer regression
 and diagnostic/fresh-output adversarial gates stay intact.
