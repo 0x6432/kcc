@@ -69,7 +69,11 @@ programs += [
      'for(int cell=0;cell<2;cell++) {} return saved==&cell?parameter(cell):4; }', ('cell',), ()),
     ('static int cell; int main(void) { cell=42; { int copy=cell,cell=2; '
      'if(copy!=42 || cell!=2) return 1; } return cell; }', ('cell',), ()),
-    ('int main(void) { return 42; } static long cell;', ('cell',), ()),
+    # Keep the after-main declaration case while making native ownership
+    # observable: Clang may legally omit an entirely unused private object.
+    # The separate layout-only fixtures still demand KCC's unused storage.
+    ('int main(void) { return 42; } static long cell; '
+     'long *slot(void) { return &cell; }', ('cell',), ()),
     ('static int cell; static typeof(cell) cell; extern typeof(cell) cell; '
      'int main(void) { cell=42; return cell; }', ('cell',), ('typeof',)),
     ('static const long frozen; static typeof_unqual(frozen) cell; '

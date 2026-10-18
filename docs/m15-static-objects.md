@@ -11,7 +11,7 @@ backend operation, runtime local slot or startup initialization code is added.
 The compiler still rejects explicit object initializers, block-scope storage,
 thread storage, variably modified arrays and aggregates.
 
-## Linkage and source-point constraints
+## Linkage and source-point requirements
 
 N3096 6.2.2p3–5 distinguishes objects from functions:
 
@@ -25,7 +25,9 @@ N3096 6.2.2p3–5 distinguishes objects from functions:
 - Unadorned function redeclarations retain their existing extern-like behavior.
 
 Internal tentative objects must have complete types at their declaration
-(6.9.2p3), using their visible prior composite (6.2.7p4):
+(6.9.2p3), using their visible prior composite (6.2.7p4). Paragraph 6.9.2p3 is
+a semantic requirement, not a Constraints paragraph: its violation is UB and
+does not require a native diagnostic. KCC conservatively refuses it:
 
 ```c
 static int items[3];
@@ -81,6 +83,17 @@ Only curated defined programs execute. Invalid, maximal-resource and fuzzed
 inputs compile only. Native syntax absence is reported separately from
 agreement; unaudited diagnostics are not ignored. QBE's missing ELF data-size
 metadata is not treated as proof of allocation size.
+
+Clang 18 translates four initial-incomplete-static-array fixtures after an exact
+warning and silently accepts one later-completed fixture. These five observed
+native non-rejections are counted separately, never as rejection agreements,
+and their objects are never linked or executed. Classification requires the
+exact source, independently probed Clang family, full diagnostic stream,
+successful status and fresh nonempty ELF output. KCC retains its immediate
+source-point semantic refusal in every case; GCC's strict rejections remain checked.
+Native storage checks use address-observable private objects because a native
+compiler may legally omit entirely unused static data. KCC's unused-storage
+layout checks remain independent and exact.
 
 The required integration gate is the frozen normal test suite, QBE execution
 suite, sanitizer checks, independent review and the actual GitHub CI result.

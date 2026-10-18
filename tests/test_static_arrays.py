@@ -74,11 +74,6 @@ query_programs = [
      {'items': (16, 8)}),
 ]
 constraints = [
-    'static int items[];',
-    'static int cell[];',
-    'static int items[]; static int items[3];',
-    'static int items[]; extern int items[3];',
-    'typedef int A[]; static A items;',
     'static int items[3]; static int items[4];',
     'static int items[3]; extern long items[3];',
     'static const int items[3]; int main(void) { items[0]=1; return 0; }',
@@ -130,6 +125,55 @@ def native_constraint(result, path):
                               r'PLEASE submit|[Ss]egmentation fault|'
                               r'unrecognized command-line|unknown argument|fatal error:',
                               result.stderr))
+
+
+# 6.9.2p3 is a semantic "shall", not a Constraints paragraph: these are
+# conservative KCC UB refusals, NOT mandatory native diagnostic tests.
+# Clang 18's exact observed non-rejections are reported separately.
+incomplete_native_nonrejections = {
+    'static int items[];': 12,
+    'static int cell[];': 12,
+    'static int items[]; static int items[3];': None,
+    'static int items[]; extern int items[3];': 12,
+    'typedef int A[]; static A items;': 27,
+}
+
+
+def valid_native_object(output):
+    if not output.is_file():
+        return False
+    data = output.read_bytes()
+    if (len(data) < 64 or data[:7] != b'\x7fELF\x02\x01\x01'
+            or int.from_bytes(data[16:18], 'little') != 1  # ET_REL
+            or int.from_bytes(data[18:20], 'little') != 62  # EM_X86_64
+            or int.from_bytes(data[20:24], 'little') != 1
+            or int.from_bytes(data[52:54], 'little') != 64
+            or int.from_bytes(data[58:60], 'little') != 64):
+        return False
+    section_offset = int.from_bytes(data[40:48], 'little')
+    section_count = int.from_bytes(data[60:62], 'little')
+    string_index = int.from_bytes(data[62:64], 'little')
+    if (section_offset < 64 or not 0 < string_index < section_count
+            or section_offset + section_count * 64 > len(data)):
+        return False
+    parsed = invoke(['readelf', '-h', '-S', output])
+    return parsed.returncode == 0 and not parsed.stderr
+
+
+def exact_incomplete_nonrejection(text, result, path, output, clang_family):
+    if (not clang_family or text not in incomplete_native_nonrejections
+            or result.returncode != 0 or result.stdout
+            or not valid_native_object(output)):
+        return False
+    column = incomplete_native_nonrejections[text]
+    if column is None:
+        return result.stderr == ''
+    expected = (f'{path}:1:{column}: warning: tentative array definition assumed '
+                'to have one element\n'
+                f'    1 | {text}\n'
+                f'      | {" " * (column - 1)}^\n'
+                '1 warning generated.\n')
+    return result.stderr == expected
 
 
 feature_probes = {'typeof': 'typeof(int) value;', 'nullptr': 'int *p=nullptr;'}
@@ -363,11 +407,69 @@ with tempfile.TemporaryDirectory(prefix='kcc static arrays ') as directory:
             fresh_output([host, obj, '-o', executable], executable)
             assert invoke([executable]).returncode == 42, text
 
-    for text in constraints:
+    # Probe family independently; a vendor/version string is not an acceptance
+    # key. No native invalid object below is linked or executed.
+    macros = invoke([host, '-dM', '-E', '-x', 'c', '/dev/null'])
+    assert macros.returncode == 0 and not macros.stderr
+    clang_family = '#define __clang__ 1' in macros.stdout.splitlines()
+    native_constraints = 0
+    native_incomplete_rejections = 0
+    warning_nonrejections = silent_nonrejections = 0
+    for text in constraints + list(incomplete_native_nonrejections):
         compile_source(text, False)
         source.write_text(text + '\n')
-        result = invoke([host, *flags, '-c', source, '-o', directory / 'invalid.o'])
+        invalid_obj = directory / 'invalid.o'
+        invalid_obj.unlink(missing_ok=True)
+        result = invoke([host, *flags, '-c', source, '-o', invalid_obj])
+        if exact_incomplete_nonrejection(text, result, source, invalid_obj, clang_family):
+            # Mutations must not broaden this exact compile-only observation.
+            for status, out, err in [
+                (0, 'unexpected output', result.stderr),
+                (0, '', result.stderr + 'unparsed failure\n'),
+                (0, '', result.stderr + 'LLVM ERROR: crash\n'),
+                (1, '', result.stderr), (2, '', result.stderr),
+            ]:
+                assert not exact_incomplete_nonrejection(
+                    text, subprocess.CompletedProcess([], status, out, err),
+                    source, invalid_obj, True)
+            assert not exact_incomplete_nonrejection(
+                text + ' ', result, source, invalid_obj, True)
+            assert not exact_incomplete_nonrejection(
+                text, result, source, invalid_obj, False)
+            warning_nonrejections += bool(result.stderr)
+            silent_nonrejections += not result.stderr
+            # Exercise exact diagnostic shape and actual ELF structure, not
+            # merely magic bytes or an arbitrary nonempty producer output.
+            for err in [
+                result.stderr.replace(':1:12:', ':1:13:').replace(':1:27:', ':1:28:'),
+                result.stderr.replace('1 warning generated.', '2 warnings generated.'),
+                '' if result.stderr else 'unexpected warning\n',
+            ]:
+                if err != result.stderr:
+                    assert not exact_incomplete_nonrejection(
+                        text, subprocess.CompletedProcess([], 0, '', err),
+                        source, invalid_obj, True)
+            original_object = invalid_obj.read_bytes()
+            malformed = [b'', b'\x7fELF', original_object[:63],
+                         original_object[:-1]]
+            for offset, replacement in [(4, b'\x01'), (5, b'\x02'),
+                                         (16, b'\x02\x00'), (18, b'\x03\x00')]:
+                malformed.append(original_object[:offset] + replacement
+                                 + original_object[offset + len(replacement):])
+            for data in malformed:
+                invalid_obj.write_bytes(data)
+                assert not exact_incomplete_nonrejection(
+                    text, result, source, invalid_obj, True)
+            invalid_obj.unlink()
+            assert not exact_incomplete_nonrejection(
+                text, result, source, invalid_obj, True)
+            continue
         assert native_constraint(result, source), (text, result.stderr)
+        assert not invalid_obj.exists(), (text, 'native rejection left object output')
+        if text in incomplete_native_nonrejections:
+            native_incomplete_rejections += 1
+        else:
+            native_constraints += 1
     # Driver/ICE failures and unrelated error text cannot inflate the native
     # constraint agreement count.
     valid_diagnostic = str(source) + ':1:1: error: invalid array type\n'
@@ -428,7 +530,11 @@ with tempfile.TemporaryDirectory(prefix='kcc static arrays ') as directory:
 print(f'Static fixed arrays passed: {len(programs)} unchanged native runtime agreements, '
       f'{len(query_programs)} C23 fixtures ({query_native} native agreements, '
       f'{len(query_programs)-query_native} exact legacy-gated originals), '
-      f'{len(constraints)} native constraints, '
+      f'{len(constraints)} constraints ({native_constraints} native rejections), '
+      f'{len(incomplete_native_nonrejections)} incomplete-static UB refusals '
+      f'({native_incomplete_rejections} native rejections, '
+      f'{warning_nonrejections} exact warning-only/{silent_nonrejections} silent '
+      'compile-only native non-rejections), '
       f'{len(linkage_refusals)} compile-only linkage refusals, {len(subset_refusals)} subset refusals; '
       'source-point completeness, per-array/object/declaration boundaries, output failure'
       + ('; QBE runtime/local BSS layout and both-direction isolated-TU ABI passed' if qbe else ''))

@@ -218,7 +218,6 @@ pair('pure extern unknown stays declaration-only beside owned scalar',
 # End-of-TU layout completion must not retroactively legalize earlier sizeof,
 # arithmetic on a pointer-to-incomplete-array, or captured unknown aliases.
 constraints = [
-    ('static int items[];', 'internal tentative object requires a complete type'),
     ('int items[]; int f(void) { return sizeof items; }', 'complete object type'),
     ('int items[]; int f(void) { return sizeof items; } int items[3];', 'complete object type'),
     ('int items[]; int f(void) { return &items+1==&items; }', 'complete object referent'),

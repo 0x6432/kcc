@@ -12,12 +12,13 @@ Object linkage deliberately differs from function inheritance. Extern after
 static preserves internal linkage; an unadorned object after static mixes
 linkages and is refused before canonical mutation. Complete prior composites
 permit later omitted-bound static array redeclarations. An initially incomplete
-internal tentative array is a source-point constraint, never a fallback-[1]
+internal tentative array is a source-point semantic/UB refusal, never a fallback-[1]
 candidate; incomplete pointer referents remain unchanged.
 
-Focused independent scalar and parent array tests have passed locally with
-GCC11/QBE1.2. The full frozen integration matrix and new remote CI must be
-checked independently; no pending run is a success claim. Neighbor regressions,
+Full normal/QBE and ASan/UBSan normal/QBE integration passed locally with
+GCC11/QBE1.2. Subsequent test-only native-oracle corrections also passed focused
+Clang18/QBE checks and sanitized-KCC/GCC checks. The new remote GCC/Clang CI must
+still be checked independently; no pending run is a success claim. Neighbor regressions,
 AST/source captures, private same-name TUs, both-direction ABI, local storage
 layout, resource boundaries and output failures remain required gates.
 
