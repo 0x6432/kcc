@@ -543,6 +543,28 @@ allocation_failure:
 	return NULL;
 }
 
+/* Only the bare `struct-or-union identifier ;` form has the special
+ * current-scope forward/shadow rule. A prefixed reference to a visible
+ * tag declares no entity; definitions and newly introduced tags do. */
+static bool sema_tag_declaration(struct sema *sema, struct ast_tag_declaration *declaration)
+{
+	struct ast_record_type_syntax *record;
+
+	if (declaration->type_syntax->kind != type_syntax_record) {
+		diagnostic_error(sema->diagnostics, declaration->location,
+			"tag-only declaration requires a struct or union specifier");
+		return false;
+	}
+	record = (struct ast_record_type_syntax *)declaration->type_syntax;
+	if (!declaration->plain_forward && !record->has_definition && record->tag.length &&
+		find_tag(sema, record->tag, false)) {
+		diagnostic_error(sema->diagnostics, declaration->location,
+			"declaration does not declare an entity");
+		return false;
+	}
+	return resolve_record_syntax(sema, record, true) != NULL;
+}
+
 /* Non-VM queries retain constraints without creating evaluated function uses. */
 static bool sema_unevaluated_expression(struct sema *sema,
 	struct ast_expression **expression_slot)
@@ -2500,8 +2522,7 @@ static bool sema_block_items(struct sema *sema, struct ast_block_item *item)
 		switch (item->kind) {
 		case block_item_tag_declaration: {
 			struct ast_tag_declaration *declaration = ((struct ast_block_tag_declaration *)item)->declaration;
-			if (declaration->type_syntax->kind != type_syntax_record ||
-				!resolve_record_syntax(sema, (struct ast_record_type_syntax *)declaration->type_syntax, true))
+			if (!sema_tag_declaration(sema, declaration))
 				return false;
 			break;
 		}
@@ -3386,8 +3407,7 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 
 		if (external->kind == external_declaration_tag) {
 			struct ast_tag_declaration *tag = ((struct ast_external_tag_declaration *)external)->declaration;
-			if (tag->type_syntax->kind != type_syntax_record ||
-				!resolve_record_syntax(&sema, (struct ast_record_type_syntax *)tag->type_syntax, true))
+			if (!sema_tag_declaration(&sema, tag))
 				return false;
 			external = external->next;
 			continue;
