@@ -1144,15 +1144,23 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 			object = ((const struct ast_external_object_declaration *)external)->symbol;
 		else if (external->kind == external_type_declaration)
 			object = ((const struct ast_external_type_declaration *)external)->object_symbol;
-		if (object && object->tentative_definition == external) {
+		if (object && (object->definition ? object->definition : object->tentative_definition) == external) {
 			struct token name = object->name;
 
-			/* Final canonical layout; exactly the first tentative owns emission. */
+			/* Explicit definitions supersede the first tentative anchor. */
 			assert(type_is_complete_object(object->type));
-			emit(&data_codegen, "%sdata $%.*s = align %u { z %ju }\n",
+			emit(&data_codegen, "%sdata $%.*s = align %u { ",
 				object->is_internal ? "" : "export ", (int)name.length,
-				(const char *)name.spelling_location.source->data + name.spelling_location.offset, type_object_alignment(object->type),
-				(uintmax_t)type_object_size(object->type));
+				(const char *)name.spelling_location.source->data + name.spelling_location.offset,
+				type_object_alignment(object->type));
+			if (object->definition) {
+				uint64_t size = type_object_size(object->type);
+				const char *encoding = size == 1 ? "b" : size == 2 ? "h" : size == 4 ? "w" : "l";
+
+				assert(type_is_integer(object->type));
+				emit(&data_codegen, "%s %ju }\n", encoding, (uintmax_t)object->initializer_bits);
+			} else
+				emit(&data_codegen, "z %ju }\n", (uintmax_t)type_object_size(object->type));
 			if (!data_codegen.output_ok)
 				return false;
 		}

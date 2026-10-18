@@ -647,6 +647,7 @@ struct ast_external_object_declaration {
 	struct token name;
 	const struct type *type;
 	struct external_object_symbol *symbol;
+	struct ast_expression *initializer;
 };
 
 /* Written alias/query root; sema classifies the resolved function/object type. */
@@ -659,6 +660,7 @@ struct ast_external_type_declaration {
 	struct token name;
 	const struct type *type;
 	struct function_symbol *symbol;
+	struct ast_expression *initializer;
 };
 
 struct ast_parameter {

@@ -2279,7 +2279,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	}
 	/* C23 6.9.2p3 requires internal tentative objects to be complete NOW,
 	 * using the composite with visible PRIOR declarations (6.2.7p4).
-	 * A later declaration or TU-end fallback cannot repair this constraint.
+	 * A later declaration or TU-end fallback cannot repair this UB.
 	 * Keep both canonical state and captured written types untouched on error.
 	 */
 	if (tentative_definition && (symbol ? symbol->is_internal : is_static) &&
@@ -2317,6 +2317,81 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	return symbol;
 }
 
+/* Make the declaration's own name visible during initialization, but publish
+ * neither ownership nor a changed canonical composite on failure. Existing
+ * expressions always retain the same canonical symbol identity.
+ */
+static struct external_object_symbol *sema_file_object(struct sema *sema,
+	struct ast_external_declaration *external, struct token name,
+	const struct type *type, struct ast_expression **initializer,
+	bool is_static, bool is_extern, bool is_query)
+{
+	struct external_object_symbol *previous = find_external_object(sema, name);
+	struct external_object_symbol saved = { 0 };
+	struct external_object_symbol *symbol;
+	struct constant_result value;
+	const struct type *target;
+
+	if (*initializer) {
+		if (!type_is_integer(type)) {
+			diagnostic_error(sema->diagnostics, (*initializer)->location,
+				is_query ? "query-derived external declarations require ';' for non-integer initializers" :
+				is_extern ? "non-integer extern object definitions are not supported yet" :
+				"non-integer file-scope object initializers are not supported yet");
+			return NULL;
+		}
+		if (previous && previous->definition) {
+			diagnostic_error(sema->diagnostics, name.location,
+				"multiple initialized definitions of object");
+			return NULL;
+		}
+		if (name.length == 4 && memcmp(name.spelling_location.source->data +
+			name.spelling_location.offset, "main", 4) == 0) {
+			diagnostic_error(sema->diagnostics, name.location,
+				"initialized main object is not supported on the Linux target");
+			return NULL;
+		}
+	}
+	if (previous)
+		saved = *previous;
+	symbol = register_external_object(sema, name, type,
+		!is_extern && !*initializer ? external : NULL, is_static, is_extern);
+	if (!symbol || !*initializer)
+		return symbol;
+	if (!sema_expression(sema, initializer, true))
+		goto rollback;
+	/* Check the original expression before narrowing (notably to _Bool).
+	 * An implicit conversion cannot hide evaluated invalid ICE arithmetic.
+	 */
+	value = evaluate_integer_constant(*initializer);
+	if (value.status != constant_value) {
+		diagnostic_error(sema->diagnostics, value.location,
+			value.status == constant_not_constant ?
+			"file-scope initializer must be an integer constant expression" : value.message);
+		goto rollback;
+	}
+	target = unqualified_type(sema, type, name.location);
+	if (!target || !convert_expression(sema, initializer, target))
+		goto rollback;
+	value = evaluate_integer_constant(*initializer);
+	if (value.status != constant_value) {
+		diagnostic_error(sema->diagnostics, value.location, value.message);
+		goto rollback;
+	}
+	symbol->definition = external;
+	symbol->initializer_bits = value.bits;
+	return symbol;
+rollback:
+	if (previous)
+		*previous = saved;
+	else {
+		assert(sema->external_objects == symbol);
+		sema->external_objects = symbol->next;
+		sema->external_object_count--;
+	}
+	return NULL;
+}
+
 static bool sema_external_object_declaration(struct sema *sema,
 	struct ast_external_object_declaration *declaration)
 {
@@ -2324,9 +2399,9 @@ static bool sema_external_object_declaration(struct sema *sema,
 
 	if (!type)
 		return false;
-	declaration->symbol = register_external_object(sema, declaration->name, type,
-		declaration->is_extern ? NULL : &declaration->external,
-		declaration->is_static, declaration->is_extern);
+	declaration->symbol = sema_file_object(sema, &declaration->external,
+		declaration->name, type, &declaration->initializer,
+		declaration->is_static, declaration->is_extern, false);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = type;
@@ -2341,13 +2416,18 @@ static bool sema_external_type_declaration(struct sema *sema,
 	if (!type)
 		return false;
 	if (type->kind != type_kind_function) {
-		declaration->object_symbol = register_external_object(sema, declaration->name, type,
-			declaration->is_extern ? NULL : &declaration->external,
-			declaration->is_static, declaration->is_extern);
+		declaration->object_symbol = sema_file_object(sema, &declaration->external,
+			declaration->name, type, &declaration->initializer,
+			declaration->is_static, declaration->is_extern, true);
 		if (!declaration->object_symbol)
 			return false;
 		declaration->type = type;
 		return true;
+	}
+	if (declaration->initializer) {
+		diagnostic_error(sema->diagnostics, declaration->name.location,
+			"query-derived external declarations require ';'; functions cannot have initializers");
+		return false;
 	}
 	declaration->symbol = register_function(sema, declaration->name,
 		(const struct function_type *)type, NULL, declaration->is_static);
@@ -2496,7 +2576,7 @@ static bool finalize_tentative_objects(struct sema *sema)
 		const struct array_type *array;
 		struct array_type *completed;
 
-		if (!symbol->tentative_definition || symbol->type->kind != type_kind_array)
+		if (symbol->definition || !symbol->tentative_definition || symbol->type->kind != type_kind_array)
 			continue;
 		array = (const struct array_type *)symbol->type;
 		if (array->count)

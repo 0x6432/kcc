@@ -2513,29 +2513,52 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* object-declaration-tail ::= declarator ( "," | ";" )
- * Extern never owns storage; unadorned/static objects are tentative.
- * Explicit initializers remain a separate unsupported construct.
+/* A comma separates declarators, not the optional assignment-expression.
+ * Braced/aggregate initialization is a separate future increment.
  */
+static bool parse_external_initializer(struct parser *parser,
+	struct ast_expression **initializer, const char *unsupported)
+{
+	if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+		preprocess_next(parser->preprocessor);
+		if (preprocess_peek(parser->preprocessor).kind == token_left_brace) {
+			diagnostic_error(parser->diagnostics,
+				preprocess_peek(parser->preprocessor).location, unsupported);
+			return false;
+		}
+		*initializer = parse_expression(parser, 1);
+		if (!*initializer)
+			return false;
+	}
+	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
+		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
+		diagnostic_error(parser->diagnostics,
+			preprocess_peek(parser->preprocessor).location, unsupported);
+		return false;
+	}
+	return true;
+}
+
+/* object-declaration-tail ::= declarator [ "=" assignment-expression ] */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
 	bool is_static, bool is_extern)
 {
 	struct ast_external_object_declaration *declaration;
+	struct ast_expression *initializer = NULL;
 
-	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
-		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
-		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-			is_extern ? "extern object definitions are not supported yet" :
-			"file-scope object initializers are not supported yet");
+	if (!parse_external_initializer(parser, &initializer,
+		is_extern ? "extern object definitions are not supported yet" :
+		"file-scope object initializers are not supported yet"))
 		return NULL;
-	}
 	declaration = ast_new_external_object_declaration(parser->arena,
 		beginning.location, type_syntax, name, is_extern);
 	if (!declaration)
 		allocation_error(parser, beginning.location);
-	else
+	else {
 		declaration->is_static = is_static;
+		declaration->initializer = initializer;
+	}
 	return declaration ? &declaration->external : NULL;
 }
 
@@ -2548,18 +2571,16 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
+	struct ast_expression *initializer = NULL;
 
 	while (base->kind == type_syntax_qualified)
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name)
 		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern);
-	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
-		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
-		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-			"query-derived external declarations require ';'");
+	if (!parse_external_initializer(parser, &initializer,
+		"query-derived external declarations require ';'"))
 		return NULL;
-	}
 	declaration = ast_new_external_type_declaration(parser->arena,
 		beginning.location, type_syntax, name);
 	if (!declaration)
@@ -2567,6 +2588,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 	else {
 		declaration->is_static = is_static;
 		declaration->is_extern = is_extern;
+		declaration->initializer = initializer;
 	}
 	return declaration ? &declaration->external : NULL;
 }
@@ -2673,6 +2695,11 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 		if (!type_syntax)
 			return NULL;
+		/* Its scope starts after the complete declarator, before an
+		 * initializer or a later declarator in the same declaration.
+		 */
+		if (!publish_parser_name(parser, name, parser_name_object))
+			return NULL;
 		if (type_syntax->kind != type_syntax_function)
 			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern);
 		else {
@@ -2691,6 +2718,12 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			declaration->parameters = declaration->type_syntax->parameters;
 			declaration->parameter_count = declaration->type_syntax->parameter_count;
 			next = preprocess_peek(parser->preprocessor).kind;
+			if (next == token_equal) {
+				diagnostic_error(parser->diagnostics,
+					preprocess_peek(parser->preprocessor).location,
+					"function declarations cannot have initializers");
+				return NULL;
+			}
 			if (!items && next != token_comma && next != token_semicolon) {
 				struct ast_compound_statement *body = parse_function_body(parser, declaration);
 				struct ast_function *function;

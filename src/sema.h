@@ -9,6 +9,9 @@ struct external_object_symbol {
 	bool is_internal;
 	/* First successful tentative declaration; NULL for extern-only symbols. */
 	struct ast_external_declaration *tentative_definition;
+	/* Explicit initialized definition supersedes tentative emission only. */
+	struct ast_external_declaration *definition;
+	uint64_t initializer_bits; /* Canonical target-width integer bits. */
 	struct external_object_symbol *next;
 };
 
