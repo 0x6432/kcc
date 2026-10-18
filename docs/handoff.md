@@ -1,3 +1,13 @@
+# M16 aggregate handoff
+
+Current implementation: M16 records for existing supported types; see
+`m16-records.md`. Record layout/member/copy/query/storage composition is
+implemented. General initializer syntax (M17), aggregate-by-value ABI (M21),
+bit-fields/flexible arrays (M22), and C23 expanded tag compatibility/repeated
+record definitions (M23h) remain explicit boundaries. Release success requires
+frozen full normal/sanitizer, fuzz and exact-commit CI gates; earlier entries are
+historical, not the current unsupported-feature inventory.
+
 # M15 integrated storage/linkage handoff
 
 Current release scope: docs/m15-completion.md. All new block/TLS/inline/address

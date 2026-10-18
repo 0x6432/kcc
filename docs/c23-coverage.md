@@ -1,5 +1,14 @@
 # C23 coverage
 
+Current implementation: M16 records for existing supported types; see
+`m16-records.md`. Record layout/member/copy/query/storage composition is
+implemented. General initializer syntax (M17), aggregate-by-value ABI (M21),
+bit-fields/flexible arrays (M22), and C23 expanded tag compatibility/repeated
+record definitions (M23h) remain explicit boundaries. Release success requires
+frozen full normal/sanitizer, fuzz and exact-commit CI gates; earlier entries are
+historical, not the current unsupported-feature inventory.
+
+
 Current storage checkpoint: M15 storage/linkage closure for existing supported
 types: block extern/function bindings, static locals, explicit thread storage,
 inline TU-end ownership and checked address offsets/subobjects/character views.

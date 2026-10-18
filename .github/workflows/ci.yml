@@ -32,7 +32,7 @@ jobs:
               'LDFLAGS=-fsanitize=address,undefined'
             )
           fi
-          make test "${make_args[@]}"
+          make test "${make_args[@]}" QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
           make test-codegen "${make_args[@]}" QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
   fuzz:
     runs-on: ubuntu-24.04

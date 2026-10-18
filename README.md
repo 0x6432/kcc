@@ -6,6 +6,15 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M16 adds struct/union definitions, natural layout, member access, zero record
+storage, checked subobject addresses and address-backed aggregate copies. Existing
+storage/linkage features compose with records. See `docs/m16-records.md` for the
+precise target and resource contracts. General initializers remain M17,
+aggregate-by-value ABI M21, bit-fields/flexible arrays M22, and C23 expanded tag
+compatibility/redefinitions M23h. No ISO C23 conformance claim is made.
+
+### Previous checkpoint
+
 M15 storage/linkage closure: block extern objects/functions, persistent static
 locals, real thread-local storage, TU-end inline linkage, and checked symbolic
 address offsets for existing types are integrated. Lexical visibility remains
