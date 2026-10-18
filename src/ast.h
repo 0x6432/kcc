@@ -642,6 +642,7 @@ struct ast_external_static_assertion {
 struct ast_external_object_declaration {
 	struct ast_external_declaration external;
 	bool is_extern;
+	bool is_static; /* Written linkage, not part of the object type. */
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	const struct type *type;

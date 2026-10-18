@@ -2514,11 +2514,12 @@ static bool parse_parameters(struct parser *parser,
 }
 
 /* object-declaration-tail ::= declarator ( "," | ";" )
- * Extern refers to storage elsewhere; an unadorned object is tentative.
+ * Extern never owns storage; unadorned/static objects are tentative.
  * Explicit initializers remain a separate unsupported construct.
  */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
-	struct ast_type_syntax *type_syntax, struct token beginning, struct token name, bool is_extern)
+	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
+	bool is_static, bool is_extern)
 {
 	struct ast_external_object_declaration *declaration;
 
@@ -2533,6 +2534,8 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
 		beginning.location, type_syntax, name, is_extern);
 	if (!declaration)
 		allocation_error(parser, beginning.location);
+	else
+		declaration->is_static = is_static;
 	return declaration ? &declaration->external : NULL;
 }
 
@@ -2549,13 +2552,8 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 	while (base->kind == type_syntax_qualified)
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
-		base->kind != type_syntax_typedef_name) {
-		if (is_extern || !is_static)
-			return new_external_object_declaration(parser, type_syntax, beginning, name, is_extern);
-		diagnostic_error(parser->diagnostics, name.location,
-			"file-scope object declarations are not supported yet");
-		return NULL;
-	}
+		base->kind != type_syntax_typedef_name)
+		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern);
 	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
 		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
 		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -2651,7 +2649,7 @@ done:
  *     declarator { "," declarator } ";"
  * Only a sole direct function declarator can introduce a definition.
  * Each declarator has its own derived chain around the shared specifier base.
- * Objects are extern declarations or unadorned tentative definitions; sema
+ * Objects are extern declarations or unadorned/static tentative definitions; sema
  * classifies alias/query roots and enforces the supported object subset.
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,

@@ -2233,7 +2233,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 /* A tentative anchor owns storage once; extern-only symbols own none. */
 static struct external_object_symbol *register_external_object(struct sema *sema,
 	struct token name, const struct type *type,
-	struct ast_external_declaration *tentative_definition)
+	struct ast_external_declaration *tentative_definition, bool is_static, bool is_extern)
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 
@@ -2246,6 +2246,21 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	if (!type_is_scalar(type) && type->kind != type_kind_array) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"only scalar or array file-scope objects are supported yet");
+		return NULL;
+	}
+	if (is_static && !type_is_scalar(type)) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"file-scope object declarations of static arrays are not supported yet");
+		return NULL;
+	}
+	/* C23 6.2.2p4-5: only extern inherits prior object linkage. Unlike
+	 * functions, unadorned file objects always declare external linkage.
+	 * Refuse mixed-linkage UB (p7) in either direction before mutation.
+	 */
+	if (symbol && ((is_static && !symbol->is_internal) ||
+		(!is_static && !is_extern && symbol->is_internal))) {
+		diagnostic_error(sema->diagnostics, name.location,
+			"object declaration conflicts with prior linkage");
 		return NULL;
 	}
 	if (find_typedef(sema, name) || find_function(sema, name)) {
@@ -2287,6 +2302,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 		.name = name,
 		.type = type,
 		.tentative_definition = tentative_definition,
+		.is_internal = is_static,
 		.next = sema->external_objects,
 	};
 	sema->external_objects = symbol;
@@ -2302,7 +2318,8 @@ static bool sema_external_object_declaration(struct sema *sema,
 	if (!type)
 		return false;
 	declaration->symbol = register_external_object(sema, declaration->name, type,
-		declaration->is_extern ? NULL : &declaration->external);
+		declaration->is_extern ? NULL : &declaration->external,
+		declaration->is_static, declaration->is_extern);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = type;
@@ -2316,18 +2333,14 @@ static bool sema_external_type_declaration(struct sema *sema,
 
 	if (!type)
 		return false;
-	if (type->kind != type_kind_function && !declaration->is_static) {
+	if (type->kind != type_kind_function) {
 		declaration->object_symbol = register_external_object(sema, declaration->name, type,
-			declaration->is_extern ? NULL : &declaration->external);
+			declaration->is_extern ? NULL : &declaration->external,
+			declaration->is_static, declaration->is_extern);
 		if (!declaration->object_symbol)
 			return false;
 		declaration->type = type;
 		return true;
-	}
-	if (type->kind != type_kind_function) {
-		diagnostic_error(sema->diagnostics, declaration->name.location,
-			"file-scope object declarations are not supported yet");
-		return false;
 	}
 	declaration->symbol = register_function(sema, declaration->name,
 		(const struct function_type *)type, NULL, declaration->is_static);

@@ -1149,9 +1149,9 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 
 			/* Final canonical layout; exactly the first tentative owns emission. */
 			assert(type_is_complete_object(object->type));
-			emit(&data_codegen, "export data $%.*s = align %u { z %ju }\n",
-				(int)name.length, (const char *)name.spelling_location.source->data +
-				name.spelling_location.offset, type_object_alignment(object->type),
+			emit(&data_codegen, "%sdata $%.*s = align %u { z %ju }\n",
+				object->is_internal ? "" : "export ", (int)name.length,
+				(const char *)name.spelling_location.source->data + name.spelling_location.offset, type_object_alignment(object->type),
 				(uintmax_t)type_object_size(object->type));
 			if (!data_codegen.output_ok)
 				return false;
