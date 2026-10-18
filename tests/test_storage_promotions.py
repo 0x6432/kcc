@@ -264,6 +264,17 @@ CASES = json.loads(r'''
             "error",
             "type defaults to 'int' in declaration of 'typeof' [-Wimplicit-int]"
           ]
+        ],
+        "alternatives": [
+          {
+            "category": "divergence",
+            "records": [
+              [
+                "error",
+                "'void' as only parameter may not be qualified"
+              ]
+            ]
+          }
         ]
       }
     }
@@ -345,6 +356,17 @@ CASES = json.loads(r'''
             "error",
             "expected ';' before 'p'"
           ]
+        ],
+        "alternatives": [
+          {
+            "category": "divergence",
+            "records": [
+              [
+                "error",
+                "address of register variable 'a' requested"
+              ]
+            ]
+          }
         ]
       },
       "clang": {
@@ -439,8 +461,22 @@ NATIVE_EXCEPTIONS = {(case['origin'], case['text'], lane): expected
                      for case in CASES for lane, expected in case.get('native_exceptions', {}).items()}
 
 
+def matching_native_exception(case, lane, stderr):
+    """Match one complete diagnostic tuple for this exact original and lane.
+
+    Old GCC lacks typeof; modern GCC parses it but diagnoses the documented
+    register-query/void divergence. Never relabel those as keyword gaps.
+    """
+    specification = NATIVE_EXCEPTIONS.get((case.get('origin'), case.get('text'), lane))
+    if specification is None:
+        return None
+    alternatives = [specification, *specification.get('alternatives', [])]
+    matches = [item for item in alternatives if records(stderr) == item['records']]
+    return matches[0] if len(matches) == 1 else None
+
+
 def known_native_exception(case, lane, result, artifact, source):
-    expected = NATIVE_EXCEPTIONS.get((case.get('origin'), case.get('text'), lane))
+    expected = matching_native_exception(case, lane, result.stderr)
     if (expected is None or result.returncode != 1 or result.stdout or artifact.exists()
             or source.read_text() != case['text']+'\n' or records(result.stderr) != expected['records']):
         return False
@@ -472,6 +508,38 @@ with tempfile.TemporaryDirectory(prefix='kcc storage promotions ') as directory:
     agreements = executed = native_executed = object_proofs = 0
     exceptions = {'keyword gap': 0, 'divergence': 0}
     assert len(CASES) == 35 and len({(c['origin'], c['text']) for c in CASES}) == len(CASES)
+    # Synthetic classifier controls, NOT native compiler agreements: exercise
+    # BOTH exact legacy and modern GCC diagnostics even on a single local GCC.
+    alternative_controls = 0
+    for control_case in CASES:
+        specification = control_case.get('native_exceptions', {}).get('gcc', {})
+        if not specification.get('alternatives'):
+            continue
+        source.write_text(control_case['text']+'\n')
+        for expected in [specification, *specification['alternatives']]:
+            stderr = ''.join(f'{source}:1:1: {kind}: {message}\n' for kind, message in expected['records'])
+            result = subprocess.CompletedProcess([], 1, '', stderr)
+            native_obj.unlink(missing_ok=True)
+            assert known_native_exception(control_case, 'gcc', result, native_obj, source)
+            assert matching_native_exception(control_case, 'gcc', stderr)['category'] == expected['category']
+            for extra in ('error: unrelated failure\n', 'warning: unrelated warning\n', 'UNRELATED STDERR\n'):
+                bad = subprocess.CompletedProcess([], 1, '', stderr+extra)
+                assert not known_native_exception(control_case, 'gcc', bad, native_obj, source)
+            for status in (0, 2, -6, -11, 127):
+                bad = subprocess.CompletedProcess([], status, '', stderr)
+                assert not known_native_exception(control_case, 'gcc', bad, native_obj, source)
+            assert not known_native_exception(dict(control_case, text='int unrelated;'), 'gcc', result, native_obj, source)
+            assert not known_native_exception(control_case, 'clang', result, native_obj, source)
+            bad = subprocess.CompletedProcess([], 1, 'unexpected stdout', stderr)
+            assert not known_native_exception(control_case, 'gcc', bad, native_obj, source)
+            source.write_text('int unrelated;\n')
+            assert not known_native_exception(control_case, 'gcc', result, native_obj, source)
+            source.write_text(control_case['text']+'\n')
+            native_obj.write_bytes(b'stale')
+            assert not known_native_exception(control_case, 'gcc', result, native_obj, source)
+            native_obj.unlink()
+            alternative_controls += 1
+    assert alternative_controls == 4
     for case in CASES:
         text = case['text']
         # The exact recorded original is used in BOTH producers. Only an ending
@@ -515,7 +583,7 @@ with tempfile.TemporaryDirectory(prefix='kcc storage promotions ') as directory:
                 native_executed += 1
         else:
             assert known_native_exception(case, lane, native, native_obj, source), (case, native.stderr)
-            category = case['native_exceptions'][lane]['category']
+            category = matching_native_exception(case, lane, native.stderr)['category']
             exceptions[category] += 1
             assert not known_native_exception(dict(case, text='int unrelated;'), lane, native, native_obj, source)
             for status in (0, 2, -6, -11, 127):
