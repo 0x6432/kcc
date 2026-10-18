@@ -146,10 +146,11 @@ static void layout_transaction(void)
  }
  assert(a.chunks==chunks && memcmp(&before,r->definition,sizeof before)==0);
  /* Checked arithmetic and storage-limit failures must not partially publish. */
- struct array_type *huge=type_new_array(&a,&type_long,UINT64_MAX);
- assert(huge);
+ /* Deliberately malformed synthetic graph: public constructor rejects this
+  * count before allocation, while layout must independently fail closed. */
+ struct array_type huge={ .type={ .kind=type_kind_array }, .element=&type_long, .count=UINT64_MAX };
  struct record_type *bad=type_new_record(&a,false);
- struct record_member giant={0}; giant.type=&huge->type; giant.offset=123;
+ struct record_member giant={0}; giant.type=&huge.type; giant.offset=123;
  bad->definition->members=&giant; bad->definition->member_count=1;
  before=*bad->definition;
  assert(!type_record_layout(bad->definition));
@@ -355,7 +356,7 @@ int main(void)
 {
  canonical_identity(); layout_transaction(); layout_boundaries(); incomplete_at_sourcepoint(); failed_publication();
  tag_scopes(); member_captures(); member_static_assertions();
- failed_record_completion(); failed_temporary_budget();
+ failed_temporary_budget(); failed_record_completion();
  puts("Record AST canonical identity, layout transactions, sourcepoint guards and publication passed");
  return 0;
 }
