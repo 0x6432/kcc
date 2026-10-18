@@ -12,11 +12,12 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tempfile
 
 from test_integer_initializers import (
     KCC, HOST, QBE, invoke, producer, clang_style, native_diagnostics,
-    harness_self_test, run_program, reject,
+    harness_self_test, run_program,
 )
 from test_null_initializers import native_compilers, compiler_selection_self_test
 from test_address_offsets import OffsetRelocations, OffsetReference, diagnostic_flags
@@ -381,6 +382,49 @@ ADDRESS_REFUSALS = [
 ]
 
 
+# Exact source-original KCC diagnostics, separately scoped from native C
+# constraints and out-of-subset/UB-proof cases. No substring-only waivers.
+KCC_REFUSALS = {
+    'const scalar member': (1, 51, 'assignment requires a modifiable lvalue'),
+    'const nested member': (1, 82, 'assignment requires a modifiable lvalue'),
+    'const array member': (1, 57, 'assignment requires a modifiable lvalue'),
+    'nested const aggregate assignment': (1, 90, 'assignment requires a modifiable lvalue'),
+    'const pointer member': (1, 60, 'assignment requires a modifiable lvalue'),
+    'missing member': (1, 53, 'no member with this name in struct or union'),
+    'dot on pointer': (1, 51, 'member access requires a complete struct or union type'),
+    'arrow on record': (1, 56, 'arrow member access requires a pointer to struct or union'),
+    'incompatible record assignment': (1, 81, 'aggregate copy requires the same complete struct or union type'),
+    'M17 general braces': (1, 33, 'file-scope object initializers are not supported yet'),
+    'M21 aggregate argument': (1, 26, 'aggregate function arguments are not supported yet (M21)'),
+    'M21 aggregate return': (1, 31, 'aggregate function returns are not supported yet (M21)'),
+    'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
+    'M22 flexible array': (1, 24, 'flexible array members are not supported yet (M22)'),
+    'member scalar beyond onepast': (1, 65, 'static pointer offset is outside its captured object bounds'),
+    'member array beyond onepast': (1, 67, 'static pointer offset is outside its captured object bounds'),
+    'member subscript beyond onepast': (1, 61, 'static pointer offset is outside its captured object bounds'),
+    'member on outer onepast': (1, 52, 'static member address requires an existing record subobject'),
+    'member on scalar record onepast': (1, 49, 'static member address requires an existing record subobject'),
+    'member on row array onepast': (1, 55, 'static member address requires an existing record subobject'),
+    'member root dereference from null': (1, 34, 'file-scope pointer initializer requires a supported null or direct address constant expression'),
+    'member pointer load is not static address': (1, 56, 'file-scope pointer initializer requires a supported null or direct address constant expression'),
+    'pointer base load is not static address': (1, 51, 'file-scope pointer initializer requires a supported null or direct address constant expression'),
+    'TLS member address': (1, 64, 'thread-local object address is not a static address constant'),
+    'TLS member decay': (1, 66, 'thread-local object address is not a static address constant'),
+    'TLS member cast address': (1, 73, 'thread-local object address is not a static address constant'),
+    'TLS nested member address': (1, 79, 'thread-local object address is not a static address constant'),
+}
+
+
+def validate_kcc_refusal(source, name, result):
+    line,column,message=KCC_REFUSALS[name]
+    expected=f"{source}:{line}:{column}: error: {message}\n"
+    assert result.returncode==1 and not result.stdout and result.stderr==expected, (name,result,expected)
+
+
+def kcc_refusal(source, name):
+    validate_kcc_refusal(source,name,invoke([KCC,source]))
+
+
 def must_fail(operation, label):
     try:
         operation()
@@ -436,6 +480,20 @@ def controls(d):
     check_il('export function w $copy() {\n@start\nret 42\n}\n',compact)
     for bad in ('blit $source, $target, 1048576\n', 'call $memcpy()\n', 'x\n'*500, 'x'*20001):
         must_fail(lambda:check_il(bad,compact),'unbounded/hidden large copy')
+    label='const scalar member'
+    line,column,message=KCC_REFUSALS[label]
+    clean=subprocess.CompletedProcess([],1,'',f'{source}:{line}:{column}: error: {message}\n')
+    validate_kcc_refusal(source,label,clean)
+    for kind in ('message','column','note','junk','stdout','status','missing-newline'):
+        bad=copy.copy(clean)
+        if kind=='message': bad.stderr=bad.stderr.replace(message,'wrong semantic reason')
+        elif kind=='column': bad.stderr=bad.stderr.replace(f':{column}:',f':{column+1}:')
+        elif kind=='note': bad.stderr+=f'{source}:1:1: note: unexpected note\n'
+        elif kind=='junk': bad.stderr+='unparsed tool noise\n'
+        elif kind=='stdout': bad.stdout='partial emitted IL\n'
+        elif kind=='status': bad.returncode=0
+        else: bad.stderr=bad.stderr.rstrip('\n')
+        must_fail(lambda:validate_kcc_refusal(source,label,bad),'KCC fullstream '+kind)
     assert native_diagnostics('unrecognized compiler noise\n',source,source.read_text(),False) is None
     print('M16 controls: ELF record extent/alignment/binding/type; exact member relocation and IL')
 
@@ -489,10 +547,10 @@ def main():
         for name,text in CONSTRAINTS:
             owner.write_text(text+'\n')
             for cc in compilers: native_constraint(cc,owner,native,name)
-            if not args.native_only: reject(owner)
+            if not args.native_only: kcc_refusal(owner,name)
         if not args.native_only:
             for name,text in SUBSET+ADDRESS_REFUSALS:
-                owner.write_text(text+'\n'); reject(owner)
+                owner.write_text(text+'\n'); kcc_refusal(owner,name)
         print(f'M16 constraints: {len(CONSTRAINTS)} exact full native diagnostic originals per compiler; '
               f'{0 if args.native_only else len(SUBSET)} separately scoped subset refusals; '
               f'{0 if args.native_only else len(ADDRESS_REFUSALS)} address/UB-proof compile-only refusals')
