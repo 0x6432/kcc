@@ -370,7 +370,16 @@ static bool direct_pointer_conversion(const struct type *source, const struct ty
  * domain through a void detour. Character views explicitly capture the pointed
  * object's byte extent. One-past is a position, not a new object.
  */
+struct address_domain {
+	const struct type *element;
+	uint64_t extent;
+	uint64_t stride;
+	uint64_t start;
+	bool known_extent;
+};
+
 struct address_proof {
+	struct address_domain original_domain;
 	struct address_initializer_result result;
 	const struct type *element;
 	uint64_t extent;
@@ -425,6 +434,36 @@ static struct address_proof address_base(const struct ast_expression *expression
 	return proof;
 }
 
+static void save_address_domain(struct address_proof *proof)
+{
+	if (proof->element && !proof->original_domain.element)
+		proof->original_domain = (struct address_domain) {
+			.element = proof->element, .extent = proof->extent, .stride = proof->stride,
+			.start = proof->start, .known_extent = proof->known_extent,
+		};
+}
+
+static bool restore_address_domain(struct address_proof *proof, const struct type *target)
+{
+	const struct address_domain *domain = &proof->original_domain;
+	uint64_t addend = (uint64_t)proof->result.address.byte_addend;
+	uint64_t position;
+
+	if (!domain->element || !type_unqualified_compatible(domain->element, target) ||
+		addend < domain->start || (addend - domain->start) % domain->stride)
+		return false;
+	position = (addend - domain->start) / domain->stride;
+	if (domain->known_extent && position > domain->extent)
+		return false;
+	proof->element = domain->element;
+	proof->extent = domain->extent;
+	proof->stride = domain->stride;
+	proof->start = domain->start;
+	proof->known_extent = domain->known_extent;
+	proof->position = position;
+	return true;
+}
+
 static struct address_proof prove_address(const struct ast_expression *expression)
 {
 	const struct ast_expression *operand;
@@ -465,6 +504,7 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 			proof.element = array->element;
 			proof.stride = type_object_size(array->element);
 			proof.result.origin_type = expression->type;
+			proof.original_domain = (struct address_domain) { 0 };
 			return proof;
 		}
 		return address_base(expression, operand, true);
@@ -514,10 +554,21 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		proof.explicit_cast |= explicit_cast;
 		if (target->kind == type_kind_void)
 			return proof;
+		if ((!proof.element || !type_unqualified_compatible(proof.element, target)) &&
+			restore_address_domain(&proof, target))
+			return proof;
 		if (proof.element && !type_unqualified_compatible(proof.element, target)) {
 			bool character = target->kind == type_kind_char || target->kind == type_kind_schar ||
 				target->kind == type_kind_uchar;
 
+			bool old_character = proof.element->kind == type_kind_char || proof.element->kind == type_kind_schar ||
+				proof.element->kind == type_kind_uchar;
+
+			if (character && old_character) {
+				proof.element = target;
+				return proof;
+			}
+			save_address_domain(&proof);
 			if (character && type_is_complete_object(proof.element) &&
 				(!proof.known_extent || proof.position < proof.extent)) {
 				/* A character view covers the pointed object, not an invented
