@@ -13,10 +13,11 @@ import tempfile
 
 from test_integer_initializers import (producer, invoke, elf_objects,
     native_diagnostics, clang_style, harness_self_test as inherited_self_test)
+from test_null_initializers import native_compilers, compiler_selection_self_test
 
 ROOT = Path(__file__).resolve().parents[1]
 KCC = Path(os.environ.get('KCC', ROOT / 'build/kcc'))
-QBE = os.environ.get('QBE', '/data/kcc-qbe/qbe-1.2/qbe')
+QBE = os.environ.get('QBE') or shutil.which('qbe')
 
 
 @dataclass(frozen=True)
@@ -223,6 +224,8 @@ def check_storage(path, case, qbe=False):
 
 def record_self_test(directory):
     inherited_self_test(directory)
+    compiler_selection_self_test(directory)
+    layout_compiler_selection_self_test(directory)
     # Actual record-shaped ELF, independently adversarial against size, binding,
     # byte content and alignment. A fresh producer is required for every mutant.
     assembly, output = directory/'control.s', directory/'control.o'
@@ -232,7 +235,7 @@ def record_self_test(directory):
             '.balign {alignment}\n{private_binding}.type private_cell,@object\n'
             'private_cell: .zero 12\n.size private_cell,12\n'
             '.section .note.GNU-stack,"",@progbits\n')
-    cc = os.environ.get('HOST_CC', 'gcc')
+    cc = os.environ.get('HOST_CC', 'cc')
     for alignment, byte, private_binding, must_pass in [
             (4, 0, '', True), (1, 0, '', False), (4, 1, '', False),
             (4, 0, '.globl private_cell\n', False)]:
@@ -246,18 +249,45 @@ def record_self_test(directory):
             assert must_pass, ('ELF mutant escaped', alignment, byte, private_binding)
     print('Record-shaped ELF alignment/bytes/binding mutation controls passed')
 
-def compilers():
-    values = [os.environ.get('HOST_CC', 'gcc'), os.environ.get('GCC13_CC', '/data/kcc-gcc13/gcc13'),
-              os.environ.get('CLANG_CC', '/data/kcc-init-clang18/usr/bin/clang-18')]
-    assert len(set(os.path.realpath(shutil.which(c) or c) for c in values)) == 3, values
-    for major, cc in zip((11, 13, 18), values):
-        version = invoke([cc, '--version'])
-        assert version.returncode == 0 and not version.stderr, (cc, version.stderr)
-        if major == 18:
-            assert re.search(r'clang version 18[.]', version.stdout), (cc, version.stdout)
+def selected_compilers(host, clang=None, gcc13=None):
+    values = native_compilers(host, clang)
+    if gcc13:
+        # Validate the explicitly requested tool BEFORE executable deduplication:
+        # a wrong tool aliased to primary must not silently disappear.
+        native_compilers(gcc13)
+        version = invoke([gcc13, '--version'])
+        identity = invoke([gcc13, '-dumpversion'])
+        assert version.returncode == 0 and not version.stderr and re.search(r'(?i)gcc', version.stdout) and 'clang' not in version.stdout.lower(), ('GCC13_CC is not GCC', gcc13, version)
+        assert identity.returncode == 0 and not identity.stderr and identity.stdout.split('.')[0].strip() == '13', ('GCC13_CC is not GCC13', gcc13, identity)
+        candidate = os.path.realpath(shutil.which(gcc13))
+        if all(os.path.realpath(shutil.which(cc)) != candidate for cc in values):
+            values.append(gcc13)
+    return values
+
+
+def layout_compiler_selection_self_test(directory):
+    gcc13 = directory/'gcc13-selection-control'
+    gcc13.write_text('#!/bin/sh\ncase "$1" in --version) echo "gcc (selection control) 13.3.0";; -dumpversion) echo 13.3.0;; *) exit 1;; esac\n')
+    gcc13.chmod(0o755)
+    alias = directory/'gcc13-selection-alias'; alias.symlink_to(gcc13)
+    assert selected_compilers(str(alias), str(gcc13), str(gcc13)) == [str(alias)]
+    clang = directory/'clang-selection-fixture'
+    assert selected_compilers(str(clang), str(clang)) == [str(clang)]
+    for extra in [str(directory/'missing-gcc13'), str(clang)]:
+        try:
+            selected_compilers(str(clang), str(clang), extra)
+        except AssertionError:
+            pass
         else:
-            identity = invoke([cc, '-dumpversion'])
-            assert identity.returncode == 0 and not identity.stderr and identity.stdout.split('.')[0].strip() == str(major), (cc, identity)
+            raise AssertionError(('wrong/missing explicit GCC13 escaped validation', extra))
+
+
+def compilers():
+    values = selected_compilers(os.environ.get('HOST_CC', 'cc'),
+        os.environ.get('CLANG_CC') or shutil.which('clang'), os.environ.get('GCC13_CC'))
+    for cc in values:
+        version = invoke([cc, '--version'])
+        assert version.returncode == 0 and not version.stderr and version.stdout, (cc, version)
         print(cc, version.stdout.splitlines()[0], flush=True)
     return values
 
@@ -267,6 +297,8 @@ def main():
     parser.add_argument('--native-only', action='store_true')
     parser.add_argument('--harness-self-test', action='store_true')
     args = parser.parse_args()
+    if not args.native_only and not args.harness_self_test:
+        assert QBE, 'QBE required for actual record ELF/runtime coverage'
     with tempfile.TemporaryDirectory(prefix='kcc record layout ') as tmp:
         d = Path(tmp)
         record_self_test(d)
