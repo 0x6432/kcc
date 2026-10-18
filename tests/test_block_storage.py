@@ -394,7 +394,9 @@ CONSTRAINTS = [
       ('error', "nested function 'target' declared but never defined")),
      (('error', "cannot combine with previous 'type-name' declaration specifier"),)),
     ('int target(void); int f(void) { auto typeof(target) other; return 0; }',
-     'auto storage requires an object type', (),
+     'auto storage requires an object type',
+     (('error', "invalid storage class for function 'other' [-Wpedantic]"),
+      ('error', "nested function 'other' declared but never defined")),
      (('error', "cannot combine with previous 'auto' declaration specifier"),
       ('error', "declaration of variable 'other' with deduced type 'auto' requires an initializer")), ('typeof',)),
 
@@ -477,6 +479,51 @@ def register_array_controls(directory):
     print('Register-array controls: exact GCC13/Clang originals, full-stream evidence and poison/stale rejection')
 
 
+def typeof_constraint_controls(directory):
+    """All typeof constraints have explicit family evidence, even when skipped
+    by an older compiler's separate keyword probe. Never accept an empty tuple.
+    """
+    import subprocess
+    source, output = directory/'typeof-constraint.c', directory/'typeof-constraint.o'
+    rows = [row for row in CONSTRAINTS if len(row) == 5 and 'typeof' in row[4]]
+    assert len(rows) == 1
+    for text, _, gcc, clang_messages, _ in rows:
+        assert gcc and clang_messages
+        source.write_text(text+'\n')
+        for clang, expected in ((False,gcc),(True,clang_messages)):
+            # Exact GCC13 CI order: both diagnostics refer to the same source
+            # point; source/caret rendering appears only after the first.
+            rendered = '' if clang else f"{source}: In function ‘f’:\n"
+            for index, (kind,message) in enumerate(expected):
+                rendered += f'{source}:1:53: {kind}: {message}\n'
+                if index == 0:
+                    rendered += f'    1 | {text}\n      |                                                     ^~~~~\n'
+            if clang:
+                rendered += '2 errors generated.\n'
+            output.unlink(missing_ok=True)
+            good = subprocess.CompletedProcess([],1,'',rendered)
+            assert native_refusal(text,good,source,output,expected,clang)
+            assert not native_refusal('int unrelated;',good,source,output,expected,clang)
+            poisoned = [rendered+'unrecognized tool output\n',
+                        rendered+'internal compiler error: broken\n',
+                        rendered.replace('error:', 'fatal error:', 1),
+                        rendered.replace(expected[-1][1], 'unrelated storage failure'),
+                        rendered.replace('other', 'wrong'),
+                        rendered.replace(f'{source}:1:53: error: {expected[-1][1]}\n',''),
+                        rendered+'2 errors generated.\n']
+            poisoned += [rendered+f'{source}:1:53: {kind}: extra\n'
+                         for kind in ('warning','error','note')]
+            for stderr in poisoned:
+                assert not native_refusal(text,subprocess.CompletedProcess([],1,'',stderr),source,output,expected,clang)
+            for status in (0,2,127,-6,-9,-11):
+                assert not native_refusal(text,subprocess.CompletedProcess([],status,'',rendered),source,output,expected,clang)
+            assert not native_refusal(text,subprocess.CompletedProcess([],1,'unexpected stdout',rendered),source,output,expected,clang)
+            output.write_bytes(b'stale')
+            assert not native_refusal(text,good,source,output,expected,clang)
+    output.unlink(missing_ok=True)
+    print('typeof constraint controls: exact modern-GCC/Clang evidence; missing/extra/wrong diagnostics and stale artifacts rejected')
+
+
 def controls(directory):
     """Storage-specific adversarial tests, in addition to imported harness gates."""
     source, output = directory/'storage-control.c',directory/'storage-control.o'
@@ -543,6 +590,7 @@ def main():
         compiler_selection_self_test(d)
         controls(d)
         register_array_controls(d)
+        typeof_constraint_controls(d)
         if options.harness_self_test:
             return
         compilers = native_compilers(HOST,os.environ.get('CLANG_CC') or shutil.which('clang'))
