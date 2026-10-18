@@ -4,10 +4,10 @@
 #include "consteval.h"
 
 enum static_data_kind {
-	static_data_zero,
 	static_data_integer,
 	static_data_null_pointer,
 	static_data_address,
+	static_data_zero,
 };
 
 /* A validated target data value, never a host pointer or a relocation sentinel. */
