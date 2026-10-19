@@ -404,8 +404,6 @@ CONSTRAINTS = [
 
 # Valid C but deliberately outside the supported static initializer subset.
 SUBSET = [
-    ('int f(void) { static int cells[2]={1,2}; return cells[0]; }', 'expected integer literal'),
-    ('int f(void) { static int cell={42}; return cell; }', 'expected integer literal'),
 ]
 
 # UB is NOT a mandatory native diagnostic. These originals only compile with

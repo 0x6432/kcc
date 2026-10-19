@@ -9,6 +9,7 @@ Legacy GCC's exact per-source C23 empty-brace gaps are counted NOT agreements.
 """
 import argparse
 import ast
+import copy
 import json
 import os
 from pathlib import Path
@@ -423,6 +424,36 @@ CASES = json.loads(r'''
         "000000000000000000000000"
       ]
     }
+  },
+  {
+    "origin": "test_block_storage.py",
+    "baseline_line": 407,
+    "text": "int f(void) { static int cells[2]={1,2}; return cells[0]; }",
+    "exit": null,
+    "objects": {
+      ".Lkcc.static.0": [
+        8,
+        4,
+        false,
+        "0100000002000000"
+      ]
+    },
+    "private_function": "f"
+  },
+  {
+    "origin": "test_block_storage.py",
+    "baseline_line": 408,
+    "text": "int f(void) { static int cell={42}; return cell; }",
+    "exit": null,
+    "objects": {
+      ".Lkcc.static.0": [
+        4,
+        4,
+        false,
+        "2a000000"
+      ]
+    },
+    "private_function": "f"
   }
 ]
 ''' )
@@ -433,9 +464,9 @@ NATIVE_GAPS = {(c['origin'], c['text']): tuple(tuple(pair) for pair in c['gcc_em
 
 
 def verify_mapping():
-    assert len(CASES) == 24
+    assert len(CASES) == 26
     assert len({(c['origin'], c['text']) for c in CASES}) == len(CASES)
-    assert len({c['origin'] for c in CASES}) == 11
+    assert len({c['origin'] for c in CASES}) == 12
     for case in CASES:
         assert case['origin'] != 'test_boolean_keywords.py'
         assert case['exit'] == (0 if re.search(r'\bint main\(void\)', case['text']) else None)
@@ -526,6 +557,74 @@ def check_kcc_elf(path, case):
     references = {name: OffsetReference('object', target, byte_addend=addend)
                   for name, (target, addend) in case.get('relocations', {}).items()}
     relocations.check(references)
+    if case.get('private_function'):
+        check_private_reference(relocations, case)
+
+
+def check_private_reference(elf, case):
+    """Require the exact retained canonical symbol, not any local at its address.
+
+    GAS may express PC-relative relocation through a genuine section symbol.
+    The x86-64 PC32 encoding addend is -4 for a reference to the object's start;
+    this representation correction is not a permitted logical interior offset.
+    """
+    name = '.Lkcc.static.0'
+    width = case['objects'][name][0]
+    target, function = elf.symbol(name), elf.symbol(case['private_function'])
+    assert [s['name'] for s in elf.symbols if s['name'].startswith('.Lkcc.static.')] == [name]
+    assert target['binding'] == 0 and target['kind'] == 0 and target['size'] == 0
+    assert 0 < target['section'] < len(elf.sections)
+    section = elf.sections[target['section']]
+    assert section[1] == 1 and section[2] & 3 == 3 and not section[2] & 4
+    assert section[5] == width and target['value'] == 0, ('exact private extent', target, section)
+    assert [s for s in elf.symbols if s['section'] == target['section'] and s['kind'] != 3] == [target]
+    assert function['kind'] == 2 and function['binding'] == 1 and function['size'] > 0
+    assert 0 < function['section'] < len(elf.sections)
+    assert elf.sections[function['section']][2] & 4
+    refs = [r for r in elf.relocations if r['section'] == function['section']]
+    assert len(refs) == 1, ('one canonical function-address relocation', refs)
+    ref = refs[0]
+    assert function['value'] <= ref['offset'] and ref['offset'] + 4 <= function['value'] + function['size']
+    assert ref['kind'] == 2, ('R_X86_64_PC32', ref)
+    base = ref['symbol']
+    if base['name'] == name:
+        assert base == target and ref['addend'] == -4
+    else:
+        assert base['kind'] == 3 and base['binding'] == 0 and base['section'] == target['section']
+        assert base['value'] + ref['addend'] + 4 == target['value']
+
+
+def private_reference_controls(elf, case):
+    """Poison actual freshly produced ELF metadata; no permissive local fallback."""
+    check_private_reference(elf, case)
+    for mutation in ('unrelated-base', 'wrong-addend', 'wrong-kind', 'wrong-offset',
+                     'duplicate-relocation', 'missing-canonical', 'extra-owner', 'wrong-extent'):
+        bad = copy.deepcopy(elf)
+        ref = next(r for r in bad.relocations if r['section'] == bad.symbol('f')['section'])
+        if mutation == 'unrelated-base':
+            ref['symbol'] = dict(bad.symbol('.Lkcc.static.0'), name='unrelated.private', value=16)
+            ref['addend'] = -20  # Same final address is NOT the same canonical base.
+        elif mutation == 'wrong-addend':
+            ref['addend'] += 4
+        elif mutation == 'wrong-kind':
+            ref['kind'] = 1
+        elif mutation == 'wrong-offset':
+            ref['offset'] = bad.symbol('f')['value'] + bad.symbol('f')['size']
+        elif mutation == 'duplicate-relocation':
+            bad.relocations.append(copy.deepcopy(ref))
+        elif mutation == 'missing-canonical':
+            bad.symbol('.Lkcc.static.0')['name'] = 'unrelated.private'
+        elif mutation == 'extra-owner':
+            bad.symbols.append(dict(bad.symbol('.Lkcc.static.0'), name='unrelated.private.owner'))
+        else:
+            index = bad.symbol('.Lkcc.static.0')['section']
+            row = list(bad.sections[index]); row[5] += 4; bad.sections[index] = tuple(row)
+        try:
+            check_private_reference(bad, case)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError(('private ELF mutant accepted', mutation))
 
 
 def run_original(linker, obj, executable, expected):
@@ -615,8 +714,10 @@ def main():
                 il_layout(result.stdout, case)
                 il.write_text(result.stdout)
                 producer([QBE, '-t', 'amd64_sysv', '-o', assembly, il], assembly)
-                producer([HOST, '-c', assembly, '-o', obj], obj)
+                producer([HOST, '-Wa,-L', '-c', assembly, '-o', obj], obj)
                 check_kcc_elf(obj, case)
+                if case.get('private_function'):
+                    private_reference_controls(OffsetRelocations(obj), case)
                 qbe_objects += 1
                 if case['exit'] is not None:
                     run_original(HOST, obj, executable, case['exit'])
@@ -639,7 +740,7 @@ def main():
                 if case['exit'] is not None:
                     run_original(cc, native_obj, executable, case['exit'])
                     native_counts[cc]['runs'] += 1
-        print(f'Initialization legacy promotions: {len(CASES)} exact originals across 11 origins; '
+        print(f'Initialization legacy promotions: {len(CASES)} exact originals across 12 origins; '
               f'KCC acceptances {kcc_acceptances}; mandatory fresh QBE/ELF {qbe_objects}; '
               f'unchanged defined original runtimes {original_runs}')
         if options.native_only:
