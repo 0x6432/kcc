@@ -111,7 +111,7 @@ with tempfile.TemporaryDirectory(prefix='kcc local declaration lists ') as direc
         ('int main(void) { int x=1,int y=2; return 0; }', 'expected local name'),
         ('int main(void) { int x=1,*; return 0; }', 'expected local name'),
         ('int main(void) { int x=1,y=(x=2,(void)3); return 0; }', 'conversion requires a scalar'),
-        ('int main(void) { int x=1,a[2]=x; return 0; }', 'array initializers'),
+        ('int main(void) { int x=1,a[2]=x; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
         ('int main(void) { int x=1,a[]; return 0; }', 'local object type must be complete'),
         ('int main(void) { for(int i=0,j=3;i<j;i=i+1); return j; }', 'undeclared identifier'),
         ('int main(void) { for(int i=0,i=3;i<0;i=i+1); return 0; }', 'redeclaration'),

@@ -74,8 +74,8 @@ constraints = [
     ('int f(auto register int x);', 'auto is not permitted'),
     ('int f(auto typeof(missing) x);', 'auto is not permitted'),
     ('int f(typedef typeof(missing) x);', 'typedef is not permitted'),
-    ('int f(register int x) { return sizeof(register int); }', 'not supported in this context'),
-    ('int f(register int x) { return (register int)42; }', 'not supported in this context'),
+    ('int f(register int x) { return sizeof(register int); }', 'storage class requires a compound literal initializer'),
+    ('int f(register int x) { return (register int)42; }', 'storage class requires a compound literal initializer'),
 ]
 for parameter, name in [('register int x','x'),('register int a[2]','a'),('register int g(int)','g')]:
     for expression in [f'&{name}', f'&(({name}))']:

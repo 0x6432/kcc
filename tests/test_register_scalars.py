@@ -61,8 +61,8 @@ constraints = [
     ('int main(void) { register const int x=0; x=1; return 0; }', 'modifiable'),
     ('int main(void) { register int x=0; int x=1; return 0; }', 'redeclaration'),
     ('int main(void) { typedef int T; register int T=1; return 0; }', 'ordinary declaration conflicts'),
-    ('int main(void) { return sizeof(register int); }', 'not supported in this context'),
-    ('int main(void) { return (register int)42; }', 'not supported in this context'),
+    ('int main(void) { return sizeof(register int); }', 'storage class requires a compound literal initializer'),
+    ('int main(void) { return (register int)42; }', 'storage class requires a compound literal initializer'),
 ]
 c23_constraints = [
     ('int main(void) { register int x=0; typeof(&x) p; return 0; }', 'cannot take the address'),

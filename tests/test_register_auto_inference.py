@@ -90,7 +90,7 @@ subset_errors = [
     ('int main(void) { register auto *x=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { auto register x[2]=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { register auto x(void)=0; return 0; }', 'single identifier declarator'),
-    ('int main(void) { auto register x={42}; return 0; }', 'expected integer literal'),
+    ('int main(void) { auto register x={42}; return 0; }', 'inferred auto requires an assignment initializer'),
     ('int main(void) { register auto x=(void)42; return 0; }', 'complete scalar or aggregate initializer type'),
     ('int main(void) { register int a[2]; auto register p=a; return 0; }', 'register array-to-pointer conversion'),
 ]

@@ -85,7 +85,7 @@ constraints = [
 syntax_errors = ['int f(void) { typeof(1+ ) x; }','int f(void) { typeof(1;2) x; }',
                  'int f(void) { typeof(1,) x; }','int f(void) { typeof(1 x; }']
 subset_errors = [
-    ('int f(void) { int a[2]; typeof(a) b=a; return 0; }','array initializers are not supported yet'),
+    ('int f(void) { int a[2]; typeof(a) b=a; return 0; }','aggregate initializer requires braces or a compatible record value'),
     ('int f(int n) { int a[n]; typeof(a) b; return 0; }','variable-length'),
 ]
 def native_array_qualification_gap(text, diagnostics):

@@ -527,6 +527,8 @@ def main():
                             'int target; long cell=(long)&target;',
                             'int target(int); void *cell=(void *)target;'):
                     message = 'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)'
+                if text == 'int *cell=(int *)0+0;':
+                    message = 'pointer arithmetic on null is not a static address constant'
                 if text == 'int target[3]; int *cell=(target+4)-1;':
                     message = 'static pointer offset is outside its captured object bounds'
                 reject(owner, 'error: '+message+'\n')

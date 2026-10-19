@@ -403,7 +403,7 @@ KCC_REFUSALS = {
     'member on outer onepast': (1, 52, 'static member address requires an existing record subobject'),
     'member on scalar record onepast': (1, 49, 'static member address requires an existing record subobject'),
     'member on row array onepast': (1, 55, 'static member address requires an existing record subobject'),
-    'member root dereference from null': (1, 34, 'file-scope pointer initializer requires a supported null or direct address constant expression'),
+    'member root dereference from null': (1, 32, 'static member address requires a proven record subobject'),
     'member pointer load is not static address': (1, 56, 'file-scope pointer initializer requires a supported null or direct address constant expression'),
     'pointer base load is not static address': (1, 51, 'file-scope pointer initializer requires a supported null or direct address constant expression'),
     'TLS member address': (1, 64, 'thread-local object address is not a static address constant'),

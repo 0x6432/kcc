@@ -77,7 +77,7 @@ constraints = [
 ]
 subset_errors = [
     ('typedef int T=42;','cannot have initializers'),
-    ('typedef int F(void); F f { return 42; }',"query-derived external declarations require ';'"),
+    ('typedef int F(void); F f { return 42; }','expected comma or semicolon after initializer'),
     ('typedef int F(void); const F f;','function type cannot be qualified'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc typedef foundation ') as directory:

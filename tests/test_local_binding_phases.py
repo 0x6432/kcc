@@ -52,7 +52,7 @@ c23_constraints = [
 ]
 subset_errors = [
     ('int f(int n) { int a[n]; return 0; }', 'variable-length arrays'),
-    ('int main(void) { int a[2]=0; return 0; }', 'array initializers are not supported'),
+    ('int main(void) { int a[2]=0; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc binding phases ') as directory:
     directory = Path(directory)

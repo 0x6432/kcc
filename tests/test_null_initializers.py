@@ -360,7 +360,7 @@ def main():
         for text, message, gcc_error, clang_error in CONSTRAINTS:
             owner.write_text(text+'\n')
             if not args.native_only:
-                reject(owner, 'error: '+('unsupported pointer conversion (incompatible pointers or integer/pointer conversion)' if message == 'pointer conversion' else 'file-scope pointer initializer requires a supported null or direct address constant expression')+'\n')
+                reject(owner, 'error: '+('unsupported pointer conversion (incompatible pointers or integer/pointer conversion)' if message == 'pointer conversion' else 'integer source is not a null pointer constant')+'\n')
                 rejected += 1
             for cc in compilers:
                 native.unlink(missing_ok=True)
@@ -385,6 +385,8 @@ def main():
                     message = "query-derived external declarations require ';' for non-integer initializers"
                 elif text == 'int *main=0;':
                     message = 'initialized main object is not supported on the Linux target'
+                elif text in ('int *cell=(int *)0+0;', 'int *cell=(int *)0-0;'):
+                    message = 'pointer arithmetic on null is not a static address constant'
                 elif text == 'int *cell=0*(1/0);':
                     message = 'division by zero in integer constant expression'
                 elif text in ('int *cell=(2147483647+1)*0;', 'int *cell=0*((-2147483647-1)/-1);'):

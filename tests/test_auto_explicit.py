@@ -76,7 +76,7 @@ c23_constraints = []
 subset_errors = [
     ('auto x=42;', 'file-scope auto declarations are not supported yet'),
     ('int f(int n) { auto int a[n]; return 0; }', 'variable-length arrays'),
-    ('int main(void) { auto int a[2]=0; return 0; }', 'array initializers are not supported'),
+    ('int main(void) { auto int a[2]=0; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
 ]
 
 

@@ -71,7 +71,7 @@ c23_constraints = [
 ]
 subset_errors = [
     ('typeof(int(void)) f,g=0;',"query-derived external declarations require ';'"),
-    ('typedef int F(void); extern F f,g { return 42; }',"query-derived external declarations require ';'"),
+    ('typedef int F(void); extern F f,g { return 42; }','expected comma or semicolon after initializer'),
     ('extern auto f=42,g=2;','file-scope auto declarations'),
 ]
 def native_return_qualifier_gap(text, status, diagnostics):

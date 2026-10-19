@@ -89,7 +89,7 @@ subset_errors = [
     ('int main(void) { auto *x=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { auto x[2]=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { auto x(void)=0; return 0; }', 'single identifier declarator'),
-    ('int main(void) { auto x={42}; return 0; }', 'expected integer literal'),
+    ('int main(void) { auto x={42}; return 0; }', 'inferred auto requires an assignment initializer'),
     ('int main(void) { auto x=(void)42; return 0; }', 'complete scalar or aggregate initializer type'),
     ('int f(auto x);', 'auto is not permitted in a type name or parameter declaration'),
     ('int main(void) { register int a[2]; auto p=a; return 0; }', 'register array-to-pointer conversion'),

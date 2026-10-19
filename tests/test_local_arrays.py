@@ -155,7 +155,7 @@ int main(void) {{ {name} a[3]; a[0]=1; a[1]=2; a[2]=3;
         ('int main(void) { int a[1,2]; return 0; }', "expected ']'"),
         ('int main(void) { int a[]; return 0; }', 'local object type must be complete'),
         ('int main(void) { int a[2][]; return 0; }', 'array element type must be complete'),
-        ('int main(void) { int a[2]=1; return 0; }', 'array initializers'),
+        ('int main(void) { int a[2]=1; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
         ('int main(void) { int a[2]; int b[2]; a=b; return 0; }', 'modifiable lvalue'),
         ('int main(void) { int a[2]; *(&a)=a; return 0; }', 'modifiable lvalue'),
         ('int main(void) { int a[2]; int *p=&a; return 0; }', 'pointer conversion'),
