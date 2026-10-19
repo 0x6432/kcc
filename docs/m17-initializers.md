@@ -82,6 +82,9 @@ Semantic store-allocation work is independently capped at 65536. Objects retain
 the existing 1 MiB limit and automatic storage/slot/snapshot budgets. Pure actual
 subobject search memoizes shared type-DAG failures and caps each search at 16384
 visits; it does not recursively expand shared union graphs without a bound.
+Semantic union-ancestry searches use a shared TU cache with at most 4096 states
+per query and 1048576 total work steps, including edge and hash-probe work.
+Exhaustion is an explicit checked resource failure, never an assumed absence.
 Failed initialization restores canonical publication/type/definition state and
 nested literal registrations; bytewise snapshots preserve padding too. No arena
 rewind or general error recovery is claimed.
