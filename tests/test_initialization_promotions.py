@@ -285,6 +285,20 @@ CASES = json.loads(r'''
     }
   },
   {
+    "origin": "test_record_runtime.py",
+    "baseline_line": 358,
+    "text": "struct S { int x; }; struct S s={1};",
+    "exit": null,
+    "objects": {
+      "s": [
+        4,
+        4,
+        true,
+        "01000000"
+      ]
+    }
+  },
+  {
     "origin": "test_static_arrays.py",
     "baseline_line": 102,
     "text": "static int items[3]={1,2,3};",
@@ -419,9 +433,9 @@ NATIVE_GAPS = {(c['origin'], c['text']): tuple(tuple(pair) for pair in c['gcc_em
 
 
 def verify_mapping():
-    assert len(CASES) == 23
+    assert len(CASES) == 24
     assert len({(c['origin'], c['text']) for c in CASES}) == len(CASES)
-    assert len({c['origin'] for c in CASES}) == 10
+    assert len({c['origin'] for c in CASES}) == 11
     for case in CASES:
         assert case['origin'] != 'test_boolean_keywords.py'
         assert case['exit'] == (0 if re.search(r'\bint main\(void\)', case['text']) else None)
@@ -625,7 +639,7 @@ def main():
                 if case['exit'] is not None:
                     run_original(cc, native_obj, executable, case['exit'])
                     native_counts[cc]['runs'] += 1
-        print(f'Initialization legacy promotions: {len(CASES)} exact originals across 10 origins; '
+        print(f'Initialization legacy promotions: {len(CASES)} exact originals across 11 origins; '
               f'KCC acceptances {kcc_acceptances}; mandatory fresh QBE/ELF {qbe_objects}; '
               f'unchanged defined original runtimes {original_runs}')
         if options.native_only:

@@ -355,7 +355,6 @@ def native_constraint(cc, source, output, name):
 # These are native-valid out-of-scope forms, NOT language constraints. They are
 # never executed and native acceptance is not treated as semantic evidence.
 SUBSET = [
-    ('M17 general braces', 'struct S { int x; }; struct S s={1};'),
     ('M21 aggregate argument', 'struct S { int x; }; int f(struct S s) { return s.x; }'),
     ('M21 aggregate return', 'struct S { int x; }; struct S f(struct S *p) { return *p; }'),
     ('M22 bitfield', 'struct S { unsigned int x:3; }; struct S s;'),
@@ -394,7 +393,6 @@ KCC_REFUSALS = {
     'dot on pointer': (1, 51, 'member access requires a complete struct or union type'),
     'arrow on record': (1, 56, 'arrow member access requires a pointer to struct or union'),
     'incompatible record assignment': (1, 81, 'aggregate copy requires the same complete struct or union type'),
-    'M17 general braces': (1, 33, 'file-scope object initializers are not supported yet'),
     'M21 aggregate argument': (1, 26, 'aggregate function arguments are not supported yet (M21)'),
     'M21 aggregate return': (1, 31, 'aggregate function returns are not supported yet (M21)'),
     'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
