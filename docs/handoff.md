@@ -19,6 +19,18 @@ union-copy partial updates and full nominal member paths for private static
 pointer-difference conditions. Public strict ICE rules remain unchanged.
 Native compiler discrepancies are never agreements; tests retain exact protocols.
 
+Recovery review found and repaired a broad GCC11/13 version guard in the
+compound-literal self-reinitialization oracle. The repaired guard admits only
+exact `11.5.0` and `13.3.0` discrepancy protocols, with unchanged original source
+and companion hashes, exit 1 and empty runtime streams, plus GCC identity and
+exact banner-version tokens. Both originals were independently replayed with
+both actual compilers during recovery. Unknown, incomplete, malformed and
+lookalike versions, mismatched/disguised identities and changed outcomes fail
+closed as discrepancies. `13.4.0` is not admitted by this repaired compound-
+literal protocol because its original observation artifacts were unavailable.
+Poison self-tests passed; this is test-integrity repair, not a compiler semantic
+change or release approval. All final gates must rerun after this tracked repair.
+
 M18 and M19 already contain implemented subsets as recorded in `milestones.md`;
 neither is declared complete. M18 enum/alignment work remains. M19 remaining
 scope must be audited against the actual implementation, with attributes/VLA
@@ -56,7 +68,14 @@ New-computer coordination is `/data/kcc-m17-coordination/`:
 Recovered CI API responses are `/data/m17-ci-runs.json` and
 `/data/m17-ci-jobs.json`. New toolchain provenance/readiness belongs under
 `toolchains/`; new isolated lane checkouts/logs belong under
-`/data/kcc-m17-lanes/`. These paths describe evidence locations, not gate passes.
+`/data/kcc-m17-lanes/`. Recovered toolchain provenance is bound separately under
+`/data/kcc-toolchains/`: immutable base `recovery-binding.json`,
+`fuzz-runtime-binding.json` for isolated glibc/libFuzzer linkage, and
+`gcc11-sanitizer-supplement-binding.json` for the exact local libasan6 SONAME link.
+Fresh exact two-original compiler protocol observations are in coordination
+`exact-native-protocols/observations.json`; the independent review copy is in
+`/data/kcc-m17-lanes/reviewer/review/exact-literal-observations/`.
+These paths describe evidence locations, not gate passes.
 Credentials are external/private and must never enter repository content/config.
 
 ## Copy-ready next-agent prompt

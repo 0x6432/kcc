@@ -277,10 +277,12 @@ SELF_REINIT_ORIGINALS = {
     'live record literal self reinitialization': '12ca3fc6e406b4c358512b6fbcf35737d5e9c1b83aed1bf08d732007d4cf2f7c',
 }
 SELF_REINIT_COMPANION = '833aa24a7c2f00f5b642a706f14fc718fbfa7fc1d52f43d537a6099022e63860'
+# Exact recovered observations only: 11.5.0 and freshly replayed 13.3.0.
+SELF_REINIT_GCC_VERSIONS = frozenset(('11.5.0', '13.3.0'))
 
 
 def validate_self_reinit_disagreement(case,version,result):
-    assert re.fullmatch(r'(?:11|13)(?:\.\d+){0,2}',version), ('unreviewed compiler version',version)
+    assert version in SELF_REINIT_GCC_VERSIONS, ('unreviewed compiler version',version)
     assert case.gcc11_disagreement and case.expected_exit==42
     assert case.name in SELF_REINIT_ORIGINALS, ('unreviewed original',case.name)
     assert hashlib.sha256(case.owner.encode()).hexdigest()==SELF_REINIT_ORIGINALS[case.name]
@@ -289,11 +291,16 @@ def validate_self_reinit_disagreement(case,version,result):
 
 
 def run_native_case(cc,objects,executable,case,version):
-    if case.gcc11_disagreement and re.fullmatch(r'(?:11|13)(?:\.\d+){0,2}',version):
+    if case.gcc11_disagreement and version in SELF_REINIT_GCC_VERSIONS:
         # N3096 6.5.2.5p5 and 6.7.10p20/22: old explicitly initialized
         # subobjects remain live; default fill does not clobber them before RHS
         # capture. Independently observed GCC11/13 clear too early. Execute the
         # exact original, require exit1 with empty streams, NEVER count agreement.
+        banner=invoke([cc,'--version'])
+        assert banner.returncode==0 and not banner.stderr and banner.stdout.endswith('\n'), ('GCC identity banner',cc,banner)
+        first=banner.stdout.splitlines()[0]
+        assert ('(GCC)' in first or ('gcc' in first.lower() and '(Ubuntu ' in first)) and 'clang' not in first.lower(), ('not observed GNU identity',cc,first)
+        assert re.search(r'(?<!\S)'+re.escape(version)+r'(?!\S)',first), ('GCC banner/version mismatch',cc,first,version)
         producer([cc,*objects,'-o',executable],executable)
         validate_self_reinit_disagreement(case,version,invoke([executable]))
         return False
@@ -621,9 +628,9 @@ def controls(d):
     # two independently reviewed GCC semantic-discrepancy classifications.
     for original in (c for c in fixtures() if c.gcc11_disagreement):
         clean=subprocess.CompletedProcess([],1,'','')
-        for version in ('11.5.0','13.4.0'):
+        for version in ('11.5.0','13.3.0'):
             validate_self_reinit_disagreement(original,version,clean)
-        for version in ('10.5.0','12.3.0','14.1.0','clang','13.4.0junk'):
+        for version in ('10.5.0','12.3.0','14.1.0','clang','13.4.0junk','11','11.0','11.99.999','13','13.3','13.3.1','13.99.999','13.4.0','13.3.0junk','13.3.0\n','013.3.0','13.3.00'):
             must_fail(lambda:validate_self_reinit_disagreement(original,version,clean),'unreviewed discrepancy version')
         for mutation in ('owner','companion','name','marker','expected','other-original','status0','status42','status2','signal','stdout','stderr'):
             case=copy.copy(original); bad=copy.copy(clean)
@@ -638,8 +645,38 @@ def controls(d):
             elif mutation=='signal': bad.returncode=-11
             elif mutation=='stdout': bad.stdout='unexpected output'
             else: bad.stderr='unexpected diagnostic'
-            for version in ('11.5.0','13.4.0'):
+            for version in ('11.5.0','13.3.0'):
                 must_fail(lambda:validate_self_reinit_disagreement(case,version,bad),'self-reinit '+mutation)
+    # Identity/routing poison controls only, NOT native outcome observations.
+    exact_case=next(c for c in fixtures() if c.gcc11_disagreement)
+    for version in SELF_REINIT_GCC_VERSIONS:
+        good_banner='gcc (GCC) '+version+'\n'
+        def controlled_run(banner, status=0, stderr='', reported=version):
+            def fake_invoke(command):
+                if command[-1]=='--version':
+                    return subprocess.CompletedProcess(command,status,banner,stderr)
+                return subprocess.CompletedProcess(command,1,'','')
+            def fake_program(*args):
+                result=fake_invoke(['controlled-program'])
+                assert result.returncode==42 and not result.stdout and not result.stderr
+            with patch.dict(globals(),{'invoke':fake_invoke,'producer':lambda *a,**k: None,'run_program':fake_program}):
+                return run_native_case('controlled-gcc',[],d/'controlled-program',exact_case,reported)
+        assert controlled_run(good_banner) is False
+        assert controlled_run('gcc (Ubuntu '+version+'-test) '+version+'\n') is False
+        for bad_banner,status,stderr in (
+                ('clang version '+version+'\n',0,''),
+                ('not-a-compiler '+version+'\n',0,''),
+                ('gcc (GCC) '+version+'junk\n',0,''),
+                ('gcc (GCC) '+version+'-lookalike\n',0,''),
+                ('gcc (GCC) '+version+'+lookalike\n',0,''),
+                ('clang disguised as gcc (GCC) '+version+'\n',0,''),
+                ('gcc (GCC) 0'+version+'\n',0,''),
+                ('gcc (GCC) 13.99.999\n',0,''),
+                (good_banner.rstrip('\n'),0,''),
+                ('',0,''),(good_banner,1,''),(good_banner,0,'tool noise\n')):
+            must_fail(lambda:controlled_run(bad_banner,status,stderr),'GCC discrepancy identity')
+        for unknown_version in ('11','11.0','11.99.999','13','13.3','13.3.1','13.99.999','13.4.0','13.3.0junk','13.3.0\n','013.3.0','13.3.00'):
+            must_fail(lambda:controlled_run(good_banner,reported=unknown_version),'unobserved discrepancy routing')
     # Each GCC13 diagnostic override remains exact-original/full-stream bound.
     for name,expected in GCC13_CONSTRAINTS.items():
         source.write_text(dict(CONSTRAINTS)[name]+'\n'); output.unlink(missing_ok=True)
