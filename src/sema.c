@@ -103,6 +103,8 @@ struct sema {
 	size_t initializer_store_count;
 	size_t initializer_node_count;
 	size_t initializer_designator_count;
+	struct initializer_ancestry_memo *initializer_ancestry;
+	size_t initializer_ancestry_work;
 };
 
 static bool same_name(struct token left, struct token right)
@@ -2220,42 +2222,162 @@ static bool initializer_store(struct initializer_builder *builder,
 	return true;
 }
 
-/* Byte containment alone would confuse a union with its first member at
- * the same address. Follow physical type ancestry before forgetting a choice. */
-static bool initializer_contains_union(const struct type *type, uint64_t offset,
-	const struct initializer_union_selection *selection, unsigned depth)
+enum initializer_ancestry_limits {
+	initializer_ancestry_slots = 8192,
+	initializer_ancestry_max_states = 4096,
+	initializer_ancestry_max_work = 1024 * 1024,
+};
+
+struct initializer_ancestry_entry {
+	const struct type *type;
+	uint64_t offset;
+	unsigned generation;
+	bool complete;
+};
+
+/* One lazily allocated cache per TU, reused between all initializer plans.
+ * The target selection is fixed during each generation. */
+struct initializer_ancestry_memo {
+	unsigned generation;
+	struct initializer_ancestry_entry entries[initializer_ancestry_slots];
+};
+
+struct initializer_ancestry_query {
+	struct initializer_builder *builder;
+	const struct initializer_union_selection *selection;
+	struct initializer_ancestry_memo *memo;
+	size_t states;
+	struct source_location location;
+};
+
+enum initializer_ancestry_result {
+	initializer_ancestry_absent,
+	initializer_ancestry_present,
+	initializer_ancestry_failed,
+};
+
+static bool initializer_ancestry_step(struct initializer_ancestry_query *query)
 {
-	if (depth > ast_max_expression_depth || selection->offset < offset)
-		return false;
+	if (query->builder->sema->initializer_ancestry_work >= initializer_ancestry_max_work)
+		return initializer_error(query->builder, query->location,
+			"initializer union ancestry exceeds work limit (1048576)");
+	query->builder->sema->initializer_ancestry_work++;
+	return true;
+}
+
+/* Byte containment alone would confuse a union with its first member at the
+ * same address. Follow physical type/offset ancestry, but memoize negative DAG
+ * states: shared overlapping union alternatives must not expand exponentially.
+ * Exhaustion is a semantic failure, never evidence of presence or absence. */
+static enum initializer_ancestry_result initializer_contains_union(
+	struct initializer_ancestry_query *query, const struct type *type,
+	uint64_t offset, unsigned depth)
+{
+	const struct initializer_union_selection *selection = query->selection;
+	struct initializer_ancestry_entry *cached;
+	size_t slot;
+	if (!initializer_ancestry_step(query))
+		return initializer_ancestry_failed;
+	if (depth > ast_max_expression_depth) {
+		initializer_error(query->builder, query->location,
+			"initializer union ancestry exceeds depth limit (128)");
+		return initializer_ancestry_failed;
+	}
+	if (selection->offset < offset || selection->offset - offset >= type_object_size(type))
+		return initializer_ancestry_absent;
 	if (type == selection->type && offset == selection->offset)
-		return true;
+		return initializer_ancestry_present;
+	if (type->kind != type_kind_array && !type_is_record(type))
+		return initializer_ancestry_absent;
+	slot = (((uintptr_t)type >> 3) ^ offset ^ (offset >> 13)) & (initializer_ancestry_slots - 1);
+	for (;;) {
+		if (!initializer_ancestry_step(query))
+			return initializer_ancestry_failed;
+		cached = &query->memo->entries[slot];
+		if (cached->generation != query->memo->generation)
+			break;
+		if (cached->type == type && cached->offset == offset) {
+			if (cached->complete)
+				return initializer_ancestry_absent;
+			initializer_error(query->builder, query->location, "cyclic initializer union ancestry");
+			return initializer_ancestry_failed;
+		}
+		slot = (slot + 1) & (initializer_ancestry_slots - 1);
+	}
+	if (query->states == initializer_ancestry_max_states) {
+		initializer_error(query->builder, query->location,
+			"initializer union ancestry exceeds state limit (4096)");
+		return initializer_ancestry_failed;
+	}
+	query->states++;
+	*cached = (struct initializer_ancestry_entry) {
+		.type = type, .offset = offset, .generation = query->memo->generation,
+	};
 	if (type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)type;
 		uint64_t stride = type_object_size(array->element);
-		uint64_t index = stride ? (selection->offset - offset) / stride : 0;
-		return stride && index < array->count && initializer_contains_union(array->element,
-			offset + index * stride, selection, depth + 1);
-	}
-	if (type_is_record(type)) {
-		for (const struct record_member *member = type_record_definition(type)->members; member; member = member->next)
+		uint64_t index = (selection->offset - offset) / stride;
+		if (index < array->count) {
+			enum initializer_ancestry_result result = initializer_contains_union(query,
+				array->element, offset + index * stride, depth + 1);
+			if (result != initializer_ancestry_absent)
+				return result;
+		}
+	} else {
+		for (const struct record_member *member = type_record_definition(type)->members;
+			member; member = member->next) {
+			if (!initializer_ancestry_step(query))
+				return initializer_ancestry_failed;
 			if (selection->offset >= offset + member->offset &&
-				selection->offset < offset + member->offset + type_object_size(member->type) &&
-				initializer_contains_union(member->type, offset + member->offset, selection, depth + 1))
-				return true;
+				selection->offset - (offset + member->offset) < type_object_size(member->type)) {
+				enum initializer_ancestry_result result = initializer_contains_union(query,
+					member->type, offset + member->offset, depth + 1);
+				if (result != initializer_ancestry_absent)
+					return result;
+			}
+		}
 	}
-	return false;
+	cached->complete = true;
+	return initializer_ancestry_absent;
 }
 
-static void initializer_forget_unions(struct initializer_builder *builder,
-	const struct type *type, uint64_t offset)
+static bool initializer_forget_unions(struct initializer_builder *builder,
+	const struct type *type, uint64_t offset, struct source_location location)
 {
 	struct initializer_union_selection **slot = &builder->unions;
+	uint64_t size = type_object_size(type);
 	while (*slot) {
-		if (initializer_contains_union(type, offset, *slot, 0))
-			*slot = (*slot)->next;
+		struct initializer_union_selection *selection = *slot;
+		if (selection->offset < offset || selection->offset - offset >= size) {
+			slot = &selection->next;
+			continue;
+		}
+		if (!builder->sema->initializer_ancestry) {
+			builder->sema->initializer_ancestry = initializer_alloc(builder,
+				sizeof(*builder->sema->initializer_ancestry), location);
+			if (!builder->sema->initializer_ancestry)
+				return false;
+		}
+		struct initializer_ancestry_memo *memo = builder->sema->initializer_ancestry;
+		/* The generation lives in the shared cache, outside the sema value
+		 * snapshot; rollback cannot reuse a prior target's generation. Clear
+		 * on unsigned wrap as well, without assuming error recovery behavior. */
+		if (++memo->generation == 0) {
+			memset(memo->entries, 0, sizeof(memo->entries));
+			memo->generation = 1;
+		}
+		struct initializer_ancestry_query query = {
+			.builder = builder, .selection = selection, .memo = memo, .location = location,
+		};
+		enum initializer_ancestry_result result = initializer_contains_union(&query, type, offset, 0);
+		if (result == initializer_ancestry_failed)
+			return false;
+		if (result == initializer_ancestry_present)
+			*slot = selection->next;
 		else
-			slot = &(*slot)->next;
+			slot = &selection->next;
 	}
+	return true;
 }
 
 static bool initializer_clear(struct initializer_builder *builder, const struct type *type,
@@ -2264,7 +2386,8 @@ static bool initializer_clear(struct initializer_builder *builder, const struct 
 	if (!type_is_complete_object(type))
 		return true;
 	uint64_t size = type_object_size(type);
-	initializer_forget_unions(builder, type, offset);
+	if (!initializer_forget_unions(builder, type, offset, syntax->location))
+		return false;
 	return initializer_store(builder, &(struct ast_initializer_plan_entry) {
 		.kind = ast_initializer_write_zero, .offset = offset, .length = size,
 		.type = type, .syntax = syntax,
@@ -2285,9 +2408,10 @@ static bool initializer_select_unions(struct initializer_builder *builder,
 				break;
 		if (selection && selection->member == member)
 			continue;
-		/* A union switch replaces its entire prior value, not just the bytes
-		 * occupied by the newly selected smaller alternative. */
-		if (!initializer_clear(builder, parent->type, parent->offset, syntax))
+		/* Only a known alternative switch discards the prior union value.
+		 * No selection may mean an explicit whole-union/parent-record copy:
+		 * a first partial member write must preserve its disjoint bytes. */
+		if (selection && !initializer_clear(builder, parent->type, parent->offset, syntax))
 			return false;
 		selection = initializer_alloc(builder, sizeof(*selection), syntax->location);
 		if (!selection)
@@ -2570,7 +2694,8 @@ static bool initializer_value(struct initializer_builder *builder,
 		if (builder->is_static)
 			return initializer_error(builder, syntax->location, "static record copy is not a constant initializer");
 		store.kind = ast_initializer_write_copy;
-		initializer_forget_unions(builder, store.type, store.offset);
+		if (!initializer_forget_unions(builder, store.type, store.offset, syntax->location))
+			return false;
 	} else {
 		struct static_data_value value;
 		store.kind = ast_initializer_write_expression;
