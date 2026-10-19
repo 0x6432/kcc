@@ -239,7 +239,7 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 		if (initializer_condition)
 			return difference_initializer_addresses((const struct ast_pointer_difference_expression *)expression);
 		return constant_failure(expression, constant_not_constant,
-			"expression is not an integer constant expression");
+			"operand is not an integer constant expression");
 	case expression_logical: {
 		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
 		struct constant_result left = evaluate(node->left, evaluated, initializer_condition);
@@ -392,6 +392,14 @@ struct address_path {
 	const struct record_member *members[ast_max_expression_depth];
 	unsigned count;
 	bool ambiguous;
+	const struct type *recovery_root;
+	uint64_t recovery_start;
+	unsigned recovery_prefix;
+	const struct type *recovery_target;
+	uint64_t recovery_address;
+	uint64_t recovery_domain_start, recovery_stride, recovery_extent;
+	unsigned recovery_count;
+	bool recovery_known_extent;
 };
 
 struct address_domain {
@@ -505,6 +513,7 @@ struct subobject_search_failure {
 	uint64_t relative;
 };
 struct subobject_search {
+	const struct address_path *desired_path;
 	size_t work;
 	bool exhausted;
 	struct subobject_search_failure failures[subobject_search_memo_size];
@@ -557,6 +566,13 @@ static bool find_actual_domain_step(const struct type *root, uint64_t start, uin
 		bool found = false;
 		struct address_proof selected = *proof;
 		for (const struct record_member *member = type_record_definition(root)->members; member; member = member->next) {
+			if (++search->work > subobject_search_work_limit) {
+				search->exhausted = true;
+				return false;
+			}
+			if (search->desired_path && (proof->path.count >= search->desired_path->count ||
+				search->desired_path->members[proof->path.count] != member))
+				continue;
 			if (relative < member->offset || relative - member->offset >= type_object_size(member->type))
 				continue;
 			struct address_proof candidate = *proof;
@@ -602,7 +618,7 @@ static bool find_actual_domain(const struct type *root, uint64_t start, uint64_t
 	size_t slot = (((uintptr_t)root >> 3) ^ ((uintptr_t)target >> 3) ^
 		(size_t)(relative * UINT64_C(11400714819323198485))) & (subobject_search_memo_size - 1);
 	size_t empty = subobject_search_memo_size;
-	for (size_t i = 0; i < subobject_search_memo_size; i++) {
+	for (size_t i = 0; !search->desired_path && i < subobject_search_memo_size; i++) {
 		size_t index = (slot + i) & (subobject_search_memo_size - 1);
 		const struct subobject_search_failure *failure = &search->failures[index];
 		if (!failure->root) {
@@ -619,6 +635,30 @@ static bool find_actual_domain(const struct type *root, uint64_t start, uint64_t
 	return false;
 }
 
+/* Preserve the search origin so an overlapping union conversion can later
+ * be matched to a specific named member domain, rather than guessed by offset. */
+static bool find_cast_domain(const struct type *root, uint64_t start, uint64_t address,
+	const struct type *target, struct address_proof *proof, struct subobject_search *search)
+{
+	unsigned prefix = proof->path.count;
+	bool inherited_alias = proof->path.ambiguous && proof->path.recovery_root;
+	if (!find_actual_domain(root, start, address, target, proof, 0, search))
+		return false;
+	if (!inherited_alias) {
+		proof->path.recovery_root = root;
+		proof->path.recovery_start = start;
+		proof->path.recovery_prefix = prefix;
+		proof->path.recovery_target = target;
+		proof->path.recovery_address = address;
+		proof->path.recovery_domain_start = proof->start;
+		proof->path.recovery_stride = proof->stride;
+		proof->path.recovery_extent = proof->extent;
+		proof->path.recovery_known_extent = proof->known_extent;
+		proof->path.recovery_count = proof->path.count;
+	}
+	return true;
+}
+
 static bool recover_cast_domain(struct address_proof *proof, const struct type *target)
 {
 	uint64_t address = (uint64_t)proof->result.address.byte_addend;
@@ -627,16 +667,16 @@ static bool recover_cast_domain(struct address_proof *proof, const struct type *
 
 	if (proof->byte_view_type)
 		candidate.path = proof->byte_view_path;
-	if (proof->byte_view_type && find_actual_domain(proof->byte_view_type,
-		proof->byte_view_start, address, target, &candidate, 0, &search)) {
+	if (proof->byte_view_type && find_cast_domain(proof->byte_view_type,
+		proof->byte_view_start, address, target, &candidate, &search)) {
 		*proof = candidate;
 		return true;
 	}
 	if (!proof->element || (proof->known_extent && proof->position >= proof->extent))
 		goto failure;
 	candidate.path = proof->path;
-	if (type_is_record(proof->element) && find_actual_domain(proof->element, address,
-		address, target, &candidate, 0, &search)) {
+	if (type_is_record(proof->element) && find_cast_domain(proof->element, address,
+		address, target, &candidate, &search)) {
 		*proof = candidate;
 		return true;
 	}
@@ -645,8 +685,8 @@ static bool recover_cast_domain(struct address_proof *proof, const struct type *
 	struct address_proof member = *proof;
 	candidate.path = (struct address_path) { 0 };
 	if (type_is_record(target) && find_actual_domain(target, address, address,
-		proof->element, &member, 0, &search) && find_actual_domain(proof->storage_type, 0,
-		address, target, &candidate, 0, &search)) {
+		proof->element, &member, 0, &search) && find_cast_domain(proof->storage_type, 0,
+		address, target, &candidate, &search)) {
 		*proof = candidate;
 		return true;
 	}
@@ -1068,6 +1108,42 @@ static struct constant_result compare_initializer_addresses(const struct ast_bin
 	}
 }
 
+/* A suitably converted union pointer may designate each compatible member.
+ * Resolve only cast-produced alternatives against the other operand's nominal
+ * path. Direct .a and .b accesses never acquire this conversion alias. */
+static void resolve_cast_alias(struct address_proof *proof, const struct address_path *desired)
+{
+	if (!proof->path.ambiguous || !proof->path.recovery_root || !proof->element)
+		return;
+	unsigned prefix = proof->path.recovery_prefix;
+	if (prefix > desired->count || prefix > proof->path.count ||
+		memcmp(proof->path.members, desired->members, prefix * sizeof(desired->members[0])))
+		return;
+	struct address_proof candidate = *proof;
+	struct subobject_search search = { .desired_path = desired };
+	candidate.path.count = prefix;
+	candidate.path.ambiguous = false;
+	unsigned recovered_count = proof->path.recovery_count;
+	if (recovered_count > proof->path.count || desired->count != proof->path.count ||
+		memcmp(proof->path.members + recovered_count, desired->members + recovered_count,
+			(proof->path.count - recovered_count) * sizeof(desired->members[0])))
+		return;
+	if (find_actual_domain(proof->path.recovery_root, proof->path.recovery_start,
+		proof->path.recovery_address, proof->path.recovery_target, &candidate, 0, &search) &&
+		candidate.start == proof->path.recovery_domain_start && candidate.stride == proof->path.recovery_stride &&
+		candidate.known_extent == proof->path.recovery_known_extent &&
+		(!candidate.known_extent || candidate.extent == proof->path.recovery_extent) &&
+		candidate.path.count == recovered_count &&
+		!memcmp(candidate.path.members, desired->members, recovered_count * sizeof(desired->members[0]))) {
+		memcpy(proof->path.members, candidate.path.members, recovered_count * sizeof(desired->members[0]));
+		proof->path.ambiguous = false;
+	}
+	if (search.exhausted) {
+		proof->result.status = constant_invalid;
+		proof->result.message = "static address subobject proof exceeds work limit (16384)";
+	}
+}
+
 /* Only the private address-initializer predicate context admits this form.
  * Strict integer/arithmetic constant expression operand rules are unchanged. */
 static struct constant_result difference_initializer_addresses(const struct ast_pointer_difference_expression *node)
@@ -1090,6 +1166,14 @@ static struct constant_result difference_initializer_addresses(const struct ast_
 		case static_address_compound_literal:
 			same = left.result.address.base.compound_literal == right.result.address.base.compound_literal; break;
 		}
+	}
+	if (same && !left.is_null && !right.is_null) {
+		resolve_cast_alias(&right, &left.path);
+		resolve_cast_alias(&left, &right.path);
+		if (left.result.status != constant_value)
+			return constant_failure(expression, left.result.status, left.result.message);
+		if (right.result.status != constant_value)
+			return constant_failure(expression, right.result.status, right.result.message);
 	}
 	if (!same || left.is_null || right.is_null || !left.element || !right.element ||
 		!node->element_size || left.stride != node->element_size || right.stride != node->element_size ||
