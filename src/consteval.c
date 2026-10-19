@@ -319,7 +319,14 @@ static struct address_initializer_result direct_address(const struct ast_express
 		const struct ast_compound_literal_expression *literal =
 			(const struct ast_compound_literal_expression *)expression;
 
-		if (!literal->object || literal->object->is_thread_local)
+		if (!literal->object) {
+			if (literal->storage != ast_compound_literal_static)
+				break;
+			result.address.kind = static_address_compound_literal;
+			result.address.base.compound_literal = literal;
+			return result;
+		}
+		if (literal->object->is_thread_local)
 			break;
 		result.address.kind = static_address_object;
 		result.address.base.object = literal->object;
