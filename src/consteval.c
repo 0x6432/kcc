@@ -554,22 +554,32 @@ static bool find_actual_domain_step(const struct type *root, uint64_t start, uin
 			find_actual_domain(array->element, start + index * stride, address, target, proof, depth + 1, search);
 	}
 	if (type_is_record(root) && type_is_complete_object(root)) {
+		bool found = false;
+		struct address_proof selected = *proof;
 		for (const struct record_member *member = type_record_definition(root)->members; member; member = member->next) {
 			if (relative < member->offset || relative - member->offset >= type_object_size(member->type))
 				continue;
-			struct address_path saved = proof->path;
-			if (proof->path.count >= ast_max_expression_depth) {
+			struct address_proof candidate = *proof;
+			if (candidate.path.count >= ast_max_expression_depth) {
 				search->exhausted = true;
 				return false;
 			}
-			proof->path.members[proof->path.count++] = member;
-			/* A cast cannot choose between overlapping union alternatives. Direct
-			 * member syntax, unlike this physical search, supplies that identity. */
-			if (type_record_definition(root)->is_union && type_record_definition(root)->members->next)
-				proof->path.ambiguous = true;
-			if (find_actual_domain(member->type, start + member->offset, address, target, proof, depth + 1, search))
-				return true;
-			proof->path = saved;
+			candidate.path.members[candidate.path.count++] = member;
+			if (find_actual_domain(member->type, start + member->offset, address, target, &candidate, depth + 1, search)) {
+				if (!found)
+					selected = candidate;
+				else
+					selected.path.ambiguous = true;
+				found = true;
+				if (!type_record_definition(root)->is_union)
+					break;
+			}
+			if (search->exhausted)
+				return false;
+		}
+		if (found) {
+			*proof = selected;
+			return true;
 		}
 	}
 	return false;
