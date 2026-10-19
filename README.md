@@ -6,14 +6,23 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
-M16 adds struct/union definitions, natural layout, member access, zero record
-storage, checked subobject addresses and address-backed aggregate copies. Existing
-storage/linkage features compose with records. See `docs/m16-records.md` for the
-precise target and resource contracts. General initializers remain M17,
-aggregate-by-value ABI M21, bit-fields/flexible arrays M22, and C23 expanded tag
-compatibility/redefinitions M23h. No ISO C23 conformance claim is made.
+M18 adds ordinary int-range enums and declaration alignment alongside existing
+fixed sizeof/alignof, strict integer constant evaluation and static assertions. M17 general initialization/designators/compound literals and
+M16 records remain supported. Read `docs/m18-enums-alignment.md` for target,
+scoping, alignment and resource contracts. Exact release evidence is recorded
+separately; implementation alone is not a green release gate. Wider/fixed-
+underlying C23 enums remain M23f, expanded tag redefinitions M23h, aggregate-by-value ABI
+M21 and bit-fields/flexible arrays M22. No ISO C23 conformance claim is made.
 
 ### Previous checkpoint
+
+M17 added nested scalar/aggregate initialization, designators, zero filling,
+runtime initialization and automatic/static/thread compound literals for existing
+supported types. Checked initialization plans preserve source-point address
+proofs and capture-before-clear behavior. See `docs/m17-initializers.md` for
+precise boundaries; later types, ABI and constexpr work remain explicit.
+
+### Historical checkpoints
 
 M15 storage/linkage closure: block extern objects/functions, persistent static
 locals, real thread-local storage, TU-end inline linkage, and checked symbolic
@@ -274,7 +283,8 @@ constraints and adjusted-array ABI behavior remain enforced; VLAs are rejected.
 M18b2: static_assert/_Static_assert declarations consume checked integer constant
 expressions at file/block scope and in for initializers. Optional ordinary-string
 messages preserve all diagnostic bytes safely. Successful assertions emit no
-runtime code or message data; VLA/enums/constexpr remain later work.
+runtime code or message data; VLA/constexpr remain later work. Ordinary enums
+are part of the current M18 integration.
 
 M18b1: a pure, checked integer constant evaluator preserves target bits/types and
 locations, distinguishes nonconstant forms from invalid arithmetic, and handles

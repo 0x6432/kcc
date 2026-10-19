@@ -2200,3 +2200,15 @@ unevaluated queries do not allocate these. Codegen consumes checked layout and
 uses address-backed record values without pretending aggregate ABI support.
 Static member proofs retain canonical relocation bases and start a selected
 subobject domain, not a fabricated enclosing-object domain. See m16-records.md.
+
+## M18 enum/alignment boundary
+
+Concrete enum syntax retains enumerators and source expressions; checked enum
+constant leaves carry int-typed bits without runtime storage. Stable nominal
+enum definitions are shared through qualified views and must be complete before
+layout/conversion. Common tag and ordinary-name scopes preserve prototype and
+definition capture and rollback. Alignment lists are immutable source syntax;
+checked effective values are declaration/member metadata, never scalar type
+mutation or ABI type decoration. Enum/cache/binding and alignment publication
+are journaled across enclosing-initializer failure. See m18-enums-alignment.md
+for target policy, exact budgets and semantic versus native-oracle boundaries.

@@ -329,8 +329,21 @@ static void test_static_preprocessing_identifier(void)
 	check_raw("static name", tokens, sizeof(tokens) / sizeof(tokens[0]), 0);
 }
 
+static void test_enumeration_alignment_preprocessing_identifiers(void)
+{
+	const struct expected_pp_token tokens[] = {
+		{ pp_identifier, "enum", false, true },
+		{ pp_identifier, "alignas", true, false },
+		{ pp_identifier, "_Alignas", true, false },
+		{ pp_eof, "", false, false },
+	};
+
+	check_raw("enum alignas _Alignas", tokens, sizeof(tokens) / sizeof(tokens[0]), 0);
+}
+
 int main(void)
 {
+	test_enumeration_alignment_preprocessing_identifiers();
 	test_extern_preprocessing_identifier();
 	test_static_preprocessing_identifier();
 	test_keywords_and_spacing();

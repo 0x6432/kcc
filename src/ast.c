@@ -1315,3 +1315,53 @@ struct ast_compound_literal_expression *ast_new_compound_literal(struct arena *a
 		};
 	return node;
 }
+
+struct ast_enum_type_syntax *ast_new_enum_type_syntax(struct arena *arena,
+	struct token keyword, struct token tag)
+{
+	struct ast_enum_type_syntax *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_enum_type_syntax) {
+			.syntax = { .kind = type_syntax_enum, .location = keyword.location },
+			.tag = tag,
+		};
+	return node;
+}
+
+struct ast_enumerator *ast_new_enumerator(struct arena *arena,
+	struct token name, struct ast_expression *value)
+{
+	struct ast_enumerator *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_enumerator) { .name = name, .value = value };
+	return node;
+}
+
+struct ast_enumerator_expression *ast_new_enumerator_expression(struct arena *arena,
+	struct token name, struct ast_enumerator *enumerator)
+{
+	struct ast_enumerator_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_enumerator_expression) {
+			.expression = { .kind = expression_enumerator, .location = name.location,
+				.type = enumerator->type, .depth = 1 },
+			.enumerator = enumerator, .bits = enumerator->bits,
+		};
+	return node;
+}
+
+struct ast_alignment_specifier *ast_new_alignment_specifier(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax,
+	struct ast_expression *expression)
+{
+	struct ast_alignment_specifier *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_alignment_specifier) { .location = location,
+			.type_syntax = type_syntax, .expression = expression,
+			.after_type_specifier = false };
+	return node;
+}

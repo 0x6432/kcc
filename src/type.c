@@ -45,6 +45,8 @@ static const struct integer_properties integer_properties[] = {
 
 bool type_is_integer(const struct type *type)
 {
+	if (type->kind == type_kind_enum)
+		return type_enum_definition(type)->complete;
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
 			return true;
@@ -58,7 +60,7 @@ bool type_is_scalar(const struct type *type)
 
 bool type_is_object(const struct type *type)
 {
-	return type_is_scalar(type) || type_is_record(type) || type->kind == type_kind_array ||
+	return type_is_scalar(type) || type_is_record(type) || type->kind == type_kind_enum || type->kind == type_kind_array ||
 		type->kind == type_kind_void;
 }
 
@@ -148,6 +150,10 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 
 static const struct integer_properties *integer_properties_for(const struct type *type)
 {
+	if (type->kind == type_kind_enum) {
+		assert(type_enum_definition(type)->complete);
+		type = type_enum_definition(type)->compatible_type;
+	}
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
 			return &integer_properties[i];
@@ -168,6 +174,8 @@ unsigned type_integer_width(const struct type *type)
 /* All implemented types below int fit in int, including unsigned char/short. */
 const struct type *type_integer_promotion(const struct type *type)
 {
+	if (type->kind == type_kind_enum)
+		type = type_enum_definition(type)->compatible_type;
 	if (type_integer_width(type) < 32)
 		return &type_int;
 	return type;
@@ -296,6 +304,14 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 		copy->type.qualifiers = qualifiers;
 		return &copy->type;
 	}
+	if (type->kind == type_kind_enum) {
+		struct enum_type *copy = arena_alloc(arena, sizeof(*copy));
+		if (copy) {
+			*copy = *(const struct enum_type *)type;
+			copy->type.qualifiers = qualifiers;
+		}
+		return copy ? &copy->type : NULL;
+	}
 	if (type_is_record(type)) {
 		struct record_type *copy = arena_alloc(arena, sizeof(*copy));
 
@@ -335,8 +351,19 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	/* Shared immutable types denote the same type without another traversal. */
 	if (left == right)
 		return true;
-	if (left->kind != right->kind ||
-		(!ignore_root_qualifiers && left->qualifiers != right->qualifiers))
+	if (!ignore_root_qualifiers && left->qualifiers != right->qualifiers)
+		return false;
+	if (left->kind == type_kind_enum || right->kind == type_kind_enum) {
+		if (left->kind == type_kind_enum && right->kind == type_kind_enum)
+			return type_enum_definition(left) == type_enum_definition(right);
+		if (require_same_type)
+			return false;
+		const struct type *enumeration = left->kind == type_kind_enum ? left : right;
+		const struct type *integer = left->kind == type_kind_enum ? right : left;
+		struct enum_definition *definition = type_enum_definition(enumeration);
+		return definition->complete && integer->kind == definition->compatible_type->kind;
+	}
+	if (left->kind != right->kind)
 		return false;
 	if (type_is_record(left))
 		return type_record_definition(left) == type_record_definition(right);
@@ -392,7 +419,11 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right)
 {
 	assert(type_compatible(left, right));
-	if (left == right || type_is_record(left) || type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
+	/* Retain a nominal enum constraint through its compatible integer;
+	 * otherwise int/enum/int composites could erase conflicting identities. */
+	if (right->kind == type_kind_enum && left->kind != type_kind_enum)
+		return right;
+	if (left == right || left->kind == type_kind_enum || type_is_record(left) || type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return left;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;
@@ -510,7 +541,7 @@ static bool checked_member_layout(const struct type *type, unsigned depth,
 	*size = type_object_size(type);
 	*alignment = type_object_alignment(type);
 	return *size && *size <= type_max_record_size && *alignment &&
-		!(*alignment & (*alignment - 1)) && *alignment <= 8;
+		!(*alignment & (*alignment - 1)) && *alignment <= 16;
 }
 
 static bool checked_align(uint64_t value, unsigned alignment, uint64_t *result)
@@ -537,6 +568,12 @@ bool type_record_layout(struct record_definition *definition)
 		if (++count > 1024 || !checked_member_layout(member->type, 0,
 			&member_size, &member_alignment))
 			return false;
+		if (member->alignment) {
+			if (member->alignment < member_alignment || member->alignment > 16 ||
+				(member->alignment & (member->alignment - 1)))
+				return false;
+			member_alignment = member->alignment;
+		}
 		if (member_alignment > alignment)
 			alignment = member_alignment;
 		if (definition->is_union) {
@@ -559,6 +596,8 @@ bool type_record_layout(struct record_definition *definition)
 
 		assert(valid);
 		(void)valid;
+		if (member->alignment)
+			member_alignment = member->alignment;
 		if (definition->is_union)
 			member->offset = 0;
 		else {
@@ -636,4 +675,20 @@ const struct record_member *type_record_find_member(const struct type *type,
 	if (member && offset)
 		*offset = result_offset;
 	return member;
+}
+
+struct enum_definition *type_enum_definition(const struct type *type)
+{
+	return type->kind == type_kind_enum ? ((const struct enum_type *)type)->definition : NULL;
+}
+
+struct enum_type *type_new_enum(struct arena *arena)
+{
+	struct enum_type *type = arena_alloc(arena, sizeof(*type));
+	struct enum_definition *definition = arena_alloc(arena, sizeof(*definition));
+	if (!type || !definition)
+		return NULL;
+	*definition = (struct enum_definition) { 0 };
+	*type = (struct enum_type) { .type = { .kind = type_kind_enum }, .definition = definition };
+	return type;
 }

@@ -98,7 +98,12 @@ static void save_type(struct snapshot *s, const struct type *t)
 			if (!save(s, m, sizeof *m)) break;
 			save_type(s, m->type);
 		}
-	} else if (t->kind == type_kind_pointer) {
+	} else if (t->kind == type_kind_enum) {
+        const struct enum_type *n = (const struct enum_type *)t;
+        if (!save(s, n, sizeof *n)) return;
+        if (save(s, n->definition, sizeof *n->definition))
+            save_type(s, n->definition->compatible_type);
+    } else if (t->kind == type_kind_pointer) {
 		if (save(s, t, sizeof(struct pointer_type)))
 			save_type(s, ((const struct pointer_type *)t)->referent);
 	} else if (t->kind == type_kind_array) {
@@ -123,6 +128,24 @@ static void save_initializer(struct snapshot *, const struct ast_initializer *);
 static void save_plan(struct snapshot *, const struct ast_initializer_plan *);
 static void save_object(struct snapshot *, const struct external_object_symbol *);
 static void save_local(struct snapshot *, const struct ast_local_declaration *);
+static void save_alignments(struct snapshot *s, const struct ast_alignment_specifier *n)
+{
+    for (; n; n=n->next) {
+        if (!save(s,n,sizeof *n)) break;
+        save_syntax(s,n->type_syntax);
+        if (n->expression) save_expression(s,n->expression);
+    }
+}
+
+static void save_enumerators(struct snapshot *s, const struct ast_enumerator *n)
+{
+    for (; n; n=n->next) {
+        if (!save(s,n,sizeof *n)) break;
+        save_type(s,n->type);
+        if (n->value) save_expression(s,n->value);
+    }
+}
+
 
 #define SAVE_NODE(T) const struct T *n = (const struct T *)e; \
 	if (!save(s, n, sizeof *n)) return
@@ -210,7 +233,13 @@ static void save_expression(struct snapshot *s, const struct ast_expression *e)
 		}
 		break;
 	}
-	case expression_integer: (void)save(s, e, sizeof(struct ast_integer_expression)); break;
+	case expression_enumerator: {
+        SAVE_NODE(ast_enumerator_expression); save_enumerators(s,n->enumerator); break;
+    }
+    case expression_alignof: {
+        SAVE_NODE(ast_alignof_expression); save_syntax(s,n->type_syntax); break;
+    }
+    case expression_integer: (void)save(s, e, sizeof(struct ast_integer_expression)); break;
 	case expression_nullptr: (void)save(s, e, sizeof(struct ast_nullptr_expression)); break;
 	case expression_sizeof_type: {
         SAVE_NODE(ast_sizeof_type_expression); save_syntax(s, n->type_syntax); break;
@@ -218,7 +247,7 @@ static void save_expression(struct snapshot *s, const struct ast_expression *e)
     case expression_compound_literal: {
         SAVE_NODE(ast_compound_literal_expression);
         assert(s->literal_count < 256); s->literals[s->literal_count++] = n;
-        save_syntax(s, n->type_syntax); save_initializer(s, n->initializer_syntax);
+        save_syntax(s, n->type_syntax); save_alignments(s,n->alignment_specifiers); save_initializer(s, n->initializer_syntax);
         save_plan(s, n->initializer_plan); save_local(s, n->local); save_object(s, n->object); break;
     }
     case expression_sizeof: { SAVE_NODE(ast_sizeof_expression); save_expression(s,n->operand); break; }
@@ -266,18 +295,21 @@ static void save_syntax(struct snapshot *s, const struct ast_type_syntax *t)
     case type_syntax_qualified: { SYNTAX(ast_qualified_type_syntax); save_syntax(s,n->base); break; }
     case type_syntax_typeof_type: { SYNTAX(ast_typeof_type_syntax); save_syntax(s,n->operand); break; }
     case type_syntax_typeof_expression: { SYNTAX(ast_typeof_expression_syntax); save_expression(s,n->operand); break; }
+    case type_syntax_enum: {
+        SYNTAX(ast_enum_type_syntax); save_enumerators(s,n->enumerators); break;
+    }
     case type_syntax_record: {
         SYNTAX(ast_record_type_syntax);
         for (const struct ast_record_member_declaration *m=n->members; m; m=m->next) {
             if (!save(s,m,sizeof *m)) break;
-            save_syntax(s,m->type_syntax);
+            save_syntax(s,m->type_syntax); save_alignments(s,m->alignment_specifiers);
         } break;
     }
     case type_syntax_function: {
         SYNTAX(ast_function_type_syntax); save_syntax(s,n->return_syntax);
         for (const struct ast_parameter *p=n->parameters; p; p=p->next) {
             if (!save(s,p,sizeof *p)) break;
-            save_syntax(s,p->type_syntax); save_type(s,p->type); save_local(s,p->local);
+            save_syntax(s,p->type_syntax); save_alignments(s,p->alignment_specifiers); save_type(s,p->type); save_local(s,p->local);
         } break;
     }
     case type_syntax_integer: { SYNTAX(ast_integer_type_syntax); break; }
@@ -317,7 +349,7 @@ static void save_object(struct snapshot *s, const struct external_object_symbol 
 static void save_local(struct snapshot *s, const struct ast_local_declaration *l)
 {
     if (!l || !save(s,l,sizeof *l)) return;
-    save_type(s,l->type); save_syntax(s,l->type_syntax);
+    save_type(s,l->type); save_syntax(s,l->type_syntax); save_alignments(s,l->alignment_specifiers);
     save_initializer(s,l->initializer_syntax); save_plan(s,l->initializer_plan);
     if (l->initializer) save_expression(s,l->initializer);
     save_object(s,l->object_symbol);
@@ -362,7 +394,7 @@ static struct snapshot *capture(struct fixture *f)
         switch (d->kind) {
         case external_object_declaration: {
             const struct ast_external_object_declaration *o=(const struct ast_external_object_declaration *)d;
-            (void)save(s,o,sizeof *o); save_type(s,o->type); save_syntax(s,o->type_syntax);
+            (void)save(s,o,sizeof *o); save_type(s,o->type); save_syntax(s,o->type_syntax); save_alignments(s,o->alignment_specifiers);
             save_initializer(s,o->initializer_syntax); save_plan(s,o->initializer_plan);
             if (o->initializer) save_expression(s,o->initializer);
             save_object(s,o->symbol); break;
@@ -379,7 +411,7 @@ static struct snapshot *capture(struct fixture *f)
         case external_declaration_tag: {
             const struct ast_external_tag_declaration *n=(const struct ast_external_tag_declaration *)d;
             (void)save(s,n,sizeof *n); (void)save(s,n->declaration,sizeof *n->declaration);
-            save_syntax(s,n->declaration->type_syntax); break;
+            save_syntax(s,n->declaration->type_syntax); save_alignments(s,n->declaration->alignment_specifiers); break;
         }
         default: assert(!"extend explicit external snapshot walker");
         }
@@ -652,8 +684,28 @@ static void check_literal_parser_budget(unsigned count, bool success)
     close_fixture(&f);
 }
 
+static void check_enum_alignment_purity(void)
+{
+    struct fixture f;
+    open_fixture(&f,"enum E { A=4 }; enum E *p=&(_Alignas(16) enum E){A};");
+    assert(sema_translation_unit(f.unit,&f.arena,&f.diagnostics));
+    struct ast_external_object_declaration *p=object(&f,1);
+    struct address_initializer_result r=pure_queries(&f,p->initializer);
+    assert(r.status==constant_value && r.address.kind==static_address_object);
+    struct snapshot *s=capture(&f);
+    assert(s->literal_count==1);
+    const struct ast_compound_literal_expression *n=s->literals[0];
+    assert(r.address.base.object==n->object);
+    assert(n->alignment==16 && n->alignment_specifiers);
+    assert(n->expression.type->kind==type_kind_enum);
+    assert(type_enum_definition(n->expression.type)->complete);
+    free(s);
+    close_fixture(&f);
+}
+
 int main(void)
 {
+    check_enum_alignment_purity();
     check_static_owners(); check_automatic_owners(); check_unevaluated_and_storage();
     check_rollback(); check_local_budget(false,ast_max_locals,true);
     check_local_budget(false,ast_max_locals+1,false);

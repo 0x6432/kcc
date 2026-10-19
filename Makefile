@@ -55,7 +55,7 @@ fuzz-compile: build/fuzz_compile
 
 test-codegen: export QBE := $(QBE)
 test-codegen: export KCC_SOURCE := $(CURDIR)
-test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
+test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast build/test_enumerations_ast build/test_alignment_specifiers_ast
 	./build/test_static_array_ast
 	./build/test_integer_initializer_ast
 	./build/test_null_initializer_ast
@@ -68,6 +68,8 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	./build/test_record_runtime_ast
 	./build/test_initialization_ast
 	./build/test_compound_literal_ast
+	./build/test_enumerations_ast
+	./build/test_alignment_specifiers_ast
 	QBE="$(QBE)" python3 tests/test_compile.py
 	QBE="$(QBE)" python3 tests/test_abi.py
 	QBE="$(QBE)" python3 tests/test_diagnostics.py
@@ -171,6 +173,8 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	python3 tests/test_initialization_promotions.py
 	python3 tests/test_initialization.py --frozen-hash "$$(git rev-parse HEAD)"
 	python3 tests/test_compound_literals.py --frozen-hash "$$(git rev-parse HEAD)"
+	python3 tests/test_enumerations.py --frozen-hash "$$(git rev-parse HEAD)"
+	python3 tests/test_alignment_specifiers.py --frozen-hash "$$(git rev-parse HEAD)"
 	python3 tests/test_function_declaration_lists.py
 	python3 tests/test_auto_explicit.py
 	python3 tests/test_local_binding_phases.py
@@ -206,7 +210,7 @@ build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
 
 test: export QBE := $(QBE)
 test: export KCC_SOURCE := $(CURDIR)
-test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
+test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast build/test_enumerations_ast build/test_alignment_specifiers_ast
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
@@ -228,6 +232,8 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	./build/test_record_runtime_ast
 	./build/test_initialization_ast
 	./build/test_compound_literal_ast
+	./build/test_enumerations_ast
+	./build/test_alignment_specifiers_ast
 	python3 tests/test_compile.py
 	python3 tests/test_diagnostics.py
 	python3 tests/test_conditions.py
@@ -330,6 +336,8 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_initialization_promotions.py
 	python3 tests/test_initialization.py --frozen-hash "$$(git rev-parse HEAD)"
 	python3 tests/test_compound_literals.py --frozen-hash "$$(git rev-parse HEAD)"
+	python3 tests/test_enumerations.py --frozen-hash "$$(git rev-parse HEAD)"
+	python3 tests/test_alignment_specifiers.py --frozen-hash "$$(git rev-parse HEAD)"
 	python3 tests/test_function_declaration_lists.py
 	python3 tests/test_auto_explicit.py
 	python3 tests/test_local_binding_phases.py
@@ -365,3 +373,9 @@ build/test_initialization_ast: tests/test_initialization_ast.c $(COMPILER_SOURCE
 
 build/test_compound_literal_ast: tests/test_compound_literal_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_compound_literal_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/test_enumerations_ast: tests/test_enumerations_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_enumerations_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/test_alignment_specifiers_ast: tests/test_alignment_specifiers_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_alignment_specifiers_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@

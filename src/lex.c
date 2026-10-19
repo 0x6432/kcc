@@ -348,6 +348,7 @@ struct keyword {
 };
 
 static const struct keyword keywords[] = {
+	{ "enum", token_enum }, { "alignas", token_alignas }, { "_Alignas", token_legacy_alignas },
 	{ "struct", token_struct }, { "union", token_union },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
@@ -824,6 +825,9 @@ const char *token_kind_name(enum token_kind kind)
 	case token_shift_right: return ">>";
 	case token_and_and: return "&&";
 	case token_or_or: return "||";
+	case token_enum: return "enum";
+	case token_alignas: return "alignas";
+	case token_legacy_alignas: return "_Alignas";
 	case token_struct: return "struct";
 	case token_union: return "union";
 	case token_dot: return ".";

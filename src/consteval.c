@@ -205,6 +205,8 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 	if (!type_is_integer(expression->type))
 		return constant_failure(expression, constant_not_constant, "integer constant expression requires integer operands");
 	switch (expression->kind) {
+	case expression_enumerator:
+		return constant_success(expression, ((const struct ast_enumerator_expression *)expression)->bits);
 	case expression_integer:
 		return constant_success(expression, ((const struct ast_integer_expression *)expression)->value);
 	case expression_boolean:

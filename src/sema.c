@@ -40,13 +40,32 @@ struct record_state {
 	struct record_state *next;
 };
 
+struct enumerator_binding {
+	struct ast_enumerator *enumerator;
+	struct enumerator_binding *next;
+};
+
+struct alignment_request {
+	struct ast_alignment_specifier *syntax;
+	unsigned request;
+	struct alignment_request *next;
+};
+
+struct semantic_publication {
+	void *target;
+	size_t size;
+	struct semantic_publication *next;
+	unsigned char saved[];
+};
+
 struct tag_binding {
 	struct token name;
-	struct record_type *type;
+	const struct type *type;
 	struct tag_binding *next;
 };
 
 struct scope {
+	struct enumerator_binding *enumerators;
 	struct tag_binding *tags;
 	struct scope *parent;
 	struct binding *bindings;
@@ -73,6 +92,15 @@ struct sema {
 	struct ast_function *function;
 	struct scope *scope;
 	struct tag_binding *file_tags;
+	struct enumerator_binding *file_enumerators;
+	struct enumerator_binding *definition_enumerators;
+	struct alignment_request *alignment_requests;
+	size_t alignment_count;
+	struct semantic_publication *publications;
+	size_t publication_count;
+	size_t enum_count;
+	size_t enumerator_count;
+	unsigned enum_nesting;
 	struct ast_function_type_syntax *definition_syntax;
 	struct tag_binding *definition_tags;
 	struct record_state *records;
@@ -128,6 +156,66 @@ static struct ast_local_declaration *find_in_scope(struct scope *scope,
 	return NULL;
 }
 
+static struct ast_enumerator *enumerator_in_scope(struct sema *sema, struct scope *scope,
+	struct token name)
+{
+	struct enumerator_binding *binding = scope ? scope->enumerators : sema->file_enumerators;
+	for (; binding; binding = binding->next)
+		if (same_name(binding->enumerator->name, name))
+			return binding->enumerator;
+	return NULL;
+}
+
+static bool typedef_in_scope(struct sema *sema, struct scope *scope, struct token name)
+{
+	for (struct typedef_binding *binding = sema->typedefs; binding; binding = binding->next)
+		if (binding->scope == scope && same_name(binding->declaration->name, name))
+			return true;
+	return false;
+}
+
+static struct ast_enumerator *find_enumerator(struct sema *sema, struct token name)
+{
+	for (struct scope *scope = sema->scope; scope; scope = scope->parent) {
+		if (find_in_scope(scope, name) || typedef_in_scope(sema, scope, name))
+			return NULL;
+		struct ast_enumerator *enumerator = enumerator_in_scope(sema, scope, name);
+		if (enumerator)
+			return enumerator;
+	}
+	return typedef_in_scope(sema, NULL, name) ? NULL : enumerator_in_scope(sema, NULL, name);
+}
+
+/* Snapshot publications, not arena lifetime. Journal size is independently bounded. */
+static bool save_publication(struct sema *sema, void *target, size_t size,
+	struct source_location location)
+{
+	if (sema->publication_count == 65536) {
+		diagnostic_error(sema->diagnostics, location, "semantic publication limit exceeded (65536)");
+		return false;
+	}
+	struct semantic_publication *entry = arena_alloc(sema->arena, sizeof(*entry) + size);
+	if (!entry) {
+		diagnostic_error(sema->diagnostics, location, "out of memory recording semantic publication");
+		return false;
+	}
+	*entry = (struct semantic_publication) { .target = target, .size = size, .next = sema->publications };
+	memcpy(entry->saved, target, size);
+	sema->publications = entry;
+	sema->publication_count++;
+	return true;
+}
+
+static void rollback_publications(struct sema *sema, struct semantic_publication *checkpoint)
+{
+	while (sema->publications != checkpoint) {
+		struct semantic_publication *entry = sema->publications;
+		memcpy(entry->target, entry->saved, entry->size);
+		sema->publications = entry->next;
+		sema->publication_count--;
+	}
+}
+
 static struct ast_local_declaration *find_local(struct sema *sema,
 	struct token name)
 {
@@ -138,6 +226,8 @@ static struct ast_local_declaration *find_local(struct sema *sema,
 
 		if (local)
 			return local;
+		if (enumerator_in_scope(sema, scope, name) || typedef_in_scope(sema, scope, name))
+			return NULL;
 		scope = scope->parent;
 	}
 	return NULL;
@@ -153,7 +243,7 @@ static struct typedef_binding *find_typedef_binding(struct sema *sema, struct to
 
 			/* A nearer object hides this alias in the ordinary namespace. */
 			while (scope && scope != binding->scope) {
-				if (find_in_scope(scope, name))
+				if (find_in_scope(scope, name) || enumerator_in_scope(sema, scope, name))
 					return NULL;
 				scope = scope->parent;
 			}
@@ -267,6 +357,160 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax);
 static bool sema_static_assertion(struct sema *sema, struct ast_static_assertion *node);
 static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal_expression *node);
+
+/* Alignment requests belong to declarations, never to shared type graphs.
+ * One immutable syntax list may serve comma declarators with distinct types. */
+static bool resolve_alignment_item(struct sema *sema, struct ast_alignment_specifier *syntax,
+	unsigned *request)
+{
+	*request = 0;
+	if (!syntax)
+		return true;
+	for (struct alignment_request *cached = sema->alignment_requests; cached; cached = cached->next)
+		if (cached->syntax == syntax) {
+			*request = cached->request;
+			return true;
+		}
+	{
+		struct ast_alignment_specifier *item = syntax;
+		if (sema->alignment_count == 4096) {
+			diagnostic_error(sema->diagnostics, item->location, "alignment specifier limit exceeded (4096)");
+			return false;
+		}
+		sema->alignment_count++;
+		uint64_t value;
+		if (item->type_syntax) {
+			const struct type *type = resolve_type_syntax(sema, item->type_syntax);
+			if (!type)
+				return false;
+			if (!type_is_complete_object(type)) {
+				diagnostic_error(sema->diagnostics, item->location, "alignment type requires a complete object type");
+				return false;
+			}
+			value = type_object_alignment(type);
+		} else {
+			if (!item->expression || !sema_expression(sema, &item->expression, true))
+				return false;
+			struct constant_result result = evaluate_integer_constant(item->expression);
+			if (result.status != constant_value) {
+				diagnostic_error(sema->diagnostics, result.location, result.message);
+				return false;
+			}
+			value = result.bits;
+			if (!type_is_unsigned(result.type) && (value & (UINT64_C(1) << (type_integer_width(result.type) - 1)))) {
+				diagnostic_error(sema->diagnostics, item->location, "alignment must not be negative");
+				return false;
+			}
+		}
+		if (value > 16 || (value && (value & (value - 1)))) {
+			diagnostic_error(sema->diagnostics, item->location,
+				"alignment is not supported by target (supported: 0, 1, 2, 4, 8, 16; no extended alignment)");
+			return false;
+		}
+		if (value > *request)
+			*request = (unsigned)value;
+	}
+	struct alignment_request *cached = arena_alloc(sema->arena, sizeof(*cached));
+	if (!cached) {
+		diagnostic_error(sema->diagnostics, syntax->location, "out of memory caching alignment request");
+		return false;
+	}
+	*cached = (struct alignment_request) { .syntax = syntax, .request = *request, .next = sema->alignment_requests };
+	sema->alignment_requests = cached;
+	return true;
+}
+
+/* Resolve each node once, including shared comma-declarator lists. */
+static bool resolve_alignment_request(struct sema *sema, struct ast_alignment_specifier *syntax,
+	unsigned *request)
+{
+	*request = 0;
+	for (struct ast_alignment_specifier *item = syntax; item; item = item->next) {
+		unsigned value;
+		if (!resolve_alignment_item(sema, item, &value))
+			return false;
+		if (value > *request)
+			*request = value;
+	}
+	return true;
+}
+
+/* No source-location ordering: macro expansion provenance is not token order.
+ * The parser records the one core type-specifier boundary explicitly. */
+static const struct type *resolve_declaration_type(struct sema *sema, struct ast_type_syntax *syntax,
+	struct ast_alignment_specifier *alignments)
+{
+	unsigned request;
+	for (struct ast_alignment_specifier *item = alignments; item; item = item->next)
+		if (!item->after_type_specifier && !resolve_alignment_item(sema, item, &request))
+			return NULL;
+	struct ast_type_syntax *core = syntax;
+	unsigned depth = 0;
+	for (;;) {
+		if (++depth > 512) {
+			diagnostic_error(sema->diagnostics, syntax->location, "declaration syntax nesting limit exceeded");
+			return NULL;
+		}
+		if (core->kind == type_syntax_qualified)
+			core = ((struct ast_qualified_type_syntax *)core)->base;
+		else if (core->kind == type_syntax_pointer)
+			core = ((struct ast_pointer_type_syntax *)core)->referent;
+		else if (core->kind == type_syntax_array)
+			core = ((struct ast_array_type_syntax *)core)->element;
+		else if (core->kind == type_syntax_function)
+			core = ((struct ast_function_type_syntax *)core)->return_syntax;
+		else
+			break;
+	}
+	if (!resolve_type_syntax(sema, core) || !resolve_alignment_request(sema, alignments, &request))
+		return NULL;
+	/* Bounds and prototype declarators follow ALL declaration specifiers. */
+	return resolve_type_syntax(sema, syntax);
+}
+
+static unsigned natural_object_alignment(const struct type *type)
+{
+	/* Incomplete outer bounds do not change element alignment. */
+	while (type->kind == type_kind_array)
+		type = ((const struct array_type *)type)->element;
+	return type_is_complete_object(type) ? type_object_alignment(type) : 0;
+}
+
+static bool effective_alignment(struct sema *sema, const struct type *type, unsigned request,
+	struct source_location location, unsigned *alignment)
+{
+	unsigned natural = natural_object_alignment(type);
+	if (request && request < natural) {
+		diagnostic_error(sema->diagnostics, location, "alignment specification weakens natural type alignment");
+		return false;
+	}
+	*alignment = request > natural ? request : natural;
+	return true;
+}
+
+static bool object_alignment(struct sema *sema, struct external_object_symbol *symbol,
+	unsigned request, bool definition, bool tentative, struct source_location location)
+{
+	unsigned alignment;
+	if (!effective_alignment(sema, symbol->type, request, location, &alignment))
+		return false;
+	if ((request && symbol->requested_alignment && request != symbol->requested_alignment) ||
+		(symbol->definition_alignment_checked && request && request != symbol->definition_alignment) ||
+		(definition && symbol->requested_alignment && request != symbol->requested_alignment)) {
+		diagnostic_error(sema->diagnostics, location, "conflicting object declaration/definition alignment");
+		return false;
+	}
+	if (request)
+		symbol->requested_alignment = request;
+	if (tentative && request)
+		symbol->tentative_alignment = request;
+	if (definition) {
+		symbol->definition_alignment_checked = true;
+		symbol->definition_alignment = request;
+	}
+	symbol->alignment = symbol->requested_alignment > alignment ? symbol->requested_alignment : alignment;
+	return true;
+}
 
 /* Records are nominal leaves in ordinary type graphs. Only this bounded,
  * acyclic by-value member walk inspects their contents; pointers stop it. */
@@ -408,7 +652,11 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	if (syntax->tag.length)
 		tag = find_tag(sema, syntax->tag, standalone || syntax->has_definition);
 	if (tag) {
-		record = tag->type;
+		if (!type_is_record(tag->type)) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "tag declared with a different kind");
+			return NULL;
+		}
+		record = (struct record_type *)tag->type;
 		if (record->definition->is_union != syntax->is_union) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
 				"tag declared with a different record kind");
@@ -434,13 +682,15 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			tag = arena_alloc(sema->arena, sizeof(*tag));
 			if (!tag)
 				goto allocation_failure;
-			*tag = (struct tag_binding) { .name = syntax->tag, .type = record, .next = *head };
+			*tag = (struct tag_binding) { .name = syntax->tag, .type = &record->type, .next = *head };
 			*head = tag;
 		}
 	}
 	definition = record->definition;
 	state = record_state(sema, &record->type);
 	assert(state);
+	if (!save_publication(sema, &syntax->syntax.type, sizeof(syntax->syntax.type), syntax->syntax.location))
+		return NULL;
 	/* Publish the identity before walking members, allowing recursive pointers. */
 	syntax->syntax.type = &record->type;
 	if (!syntax->has_definition)
@@ -456,6 +706,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	/* Completion is a transaction on the existing nominal identity. In
 	 * particular a failed definition must not publish members through a
 	 * previously captured forward pointer or qualified wrapper. */
+	if (!save_publication(sema, definition, sizeof(*definition), syntax->syntax.location) ||
+		!save_publication(sema, state, sizeof(*state), syntax->syntax.location))
+		return NULL;
 	saved_definition = *definition;
 	saved_state = *state;
 	saved_member_count = sema->member_count;
@@ -477,7 +730,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				goto done;
 			continue;
 		}
-		type = resolve_type_syntax(sema, member->type_syntax);
+		type = resolve_declaration_type(sema, member->type_syntax, member->alignment_specifiers);
 		if (!type)
 			goto done;
 		struct ast_type_syntax *written = member->type_syntax;
@@ -522,7 +775,12 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			diagnostic_error(sema->diagnostics, member->type_syntax->location, "out of memory creating record member");
 			goto done;
 		}
-		*resolved = (struct record_member) { .name = member->name, .type = type, .anonymous = member->anonymous };
+		unsigned request, alignment;
+		if (!resolve_alignment_request(sema, member->alignment_specifiers, &request) ||
+			!effective_alignment(sema, type, request, member->type_syntax->location, &alignment))
+			goto done;
+		*resolved = (struct record_member) { .name = member->name, .type = type,
+			.anonymous = member->anonymous, .alignment = alignment };
 		*tail = resolved;
 		tail = &resolved->next;
 		definition->member_count++;
@@ -551,6 +809,169 @@ allocation_failure:
 	return NULL;
 }
 
+/* Nested literals publish canonical identities only after their initializer
+ * succeeds. Keep a small journal so an enclosing failed initializer also
+ * withdraws those otherwise successful inner publications. */
+struct literal_publication {
+	struct ast_compound_literal_expression *node;
+	struct ast_compound_literal_expression saved;
+	struct literal_publication *next;
+};
+
+struct sema_initializer_transaction {
+	struct tag_binding *tags;
+	struct enumerator_binding *enumerators;
+	struct sema saved;
+	struct binding *bindings;
+	struct ast_function function;
+};
+
+static struct sema_initializer_transaction initializer_transaction_begin(struct sema *sema)
+{
+	struct sema_initializer_transaction transaction = { .saved = *sema };
+	if (sema->scope) {
+		transaction.bindings = sema->scope->bindings;
+		transaction.tags = sema->scope->tags;
+		transaction.enumerators = sema->scope->enumerators;
+	}
+	if (sema->function)
+		transaction.function = *sema->function;
+	return transaction;
+}
+
+static void initializer_transaction_rollback(struct sema *sema,
+	const struct sema_initializer_transaction *transaction)
+{
+	for (struct literal_publication *entry = sema->literal_publications;
+		entry != transaction->saved.literal_publications; entry = entry->next)
+		memcpy(entry->node, &entry->saved, sizeof(entry->saved));
+	rollback_publications(sema, transaction->saved.publications);
+	*transaction->saved.string_tail = NULL;
+	*transaction->saved.static_tail = NULL;
+	if (transaction->saved.scope) {
+		transaction->saved.scope->bindings = transaction->bindings;
+		transaction->saved.scope->tags = transaction->tags;
+		transaction->saved.scope->enumerators = transaction->enumerators;
+	}
+	if (transaction->saved.function)
+		*transaction->saved.function = transaction->function;
+	*sema = transaction->saved;
+}
+
+/* Ordinary enum references require an already-complete visible tag. */
+static const struct type *resolve_enum_syntax(struct sema *sema, struct ast_enum_type_syntax *syntax)
+{
+	if (syntax->syntax.type)
+		return syntax->syntax.type;
+	struct tag_binding *tag = syntax->tag.length ? find_tag(sema, syntax->tag, syntax->has_definition) : NULL;
+	if (!syntax->has_definition) {
+		if (!tag || tag->type->kind != type_kind_enum || !type_enum_definition(tag->type)->complete) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location,
+				"enum reference requires an already complete enum tag");
+			return NULL;
+		}
+		if (!save_publication(sema, &syntax->syntax.type, sizeof(syntax->syntax.type), syntax->syntax.location))
+			return NULL;
+		return syntax->syntax.type = tag->type;
+	}
+	if (tag) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, tag->type->kind == type_kind_enum ?
+			"enum redefinitions are not supported yet (M23f)" : "tag declared with a different kind");
+		return NULL;
+	}
+	if (sema->enum_count == 512 || sema->enum_nesting == 64) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "enum identity or nesting limit exceeded");
+		return NULL;
+	}
+	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
+	struct tag_binding *saved_tags = sema->scope ? sema->scope->tags : sema->file_tags;
+	struct enum_type *enumeration = type_new_enum(sema->arena);
+	if (!enumeration)
+		goto allocation_failure;
+	if (!save_publication(sema, &syntax->syntax.type, sizeof(syntax->syntax.type), syntax->syntax.location))
+		goto failure;
+	if (syntax->tag.length) {
+		tag = arena_alloc(sema->arena, sizeof(*tag));
+		if (!tag)
+			goto allocation_failure;
+		*tag = (struct tag_binding) { .name = syntax->tag, .type = &enumeration->type, .next = saved_tags };
+		if (sema->scope) sema->scope->tags = tag; else sema->file_tags = tag;
+	}
+	sema->enum_count++;
+	sema->enum_nesting++;
+	int64_t previous = -1;
+	bool negative = false;
+	size_t count = 0;
+	for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next) {
+		if (++count > 1024 || sema->enumerator_count == 4096) {
+			diagnostic_error(sema->diagnostics, item->name.location, "enumerator limit exceeded");
+			goto failure;
+		}
+		int64_t value = previous + 1;
+		if (item->value) {
+			if (!sema_expression(sema, &item->value, true))
+				goto failure;
+			struct constant_result result = evaluate_integer_constant(item->value);
+			if (result.status != constant_value) {
+				diagnostic_error(sema->diagnostics, result.location, result.message);
+				goto failure;
+			}
+			unsigned width = type_integer_width(result.type);
+			bool minus = !type_is_unsigned(result.type) && (result.bits & (UINT64_C(1) << (width - 1)));
+			uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+			if (minus)
+				value = -1 - (int64_t)(mask - result.bits);
+			else if (result.bits <= INT32_MAX)
+				value = (int64_t)result.bits;
+			else
+				value = (int64_t)INT32_MAX + 1;
+		}
+		if (value < INT32_MIN || value > INT32_MAX) {
+			diagnostic_error(sema->diagnostics, item->name.location,
+				"enum values beyond target int range are not supported yet (M23f)");
+			goto failure;
+		}
+		if (enumerator_in_scope(sema, sema->scope, item->name) ||
+			typedef_in_scope(sema, sema->scope, item->name) ||
+			(sema->scope ? find_in_scope(sema->scope, item->name) != NULL :
+			((find_function(sema, item->name) && find_function(sema, item->name)->file_type) ||
+			 (find_external_object(sema, item->name) && find_external_object(sema, item->name)->file_type)))) {
+			diagnostic_error(sema->diagnostics, item->name.location, "enumerator conflicts with prior ordinary declaration");
+			goto failure;
+		}
+		if (!save_publication(sema, &item->type, sizeof(item->type), item->name.location) ||
+			!save_publication(sema, &item->bits, sizeof(item->bits), item->name.location))
+			goto failure;
+		item->type = &type_int;
+		item->bits = (uint64_t)value & UINT32_MAX;
+		struct enumerator_binding *binding = arena_alloc(sema->arena, sizeof(*binding));
+		if (!binding)
+			goto allocation_failure;
+		struct enumerator_binding **head = sema->scope ? &sema->scope->enumerators : &sema->file_enumerators;
+		*binding = (struct enumerator_binding) { .enumerator = item, .next = *head };
+		*head = binding;
+		sema->enumerator_count++;
+		negative |= value < 0;
+		previous = value;
+	}
+	if (!count) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "enum definition requires enumerators");
+		goto failure;
+	}
+	if (!save_publication(sema, enumeration->definition, sizeof(*enumeration->definition), syntax->syntax.location))
+		goto failure;
+	enumeration->definition->compatible_type = negative ? &type_int : &type_uint;
+	enumeration->definition->complete = true;
+	syntax->syntax.type = &enumeration->type;
+	sema->enum_nesting--;
+	return &enumeration->type;
+allocation_failure:
+	diagnostic_error(sema->diagnostics, syntax->syntax.location, "out of memory creating enum");
+failure:
+	initializer_transaction_rollback(sema, &transaction);
+	return NULL;
+}
+
 /* Only the bare `struct-or-union identifier ;` form has the special
  * current-scope forward/shadow rule. A prefixed reference to a visible
  * tag declares no entity; definitions and newly introduced tags do. */
@@ -558,6 +979,22 @@ static bool sema_tag_declaration(struct sema *sema, struct ast_tag_declaration *
 {
 	struct ast_record_type_syntax *record;
 
+	if (declaration->alignment_specifiers) {
+		diagnostic_error(sema->diagnostics, declaration->location, "alignment requires an object or member declaration");
+		return false;
+	}
+	struct ast_type_syntax *syntax = declaration->type_syntax;
+	while (syntax->kind == type_syntax_qualified)
+		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	if (syntax->kind == type_syntax_enum) {
+		if (!resolve_type_syntax(sema, declaration->type_syntax))
+			return false;
+		if (!((struct ast_enum_type_syntax *)syntax)->has_definition) {
+			diagnostic_error(sema->diagnostics, declaration->location, "declaration does not declare an entity");
+			return false;
+		}
+		return true;
+	}
 	if (declaration->type_syntax->kind != type_syntax_record) {
 		diagnostic_error(sema->diagnostics, declaration->location,
 			"tag-only declaration requires a struct or union specifier");
@@ -603,7 +1040,11 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 {
 	if (syntax->type)
 		return syntax->type;
+	if (!save_publication(sema, &syntax->type, sizeof(syntax->type), syntax->location))
+		return NULL;
 	switch (syntax->kind) {
+	case type_syntax_enum:
+		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)syntax);
 	case type_syntax_record:
 		return resolve_record_syntax(sema, (struct ast_record_type_syntax *)syntax, false);
 	case type_syntax_inferred:
@@ -754,6 +1195,10 @@ static bool bind_prototype_parameter(struct sema *sema, const struct ast_paramet
 
 	if (!parameter->has_name)
 		return true;
+	if (enumerator_in_scope(sema, sema->scope, parameter->name)) {
+		diagnostic_error(sema->diagnostics, parameter->location, "parameter conflicts with enumerator");
+		return false;
+	}
 	local = ast_new_local(sema->arena, parameter->location, parameter->name, NULL);
 	binding = arena_alloc(sema->arena, sizeof(*binding));
 	if (!local || !binding) {
@@ -789,10 +1234,14 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	sema->scope = &scope;
 	sema->prototype_depth++;
 	for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
-		const struct type *declared = resolve_type_syntax(sema, parameter->type_syntax);
+		const struct type *declared = resolve_declaration_type(sema, parameter->type_syntax, parameter->alignment_specifiers);
 
 		if (!declared)
 			goto done;
+		if (parameter->alignment_specifiers && (parameter->is_register || declared->kind == type_kind_void)) {
+			diagnostic_error(sema->diagnostics, parameter->location, "alignment is not permitted on register or void parameter");
+			goto done;
+		}
 		if (declared->kind == type_kind_void) {
 			/* Resolve query-derived void without removing its written syntax. */
 			if (function->parameter_count == 1 && !parameter->has_name && !declared->qualifiers) {
@@ -806,6 +1255,10 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		}
 		parameter->type = adjust_parameter_type(sema, declared, parameter->location);
 		if (!parameter->type)
+			goto done;
+		unsigned request;
+		if (!resolve_alignment_request(sema, parameter->alignment_specifiers, &request) ||
+			!effective_alignment(sema, parameter->type, request, parameter->location, &parameter->alignment))
 			goto done;
 		parameters[count] = unqualified_type(sema, parameter->type, parameter->location);
 		if (!parameters[count] || !bind_prototype_parameter(sema, parameter))
@@ -823,8 +1276,10 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		diagnostic_error(sema->diagnostics, function->syntax.location, "out of memory creating function type");
 done:
 	sema->prototype_depth--;
-	if (function == sema->definition_syntax)
+	if (function == sema->definition_syntax) {
 		sema->definition_tags = scope.tags;
+		sema->definition_enumerators = scope.enumerators;
+	}
 	sema->scope = scope.parent;
 	return type ? &type->type : NULL;
 }
@@ -981,7 +1436,11 @@ static bool convert_expression(struct sema *sema, struct ast_expression **slot,
 		is_null_pointer_source(*slot)) &&
 		!check_conversion(sema, (*slot)->type, target, (*slot)->location))
 		return false;
-	if (type_compatible((*slot)->type, target))
+	/* Enum/compatible-integer representations agree, but promotions must
+	 * still publish the requested primitive type (and assignments the enum).
+	 * Pointer compatibility keeps its existing source-point snapshot policy. */
+	if (type_compatible((*slot)->type, target) &&
+		(!type_is_integer(target) || type_same((*slot)->type, target)))
 		return true;
 	conversion = ast_new_conversion(sema->arena, *slot, target);
 	if (!conversion) {
@@ -1299,7 +1758,7 @@ static bool sema_expression(struct sema *sema,
 		if (node->callee->kind == expression_name) {
 			struct ast_name_expression *name = (struct ast_name_expression *)node->callee;
 
-			if (!find_typedef(sema, name->name) && !find_local(sema, name->name) &&
+			if (!find_enumerator(sema, name->name) && !find_typedef(sema, name->name) && !find_local(sema, name->name) &&
 				!visible_file_function(sema, name->name) && !visible_file_object(sema, name->name)) {
 				diagnostic_error(sema->diagnostics, name->expression.location, "call to undeclared function");
 				return false;
@@ -1471,11 +1930,26 @@ static bool sema_expression(struct sema *sema,
 		}
 		break;
 	}
+	case expression_enumerator:
+		result_type = &type_int;
+		break;
 	case expression_name: {
 		struct ast_name_expression *node =
 			(struct ast_name_expression *)expression;
 		struct external_object_symbol *object;
 
+		struct ast_enumerator *enumerator = find_enumerator(sema, node->name);
+		if (enumerator) {
+			struct ast_enumerator_expression *reference = ast_new_enumerator_expression(sema->arena, node->name, enumerator);
+			if (!reference) {
+				diagnostic_error(sema->diagnostics, expression->location, "out of memory creating enumerator reference");
+				return false;
+			}
+			reference->bits = enumerator->bits;
+			*expression_slot = expression = &reference->expression;
+			result_type = &type_int;
+			break;
+		}
 		/* A visible typedef hides outer ordinary names; it is never a value. */
 		if (find_typedef(sema, node->name)) {
 			diagnostic_error(sema->diagnostics, expression->location, "typedef name is not an expression");
@@ -1970,46 +2444,6 @@ static bool sema_condition(struct sema *sema, struct ast_expression **slot)
 		return false;
 	}
 	return true;
-}
-
-/* Nested literals publish canonical identities only after their initializer
- * succeeds. Keep a small journal so an enclosing failed initializer also
- * withdraws those otherwise successful inner publications. */
-struct literal_publication {
-	struct ast_compound_literal_expression *node;
-	struct ast_compound_literal_expression saved;
-	struct literal_publication *next;
-};
-
-struct sema_initializer_transaction {
-	struct sema saved;
-	struct binding *bindings;
-	struct ast_function function;
-};
-
-static struct sema_initializer_transaction initializer_transaction_begin(struct sema *sema)
-{
-	struct sema_initializer_transaction transaction = { .saved = *sema };
-	if (sema->scope)
-		transaction.bindings = sema->scope->bindings;
-	if (sema->function)
-		transaction.function = *sema->function;
-	return transaction;
-}
-
-static void initializer_transaction_rollback(struct sema *sema,
-	const struct sema_initializer_transaction *transaction)
-{
-	for (struct literal_publication *entry = sema->literal_publications;
-		entry != transaction->saved.literal_publications; entry = entry->next)
-		memcpy(entry->node, &entry->saved, sizeof(entry->saved));
-	*transaction->saved.string_tail = NULL;
-	*transaction->saved.static_tail = NULL;
-	if (transaction->saved.scope)
-		transaction->saved.scope->bindings = transaction->bindings;
-	if (transaction->saved.function)
-		*transaction->saved.function = transaction->function;
-	*sema = transaction->saved;
 }
 
 /* Assignment to bool is outside the initializer's source constant category:
@@ -2762,7 +3196,7 @@ static bool reserve_local_name(struct sema *sema, struct ast_local_declaration *
 			"ordinary declaration conflicts with typedef name");
 		return false;
 	}
-	if (find_in_scope(sema->scope, local->name)) {
+	if (find_in_scope(sema->scope, local->name) || enumerator_in_scope(sema, sema->scope, local->name)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"redeclaration of local in this scope");
 		return false;
@@ -2784,6 +3218,13 @@ static bool complete_local_storage(struct sema *sema, struct ast_local_declarati
 	const struct type *effective_type)
 {
 	assert(type_is_complete_object(effective_type));
+	unsigned request;
+	if (!resolve_alignment_request(sema, local->alignment_specifiers, &request))
+		return false;
+	if (local->alignment > request)
+		request = local->alignment;
+	if (!effective_alignment(sema, effective_type, request, local->name.location, &local->alignment))
+		return false;
 	if (sema->local_count == ast_max_locals) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"function exceeds local limit (256)");
@@ -2875,7 +3316,11 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
-
+	unsigned request;
+	if (local->alignment_specifiers && local->is_register) {
+		diagnostic_error(sema->diagnostics, local->name.location, "alignment is not permitted with register");
+		return false;
+	}
 	if (local->is_inline && local->type_syntax->kind == type_syntax_inferred) {
 		diagnostic_error(sema->diagnostics, local->name.location, "inline requires a function declaration");
 		return false;
@@ -2886,10 +3331,18 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 				"static or extern auto inference is not supported yet");
 			return false;
 		}
+		if (!resolve_alignment_request(sema, local->alignment_specifiers, &request))
+			return false;
 		return sema_inferred_local(sema, local);
 	}
-	type = resolve_type_syntax(sema, local->type_syntax);
-	if (!type)
+	type = resolve_declaration_type(sema, local->type_syntax, local->alignment_specifiers);
+	if (!type || !resolve_alignment_request(sema, local->alignment_specifiers, &request))
+		return false;
+	if (local->alignment_specifiers && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location, "alignment is not permitted on a function");
+		return false;
+	}
+	if (!effective_alignment(sema, type, request, local->name.location, &local->alignment))
 		return false;
 	if (local->is_inline && type->kind != type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location, "inline requires a function declaration");
@@ -3410,7 +3863,7 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 
 static bool sema_function_body(struct sema *sema, struct ast_function *definition)
 {
-	struct scope scope = { .tags = sema->definition_tags };
+	struct scope scope = { .tags = sema->definition_tags, .enumerators = sema->definition_enumerators };
 	struct typedef_binding *saved_typedefs = sema->typedefs;
 	bool success = false;
 
@@ -3438,6 +3891,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 		}
 		parameter->local->type_syntax = parameter->type_syntax;
 		parameter->local->is_register = parameter->is_register;
+		parameter->local->alignment = parameter->alignment;
 		if (!bind_local(sema, parameter->local, parameter->type))
 			goto done;
 	}
@@ -3465,6 +3919,11 @@ done:
 static struct function_symbol *register_function(struct sema *sema, struct token name,
 	const struct function_type *type, struct ast_function *definition, bool is_static)
 {
+	if (!sema->scope && enumerator_in_scope(sema, NULL, name)) {
+		diagnostic_error(sema->diagnostics, name.location, "function conflicts with enumerator");
+		return NULL;
+	}
+
 	struct function_symbol *symbol = find_function(sema, name);
 	bool canonical_is_visible = symbol && symbol->file_type == symbol->type;
 	const struct type *return_type;
@@ -3566,6 +4025,8 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 {
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 	const struct type *composite = type;
+	if (symbol && !save_publication(sema, symbol, sizeof(*symbol), name.location))
+		return NULL;
 
 	if (tentative_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
 		name.spelling_location.offset, "main", 4) == 0) {
@@ -3588,7 +4049,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 			"object declaration conflicts with prior linkage");
 		return NULL;
 	}
-	if ((!sema->scope && find_typedef(sema, name)) || find_function(sema, name)) {
+	if ((!sema->scope && (find_typedef(sema, name) || enumerator_in_scope(sema, NULL, name))) || find_function(sema, name)) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"external object conflicts with prior ordinary declaration");
 		return NULL;
@@ -3670,7 +4131,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct ast_external_declaration *external, struct token name,
 	const struct type *type, struct ast_expression **initializer,
 	const struct ast_initializer *syntax, struct ast_initializer_plan **published_plan,
-	bool is_static, bool is_extern, bool is_query, bool is_thread_local)
+	bool is_static, bool is_extern, bool is_query, bool is_thread_local, unsigned alignment_request)
 {
 	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
 	struct external_object_symbol *previous = find_external_object(sema, name);
@@ -3721,6 +4182,9 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		!is_extern && !has_initializer && !zero_definition ? external : NULL, is_static, is_extern, is_thread_local);
 	if (!symbol)
 		return NULL;
+	if (!object_alignment(sema, symbol, alignment_request, has_initializer || zero_definition,
+		!is_extern && !has_initializer && !zero_definition, name.location))
+		goto rollback;
 	if (zero_definition) {
 		const struct type *visible = sema->scope ? type : symbol->file_type;
 		if (!type_is_complete_object(visible)) {
@@ -3861,6 +4325,9 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 	bool inherited_internal = false;
 	struct external_object_symbol *object = find_external_object(sema, local->name);
 	struct function_symbol *function = find_function(sema, local->name);
+	unsigned alignment_request;
+	if (!resolve_alignment_request(sema, local->alignment_specifiers, &alignment_request))
+		return false;
 
 	if (type->kind == type_kind_function) {
 		if (local->is_thread_local || local->is_static || local->is_register) {
@@ -3875,7 +4342,8 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		diagnostic_error(sema->diagnostics, local->name.location, "static local object type must be complete");
 		return false;
 	}
-	if ((alias && alias->scope == sema->scope) ||
+	if (enumerator_in_scope(sema, sema->scope, local->name) ||
+		(alias && alias->scope == sema->scope) ||
 		(same && (local->is_static || (!same->object_symbol && !same->function_symbol) || same->is_static))) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			alias && alias->scope == sema->scope ? "ordinary declaration conflicts with typedef name" :
@@ -3923,9 +4391,12 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		local->object_symbol->is_block_static = true;
 		definition->symbol = sema_file_object(sema, &definition->external, name,
 			type, &local->initializer, local->initializer_syntax, &local->initializer_plan,
-			true, false, false, local->is_thread_local);
+			true, false, false, local->is_thread_local, alignment_request);
 		if (!definition->symbol)
 			return false;
+		definition->alignment_specifiers = local->alignment_specifiers;
+		definition->alignment = local->object_symbol->alignment;
+		local->alignment = local->object_symbol->alignment;
 		definition->initializer = local->initializer;
 		definition->initializer_syntax = local->initializer_syntax;
 		definition->initializer_plan = local->initializer_plan;
@@ -3939,7 +4410,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 	 * local composite and inherited linkage. An automatic/static-local/typedef
 	 * hiding an internal entity must not silently inherit its linkage.
 	 */
-	if (!alias) {
+	if (!alias && !find_enumerator(sema, local->name)) {
 		if (prior) {
 			if (!prior->is_static && (prior->object_symbol || prior->function_symbol)) {
 				visible_type = prior->type;
@@ -3982,8 +4453,10 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 	} else {
 		local->object_symbol = register_external_object(sema, local->name, type,
 			NULL, inherited_internal, true, local->is_thread_local);
-		if (!local->object_symbol)
+		if (!local->object_symbol || !object_alignment(sema, local->object_symbol,
+			alignment_request, false, false, local->name.location))
 			return false;
+		local->alignment = local->object_symbol->alignment;
 	}
 	local->type = type;
 	if (same) {
@@ -4030,11 +4503,20 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 	 * including on optimized/sanitized builds. */
 	memcpy(&publication->saved, node, sizeof(*node));
 	sema->literal_publications = publication;
-	type = resolve_type_syntax(sema, node->type_syntax);
+	type = resolve_declaration_type(sema, node->type_syntax, node->alignment_specifiers);
 	if (!type)
 		goto failure;
+	unsigned alignment_request;
+	if ((node->alignment_specifiers && node->is_register) ||
+		!resolve_alignment_request(sema, node->alignment_specifiers, &alignment_request)) {
+		if (node->alignment_specifiers && node->is_register)
+			diagnostic_error(sema->diagnostics, node->expression.location, "alignment is not permitted with register");
+		goto failure;
+	}
 	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, &initializer_depth);
 	if (!plan)
+		goto failure;
+	if (!effective_alignment(sema, plan->type, alignment_request, node->expression.location, &node->alignment))
 		goto failure;
 	node->expression.type = plan->type;
 	node->expression.is_lvalue = true;
@@ -4066,6 +4548,7 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 			goto allocation_failure;
 		local->type_syntax = node->type_syntax;
 		local->is_register = node->is_register;
+		local->alignment = node->alignment;
 		/* Backend initializes at the expression evaluation site. Keeping this
 		 * synthetic slot's initializer empty prevents eager declaration stores. */
 		if (!complete_local_storage(sema, local, plan->type))
@@ -4081,6 +4564,9 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 	symbol = register_external_object(sema, name, plan->type, NULL, true, false, node->is_thread_local);
 	if (!symbol)
 		goto failure;
+	if (!object_alignment(sema, symbol, alignment_request, true, false, node->expression.location))
+		goto failure;
+	definition->alignment = node->alignment;
 	symbol->is_block_static = true;
 	symbol->initializer_plan = plan;
 	symbol->definition = &definition->external;
@@ -4108,10 +4594,17 @@ failure:
 static bool sema_external_object_declaration(struct sema *sema,
 	struct ast_external_object_declaration *declaration)
 {
-	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
+	const struct type *type = resolve_declaration_type(sema, declaration->type_syntax, declaration->alignment_specifiers);
 
 	if (!type)
 		return false;
+	unsigned alignment_request;
+	if (!resolve_alignment_request(sema, declaration->alignment_specifiers, &alignment_request))
+		return false;
+	if (declaration->alignment_specifiers && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment is not permitted on a function");
+		return false;
+	}
 	if (declaration->is_inline) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "inline requires a function declaration");
 		return false;
@@ -4119,20 +4612,28 @@ static bool sema_external_object_declaration(struct sema *sema,
 	declaration->symbol = sema_file_object(sema, &declaration->external,
 		declaration->name, type, &declaration->initializer,
 		declaration->initializer_syntax, &declaration->initializer_plan,
-		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local);
+		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local, alignment_request);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
+	declaration->alignment = declaration->symbol->alignment;
 	return true;
 }
 
 static bool sema_external_type_declaration(struct sema *sema,
 	struct ast_external_type_declaration *declaration)
 {
-	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
+	const struct type *type = resolve_declaration_type(sema, declaration->type_syntax, declaration->alignment_specifiers);
 
 	if (!type)
 		return false;
+	unsigned alignment_request;
+	if (!resolve_alignment_request(sema, declaration->alignment_specifiers, &alignment_request))
+		return false;
+	if (declaration->alignment_specifiers && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment is not permitted on a function");
+		return false;
+	}
 	if (type->kind != type_kind_function) {
 		if (declaration->is_inline) {
 			diagnostic_error(sema->diagnostics, declaration->name.location, "inline requires a function declaration");
@@ -4141,10 +4642,11 @@ static bool sema_external_type_declaration(struct sema *sema,
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
 			declaration->initializer_syntax, &declaration->initializer_plan,
-			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local);
+			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local, alignment_request);
 		if (!declaration->object_symbol)
 			return false;
 		declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
+		declaration->alignment = declaration->object_symbol->alignment;
 		return true;
 	}
 	if (declaration->initializer || declaration->initializer_syntax) {
@@ -4173,12 +4675,17 @@ static bool sema_function_declaration(struct sema *sema,
 	const struct type *resolved;
 	struct function_symbol *symbol;
 
+	if (declaration->alignment_specifiers) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment is not permitted on a function");
+		return false;
+	}
 	/* Queries in a definition's declarator are part of that definition too,
 	 * including unevaluated references in return/parameter type syntax.
 	 */
 	sema->function = definition;
 	sema->definition_syntax = definition ? declaration->type_syntax : NULL;
 	sema->definition_tags = NULL;
+	sema->definition_enumerators = NULL;
 	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
 	sema->function = NULL;
 	sema->definition_syntax = NULL;
@@ -4285,10 +4792,15 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 	struct typedef_binding *previous;
 	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
 
+	if (declaration->alignment_specifiers) {
+		diagnostic_error(sema->diagnostics, declaration->location, "alignment is not permitted with typedef");
+		return false;
+	}
 	if (!type)
 		return false;
-	if (!sema->scope && (visible_file_function(sema, declaration->name) ||
-		visible_file_object(sema, declaration->name))) {
+	if (enumerator_in_scope(sema, sema->scope, declaration->name) ||
+		(!sema->scope && (visible_file_function(sema, declaration->name) ||
+		visible_file_object(sema, declaration->name)))) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"typedef name conflicts with prior ordinary declaration");
 		return false;
@@ -4337,6 +4849,16 @@ static bool finalize_tentative_objects(struct sema *sema)
 
 		if (symbol->definition || !symbol->tentative_definition)
 			continue;
+		if (symbol->requested_alignment && symbol->tentative_alignment != symbol->requested_alignment) {
+			diagnostic_error(sema->diagnostics, symbol->tentative_definition->location,
+				"tentative definition does not carry required object alignment");
+			return false;
+		}
+		unsigned alignment;
+		if (!effective_alignment(sema, symbol->type, symbol->requested_alignment,
+			symbol->tentative_definition->location, &alignment))
+			return false;
+		symbol->alignment = alignment;
 		if (type_is_record(symbol->type) && !type_is_complete_object(symbol->type)) {
 			diagnostic_error(sema->diagnostics, symbol->tentative_definition->location,
 				"tentative record object requires completion before end of translation unit");

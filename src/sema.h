@@ -27,6 +27,12 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 	struct diagnostics *diagnostics);
 
 struct external_object_symbol {
+	unsigned alignment; /* Effective storage alignment; never a type qualifier. */
+	unsigned requested_alignment; /* Agreed nonzero declaration requirement. */
+	unsigned tentative_alignment; /* Requirement carried by an actual tentative. */
+	bool definition_alignment_checked;
+	unsigned definition_alignment;
+
 	struct token name;
 	const struct type *type;
 	const struct type *file_type; /* NULL until declared at file scope. */

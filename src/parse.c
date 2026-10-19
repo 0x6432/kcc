@@ -16,11 +16,23 @@ struct parser_name {
 	struct parser_name *next;
 };
 
+/* A suffix retains only its own prototype-scope name prefix. */
+struct parser_function_scope {
+	struct ast_function_type_syntax *function;
+	struct parser_name *names;
+	struct parser_name *outer_names;
+	struct parser_function_scope *next;
+};
+
 struct parser {
 	struct preprocessor *preprocessor;
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	struct parser_name *names;
+	struct parser_function_scope *function_scopes;
+	unsigned enum_nesting;
+	size_t enumerators;
+	size_t alignment_specifiers;
 	unsigned depth;
 	unsigned statement_nesting;
 	unsigned declarator_nesting;
@@ -107,6 +119,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 	return kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
 		kind == token_void || kind == token_const || kind == token_struct || kind == token_union ||
+		kind == token_enum || kind == token_alignas || kind == token_legacy_alignas ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
@@ -128,7 +141,10 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
 static struct ast_type_syntax *parse_record_specifier(struct parser *parser, struct token keyword);
+static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword);
+static struct ast_alignment_specifier *parse_alignment_specifier(struct parser *parser);
 static struct ast_static_assertion *parse_static_assertion(struct parser *parser);
+static bool is_constexpr_keyword(struct token token);
 
 enum declarator_context {
 	declarator_local,
@@ -136,10 +152,14 @@ enum declarator_context {
 	declarator_typedef,
 	declarator_parameter,
 	declarator_cast,
+	declarator_member,
+	declarator_literal,
 };
 
 /* Preserve storage spellings and an inferred name consumed during disambiguation. */
 struct declaration_head {
+	struct ast_alignment_specifier *alignment_specifiers;
+	struct ast_alignment_specifier *alignment_tail;
 	struct token inline_keyword;
 	struct token thread_keyword;
 	struct token keyword;
@@ -176,11 +196,41 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	struct ast_type_syntax *query = named_type;
 	struct token qualifier = { 0 };
 
-	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor)) ||
+		(context == declarator_literal && is_constexpr_keyword(preprocess_peek(parser->preprocessor)))) {
 		struct token token = preprocess_peek(parser->preprocessor);
 
+		if (context == declarator_literal && is_constexpr_keyword(token)) {
+			diagnostic_error(parser->diagnostics, token.location,
+				"constexpr compound literals require M23h constant-object support");
+			return NULL;
+		}
+		if (token.kind == token_alignas || token.kind == token_legacy_alignas) {
+			struct ast_alignment_specifier *alignment;
+
+			if (!head) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"alignment specifier is not permitted in this type name");
+				return NULL;
+			}
+			alignment = parse_alignment_specifier(parser);
+			if (!alignment)
+				return NULL;
+			/* Only one side-effecting core type is permitted. Builtin type
+			 * permutations have no declarations of their own. Qualifiers,
+			 * storage and macro invocation locations do not define this order. */
+			alignment->after_type_specifier = query || seen_void || seen_int ||
+				seen_char || seen_short || seen_bool || seen_sign || long_count;
+			if (head->alignment_tail)
+				head->alignment_tail->next = alignment;
+			else
+				head->alignment_specifiers = alignment;
+			head->alignment_tail = alignment;
+			continue;
+		}
 		if (token.kind == token_inline) {
-			if (!head || context == declarator_parameter || head->keyword.kind == token_typedef) {
+			if (!head || context == declarator_parameter || context == declarator_member ||
+				context == declarator_literal || head->keyword.kind == token_typedef) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"inline is not permitted in a type name, typedef, or parameter declaration");
 				return NULL;
@@ -189,7 +239,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		if (token.kind == token_thread_local) {
-			if (!head || context == declarator_parameter) {
+			if (!head || context == declarator_parameter || context == declarator_member) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"thread_local is not permitted in a type name or parameter declaration");
 				return NULL;
@@ -209,7 +259,9 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			token.kind == token_extern || token.kind == token_static || token.kind == token_auto) {
 			struct token *slot;
 
-			if (!head || (context == declarator_parameter && token.kind != token_register)) {
+			if (!head || context == declarator_member ||
+				(context == declarator_parameter && token.kind != token_register) ||
+				(context == declarator_literal && token.kind != token_static && token.kind != token_register)) {
 				const char *message = "register storage is not supported in this context";
 
 				if (token.kind == token_typedef)
@@ -224,6 +276,11 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 				return NULL;
 			}
 			slot = token.kind == token_auto ? &head->auto_keyword : &head->keyword;
+			if (context == declarator_literal && slot->kind != token_eof) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"duplicate or conflicting compound literal storage class");
+				return NULL;
+			}
 			if (slot->kind == token.kind) {
 				const char *message = "duplicate auto storage-class specifier";
 
@@ -277,12 +334,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		preprocess_next(parser->preprocessor);
-		if (token.kind == token_struct || token.kind == token_union) {
+		if (token.kind == token_struct || token.kind == token_union || token.kind == token_enum) {
 			if (query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 				diagnostic_error(parser->diagnostics, token.location, "record cannot combine with other type specifiers");
 				return NULL;
 			}
-			query = parse_record_specifier(parser, token);
+			query = token.kind == token_enum ? parse_enum_specifier(parser, token) :
+				parse_record_specifier(parser, token);
 			if (!query)
 				return NULL;
 			continue;
@@ -495,6 +553,19 @@ static bool parse_function_suffix(struct parser *parser,
 	success = parse_parameters(parser, function) &&
 		expect_token(parser, token_right_paren, "expected ')' after parameter list", NULL);
 	parser->parameter_nesting--;
+	if (success && parser->names != saved_names) {
+		struct parser_function_scope *scope = arena_alloc(parser->arena, sizeof(*scope));
+
+		if (!scope) {
+			allocation_error(parser, opening.location);
+			success = false;
+		} else {
+			*scope = (struct parser_function_scope) { .function = function,
+				.names = parser->names, .outer_names = saved_names,
+				.next = parser->function_scopes };
+			parser->function_scopes = scope;
+		}
+	}
 	/* Callback names and parameter masks do not escape into return syntax. */
 	parser->names = saved_names;
 	if (!success)
@@ -691,9 +762,55 @@ static struct ast_record_type_syntax *record_specifier_base(struct ast_type_synt
 		(struct ast_record_type_syntax *)syntax : NULL;
 }
 
+static struct ast_type_syntax *tag_specifier_base(struct ast_type_syntax *syntax)
+{
+	while (syntax && syntax->kind == type_syntax_qualified)
+		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	return syntax && (syntax->kind == type_syntax_record || syntax->kind == type_syntax_enum) ?
+		syntax : NULL;
+}
+
+/* An enum reference never creates a forward tag; sema requires completeness. */
+static struct ast_tag_declaration *parse_tag_declaration_tail(struct parser *parser,
+	struct token beginning, struct ast_type_syntax *base, struct declaration_head head)
+{
+	struct ast_type_syntax *tag_syntax = tag_specifier_base(base);
+	struct ast_tag_declaration *declaration;
+	bool plain_forward = false;
+
+	if (tag_syntax->kind == type_syntax_record) {
+		struct ast_record_type_syntax *record = (struct ast_record_type_syntax *)tag_syntax;
+
+		if (record->tag.kind != token_identifier) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"declaration without a declarator requires a tag name");
+			return NULL;
+		}
+		plain_forward = !record->has_definition && base == tag_syntax &&
+			head.keyword.kind == token_eof && head.auto_keyword.kind == token_eof &&
+			head.thread_keyword.kind == token_eof && head.inline_keyword.kind == token_eof &&
+			!head.alignment_specifiers;
+	}
+	if (head.inline_keyword.kind != token_eof) {
+		diagnostic_error(parser->diagnostics, beginning.location,
+			"inline requires a function identifier declaration");
+		return NULL;
+	}
+	preprocess_next(parser->preprocessor);
+	declaration = ast_new_tag_declaration(parser->arena,
+		tag_syntax->kind == type_syntax_enum ? base : tag_syntax, beginning.location);
+	if (!declaration) {
+		allocation_error(parser, beginning.location);
+		return NULL;
+	}
+	declaration->plain_forward = plain_forward;
+	declaration->alignment_specifiers = head.alignment_specifiers;
+	return declaration;
+}
+
 static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
 	struct ast_record_member_declaration ***tail, struct ast_type_syntax *syntax,
-	struct token name, bool anonymous)
+	struct token name, bool anonymous, struct ast_alignment_specifier *alignment_specifiers)
 {
 	struct ast_record_member_declaration *member;
 
@@ -710,6 +827,7 @@ static bool append_record_member(struct parser *parser, struct ast_record_type_s
 	}
 	*member = (struct ast_record_member_declaration) {
 		.type_syntax = syntax, .name = name, .anonymous = anonymous,
+		.alignment_specifiers = alignment_specifiers,
 	};
 	**tail = member;
 	*tail = &member->next;
@@ -725,6 +843,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
 		struct token beginning;
 		struct ast_type_syntax *base;
+		struct declaration_head head = { 0 };
 
 		if (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
 			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert) {
@@ -751,7 +870,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			parser->record_declarations++;
 			continue;
 		}
-		base = parse_declaration_specifiers(parser, &beginning, NULL, declarator_parameter);
+		base = parse_declaration_specifiers(parser, &beginning, &head, declarator_member);
 		if (!base)
 			return false;
 		if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
@@ -766,7 +885,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name, true))
+			if (!append_record_member(parser, record, &tail, base, name, true, head.alignment_specifiers))
 				return false;
 			continue;
 		}
@@ -798,7 +917,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 					"flexible array members are not supported yet (M22)");
 				return false;
 			}
-			if (!append_record_member(parser, record, &tail, syntax, name, false))
+			if (!append_record_member(parser, record, &tail, syntax, name, false, head.alignment_specifiers))
 				return false;
 			if (preprocess_peek(parser->preprocessor).kind != token_comma)
 				break;
@@ -841,6 +960,94 @@ static struct ast_type_syntax *parse_record_specifier(struct parser *parser, str
 	return success ? &record->syntax : NULL;
 }
 
+/* enum-specifier ::= "enum" [ identifier ] "{" enumerator-list [ "," ] "}"
+ *                  | "enum" identifier
+ * enumerator ::= identifier [ "=" conditional-expression ]
+ * An enumerator's ordinary scope begins after its complete defining enumerator.
+ */
+static struct ast_type_syntax *parse_enum_contents(struct parser *parser, struct token keyword)
+{
+	struct token tag = { 0 };
+	struct ast_enum_type_syntax *node;
+	struct ast_enumerator **tail;
+
+	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
+		tag = preprocess_next(parser->preprocessor);
+	if (preprocess_peek(parser->preprocessor).kind == token_colon) {
+		diagnostic_error(parser->diagnostics, keyword.location,
+			"fixed underlying enum types require M23f expanded enum support");
+		return NULL;
+	}
+	node = ast_new_enum_type_syntax(parser->arena, keyword, tag);
+	if (!node) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
+		if (tag.kind != token_identifier) {
+			diagnostic_error(parser->diagnostics, keyword.location, "expected tag name or enum definition");
+			return NULL;
+		}
+		return &node->syntax;
+	}
+	if (parser->enum_nesting == ast_max_enum_nesting) {
+		diagnostic_error(parser->diagnostics, keyword.location, "enum definition exceeds nesting limit (64)");
+		return NULL;
+	}
+	parser->enum_nesting++;
+	preprocess_next(parser->preprocessor);
+	node->has_definition = true;
+	tail = &node->enumerators;
+	for (;;) {
+		struct token name;
+		struct ast_expression *value = NULL;
+		struct ast_enumerator *enumerator;
+
+		if (node->enumerator_count == ast_max_enum_members || parser->enumerators == ast_max_enumerators) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"enum enumerator resource limit exceeded");
+			return NULL;
+		}
+		if (!expect_token(parser, token_identifier, "expected enumerator name", &name))
+			return NULL;
+		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+			preprocess_next(parser->preprocessor);
+			value = parse_expression(parser, 2);
+			if (!value)
+				return NULL;
+		}
+		enumerator = ast_new_enumerator(parser->arena, name, value);
+		if (!enumerator) {
+			allocation_error(parser, name.location);
+			return NULL;
+		}
+		if (!publish_parser_name(parser, name, parser_name_object))
+			return NULL;
+		*tail = enumerator;
+		tail = &enumerator->next;
+		node->enumerator_count++;
+		parser->enumerators++;
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
+		if (preprocess_peek(parser->preprocessor).kind == token_right_brace)
+			break;
+	}
+	if (!expect_token(parser, token_right_brace, "expected '}' after enum definition", NULL))
+		return NULL;
+	return &node->syntax;
+}
+
+static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword)
+{
+	struct ast_type_syntax *syntax;
+	unsigned saved_nesting = parser->enum_nesting;
+
+	syntax = parse_enum_contents(parser, keyword);
+	parser->enum_nesting = saved_nesting;
+	return syntax;
+}
+
 /* type-name ::= declaration-specifiers [ declarator ]
  * Outer type names forbid storage; nested parameter lists have their own context.
  */
@@ -851,6 +1058,42 @@ static struct ast_type_syntax *parse_type_name(struct parser *parser,
 	struct ast_type_syntax *base = parse_declaration_specifiers(parser, beginning, NULL, context);
 
 	return parse_derived_type(parser, base, name, has_name, context);
+}
+
+/* alignment-specifier ::= ("alignas" | "_Alignas") "("
+ *                         (type-name | conditional-expression) ")" */
+static struct ast_alignment_specifier *parse_alignment_specifier(struct parser *parser)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct ast_type_syntax *type_syntax = NULL;
+	struct ast_expression *expression = NULL;
+	struct ast_alignment_specifier *node;
+
+	if (parser->alignment_specifiers == ast_max_alignment_specifiers) {
+		diagnostic_error(parser->diagnostics, keyword.location, "alignment specifier resource limit exceeded");
+		return NULL;
+	}
+	/* Count before recursing into an operand type-name. */
+	parser->alignment_specifiers++;
+	if (!expect_token(parser, token_left_paren, "expected '(' after alignment specifier", NULL))
+		return NULL;
+	if (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+		struct token beginning;
+
+		type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+		if (!type_syntax)
+			return NULL;
+	} else {
+		expression = parse_expression(parser, 2);
+		if (!expression)
+			return NULL;
+	}
+	if (!expect_token(parser, token_right_paren, "expected ')' after alignment specifier", NULL))
+		return NULL;
+	node = ast_new_alignment_specifier(parser->arena, keyword.location, type_syntax, expression);
+	if (!node)
+		allocation_error(parser, keyword.location);
+	return node;
 }
 
 /* typeof-specifier ::= ("typeof" | "typeof_unqual") "(" (type-name | expression) ")"
@@ -1424,30 +1667,21 @@ static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 	struct declaration_head *storage)
 {
 	struct token beginning;
+	struct ast_type_syntax *base;
 
-	for (;;) {
-		struct token token = preprocess_peek(parser->preprocessor);
-		struct token *slot;
-
-		if (is_constexpr_keyword(token)) {
-			diagnostic_error(parser->diagnostics, token.location,
-				"constexpr compound literals require M23h constant-object support");
-			return NULL;
-		}
-		if (token.kind != token_static && token.kind != token_register && token.kind != token_thread_local)
-			break;
-		slot = token.kind == token_thread_local ? &storage->thread_keyword : &storage->keyword;
-		if (slot->kind != token_eof) {
-			diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting compound literal storage class");
-			return NULL;
-		}
-		*slot = preprocess_next(parser->preprocessor);
+	if (is_constexpr_keyword(preprocess_peek(parser->preprocessor))) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"constexpr compound literals require M23h constant-object support");
+		return NULL;
 	}
+	base = parse_declaration_specifiers(parser, &beginning, storage, declarator_literal);
+	if (!base)
+		return NULL;
 	if (storage->thread_keyword.kind == token_thread_local && storage->keyword.kind == token_register) {
 		diagnostic_error(parser->diagnostics, storage->keyword.location, "thread_local cannot combine with register");
 		return NULL;
 	}
-	return parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+	return parse_derived_type(parser, base, NULL, NULL, declarator_cast);
 }
 
 static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
@@ -1475,6 +1709,7 @@ static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
 		diagnostic_error(parser->diagnostics, location, "expression tree exceeds depth limit (128)");
 		return NULL;
 	}
+	node->alignment_specifiers = storage.alignment_specifiers;
 	node->file_scope = !parser->in_function && !parser->parameter_nesting;
 	node->is_static = storage.keyword.kind == token_static;
 	node->is_register = storage.keyword.kind == token_register;
@@ -1514,6 +1749,11 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_brace)
 		return parse_compound_literal_tail(parser, opening.location, type_syntax, storage);
+	if (storage.alignment_specifiers) {
+		diagnostic_error(parser->diagnostics, opening.location,
+			"alignment specifier in a type name requires a compound literal initializer");
+		return NULL;
+	}
 	if (literal_storage_present(storage)) {
 		diagnostic_error(parser->diagnostics, opening.location, "storage class requires a compound literal initializer");
 		return NULL;
@@ -1565,6 +1805,11 @@ static struct ast_expression *parse_sizeof_expression(struct parser *parser)
 				if (!node)
 					allocation_error(parser, keyword.location);
 				return node ? &node->expression : NULL;
+			}
+			if (storage.alignment_specifiers) {
+				diagnostic_error(parser->diagnostics, opening.location,
+					"alignment specifier in a type name requires a compound literal initializer");
+				return NULL;
 			}
 			if (literal_storage_present(storage)) {
 				diagnostic_error(parser->diagnostics, opening.location, "storage class requires a compound literal initializer");
@@ -2299,7 +2544,8 @@ static struct ast_do_statement *parse_do_statement(struct parser *parser)
 
 static struct ast_block_item *parse_local_declaration(struct parser *parser);
 static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser *parser,
-	struct token keyword, struct ast_type_syntax *base);
+	struct token keyword, struct ast_type_syntax *base,
+	struct ast_alignment_specifier *alignment_specifiers);
 static struct ast_block_item *parse_block_item(struct parser *parser);
 static bool begins_static_assertion(enum token_kind kind);
 static bool count_block_item(struct parser *parser, struct source_location location);
@@ -2592,37 +2838,19 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
-	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && tag_specifier_base(base)) {
 		struct ast_tag_declaration *declaration;
 		struct ast_block_tag_declaration *node;
 
-		struct ast_record_type_syntax *record = record_specifier_base(base);
-
-		/* Storage/qualifier spellings describe no ordinary entity here.
-		 * Specifier combination constraints were already checked above. */
-		if (record->tag.kind != token_identifier) {
-			diagnostic_error(parser->diagnostics, beginning.location,
-				"declaration without a declarator requires a tag name");
-			return NULL;
-		}
-		if (head.inline_keyword.kind != token_eof) {
-			diagnostic_error(parser->diagnostics, beginning.location,
-				"inline requires a function identifier declaration");
-			return NULL;
-		}
 		if (!count_block_item(parser, beginning.location))
 			return NULL;
-		preprocess_next(parser->preprocessor);
-		declaration = ast_new_tag_declaration(parser->arena, &record->syntax, beginning.location);
-		if (declaration)
-			declaration->plain_forward = !record->has_definition && base == &record->syntax &&
-				head.keyword.kind == token_eof && head.auto_keyword.kind == token_eof &&
-				head.thread_keyword.kind == token_eof && head.inline_keyword.kind == token_eof;
+		declaration = parse_tag_declaration_tail(parser, beginning, base, head);
 		node = declaration ? ast_new_block_tag_declaration(parser->arena, declaration) : NULL;
-		if (!node)
+		if (!node && declaration)
 			allocation_error(parser, beginning.location);
 		return node ? &node->item : NULL;
 	}
+
 	if (head.thread_keyword.kind == token_thread_local &&
 		head.keyword.kind != token_static && head.keyword.kind != token_extern) {
 		diagnostic_error(parser->diagnostics, beginning.location,
@@ -2675,6 +2903,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		}
 		node->type_syntax = type_syntax;
+		node->alignment_specifiers = head.alignment_specifiers;
 		node->initializer_syntax = initializer_syntax;
 		node->is_inline = head.inline_keyword.kind == token_inline;
 		node->is_register = head.keyword.kind == token_register;
@@ -2710,8 +2939,8 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 	if (!base)
 		return NULL;
 	if (head.keyword.kind == token_typedef &&
-		!(preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)))
-		return parse_block_typedef_declaration_tail(parser, head.keyword, base);
+		!(preprocess_peek(parser->preprocessor).kind == token_semicolon && tag_specifier_base(base)))
+		return parse_block_typedef_declaration_tail(parser, head.keyword, base, head.alignment_specifiers);
 	return parse_local_declaration_tail(parser, beginning, base, head);
 }
 
@@ -2784,7 +3013,8 @@ static struct ast_typedef_declaration *new_typedef_declaration(struct parser *pa
  * Specifiers already selected typedef storage and one shared written base.
  */
 static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser *parser,
-	struct token keyword, struct ast_type_syntax *base)
+	struct token keyword, struct ast_type_syntax *base,
+	struct ast_alignment_specifier *alignment_specifiers)
 {
 	struct ast_block_item *items = NULL;
 	struct ast_block_item **tail = &items;
@@ -2805,6 +3035,7 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
+		declaration->alignment_specifiers = alignment_specifiers;
 		item = ast_new_block_typedef_declaration(parser->arena, declaration);
 		if (!item) {
 			allocation_error(parser, keyword.location);
@@ -2887,7 +3118,7 @@ static struct ast_block_item *parse_block_item(struct parser *parser)
 			if (!base)
 				return NULL;
 			if (head.keyword.kind == token_typedef)
-				return parse_block_typedef_declaration_tail(parser, head.keyword, base);
+				return parse_block_typedef_declaration_tail(parser, head.keyword, base, head.alignment_specifiers);
 			return parse_local_declaration_tail(parser, token, base, head);
 		}
 		statement = parse_identifier_expression_statement(parser, token);
@@ -2998,7 +3229,7 @@ static bool parse_parameters(struct parser *parser,
 		if (!type_syntax)
 			return false;
 		/* Keep written register void for the semantic subset diagnostic. */
-		if (!function->parameter_count && !has_name && head.keyword.kind != token_register &&
+		if (!function->parameter_count && !has_name && !head.alignment_specifiers && head.keyword.kind != token_register &&
 			type_syntax->kind == type_syntax_void &&
 			preprocess_peek(parser->preprocessor).kind == token_right_paren)
 			return true;
@@ -3008,6 +3239,7 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		}
 		parameter->type_syntax = type_syntax;
+		parameter->alignment_specifiers = head.alignment_specifiers;
 		parameter->is_register = head.keyword.kind == token_register;
 		if (has_name && !publish_parser_name(parser, name, parser_name_object))
 			return false;
@@ -3043,7 +3275,8 @@ static bool parse_external_initializer(struct parser *parser,
 /* object-declaration-tail ::= declarator [ "=" initializer ] */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline,
+	struct ast_alignment_specifier *alignment_specifiers)
 {
 	struct ast_external_object_declaration *declaration;
 	struct ast_expression *initializer = NULL;
@@ -3056,6 +3289,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
 	if (!declaration)
 		allocation_error(parser, beginning.location);
 	else {
+		declaration->alignment_specifiers = alignment_specifiers;
 		declaration->is_inline = is_inline;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
@@ -3070,7 +3304,8 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline,
+	struct ast_alignment_specifier *alignment_specifiers)
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
@@ -3081,7 +3316,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name)
-		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline);
+		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, alignment_specifiers);
 	if (!parse_external_initializer(parser, &initializer, &initializer_syntax))
 		return NULL;
 	declaration = ast_new_external_type_declaration(parser->arena,
@@ -3089,6 +3324,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 	if (!declaration)
 		allocation_error(parser, beginning.location);
 	else {
+		declaration->alignment_specifiers = alignment_specifiers;
 		declaration->is_inline = is_inline;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
@@ -3104,7 +3340,8 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
  * Every name is visible to later declarators, not its own unfinished declarator.
  */
 static struct ast_external_declaration *parse_typedef_declaration_tail(struct parser *parser,
-	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base)
+	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base,
+	struct ast_alignment_specifier *alignment_specifiers)
 {
 	struct ast_external_declaration *declarations = NULL;
 	struct ast_external_declaration **tail = &declarations;
@@ -3129,6 +3366,7 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
+		declaration->alignment_specifiers = alignment_specifiers;
 		external = ast_new_external_typedef_declaration(parser->arena, declaration);
 		if (!external) {
 			allocation_error(parser, keyword.location);
@@ -3152,7 +3390,8 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 }
 
 /* function-body ::= compound-statement
- * Only the defining outer function's parameter names extend into its body.
+ * Only the defining outer function's parameter names and enumerator masks
+ * extend into its body; nested callback prototype scopes do not.
  */
 static struct ast_compound_statement *parse_function_body(struct parser *parser,
 	struct ast_function_declaration *declaration)
@@ -3160,11 +3399,26 @@ static struct ast_compound_statement *parse_function_body(struct parser *parser,
 	struct parser_name *saved_names = parser->names;
 	struct ast_compound_statement *body = NULL;
 
-	for (struct ast_parameter *parameter = declaration->parameters; parameter;
-		parameter = parameter->next) {
-		if (parameter->has_name &&
-			!publish_parser_name(parser, parameter->name, parser_name_object))
-			goto done;
+	for (struct parser_function_scope *scope = parser->function_scopes; scope; scope = scope->next) {
+		struct parser_name *head = NULL;
+		struct parser_name **tail = &head;
+
+		if (scope->function != declaration->type_syntax)
+			continue;
+		for (struct parser_name *name = scope->names; name != scope->outer_names; name = name->next) {
+			struct parser_name *copy = arena_alloc(parser->arena, sizeof(*copy));
+
+			if (!copy) {
+				allocation_error(parser, name->name.location);
+				goto done;
+			}
+			*copy = *name;
+			*tail = copy;
+			tail = &copy->next;
+		}
+		*tail = parser->names;
+		parser->names = head;
+		break;
 	}
 	parser->block_items = 0;
 	parser->in_function = true;
@@ -3184,7 +3438,8 @@ done:
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline,
+	struct ast_alignment_specifier *alignment_specifiers)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -3209,7 +3464,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		if (!publish_parser_name(parser, name, parser_name_object))
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, alignment_specifiers);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -3219,6 +3474,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 				allocation_error(parser, beginning.location);
 				return NULL;
 			}
+			declaration->alignment_specifiers = alignment_specifiers;
 			declaration->is_extern = is_extern;
 			declaration->is_inline = is_inline;
 			declaration->is_thread_local = is_thread_local;
@@ -3297,38 +3553,22 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			"file-scope auto declarations are not supported yet");
 		return NULL;
 	}
-	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
-		struct ast_tag_declaration *declaration;
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && tag_specifier_base(base)) {
+		struct ast_tag_declaration *declaration = parse_tag_declaration_tail(parser, beginning, base, head);
 		struct ast_external_tag_declaration *node;
 
-		struct ast_record_type_syntax *record = record_specifier_base(base);
-
-		if (record->tag.kind != token_identifier) {
-			diagnostic_error(parser->diagnostics, beginning.location,
-				"declaration without a declarator requires a tag name");
-			return NULL;
-		}
-		if (head.inline_keyword.kind != token_eof) {
-			diagnostic_error(parser->diagnostics, beginning.location,
-				"inline requires a function identifier declaration");
-			return NULL;
-		}
-		preprocess_next(parser->preprocessor);
-		declaration = ast_new_tag_declaration(parser->arena, &record->syntax, beginning.location);
-		if (declaration)
-			declaration->plain_forward = !record->has_definition && base == &record->syntax &&
-				head.keyword.kind == token_eof && head.auto_keyword.kind == token_eof &&
-				head.thread_keyword.kind == token_eof && head.inline_keyword.kind == token_eof;
 		node = declaration ? ast_new_external_tag_declaration(parser->arena, declaration) : NULL;
-		if (!node)
+		if (!node && declaration)
 			allocation_error(parser, beginning.location);
 		return node ? &node->external : NULL;
 	}
+
 	if (head.keyword.kind == token_typedef)
-		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
+		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base, head.alignment_specifiers);
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
-		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline);
+		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
+		head.alignment_specifiers);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

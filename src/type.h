@@ -27,6 +27,7 @@ enum type_kind {
 	type_kind_function,
 	type_kind_struct,
 	type_kind_union,
+	type_kind_enum,
 };
 
 enum type_qualifier {
@@ -39,10 +40,24 @@ struct type {
 };
 
 /* Stable nominal identity shared by every qualified wrapper. */
+struct enum_definition {
+	bool complete;
+	const struct type *compatible_type;
+};
+
+struct enum_type {
+	struct type type;
+	struct enum_definition *definition;
+};
+
+struct enum_type *type_new_enum(struct arena *arena);
+struct enum_definition *type_enum_definition(const struct type *type);
+
 struct record_member {
 	struct token name;
 	const struct type *type;
 	uint64_t offset;
+	unsigned alignment; /* Zero selects intrinsic type alignment. */
 	bool anonymous;
 	struct record_member *next;
 };

@@ -1,6 +1,16 @@
 # C23 coverage
 
-Current implementation: M16 records for existing supported types; see
+Current M18 implementation: ordinary signed-int-range enumerations and declaration
+alignment complement fixed sizeof/alignof, strict integer constant evaluation
+and static assertions. Read `m18-enums-alignment.md` for exact target policy,
+C23 parameter/literal support, redeclaration interpretation and resource limits.
+Exact release gates are recorded separately. Wider/fixed-underlying enums
+(M23f), expanded tag redefinitions (M23h), aggregate ABI (M21) and bit-fields/flexible arrays (M22)
+remain outside this increment. Earlier checkpoint entries below are historical,
+not the current unsupported-feature inventory. No full C23 conformance claimed.
+
+
+Historical M16 checkpoint: records for existing supported types; see
 `m16-records.md`. Record layout/member/copy/query/storage composition is
 implemented. General initializer syntax (M17), aggregate-by-value ABI (M21),
 bit-fields/flexible arrays (M22), and C23 expanded tag compatibility/repeated
@@ -9,7 +19,7 @@ frozen full normal/sanitizer, fuzz and exact-commit CI gates; earlier entries ar
 historical, not the current unsupported-feature inventory.
 
 
-Current storage checkpoint: M15 storage/linkage closure for existing supported
+Historical storage checkpoint: M15 storage/linkage closure for existing supported
 types: block extern/function bindings, static locals, explicit thread storage,
 inline TU-end ownership and checked address offsets/subobjects/character views.
 Static null storage includes typeof(nullptr) targets. Existing tentative and

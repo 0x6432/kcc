@@ -718,6 +718,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =w copy %u\n", temporary, node->value ? 1u : 0u);
 		return temporary;
 	}
+	case expression_enumerator:
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w copy %ju\n", temporary,
+			(uintmax_t)((const struct ast_enumerator_expression *)expression)->bits);
+		return temporary;
 	case expression_integer: {
 		const struct ast_integer_expression *node =
 			(const struct ast_integer_expression *)expression;
@@ -1333,7 +1338,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	while (local) {
 		/* Slots are allocated at entry; initialization is in source order. */
 		uint64_t bytes = type_object_size(local->type);
-		unsigned alignment = type_object_alignment(local->type);
+		unsigned alignment = local->alignment ? local->alignment : type_object_alignment(local->type);
 
 		if (alignment < 4)
 			alignment = 4;
@@ -1491,7 +1496,7 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 			emit(&data_codegen, "%s%sdata $%.*s = align %u { ",
 				object->is_internal ? "" : "export ", object->is_thread_local ? "thread " : "", (int)name.length,
 				(const char *)name.spelling_location.source->data + name.spelling_location.offset,
-				type_object_alignment(object->type));
+				object->alignment ? object->alignment : type_object_alignment(object->type));
 			if (object->definition && object->initializer_plan)
 				codegen_static_initializer(&data_codegen, object->initializer_plan);
 			else if (object->definition) {

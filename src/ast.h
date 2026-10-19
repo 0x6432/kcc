@@ -11,6 +11,7 @@ struct external_object_symbol;
 
 enum expression_kind {
 	expression_integer,
+	expression_enumerator,
 	expression_boolean,
 	expression_nullptr,
 	expression_character,
@@ -46,6 +47,10 @@ enum expression_kind {
 };
 
 enum {
+	ast_max_enum_nesting = 64,
+	ast_max_enumerators = 4096,
+	ast_max_enum_members = 1024,
+	ast_max_alignment_specifiers = 4096,
 	ast_max_initializer_nesting = 64,
 	ast_max_initializer_nodes = 16384,
 	ast_max_initializer_entries = 16384,
@@ -195,6 +200,8 @@ enum ast_compound_literal_storage {
 /* One syntax node is one canonical object, including repeated evaluations. */
 struct ast_compound_literal_expression {
 	struct ast_expression expression;
+	struct ast_alignment_specifier *alignment_specifiers;
+	unsigned alignment;
 	struct ast_type_syntax *type_syntax;
 	struct ast_initializer *initializer_syntax;
 	struct ast_initializer_plan *initializer_plan;
@@ -473,12 +480,45 @@ enum type_syntax_kind {
 	type_syntax_array,
 	type_syntax_function,
 	type_syntax_record,
+	type_syntax_enum,
 };
 
 struct ast_type_syntax {
 	enum type_syntax_kind kind;
 	struct source_location location;
 	const struct type *type;
+};
+
+struct ast_enumerator {
+	struct token name;
+	struct ast_expression *value;
+	struct ast_enumerator *next;
+	const struct type *type;
+	uint64_t bits;
+};
+
+struct ast_enum_type_syntax {
+	struct ast_type_syntax syntax;
+	struct token tag;
+	bool has_definition;
+	struct ast_enumerator *enumerators;
+	size_t enumerator_count;
+};
+
+struct ast_enumerator_expression {
+	struct ast_expression expression;
+	struct ast_enumerator *enumerator;
+	uint64_t bits;
+};
+
+struct ast_alignment_specifier {
+	struct source_location location;
+	struct ast_type_syntax *type_syntax;
+	struct ast_expression *expression;
+	struct ast_alignment_specifier *next;
+	/* Declaration-specifier order, independent of macro spelling locations.
+	 * All such operands precede derived declarator bounds/parameter syntax. */
+	bool after_type_specifier;
 };
 
 /* Syntax only: tags belong to sema's separate namespace, never parser aliases. */
@@ -492,6 +532,7 @@ struct ast_record_type_syntax {
 };
 
 struct ast_record_member_declaration {
+	struct ast_alignment_specifier *alignment_specifiers;
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	bool anonymous;
@@ -509,10 +550,12 @@ struct ast_member_expression {
 };
 
 struct ast_tag_declaration {
+	struct ast_alignment_specifier *alignment_specifiers;
 	struct ast_type_syntax *type_syntax;
 	struct source_location location;
 	/* Exactly unqualified/unprefixed `struct-or-union tag;`. Unlike a
-	 * prefixed reference, this form declares/shadows in the current scope. */
+	 * prefixed reference, this form declares/shadows in the current scope.
+	 * Always false for enums: references require a visible complete tag. */
 	bool plain_forward;
 };
 
@@ -762,6 +805,8 @@ struct ast_block_tag_declaration {
 
 struct ast_local_declaration {
 	struct ast_block_item item;
+	struct ast_alignment_specifier *alignment_specifiers;
+	unsigned alignment;
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	struct ast_expression *initializer;
@@ -812,6 +857,7 @@ struct ast_external_tag_declaration {
 };
 
 struct ast_typedef_declaration {
+	struct ast_alignment_specifier *alignment_specifiers;
 	struct source_location location;
 	struct ast_type_syntax *type_syntax;
 	struct token name;
@@ -830,6 +876,8 @@ struct ast_external_static_assertion {
 
 struct ast_external_object_declaration {
 	struct ast_external_declaration external;
+	struct ast_alignment_specifier *alignment_specifiers;
+	unsigned alignment;
 	bool is_extern;
 	bool is_inline;
 	bool is_thread_local;
@@ -846,6 +894,8 @@ struct ast_external_object_declaration {
 /* Written alias/query root; sema classifies the resolved function/object type. */
 struct ast_external_type_declaration {
 	struct ast_external_declaration external;
+	struct ast_alignment_specifier *alignment_specifiers;
+	unsigned alignment;
 	bool is_extern;
 	struct external_object_symbol *object_symbol;
 	bool is_inline;
@@ -861,6 +911,8 @@ struct ast_external_type_declaration {
 };
 
 struct ast_parameter {
+	struct ast_alignment_specifier *alignment_specifiers;
+	unsigned alignment;
 	struct ast_type_syntax *type_syntax;
 	const struct type *type;
 	struct source_location location;
@@ -874,6 +926,7 @@ struct ast_parameter {
 
 struct ast_function_declaration {
 	struct ast_external_declaration external;
+	struct ast_alignment_specifier *alignment_specifiers;
 	bool is_extern;
 	bool is_inline;
 	bool is_thread_local;
@@ -908,6 +961,16 @@ struct ast_translation_unit {
 	struct ast_external_declaration *declarations;
 	struct ast_string_expression *strings;
 };
+
+struct ast_enum_type_syntax *ast_new_enum_type_syntax(struct arena *arena,
+	struct token keyword, struct token tag);
+struct ast_enumerator *ast_new_enumerator(struct arena *arena,
+	struct token name, struct ast_expression *value);
+struct ast_enumerator_expression *ast_new_enumerator_expression(struct arena *arena,
+	struct token name, struct ast_enumerator *enumerator);
+struct ast_alignment_specifier *ast_new_alignment_specifier(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax,
+	struct ast_expression *expression);
 
 struct ast_initializer *ast_new_initializer(struct arena *arena,
 	enum ast_initializer_kind kind, struct source_location location);

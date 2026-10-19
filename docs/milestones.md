@@ -24,7 +24,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M15 | Globals/storage/linkage/multiple translation units | Host-link integration, tentative definitions, compatibility | complete for existing supported types (block extern/functions, static locals, thread storage, inline ownership and checked symbolic offsets); general M17 initializers and later-type/environment dependencies remain explicit in m15-completion.md; exact release gates recorded separately |
 | M16 | Struct/union/member/layout | Size/alignment/member access, host pointer interop and aggregate-copy tests | complete for existing supported types within m16-records.md; exact release gates recorded separately; general initializers M17, aggregate ABI M21, bit-fields/flexible arrays M22 and expanded C23 tag rules M23h remain |
 | M17 | Initializers/designators/compound literals | Nested initialization, zero fill, storage duration | implemented for existing supported types within m17-initializers.md; exact release gates recorded separately; constexpr, later types/ABI and baseline nonzero integer-pointer conversions remain explicit dependencies |
-| M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
+| M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | implemented for supported types within m18-enums-alignment.md, including prior M18a/b1/b2; exact release gates recorded separately; wider/fixed enums M23f and expanded redefinitions M23h remain |
 | M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels and M19e2 direct goto implemented; M19f1/f2 integer switch/case/default implemented; attributes/VLA interactions remain) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
@@ -3568,3 +3568,15 @@ See m15-completion.md for supported existing-type storage, thread duration,
 lexical/canonical composites, inline external identity, static address constants,
 release gates and exact dependency boundaries. Earlier M15 slice records remain
 historical. General initialization is M17, not silently treated as implemented.
+
+## M18 ordinary enums and declaration alignment (integration)
+
+See m18-enums-alignment.md for nominal enum identities, signed-int-range
+enumerators, unsigned/signed compatible-type policy, source-point scopes, C23
+for declarations, fundamental target alignment through16, declaration/member
+storage metadata and zero/redeclaration/tentative provenance. C23 aligned
+parameters and compound literals are included. Native legacy capability gaps,
+valid-case disagreements and semantic/UB refusals remain separate from native
+constraint agreements. Both full make targets gain additive enum/alignment AST
+and pipeline suites. All complete local lanes, exact-commit fuzz, independent
+manifest-bound review and five remote jobs are required, not presumed.

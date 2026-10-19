@@ -496,6 +496,18 @@ static void test_static_keyword(void)
 	assert(strcmp(token_kind_name(token_static), "static") == 0);
 }
 
+static void test_enumeration_alignment_tokens(void)
+{
+	const enum token_kind kinds[] = { token_enum, token_alignas, token_legacy_alignas, token_identifier, token_identifier, token_identifier };
+	const enum token_kind pasted[] = { token_enum, token_alignas, token_legacy_alignas };
+
+	assert(strcmp(token_kind_name(token_enum), "enum") == 0);
+	assert(strcmp(token_kind_name(token_alignas), "alignas") == 0);
+	assert(strcmp(token_kind_name(token_legacy_alignas), "_Alignas") == 0);
+	check_tokens("enum alignas _Alignas enum_value alignas_value _Alignas_value", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	check_tokens("#define JOIN(a,b) a ## b\nJOIN(en,um) JOIN(al,ignas) JOIN(_Align,as)", pasted, sizeof(pasted) / sizeof(pasted[0]), 0);
+}
+
 int main(void)
 {
 	test_extern_keyword();
@@ -539,6 +551,7 @@ int main(void)
 	test_basic();
 	test_bracket_tokens();
 	test_record_tokens();
+	test_enumeration_alignment_tokens();
 	test_errors();
 	test_binary_and_values();
 	test_condition_tokens();
