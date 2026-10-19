@@ -992,4 +992,3 @@ static struct constant_result compare_initializer_addresses(const struct ast_bin
 	default: return constant_failure(expression, constant_not_constant, "unsupported constant address operation");
 	}
 }
-

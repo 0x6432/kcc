@@ -65,9 +65,9 @@ struct address_initializer_result {
 	const struct type *origin_type; /* Captured direct address/decay pointer type. */
 };
 
-/* Pure checked-AST query. Only direct address/decay bases and compatible,
- * qualifier-preserving conversions and bounded strict-ICE pointer offsets.
- * No loads, inferred later bounds, or unproved pointer reinterpretations.
+/* Pure checked-AST query. Proves symbolic bases, selected address conditions,
+ * source-point subobject domains and checked strict-ICE pointer offsets.
+ * No object loads, inferred later bounds, or invented reinterpretation domains.
  */
 struct address_initializer_result evaluate_address_initializer(const struct ast_expression *expression);
 
