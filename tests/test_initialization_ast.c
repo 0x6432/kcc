@@ -403,6 +403,55 @@ static void check_difference_condition_private_address_not_public_ice(void)
     close_fixture(&f);
 }
 
+static void check_nominal_difference_paths_and_unknown_bound_purity(void)
+{
+    const char *sources[]={
+        "typedef int A[2];union U{A a,b;}u;int g,h;int*p=((&u.a[1]-&u.a[0])==1)?&g:&h;",
+        "typedef int A[2];union V{A a,b;};struct S{union V v;};union U{struct S a,b;}u;int g,h;int*p=((&u.a.v.a[1]-&u.a.v.a[0])==1)?&g:&h;",
+        "extern int a[];int g,h;int*p=((&a[1]-&a[0])==1)?&g:&h;",
+    };
+    for(unsigned n=0;n<3;++n) {
+        struct fixture f; struct ast_external_object_declaration *objects[4],*p;
+        struct ast_conditional_expression *conditional, before;
+        struct ast_binary_expression *comparison;
+        struct static_data_value cache; struct ast_translation_unit unit;
+        struct external_object_symbol root_before,p_before;
+        unsigned count_objects=0;
+        open_fixture(&f,sources[n],true); analyze(&f);
+        for(struct ast_external_declaration *d=f.unit->declarations;d;d=d->next) {
+            if(d->kind!=external_object_declaration) continue;
+            assert(count_objects<4); objects[count_objects++]=(struct ast_external_object_declaration *)d;
+        }
+        assert(count_objects==4); p=objects[3];
+        assert(p->initializer->kind==expression_conditional);
+        conditional=(struct ast_conditional_expression *)p->initializer;
+        assert(conditional->condition->kind==expression_binary);
+        comparison=(struct ast_binary_expression *)conditional->condition;
+        assert(comparison->operation==binary_equal && comparison->left->kind==expression_pointer_difference);
+        assert(p->symbol->initializer_value.kind==static_data_address);
+        assert(p->symbol->initializer_value.address.base.object==objects[1]->symbol);
+        assert(!p->symbol->initializer_value.address.byte_addend);
+        if(n==2) assert(objects[0]->is_extern && count(objects[0]->type)==0);
+        before=*conditional; cache=p->symbol->initializer_value; unit=*f.unit;
+        root_before=*objects[0]->symbol; p_before=*p->symbol;
+        for(unsigned query=0;query<32;++query) {
+            struct address_initializer_result address=evaluate_address_initializer(p->initializer);
+            assert(address.status==constant_value && address.address.kind==static_address_object);
+            assert(address.address.base.object==objects[1]->symbol && !address.address.byte_addend);
+            assert(evaluate_integer_constant(comparison->left).status==constant_not_constant);
+            assert(evaluate_integer_constant(conditional->condition).status==constant_not_constant);
+            assert(!memcmp(&before,conditional,sizeof before));
+            assert(!memcmp(&cache,&p->symbol->initializer_value,sizeof cache));
+            assert(!memcmp(&root_before,objects[0]->symbol,sizeof root_before));
+            assert(!memcmp(&p_before,p->symbol,sizeof p_before));
+            assert(!memcmp(&unit,f.unit,sizeof unit) && !f.diagnostics.errors);
+            if(n==2) assert(count(objects[0]->type)==0);
+        }
+        assert(!f.unit->strings && !f.unit->static_declarations);
+        close_fixture(&f);
+    }
+}
+
 static void check_source_constant_bool_is_not_integer_ice(void)
 {
     const char *sources[]={"int target; _Bool cell=&target;","_Bool cell=(int *)0;"};
@@ -509,7 +558,7 @@ int main(void)
 	check_constructors(); check_syntax_and_continuation(); check_completion_and_canonical_definition();
 	check_address_source_bound_capture(); check_static_and_block_storage();
     check_alias_capture(); check_override_plan(); check_cached_tags_and_pure_queries();
-	check_string_extent_and_compact_plan(); check_failed_publication(); check_prior_definition_failure(); check_promoted_exact_conditional_null(); check_source_constant_bool_is_not_integer_ice(); check_difference_condition_private_address_not_public_ice(); check_union_copy_fragments_and_capture_once(); check_parser_budgets();
+	check_string_extent_and_compact_plan(); check_failed_publication(); check_prior_definition_failure(); check_promoted_exact_conditional_null(); check_source_constant_bool_is_not_integer_ice(); check_difference_condition_private_address_not_public_ice(); check_nominal_difference_paths_and_unknown_bound_purity(); check_union_copy_fragments_and_capture_once(); check_parser_budgets();
 	puts("M17 initialization AST: syntax/capture/canonical plans/static tags/purity/failure/budgets");
 	return 0;
 }
