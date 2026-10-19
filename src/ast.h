@@ -130,6 +130,7 @@ enum ast_initializer_write_kind {
 	ast_initializer_write_expression,
 	ast_initializer_write_string,
 	ast_initializer_write_copy,
+	ast_initializer_write_zero,
 };
 
 enum ast_initializer_constant_kind {
