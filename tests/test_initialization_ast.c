@@ -376,6 +376,45 @@ static void check_source_constant_bool_is_not_integer_ice(void)
     }
 }
 
+static void check_union_copy_fragments_and_capture_once(void)
+{
+    struct fixture f; struct ast_function *fn; struct ast_local_declaration *r=NULL;
+    struct ast_expression *capture=NULL; unsigned locals=0,copies=0,scalars=0;
+    open_fixture(&f,"union U{struct S{int x,y,z;}s;long l;};struct R{union U u;};"
+        "int main(void){int n=0;union U seed={.s={3,4,5}};"
+        "struct R r={.u=(++n,seed),.u.s.y=9};"
+        "return n==1&&r.u.s.x==3&&r.u.s.y==9&&r.u.s.z==5?0:1;}",true);
+    analyze(&f); fn=(struct ast_function *)declaration(&f,2);
+    assert(fn->external.kind==external_function_definition);
+    for(struct ast_block_item *item=fn->body->items;item;item=item->next) {
+        if(item->kind==block_item_declaration) {
+            if(locals++==2) r=(struct ast_local_declaration *)item;
+        }
+    }
+    assert(r && locals==3 && r->initializer_plan && writes(r->initializer_plan)==3);
+    assert(r->initializer_syntax->entry_count==2 && r->initializer_plan->size==16);
+    for(struct ast_initializer_plan_entry *e=r->initializer_plan->entries;e;e=e->next) {
+        if(e->kind==ast_initializer_write_copy) {
+            ++copies;
+            assert((e->offset==0 && e->length==4) || (e->offset==8 && e->length==8));
+            assert(e->source_offset==e->offset && e->expression);
+            if(capture) assert(capture==e->expression); else capture=e->expression;
+        } else if(e->kind==ast_initializer_write_expression) {
+            struct constant_result result=evaluate_integer_constant(e->expression);
+            ++scalars; assert(e->offset==4 && e->length==4 && result.status==constant_value && result.bits==9);
+        } else assert(e->kind==ast_initializer_write_zero);
+    }
+    /* One checked source expression is the backend's capture key for both
+     * disjoint slices: ++n must run once, not once per retained copy fragment. */
+    assert(copies==2 && scalars==1 && capture);
+    {
+        struct ast_expression before=*capture;
+        assert(evaluate_integer_constant(capture).status==constant_not_constant);
+        assert(!memcmp(&before,capture,sizeof before) && !f.diagnostics.errors);
+    }
+    close_fixture(&f);
+}
+
 static void check_parser_budgets(void)
 {
 	/* All generated input is bounded (<100 KiB); no timeout/source explosion. */
@@ -423,7 +462,7 @@ int main(void)
 	check_constructors(); check_syntax_and_continuation(); check_completion_and_canonical_definition();
 	check_address_source_bound_capture(); check_static_and_block_storage();
     check_alias_capture(); check_override_plan(); check_cached_tags_and_pure_queries();
-	check_string_extent_and_compact_plan(); check_failed_publication(); check_prior_definition_failure(); check_promoted_exact_conditional_null(); check_source_constant_bool_is_not_integer_ice(); check_parser_budgets();
+	check_string_extent_and_compact_plan(); check_failed_publication(); check_prior_definition_failure(); check_promoted_exact_conditional_null(); check_source_constant_bool_is_not_integer_ice(); check_union_copy_fragments_and_capture_once(); check_parser_budgets();
 	puts("M17 initialization AST: syntax/capture/canonical plans/static tags/purity/failure/budgets");
 	return 0;
 }

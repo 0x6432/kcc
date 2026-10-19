@@ -48,6 +48,8 @@ class Case:
     compact: bool = False
     gcc_discrepancy: bool = False
     bounded_work: bool = False
+    standalone: bool = False
+    success_exit: int = 42
 
 
 def integer(n, width=4):
@@ -246,6 +248,14 @@ def fixtures():
         (Object('g',4,4,((0,bytes(4)),)),Object('p',8,8,(),refs={0:OffsetReference('object','g')})),
         compact=True,bounded_work=True))
     add('promoted exact conditional null','int *cell=1?(int *)0:(int *)0;', '!cell', [Object('cell',8,8,((0,bytes(8)),))])
+    cases.append(Case('N3096 union retention exact reviewer original','union U{struct S{int x,y;}s;long l;};struct R{union U u;};int main(void){union U seed={.s={3,4}};struct R r={.u=seed,.u.s.x=9};return r.u.s.x==9&&r.u.s.y==4?0:1;}',
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+    cases.append(Case('N3096 union retention direct union destination struct member copy','union U{struct S{int x,y;}s;long l;};int main(void){union U seed={.s={3,4}};union U r={.s=seed.s,.s.x=9};return r.s.x==9&&r.s.y==4?0:1;}',
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+    cases.append(Case('N3096 union retention whole parent record containing union','union U{struct S{int x,y;}s;long l;};struct R{union U u;};struct O{struct R r;};int main(void){struct R seed={.u.s={3,4}};struct O o={.r=seed,.r.u.s.x=9};return o.r.u.s.x==9&&o.r.u.s.y==4?0:1;}',
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+    cases.append(Case('N3096 union retention copy fragment evaluation once','union U{struct S{int x,y,z;}s;long l;};struct R{union U u;};int main(void){int n=0;union U seed={.s={3,4,5}};struct R r={.u=(++n,seed),.u.s.y=9};return n==1&&r.u.s.x==3&&r.u.s.y==9&&r.u.s.z==5?0:1;}',
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
     for case in cases:
         for obj in case.objects:
             for offset,contents in obj.fields:
@@ -591,6 +601,25 @@ def empty_probe(cc,source,output):
     return False
 
 
+def validate_case_runtime(case,compiler,result,native=False):
+    assert not result.stdout and not result.stderr,(case.name,compiler,result)
+    if native and case.gcc_discrepancy and not clang_style(compiler):
+        # ONLY curated exact originals independently observed on GCC11/13.
+        # A signal, diagnostic/tool failure, or another return is never a gap.
+        assert result.returncode in (1,case.success_exit),(case.name,compiler,result)
+        return result.returncode==case.success_exit
+    assert result.returncode==case.success_exit,(case.name,compiler,result)
+    return True
+
+
+def run_case_program(compiler,objects,executable,case,native=False):
+    producer([compiler,*objects,'-o',executable],executable)
+    agreement=validate_case_runtime(case,compiler,invoke([executable]),native)
+    if native and not agreement:
+        print(f'{compiler}: {case.name}: N3096 6.7.10p37 defined-runtime DISCREPANCY (not agreement)')
+    return agreement
+
+
 def must_fail(fn,label):
     try: fn()
     except (AssertionError,KeyError,ValueError,struct_error): return
@@ -712,6 +741,21 @@ def controls(d):
     check_il(valid_dag_il,valid_dag)
     for bad in (valid_dag_il.replace('z 4','z 3'),valid_dag_il.replace('align 4','align 1'),valid_dag_il.replace('export ',''),valid_dag_il.replace('z 4','w 1')):
         must_fail(lambda:check_il(bad,valid_dag),'initialized DAG exact acceptance storage')
+    exact_runtime=next(c for c in fixtures() if c.name=='N3096 union retention exact reviewer original')
+    normative=subprocess.CompletedProcess([],0,'','')
+    discrepancy=subprocess.CompletedProcess([],1,'','')
+    assert validate_case_runtime(exact_runtime,'gcc',normative,native=True)
+    assert not validate_case_runtime(exact_runtime,'gcc',discrepancy,native=True)
+    must_fail(lambda:validate_case_runtime(exact_runtime,'gcc',discrepancy),'KCC may not inherit native discrepancy')
+    ordinary=Case('ordinary source','',success_exit=0)
+    must_fail(lambda:validate_case_runtime(ordinary,'gcc',discrepancy,native=True),'no generic GCC waiver')
+    for kind in ('signal','stdout','stderr','wrong-exit'):
+        bad=copy.copy(discrepancy)
+        if kind=='signal': bad.returncode=-11
+        elif kind=='stdout': bad.stdout='tool noise\n'
+        elif kind=='stderr': bad.stderr='unexpected diagnostic\n'
+        else: bad.returncode=42
+        must_fail(lambda:validate_case_runtime(exact_runtime,'gcc',bad,native=True),'exact discrepancy fullstream '+kind)
     print('M17 poison controls: imported fresh producers/fullstream/selection/relocations; initializer IL/ELF/padding')
 
 
@@ -743,21 +787,21 @@ def main():
                 if not set(case.features)<=features[cc]: counts[cc][1]+=1; continue
                 producer([cc,*diagnostic_flags(cc),'-std=c2x','-pedantic-errors','-fno-common','-O0','-c',source,'-o',obj],obj,case.warnings[int(clang_style(cc))])
                 check_elf(ElfRelocations(obj),case)
-                producer([cc,'-std=c2x','-pedantic-errors','-fno-common','-O0','-c',other,'-o',peer],peer)
-                if case.gcc_discrepancy and not clang_style(cc):
-                    producer([cc,obj,peer,'-o',exe],exe)
-                    result=invoke([exe]); assert result.returncode in (1,42) and not result.stdout and not result.stderr,(case.name,cc,result)
-                    if result.returncode==1: print(f'{cc}: N3096 6.7.10p37 defined-runtime DISCREPANCY (not agreement)')
-                    else: counts[cc][0]+=1
-                else:
-                    run_program(cc,[obj,peer],exe); counts[cc][0]+=1
+                native_objects=[obj]
+                if not case.standalone:
+                    producer([cc,'-std=c2x','-pedantic-errors','-fno-common','-O0','-c',other,'-o',peer],peer)
+                    native_objects.append(peer)
+                if run_case_program(cc,native_objects,exe,case,native=True): counts[cc][0]+=1
             if args.native_only: continue
             r=bounded_kcc_work(source,case.name) if case.bounded_work else invoke([KCC,source]); assert r.returncode==0 and not r.stderr and r.stdout,(case.name,r)
             check_il(r.stdout,case); ssa.write_text(r.stdout)
             producer([QBE,'-t','amd64_sysv','-o',asm,ssa],asm)
             producer([HOST,'-Wa,-L','-c',asm,'-o',kobj],kobj); check_elf(ElfRelocations(kobj),case,True)
-            producer([HOST,'-std=c2x','-pedantic-errors','-fno-common','-c',other,'-o',peer],peer)
-            run_program(HOST,[kobj,peer],exe); kcount+=1
+            kcc_objects=[kobj]
+            if not case.standalone:
+                producer([HOST,'-std=c2x','-pedantic-errors','-fno-common','-c',other,'-o',peer],peer)
+                kcc_objects.append(peer)
+            run_case_program(HOST,kcc_objects,exe,case); kcount+=1
         if not args.native_only:
             for case in compile_only_fixtures():
                 source.write_text(case.owner+'\n')
