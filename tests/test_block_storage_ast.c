@@ -334,7 +334,7 @@ static void check_failed_publication(void)
 		assert(first->symbol->definition == &first->external);
 		assert(first->symbol->initializer_value.kind == static_data_integer && first->symbol->initializer_value.integer_bits == 42);
 		bad = local(function(&f, 0)->body, 1);
-		assert(bad->object_symbol && !bad->object_symbol->definition && !bad->object_symbol->tentative_definition);
+		assert(!bad->object_symbol && !bad->initializer_plan);
 		close_fixture(&f);
 	}
 }

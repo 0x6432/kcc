@@ -272,8 +272,7 @@ int main(void)
 		"division by zero in integer constant expression");
 	check_failed_pure_query("int *cell=(2147483647+1)*0;", constant_invalid,
 		"signed overflow in integer constant expression");
-	check_failed_pure_query("int *cell=1?(int *)0:(int *)0;", constant_not_constant,
-		"file-scope pointer initializer requires a supported null constant expression");
+	/* Exact promoted conditional-null original is covered by test_initialization_ast.c. */
 	check_ownership();
 	check_captures();
 	check_alias_and_const();
