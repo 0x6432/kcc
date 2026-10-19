@@ -195,7 +195,6 @@ DEFERRED = [
     'typeof(nullptr) other; int *cell=(int *)(typeof(nullptr))other;',
     'typeof(nullptr) get(void); int *cell=(int *)(typeof(nullptr))get();',
     'int *get(void); int *cell=get();',
-    '_Bool cell=(int *)0;',  # Pointer support must not broaden integer ICEs.
     'long cell=(long)(int *)0;',
     'int *main=0;',
 ]
@@ -384,8 +383,6 @@ def main():
                     message = 'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)'
                 elif text.startswith('typeof(nullptr) cell='):
                     message = "query-derived external declarations require ';' for non-integer initializers"
-                elif text == '_Bool cell=(int *)0;':
-                    message = 'file-scope initializer must be an integer constant expression'
                 elif text == 'int *main=0;':
                     message = 'initialized main object is not supported on the Linux target'
                 elif text == 'int *cell=0*(1/0);':

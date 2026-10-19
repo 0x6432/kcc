@@ -79,6 +79,27 @@ CASES = json.loads(r'''
     }
   },
   {
+    "origin": "test_direct_address_initializers.py",
+    "baseline_line": 315,
+    "text": "int target; _Bool cell=&target;",
+    "exit": null,
+    "objects": {
+      "target": [
+        4,
+        4,
+        true,
+        "00000000"
+      ],
+      "cell": [
+        1,
+        1,
+        true,
+        "01"
+      ]
+    },
+    "pointer_bool_warning": true
+  },
+  {
     "origin": "test_extern_arrays.py",
     "baseline_line": 236,
     "text": "static int a[2]={40,2};",
@@ -236,6 +257,20 @@ CASES = json.loads(r'''
     }
   },
   {
+    "origin": "test_null_initializers.py",
+    "baseline_line": 198,
+    "text": "_Bool cell=(int *)0;",
+    "exit": null,
+    "objects": {
+      "cell": [
+        1,
+        1,
+        true,
+        "00"
+      ]
+    }
+  },
+  {
     "origin": "test_record_layout.py",
     "baseline_line": 97,
     "text": "struct R { int x; }; struct R cell={42};",
@@ -384,7 +419,7 @@ NATIVE_GAPS = {(c['origin'], c['text']): tuple(tuple(pair) for pair in c['gcc_em
 
 
 def verify_mapping():
-    assert len(CASES) == 21
+    assert len(CASES) == 23
     assert len({(c['origin'], c['text']) for c in CASES}) == len(CASES)
     assert len({c['origin'] for c in CASES}) == 10
     for case in CASES:
@@ -397,6 +432,8 @@ def verify_mapping():
 
 
 def native_warnings(case, clang):
+    if clang and case.get('pointer_bool_warning'):
+        return (('warning', "address of 'target' will always evaluate to 'true' [-Wpointer-bool-conversion]"),)
     name = case.get('extern_warning')
     if not name:
         return ()
