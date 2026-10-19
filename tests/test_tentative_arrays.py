@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """Sole-owner tentative arrays and end-of-TU outer completion.
 
 Run: [KCC=...] [HOST_CC=...] [QBE=...] python3 tests/test_tentative_arrays.py
@@ -255,10 +256,6 @@ c23_constraints = [
      'int f(void) { return sizeof old; }', 'complete object type'),
 ]
 subset_errors = [
-    ('int items[3]={0,0,0};', 'file-scope object initializers'),
-    ('int items[]={40,2};', 'file-scope object initializers'),
-    ('extern int items[3]={0,0,0};', 'extern object definitions'),
-    ('typedef int Row[3]; Row items={0,0,0};', "query-derived external declarations require ';'"),
     ('int main[1];', 'tentative main object is not supported on the Linux target'),
 ]
 unavailable_initializers = [

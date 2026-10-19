@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """Checked pointer constant offsets: unchanged originals and exact logical addends.
 
 KCC=... QBE=... CLANG_CC=... python3 tests/test_address_offsets.py
@@ -340,7 +341,6 @@ INVALID = [
 ]
 DEFERRED = [
     'extern int target[]; int (*cell)[3]=(int (*)[3])&target+0;',
-    'extern int target[3]; int *cell=1?target+1:target;',
     'extern int target[3]; int *cell=(0,target+1);',
     'extern int target[3]; int n; int *cell=target+n;',
     'extern int target[3]; const int n=1; int *cell=target+n;',

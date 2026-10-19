@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """M15i2 null-only initialized pointer definitions, unchanged native originals.
 
 KCC=... QBE=... CLANG_CC=... python3 tests/test_null_initializers.py
@@ -180,7 +181,6 @@ DUPLICATES = [
     'typedef int *P; P cell=0; typeof(cell) cell=0;',
 ]
 DEFERRED = [
-    'int *cell=(1?(int *)0:(int *)0);',
     'int *cell=(0,(int *)0);',
     'int *cell=(0,nullptr);',
     'int *other=0; int *cell=other;',

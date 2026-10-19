@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """Independent M16 record identity/layout oracle. No aggregate by-value ABI.
 
 HOST_CC/GCC13_CC/CLANG_CC/KCC/QBE select real tools. --native-only does not
@@ -94,7 +95,6 @@ def original(case):
 # These are valid C, deliberately separate from language constraints. They may
 # be rejected only as the stated future milestone, never native disagreements.
 UNSUPPORTED = {
-    'M17 braced initializer': 'struct R { int x; }; struct R cell={42};',
     'M21 by-value argument': 'struct R { int x; }; int f(struct R r) { return r.x; }',
     'M21 by-value return': 'struct R { int x; }; struct R f(struct R *p) { return *p; }',
     'M22 bitfield': 'struct R { unsigned x:3; }; struct R cell;',
@@ -194,7 +194,6 @@ KCC_CONSTRAINT_ERRORS = {
     'member-assert-self': 'sizeof requires a complete object type',
 }
 KCC_FUTURE_ERRORS = {
-    'M17 braced initializer': 'file-scope object initializers are not supported yet',
     'M21 by-value argument': 'aggregate function arguments are not supported yet (M21)',
     'M21 by-value return': 'aggregate function returns are not supported yet (M21)',
     'M22 bitfield': 'bit-fields are not supported yet (M22)',

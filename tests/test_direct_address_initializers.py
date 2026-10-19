@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """P1 direct zero-addend address definitions: exact originals and ELF relocations.
 
 KCC=... QBE=... CLANG_CC=... python3 tests/test_direct_address_initializers.py
@@ -306,7 +307,6 @@ def check_il(text, case):
 # arithmetic. None run and native acceptance is never scored as proof.
 # Seven exact originals promoted to test_address_offsets.py positive fixtures.
 DEFERRED = [
-    'int target; int *cell=1?&target:&target;',
     'int target; int *cell=(0,&target);',
     'int target; int *base=&target; int *cell=base;',
     'int target; int *const base=&target; int *cell=base;',

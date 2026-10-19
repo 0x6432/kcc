@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """File-scope static tentative SCALARS: object linkage is NOT function linkage.
 
 N3096 6.2.2p3-5,7; 6.9.2p2-4; 6.7.10p11. Only defined originals
@@ -138,7 +139,6 @@ ub_refusals = [
 # incomplete-internal-array UB refusal are covered by test_static_arrays.py.
 # Integer initializers now have independent acceptance/ownership coverage.
 subset_errors = [
-    'static int cell={};',
     'static auto cell=42;', 'auto static cell=42;',
     'int f(int cell[static 3]);',
 ]

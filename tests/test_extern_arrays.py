@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """Declaration-only extern arrays backed by initialized native owners.
 
 Run from the repository:
@@ -232,13 +233,7 @@ c23_constraints = [
     ('extern int f(typeof(a[0])),a[2];', 'undeclared'),
 ]
 # Deferred definitions/storage probes make no native-constraint claims.
-subset_errors = [
-    ('static int a[2]={40,2};', 'file-scope object initializers'),
-    ('int a[2]={40,2};', 'file-scope object initializers'),
-    ('extern int a[2]={40,2};', 'extern object definitions'),
-    ('extern int a[]={40,2};', 'extern object definitions'),
-    ('typedef int Row[2]; extern Row a={40,2};', "query-derived external declarations require ';'"),
-]
+subset_errors = []
 unavailable_initializers = [
     'extern int a[3]; int f(void) { auto a='+initializer+'; return 0; }'
     for initializer in ['a', 'sizeof a', '(typeof(a[0]))0', 'sizeof(typeof(a))', '&a', '0?a:a']

@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """Ordinary byte strings have static array storage and explicit decay.
 
 No literal is modified and separate occurrences are never subtracted/ordered.
@@ -143,7 +144,6 @@ with tempfile.TemporaryDirectory(prefix='kcc string literals ') as directory:
         ('int main(void) { char *p="\\x100"; return 0; }', 'exceeds one byte'),
         ('int main(void) { char *p="\\400"; return 0; }', 'exceeds one byte'),
         ('int main(void) { char *p="a" L"b"; return 0; }', 'prefixed string'),
-        ('int main(void) { char a[2]="x"; return 0; }', 'array initializers'),
         ('int main(void) { return "x"; }', 'pointer conversion'),
         ('int main(void) { "x"="y"; return 0; }', 'modifiable lvalue'),
     ]

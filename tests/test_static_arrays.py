@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """File-scope internal fixed arrays: source-point types, local storage and ABI.
 
 Only small, defined curated programs execute. Constraints, undefined-linkage
@@ -98,10 +99,7 @@ acceptance_only = [
     'static int cell,items[3];', 'static int items[3],cell;',
     'static int items[3];',
 ]
-subset_refusals = [
-    'static int items[3]={1,2,3};',
-    'static int items[3]={};',
-]
+subset_refusals = []
 
 
 def invoke(args):

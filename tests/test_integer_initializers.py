@@ -1,3 +1,4 @@
+# M17: exact newly legal originals moved to test_initialization_promotions.py.
 """M15 file-scope INTEGER initialized definitions: independent storage/ICE oracle.
 
 [KCC=...] [HOST_CC=...] [CLANG_CC=...] [QBE=...] python3 tests/test_integer_initializers.py
@@ -234,8 +235,6 @@ ARITHMETIC = [('1/0', 'division by zero'), ('1%0', 'division by zero'),
               ('1ULL<<64', 'invalid shift count'), ('1<<-1', 'invalid shift count'),
               ('-1<<1', 'negative left operand'), ('1<<31', 'signed overflow')]
 DEFERRED = [
-    'int cell[2]={1,2};',
-    'int cell[]={1,2};', 'int cell={42};', 'int cell={};',
     'int cell=(1,42);', 'int other; int cell=1?42:other;',
     'int f(void); int cell=1||f();',
     'static int cell; int cell=42;',
