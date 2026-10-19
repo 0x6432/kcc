@@ -266,6 +266,12 @@ def fixtures():
     cases.append(Case('unknown extern array same root condition exact','extern int a[];int g,h;int*p=((&a[1]-&a[0])==1)?&g:&h;',
         (Object('g',4,4,((0,bytes(4)),)),Object('h',4,4,((0,bytes(4)),)),Object('p',8,8,(),refs={0:OffsetReference('object','g')})),
         companion='int a[2];extern int g,h;extern int*p;int main(void){return p==&g&&p!=&h&&a[0]==0&&a[1]==0?42:1;}\n'))
+    cases.append(Case('union duplicate scalar cast to named member condition exact','union U{int a,b;}u;int g,h;int*p=(((int*)&u-&u.b)==0)?&g:&h;',
+        (Object('u',4,4,((0,bytes(4)),)),Object('g',4,4,((0,bytes(4)),)),Object('h',4,4,((0,bytes(4)),)),Object('p',8,8,(),refs={0:OffsetReference('object','g')})),
+        companion='union U{int a,b;};extern union U u;extern int g,h;extern int*p;int main(void){return p==&g&&p!=&h&&u.a==0?42:1;}\n'))
+    cases.append(Case('union duplicate scalar character view alias condition exact','union U{int a,b;}u;int g,h;int*p=(((char*)(int*)&u-(char*)&u.b)==0)?&g:&h;',
+        (Object('u',4,4,((0,bytes(4)),)),Object('g',4,4,((0,bytes(4)),)),Object('h',4,4,((0,bytes(4)),)),Object('p',8,8,(),refs={0:OffsetReference('object','g')})),
+        companion='union U{int a,b;};extern union U u;extern int g,h;extern int*p;int main(void){return p==&g&&p!=&h&&u.a==0?42:1;}\n'))
     add('promoted exact conditional null','int *cell=1?(int *)0:(int *)0;', '!cell', [Object('cell',8,8,((0,bytes(8)),))])
     cases.append(Case('N3096 union retention exact reviewer original','union U{struct S{int x,y;}s;long l;};struct R{union U u;};int main(void){union U seed={.s={3,4}};struct R r={.u=seed,.u.s.x=9};return r.u.s.x==9&&r.u.s.y==4?0:1;}',
         warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True,companion=''))
@@ -477,6 +483,7 @@ PROOF_AND_RESOURCE={
     'condition difference distinct subrows': 'int a[2][2],g,h;int*p=((&a[1][0]-&a[0][0])==2)?&g:&h;',
     'condition difference overlapping union members': 'typedef int A[2];union U{A a,b;}u;int g,h;int*p=((&u.a[1]-&u.b[0])==1)?&g:&h;',
     'condition difference reused nested union paths': 'typedef int A[2];union V{A a,b;};struct S{union V v;};union U{struct S a,b;}u;int g,h;int*p=((&u.a.v.a[1]-&u.b.v.a[0])==1)?&g:&h;',
+    'condition difference cast original target laundering': 'struct S{int x,y;};struct T{int x;long y;};union U{struct S a,b;struct T c;}u;int g,h;int*p=((&((struct S*)&u)->x-&u.c.x)==0)?&g:&h;',
     'one MiB plus one': 'unsigned char cell[1048577]={0};',
     'long array storage boundary': 'long cell[131073]={0};',
     'index extent overflow': 'int cell[]={[18446744073709551615ULL]=42};',
@@ -570,6 +577,7 @@ KCC_REFUSALS={'excess array': (1, 16, 'excess elements in initializer'),
  'condition difference distinct subrows': (1,47,'static pointer difference requires the same captured array domain'),
  'condition difference overlapping union members': (1,71,'static pointer difference requires the same captured array domain'),
  'condition difference reused nested union paths': (1,123,'static pointer difference requires the same captured array domain'),
+ 'condition difference cast original target laundering': (1,126,'static pointer difference requires the same captured array domain'),
  'one MiB plus one': (1, 20, 'array bound must be positive and fit array type storage limit (1 MiB)'),
  'long array storage boundary': (1, 11, 'array bound must be positive and fit array type storage limit (1 MiB)'),
  'index extent overflow': (1, 13, 'array initializer index exceeds bound or storage limit (1 MiB)')}

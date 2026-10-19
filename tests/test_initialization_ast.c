@@ -409,8 +409,10 @@ static void check_nominal_difference_paths_and_unknown_bound_purity(void)
         "typedef int A[2];union U{A a,b;}u;int g,h;int*p=((&u.a[1]-&u.a[0])==1)?&g:&h;",
         "typedef int A[2];union V{A a,b;};struct S{union V v;};union U{struct S a,b;}u;int g,h;int*p=((&u.a.v.a[1]-&u.a.v.a[0])==1)?&g:&h;",
         "extern int a[];int g,h;int*p=((&a[1]-&a[0])==1)?&g:&h;",
+        "union U{int a,b;}u;int g,h;int*p=(((int*)&u-&u.b)==0)?&g:&h;",
+        "union U{int a,b;}u;int g,h;int*p=(((char*)(int*)&u-(char*)&u.b)==0)?&g:&h;",
     };
-    for(unsigned n=0;n<3;++n) {
+    for(unsigned n=0;n<sizeof sources/sizeof sources[0];++n) {
         struct fixture f; struct ast_external_object_declaration *objects[4],*p;
         struct ast_conditional_expression *conditional, before;
         struct ast_binary_expression *comparison;
