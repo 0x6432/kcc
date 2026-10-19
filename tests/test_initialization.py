@@ -249,6 +249,14 @@ def fixtures():
         'int g; int *p='+predicate+'; int test(void) { return p==&g?42:1; }',
         (Object('g',4,4,((0,bytes(4)),)),Object('p',8,8,(),refs={0:OffsetReference('object','g')})),
         compact=True,bounded_work=True))
+    # Exact p9/p11 original: condition is defined same-array subtraction, not
+    # an integer constant expression. Native/KCC link the unchanged owner and
+    # companion separately; only the selected address contributes relocation.
+    cases.append(Case('same-array difference address condition exact',
+        'int a[2],g,h;int*p=((&a[1]-&a[0])==1)?&g:&h;',
+        (Object('a',8,4,((0,bytes(8)),)),Object('g',4,4,((0,bytes(4)),)),
+         Object('h',4,4,((0,bytes(4)),)),Object('p',8,8,(),refs={0:OffsetReference('object','g')})),
+        companion='extern int a[2],g,h;extern int*p;int main(void){return p==&g&&p!=&h&&a[0]==0&&a[1]==0?42:1;}\n'))
     add('promoted exact conditional null','int *cell=1?(int *)0:(int *)0;', '!cell', [Object('cell',8,8,((0,bytes(8)),))])
     cases.append(Case('N3096 union retention exact reviewer original','union U{struct S{int x,y;}s;long l;};struct R{union U u;};int main(void){union U seed={.s={3,4}};struct R r={.u=seed,.u.s.x=9};return r.u.s.x==9&&r.u.s.y==4?0:1;}',
         warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True,companion=''))
@@ -452,6 +460,12 @@ PROOF_AND_RESOURCE={
     'member cast beyond domain': 'struct S { int x,y; } target; int *cell=(int*)&target+2;',
     'character scalar cannot widen domain': 'int target[3]; int *cell=(int*)((char*)&target[0]+8);',
     'row onepast cast cannot cross row': 'int target[2][3]; int *cell=(int*)((char*)&target[0]+12)+1;',
+    # These differences have no proven common actual array domain. They are
+    # compile-only KCC proof refusals, never executed or native UB oracles.
+    'condition difference unrelated arrays': 'int a[2],b[2],g,h;int*p=((&a[1]-&b[0])==1)?&g:&h;',
+    'condition difference null pointers': 'int g,h;int*p=(((int*)0-(int*)0)==0)?&g:&h;',
+    'condition difference fabricated domain': 'int a[2],g,h;int*p=(((short*)&a[1]-(short*)&a[0])==2)?&g:&h;',
+    'condition difference distinct subrows': 'int a[2][2],g,h;int*p=((&a[1][0]-&a[0][0])==2)?&g:&h;',
     'one MiB plus one': 'unsigned char cell[1048577]={0};',
     'long array storage boundary': 'long cell[131073]={0};',
     'index extent overflow': 'int cell[]={[18446744073709551615ULL]=42};',
@@ -539,6 +553,10 @@ KCC_REFUSALS={'excess array': (1, 16, 'excess elements in initializer'),
  'member cast beyond domain': (1, 54, 'static pointer offset is outside its captured object bounds'),
  'character scalar cannot widen domain': (1, 50, 'static pointer offset is outside its captured object bounds'),
  'row onepast cast cannot cross row': (1, 57, 'static pointer offset is outside its captured object bounds'),
+ 'condition difference unrelated arrays': (1,43,'static pointer difference requires the same captured array domain'),
+ 'condition difference null pointers': (1,37,'static pointer difference requires the same captured array domain'),
+ 'condition difference fabricated domain': (1,54,'static pointer difference requires the same captured array domain'),
+ 'condition difference distinct subrows': (1,47,'static pointer difference requires the same captured array domain'),
  'one MiB plus one': (1, 20, 'array bound must be positive and fit array type storage limit (1 MiB)'),
  'long array storage boundary': (1, 11, 'array bound must be positive and fit array type storage limit (1 MiB)'),
  'index extent overflow': (1, 13, 'array initializer index exceeds bound or storage limit (1 MiB)')}

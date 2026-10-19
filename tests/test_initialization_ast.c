@@ -356,6 +356,53 @@ static void check_promoted_exact_conditional_null(void)
     close_fixture(&f);
 }
 
+static void check_difference_condition_private_address_not_public_ice(void)
+{
+    struct fixture f; struct ast_external_object_declaration *a,*g,*h,*p;
+    struct ast_conditional_expression *conditional, conditional_before;
+    struct ast_binary_expression *condition, condition_before;
+    struct ast_pointer_difference_expression *difference, difference_before;
+    struct static_data_value cache; struct ast_translation_unit unit;
+    struct external_object_symbol a_before,g_before,h_before,p_before;
+    /* Exact original: the whole expression is an address initializer. Its
+     * same-array difference is defined, but never gains public ICE status. */
+    open_fixture(&f,"int a[2],g,h;int*p=((&a[1]-&a[0])==1)?&g:&h;",true);
+    analyze(&f); a=object(&f,0); g=object(&f,1); h=object(&f,2); p=object(&f,3);
+    assert(count(a->type)==2 && p->symbol->definition==&p->external);
+    assert(p->initializer->kind==expression_conditional);
+    conditional=(struct ast_conditional_expression *)p->initializer;
+    assert(conditional->condition->kind==expression_binary);
+    condition=(struct ast_binary_expression *)conditional->condition;
+    assert(condition->operation==binary_equal && condition->left->kind==expression_pointer_difference);
+    difference=(struct ast_pointer_difference_expression *)condition->left;
+    assert(difference->element_size==4);
+    assert(p->symbol->initializer_value.kind==static_data_address);
+    assert(p->symbol->initializer_value.address.kind==static_address_object);
+    assert(p->symbol->initializer_value.address.base.object==g->symbol);
+    assert(!p->symbol->initializer_value.address.byte_addend && !p->initializer_plan && !p->symbol->initializer_plan);
+    conditional_before=*conditional; condition_before=*condition; difference_before=*difference;
+    cache=p->symbol->initializer_value; unit=*f.unit;
+    a_before=*a->symbol; g_before=*g->symbol; h_before=*h->symbol; p_before=*p->symbol;
+    for(unsigned query=0;query<32;++query) {
+        struct address_initializer_result address=evaluate_address_initializer(p->initializer);
+        assert(address.status==constant_value && address.address.kind==static_address_object);
+        assert(address.address.base.object==g->symbol && !address.address.byte_addend);
+        assert(evaluate_integer_constant(&difference->expression).status==constant_not_constant);
+        assert(evaluate_integer_constant(&condition->expression).status==constant_not_constant);
+        assert(evaluate_integer_constant(p->initializer).status==constant_not_constant);
+        assert(evaluate_null_initializer(p->initializer).status==constant_not_constant);
+        assert(!memcmp(&conditional_before,conditional,sizeof conditional_before));
+        assert(!memcmp(&condition_before,condition,sizeof condition_before));
+        assert(!memcmp(&difference_before,difference,sizeof difference_before));
+        assert(!memcmp(&cache,&p->symbol->initializer_value,sizeof cache));
+        assert(!memcmp(&a_before,a->symbol,sizeof a_before) && !memcmp(&g_before,g->symbol,sizeof g_before));
+        assert(!memcmp(&h_before,h->symbol,sizeof h_before) && !memcmp(&p_before,p->symbol,sizeof p_before));
+        assert(!memcmp(&unit,f.unit,sizeof unit) && !f.diagnostics.errors);
+    }
+    assert(!f.unit->strings && !f.unit->static_declarations);
+    close_fixture(&f);
+}
+
 static void check_source_constant_bool_is_not_integer_ice(void)
 {
     const char *sources[]={"int target; _Bool cell=&target;","_Bool cell=(int *)0;"};
@@ -462,7 +509,7 @@ int main(void)
 	check_constructors(); check_syntax_and_continuation(); check_completion_and_canonical_definition();
 	check_address_source_bound_capture(); check_static_and_block_storage();
     check_alias_capture(); check_override_plan(); check_cached_tags_and_pure_queries();
-	check_string_extent_and_compact_plan(); check_failed_publication(); check_prior_definition_failure(); check_promoted_exact_conditional_null(); check_source_constant_bool_is_not_integer_ice(); check_union_copy_fragments_and_capture_once(); check_parser_budgets();
+	check_string_extent_and_compact_plan(); check_failed_publication(); check_prior_definition_failure(); check_promoted_exact_conditional_null(); check_source_constant_bool_is_not_integer_ice(); check_difference_condition_private_address_not_public_ice(); check_union_copy_fragments_and_capture_once(); check_parser_budgets();
 	puts("M17 initialization AST: syntax/capture/canonical plans/static tags/purity/failure/budgets");
 	return 0;
 }
