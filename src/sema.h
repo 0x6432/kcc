@@ -17,6 +17,15 @@ struct static_data_value {
 	struct static_address address; /* Used only by static_data_address. */
 };
 
+/* Bounded semantic work, including overridden/split stores. */
+enum { sema_max_initializer_stores = 65536 };
+
+/* Pure validation of an already checked source and its assignment conversion.
+ * Does not analyze either tree again. */
+bool sema_validate_static_initializer(const struct ast_expression *source,
+	const struct ast_expression *converted, struct static_data_value *value,
+	struct diagnostics *diagnostics);
+
 struct external_object_symbol {
 	struct token name;
 	const struct type *type;
@@ -29,6 +38,7 @@ struct external_object_symbol {
 	/* Explicit initialized definition supersedes tentative emission only. */
 	struct ast_external_declaration *definition;
 	struct static_data_value initializer_value;
+	struct ast_initializer_plan *initializer_plan;
 	struct external_object_symbol *next;
 };
 

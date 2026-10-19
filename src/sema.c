@@ -91,6 +91,8 @@ struct sema {
 	struct external_object_symbol *external_objects;
 	size_t external_object_count;
 	bool unevaluated;
+	unsigned prototype_depth;
+	struct literal_publication *literal_publications;
 	struct typedef_binding *typedefs;
 	struct typedef_type_shape *typedef_shapes;
 	size_t function_count;
@@ -98,6 +100,9 @@ struct sema {
 	struct ast_string_expression **string_tail;
 	struct ast_external_declaration **static_tail;
 	size_t static_count;
+	size_t initializer_store_count;
+	size_t initializer_node_count;
+	size_t initializer_designator_count;
 };
 
 static bool same_name(struct token left, struct token right)
@@ -259,6 +264,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax);
 static bool sema_static_assertion(struct sema *sema, struct ast_static_assertion *node);
+static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal_expression *node);
 
 /* Records are nominal leaves in ordinary type graphs. Only this bounded,
  * acyclic by-value member walk inspects their contents; pointers stop it. */
@@ -779,6 +785,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		return NULL;
 	}
 	sema->scope = &scope;
+	sema->prototype_depth++;
 	for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
 		const struct type *declared = resolve_type_syntax(sema, parameter->type_syntax);
 
@@ -813,6 +820,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	if (!type)
 		diagnostic_error(sema->diagnostics, function->syntax.location, "out of memory creating function type");
 done:
+	sema->prototype_depth--;
 	if (function == sema->definition_syntax)
 		sema->definition_tags = scope.tags;
 	sema->scope = scope.parent;
@@ -1224,6 +1232,8 @@ static bool has_register_root(const struct ast_expression *expression)
 			return false;
 		expression = member->operand;
 	}
+	if (expression->kind == expression_compound_literal)
+		return ((const struct ast_compound_literal_expression *)expression)->is_register;
 	return expression->kind == expression_name &&
 		((const struct ast_name_expression *)expression)->declaration->is_register;
 }
@@ -1235,6 +1245,14 @@ static bool sema_expression(struct sema *sema,
 	const struct type *result_type = &type_int;
 
 	switch (expression->kind) {
+	case expression_compound_literal: {
+		struct ast_compound_literal_expression *node = (struct ast_compound_literal_expression *)expression;
+		if (!sema_compound_literal(sema, node))
+			return false;
+		result_type = expression->type;
+		expression->is_lvalue = true;
+		break;
+	}
 	case expression_member: {
 		struct ast_member_expression *node = (struct ast_member_expression *)expression;
 		const struct type *base;
@@ -1421,9 +1439,13 @@ static bool sema_expression(struct sema *sema,
 		}
 		result_type = &array->type;
 		expression->is_lvalue = true;
-		node->object_id = sema->string_count++;
-		*sema->string_tail = node;
-		sema->string_tail = &node->next_string;
+		/* Query/prototype operands still receive decoded bytes and a checked
+		 * array type, but never publish an evaluated static string object. */
+		if (!sema->unevaluated && !sema->prototype_depth) {
+			node->object_id = sema->string_count++;
+			*sema->string_tail = node;
+			sema->string_tail = &node->next_string;
+		}
 		break;
 	}
 	case expression_nullptr:
@@ -1948,6 +1970,662 @@ static bool sema_condition(struct sema *sema, struct ast_expression **slot)
 	return true;
 }
 
+/* Nested literals publish canonical identities only after their initializer
+ * succeeds. Keep a small journal so an enclosing failed initializer also
+ * withdraws those otherwise successful inner publications. */
+struct literal_publication {
+	struct ast_compound_literal_expression *node;
+	struct ast_compound_literal_expression saved;
+	struct literal_publication *next;
+};
+
+struct sema_initializer_transaction {
+	struct sema saved;
+	struct binding *bindings;
+	struct ast_function function;
+};
+
+static struct sema_initializer_transaction initializer_transaction_begin(struct sema *sema)
+{
+	struct sema_initializer_transaction transaction = { .saved = *sema };
+	if (sema->scope)
+		transaction.bindings = sema->scope->bindings;
+	if (sema->function)
+		transaction.function = *sema->function;
+	return transaction;
+}
+
+static void initializer_transaction_rollback(struct sema *sema,
+	const struct sema_initializer_transaction *transaction)
+{
+	for (struct literal_publication *entry = sema->literal_publications;
+		entry != transaction->saved.literal_publications; entry = entry->next)
+		memcpy(entry->node, &entry->saved, sizeof(entry->saved));
+	*transaction->saved.string_tail = NULL;
+	*transaction->saved.static_tail = NULL;
+	if (transaction->saved.scope)
+		transaction->saved.scope->bindings = transaction->bindings;
+	if (transaction->saved.function)
+		*transaction->saved.function = transaction->function;
+	*sema = transaction->saved;
+}
+
+/* Assignment to bool is outside the initializer's source constant category:
+ * a valid address constant is not an ICE, but may initialize bool as true. */
+static bool static_boolean_initializer(const struct ast_expression *source,
+	struct static_data_value *value, struct diagnostics *diagnostics)
+{
+	struct null_initializer_result null = evaluate_null_initializer(source);
+	struct address_initializer_result address;
+	if (null.status == constant_invalid) {
+		diagnostic_error(diagnostics, null.location, null.message);
+		return false;
+	}
+	if (null.status == constant_value) {
+		*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = 0 };
+		return true;
+	}
+	address = evaluate_address_initializer(source);
+	if (address.status != constant_value) {
+		diagnostic_error(diagnostics, address.location, address.message);
+		return false;
+	}
+	*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = 1 };
+	return true;
+}
+
+/* The source is checked before conversion so narrowing cannot hide invalid
+ * evaluated arithmetic. Both queries are pure: no lowered node is re-sema'd. */
+bool sema_validate_static_initializer(const struct ast_expression *source,
+	const struct ast_expression *converted, struct static_data_value *value,
+	struct diagnostics *diagnostics)
+{
+	if (converted->type->kind == type_kind_bool &&
+		(source->type->kind == type_kind_pointer || source->type->kind == type_kind_nullptr))
+		return static_boolean_initializer(source, value, diagnostics);
+	if (converted->type->kind == type_kind_pointer || converted->type->kind == type_kind_nullptr) {
+		struct null_initializer_result null = evaluate_null_initializer(source);
+		struct address_initializer_result address;
+		if (null.status == constant_invalid) {
+			diagnostic_error(diagnostics, null.location, null.message);
+			return false;
+		}
+		if (null.status == constant_value) {
+			*value = (struct static_data_value) { .kind = static_data_null_pointer };
+			return true;
+		}
+		address = evaluate_address_initializer(source);
+		if (address.status != constant_value) {
+			diagnostic_error(diagnostics, address.location, address.message);
+			return false;
+		}
+		address = evaluate_address_initializer(converted);
+		if (address.status != constant_value) {
+			diagnostic_error(diagnostics, address.location, address.message);
+			return false;
+		}
+		*value = (struct static_data_value) { .kind = static_data_address, .address = address.address };
+		return true;
+	}
+	struct constant_result result = evaluate_integer_constant(source);
+	if (result.status != constant_value) {
+		diagnostic_error(diagnostics, result.location, result.status == constant_not_constant ?
+			"static initializer must be a constant expression" : result.message);
+		return false;
+	}
+	result = evaluate_integer_constant(converted);
+	if (result.status != constant_value) {
+		diagnostic_error(diagnostics, result.location, result.message);
+		return false;
+	}
+	*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = result.bits };
+	return true;
+}
+
+struct initializer_path_component {
+	const struct type *type;
+	uint64_t offset;
+	uint64_t index;
+	const struct record_member *member;
+};
+
+struct initializer_path {
+	struct initializer_path_component components[ast_max_expression_depth + 1];
+	unsigned depth;
+};
+
+struct initializer_union_selection {
+	const struct type *type;
+	uint64_t offset;
+	const struct record_member *member;
+	struct initializer_union_selection *next;
+};
+
+struct initializer_builder {
+	struct sema *sema;
+	struct ast_initializer_plan *plan;
+	struct initializer_union_selection *unions;
+	uint64_t inferred_count;
+	bool is_static;
+	unsigned nesting;
+	unsigned expression_depth; /* Includes overridden sources and designators. */
+};
+
+static bool initializer_error(struct initializer_builder *builder,
+	struct source_location location, const char *message)
+{
+	diagnostic_error(builder->sema->diagnostics, location, message);
+	return false;
+}
+
+static void *initializer_alloc(struct initializer_builder *builder, size_t size,
+	struct source_location location)
+{
+	void *memory = arena_alloc(builder->sema->arena, size);
+	if (!memory)
+		initializer_error(builder, location, "out of memory resolving initializer");
+	else
+		memset(memory, 0, size);
+	return memory;
+}
+
+static struct ast_initializer_plan_entry *initializer_new_store(struct initializer_builder *builder,
+	struct source_location location)
+{
+	if (builder->sema->initializer_store_count == sema_max_initializer_stores) {
+		initializer_error(builder, location, "translation unit exceeds initializer store work limit (65536)");
+		return NULL;
+	}
+	builder->sema->initializer_store_count++;
+	return initializer_alloc(builder, sizeof(struct ast_initializer_plan_entry), location);
+}
+
+/* Remove precisely the later-written byte interval. Aggregate snapshots and
+ * strings can be sliced, sharing expression identity as a single capture key.
+ * No interval bitmap or per-byte/per-omitted-leaf allocation is used. */
+static bool initializer_prune(struct initializer_builder *builder, uint64_t offset,
+	uint64_t length, struct source_location location)
+{
+	struct ast_initializer_plan_entry **slot = &builder->plan->entries;
+	uint64_t finish = offset + length;
+	while (*slot) {
+		struct ast_initializer_plan_entry *entry = *slot;
+		uint64_t end = entry->offset + entry->length;
+		if (entry->offset >= finish || end <= offset) {
+			slot = &entry->next;
+			continue;
+		}
+		if (offset <= entry->offset && finish >= end) {
+			*slot = entry->next;
+			builder->plan->entry_count--;
+			continue;
+		}
+		if (entry->kind == ast_initializer_write_expression)
+			return initializer_error(builder, location, "initializer partially overlaps a scalar store");
+		if (offset > entry->offset && finish < end) {
+			if (builder->plan->entry_count == ast_max_initializer_entries)
+				return initializer_error(builder, location, "initializer exceeds resolved store limit (16384)");
+			struct ast_initializer_plan_entry *right = initializer_new_store(builder, location);
+			if (!right)
+				return false;
+			*right = *entry;
+			right->offset = finish;
+			right->length = right->size = end - finish;
+			right->source_offset += finish - entry->offset;
+			right->next = entry->next;
+			entry->next = right;
+			entry->length = entry->size = offset - entry->offset;
+			builder->plan->entry_count++;
+			slot = &right->next;
+		} else if (offset <= entry->offset) {
+			entry->source_offset += finish - entry->offset;
+			entry->offset = finish;
+			entry->length = entry->size = end - finish;
+			slot = &entry->next;
+		} else {
+			entry->length = entry->size = offset - entry->offset;
+			slot = &entry->next;
+		}
+	}
+	builder->plan->tail = NULL;
+	for (struct ast_initializer_plan_entry *entry = builder->plan->entries; entry; entry = entry->next)
+		builder->plan->tail = entry;
+	return true;
+}
+
+static bool initializer_store(struct initializer_builder *builder,
+	const struct ast_initializer_plan_entry *value, struct source_location location)
+{
+	struct ast_initializer_plan_entry *entry;
+	if (!value->length)
+		return true;
+	if (value->offset > ast_max_local_storage || value->length > ast_max_local_storage - value->offset)
+		return initializer_error(builder, location, "initializer object exceeds storage limit (1 MiB)");
+	if (!initializer_prune(builder, value->offset, value->length, location))
+		return false;
+	if (builder->plan->entry_count == ast_max_initializer_entries)
+		return initializer_error(builder, location, "initializer exceeds resolved store limit (16384)");
+	entry = initializer_new_store(builder, location);
+	if (!entry)
+		return false;
+	*entry = *value;
+	entry->size = entry->length;
+	entry->next = NULL;
+	if (builder->plan->tail)
+		builder->plan->tail->next = entry;
+	else
+		builder->plan->entries = entry;
+	builder->plan->tail = entry;
+	builder->plan->entry_count++;
+	return true;
+}
+
+/* Byte containment alone would confuse a union with its first member at
+ * the same address. Follow physical type ancestry before forgetting a choice. */
+static bool initializer_contains_union(const struct type *type, uint64_t offset,
+	const struct initializer_union_selection *selection, unsigned depth)
+{
+	if (depth > ast_max_expression_depth || selection->offset < offset)
+		return false;
+	if (type == selection->type && offset == selection->offset)
+		return true;
+	if (type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+		uint64_t stride = type_object_size(array->element);
+		uint64_t index = stride ? (selection->offset - offset) / stride : 0;
+		return stride && index < array->count && initializer_contains_union(array->element,
+			offset + index * stride, selection, depth + 1);
+	}
+	if (type_is_record(type)) {
+		for (const struct record_member *member = type_record_definition(type)->members; member; member = member->next)
+			if (selection->offset >= offset + member->offset &&
+				selection->offset < offset + member->offset + type_object_size(member->type) &&
+				initializer_contains_union(member->type, offset + member->offset, selection, depth + 1))
+				return true;
+	}
+	return false;
+}
+
+static void initializer_forget_unions(struct initializer_builder *builder,
+	const struct type *type, uint64_t offset)
+{
+	struct initializer_union_selection **slot = &builder->unions;
+	while (*slot) {
+		if (initializer_contains_union(type, offset, *slot, 0))
+			*slot = (*slot)->next;
+		else
+			slot = &(*slot)->next;
+	}
+}
+
+static bool initializer_clear(struct initializer_builder *builder, const struct type *type,
+	uint64_t offset, const struct ast_initializer *syntax)
+{
+	if (!type_is_complete_object(type))
+		return true;
+	uint64_t size = type_object_size(type);
+	initializer_forget_unions(builder, type, offset);
+	return initializer_store(builder, &(struct ast_initializer_plan_entry) {
+		.kind = ast_initializer_write_zero, .offset = offset, .length = size,
+		.type = type, .syntax = syntax,
+	}, syntax->location);
+}
+
+static bool initializer_select_unions(struct initializer_builder *builder,
+	const struct initializer_path *path, const struct ast_initializer *syntax)
+{
+	for (unsigned i = 0; i < path->depth; i++) {
+		const struct initializer_path_component *parent = &path->components[i];
+		const struct record_member *member = path->components[i + 1].member;
+		struct initializer_union_selection *selection;
+		if (parent->type->kind != type_kind_union)
+			continue;
+		for (selection = builder->unions; selection; selection = selection->next)
+			if (selection->offset == parent->offset && selection->type == parent->type)
+				break;
+		if (selection && selection->member == member)
+			continue;
+		/* A union switch replaces its entire prior value, not just the bytes
+		 * occupied by the newly selected smaller alternative. */
+		if (!initializer_clear(builder, parent->type, parent->offset, syntax))
+			return false;
+		selection = initializer_alloc(builder, sizeof(*selection), syntax->location);
+		if (!selection)
+			return false;
+		*selection = (struct initializer_union_selection) {
+			.type = parent->type, .offset = parent->offset, .member = member, .next = builder->unions,
+		};
+		builder->unions = selection;
+	}
+	return true;
+}
+
+static bool initializer_child(struct initializer_builder *builder, struct initializer_path *path,
+	uint64_t index, const struct record_member *member, struct source_location location)
+{
+	struct initializer_path_component *parent = &path->components[path->depth];
+	struct initializer_path_component child = { .index = index, .member = member };
+	if (path->depth == ast_max_expression_depth)
+		return initializer_error(builder, location, "initializer subobject path exceeds limit (128)");
+	if (parent->type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)parent->type;
+		uint64_t stride = type_object_size(array->element);
+		if (!stride || index >= ast_max_local_storage / stride || (array->count && index >= array->count))
+			return initializer_error(builder, location, "array initializer index exceeds bound or storage limit (1 MiB)");
+		child.type = array->element;
+		child.offset = parent->offset + index * stride;
+		if (path->depth == 0 && !array->count && index + 1 > builder->inferred_count)
+			builder->inferred_count = index + 1;
+	} else {
+		if (!member)
+			return initializer_error(builder, location, "initializer requires an available record member");
+		child.type = member->type;
+		child.offset = parent->offset + member->offset;
+	}
+	if (child.offset > ast_max_local_storage || type_object_size(child.type) > ast_max_local_storage - child.offset)
+		return initializer_error(builder, location, "initializer offset exceeds storage limit (1 MiB)");
+	path->components[++path->depth] = child;
+	return true;
+}
+
+static bool initializer_first(struct initializer_builder *builder, struct initializer_path *path,
+	struct source_location location)
+{
+	const struct type *type = path->components[path->depth].type;
+	if (type->kind == type_kind_array)
+		return initializer_child(builder, path, 0, NULL, location);
+	if (type_is_record(type))
+		return initializer_child(builder, path, 0, type_record_definition(type)->members, location);
+	return false;
+}
+
+/* Pop exhausted aggregates, including union alternatives; never advance to a
+ * second member of a union. The closest explicit brace owns component zero. */
+static bool initializer_next(struct initializer_builder *builder, struct initializer_path *path,
+	struct source_location location)
+{
+	while (path->depth) {
+		struct initializer_path_component old = path->components[path->depth--];
+		const struct type *parent = path->components[path->depth].type;
+		if (parent->kind == type_kind_array) {
+			uint64_t count = ((const struct array_type *)parent)->count;
+			if ((!count || old.index + 1 < count) && old.index + 1 <
+				ast_max_local_storage / type_object_size(((const struct array_type *)parent)->element)) {
+				/* Do not infer an unused next element. */
+				uint64_t inferred = builder->inferred_count;
+				bool success = initializer_child(builder, path, old.index + 1, NULL, location);
+				builder->inferred_count = inferred;
+				return success;
+			}
+		} else if (parent->kind == type_kind_struct && old.member->next) {
+			return initializer_child(builder, path, 0, old.member->next, location);
+		}
+	}
+	return false;
+}
+
+static bool initializer_member_path(struct initializer_builder *builder,
+	struct initializer_path *path, const struct token *name, struct source_location location)
+{
+	const struct type *type = path->components[path->depth].type;
+	if (!type_is_record(type))
+		return initializer_error(builder, location, "member designator requires a struct or union");
+	for (const struct record_member *member = type_record_definition(type)->members; member; member = member->next) {
+		uint64_t ignored;
+		if (!member->anonymous && same_name(member->name, *name))
+			return initializer_child(builder, path, 0, member, location);
+		if (member->anonymous && type_record_find_member(member->type, name, &ignored)) {
+			if (!initializer_child(builder, path, 0, member, location))
+				return false;
+			return initializer_member_path(builder, path, name, location);
+		}
+	}
+	return initializer_error(builder, location, "initializer designates an unknown member");
+}
+
+static bool initializer_designate(struct initializer_builder *builder,
+	struct initializer_path *path, const struct ast_designator *designator)
+{
+	unsigned count = 0;
+	path->depth = 0;
+	for (; designator; designator = designator->next) {
+		if (++count > ast_max_designator_depth ||
+			++builder->sema->initializer_designator_count > ast_max_designators)
+			return initializer_error(builder, designator->location, "initializer designator limit exceeded");
+		if (designator->kind == ast_designator_member) {
+			if (!initializer_member_path(builder, path, &designator->member, designator->location))
+				return false;
+		} else {
+			struct ast_expression *index = designator->index;
+			struct constant_result result;
+			if (path->components[path->depth].type->kind != type_kind_array)
+				return initializer_error(builder, designator->location, "index designator requires an array");
+			if (!sema_expression(builder->sema, &index, true))
+				return false;
+			if (index->depth > builder->expression_depth)
+				builder->expression_depth = index->depth;
+			result = evaluate_integer_constant(index);
+			if (result.status != constant_value || !type_is_integer(index->type))
+				return initializer_error(builder, designator->location, "array designator requires an integer constant expression");
+			if (!initializer_child(builder, path, result.bits, NULL, designator->location))
+				return false;
+		}
+	}
+	return true;
+}
+
+static bool initializer_character_array(const struct type *type)
+{
+	if (type->kind != type_kind_array)
+		return false;
+	enum type_kind kind = ((const struct array_type *)type)->element->kind;
+	return kind == type_kind_char || kind == type_kind_schar || kind == type_kind_uchar;
+}
+
+static void initializer_cache_constant(struct ast_initializer_constant *constant,
+	const struct static_data_value *value)
+{
+	if (value->kind == static_data_integer) {
+		constant->kind = ast_initializer_constant_integer;
+		constant->bits = value->integer_bits;
+	} else if (value->kind == static_data_null_pointer) {
+		constant->kind = ast_initializer_constant_null;
+	} else if (value->kind == static_data_address) {
+		constant->kind = ast_initializer_constant_address;
+		constant->byte_addend = value->address.byte_addend;
+		switch (value->address.kind) {
+		case static_address_object:
+			constant->address_kind = ast_initializer_address_object;
+			constant->base.object = value->address.base.object;
+			break;
+		case static_address_function:
+			constant->address_kind = ast_initializer_address_function;
+			constant->base.function = value->address.base.function;
+			break;
+		case static_address_string:
+			constant->address_kind = ast_initializer_address_string;
+			constant->base.string = value->address.base.string;
+			break;
+		case static_address_compound_literal:
+			/* Query-only static literals have syntax identity but no emitted
+			 * owner. Evaluated static literals always use canonical objects. */
+			constant->address_kind = ast_initializer_address_compound_literal;
+			constant->base.compound_literal = value->address.base.compound_literal;
+			break;
+		}
+	}
+}
+
+static bool initializer_value(struct initializer_builder *builder,
+	struct initializer_path *path, const struct ast_initializer *syntax, bool elision);
+
+static bool initializer_list(struct initializer_builder *builder,
+	const struct type *type, uint64_t offset, const struct ast_initializer *syntax)
+{
+	struct initializer_path path = { .components = { { .type = type, .offset = offset } } };
+	bool available = true;
+	if (type_is_complete_object(type) && !initializer_clear(builder, type, offset, syntax))
+		return false;
+	/* A string in optional braces initializes the array itself, not char[0]. */
+	if (initializer_character_array(type) && syntax->entries && !syntax->entries->next &&
+		!syntax->entries->designators && syntax->entries->value->kind == ast_initializer_expression &&
+		syntax->entries->value->expression->kind == expression_string)
+		return initializer_value(builder, &path, syntax->entries->value, false);
+	if (syntax->entries && (type->kind == type_kind_array || type_is_record(type)))
+		available = initializer_first(builder, &path, syntax->location);
+	for (const struct ast_initializer_entry *entry = syntax->entries; entry; entry = entry->next) {
+		if (entry->designators) {
+			if (!initializer_designate(builder, &path, entry->designators))
+				return false;
+			available = true;
+		}
+		if (!available)
+			return initializer_error(builder, entry->location, "excess elements in initializer");
+		if (path.depth && path.components[0].type->kind == type_kind_array &&
+			!((const struct array_type *)path.components[0].type)->count &&
+			path.components[1].index + 1 > builder->inferred_count)
+			builder->inferred_count = path.components[1].index + 1;
+		if (!initializer_value(builder, &path, entry->value, true))
+			return false;
+		available = initializer_next(builder, &path, entry->location);
+	}
+	return true;
+}
+
+static bool initializer_value(struct initializer_builder *builder,
+	struct initializer_path *path, const struct ast_initializer *syntax, bool elision)
+{
+	struct initializer_path_component *object = &path->components[path->depth];
+	struct ast_expression *expression;
+	struct ast_expression *source;
+	struct ast_initializer_plan_entry store = { .syntax = syntax };
+	const struct type *target;
+	if (++builder->sema->initializer_node_count > ast_max_initializer_nodes)
+		return initializer_error(builder, syntax->location, "translation unit exceeds initializer node limit (16384)");
+	if (syntax->kind == ast_initializer_list) {
+		if (++builder->nesting > ast_max_initializer_nesting)
+			return initializer_error(builder, syntax->location, "initializer nesting exceeds limit (64)");
+		if (!initializer_select_unions(builder, path, syntax) ||
+			!initializer_list(builder, object->type, object->offset, syntax))
+			return false;
+		builder->nesting--;
+		return true;
+	}
+	expression = syntax->expression;
+	/* Character strings are checked without decay exactly once. Other
+	 * expression initializers have ordinary assignment-expression conversion. */
+	bool string = expression->kind == expression_string;
+	if (!sema_expression(builder->sema, &expression, !string))
+		return false;
+	if (expression->depth > builder->expression_depth)
+		builder->expression_depth = expression->depth;
+	for (;;) {
+		object = &path->components[path->depth];
+		if ((string && initializer_character_array(object->type)) ||
+			(type_is_record(object->type) && type_unqualified_compatible(object->type, expression->type)) ||
+			type_is_scalar(object->type))
+			break;
+		if (!elision || !initializer_first(builder, path, syntax->location))
+			return initializer_error(builder, syntax->location, "aggregate initializer requires braces or a compatible record value");
+	}
+	if (!initializer_select_unions(builder, path, syntax))
+		return false;
+	store.offset = object->offset;
+	store.type = object->type;
+	store.length = type_is_complete_object(object->type) ? type_object_size(object->type) : 0;
+	if (string && initializer_character_array(object->type)) {
+		const struct ast_string_expression *literal = (const struct ast_string_expression *)expression;
+		const struct array_type *array = (const struct array_type *)object->type;
+		uint64_t count = array->count ? array->count : literal->length + 1;
+		if (count < literal->length)
+			return initializer_error(builder, syntax->location, "string initializer is too long for character array");
+		if (!array->count)
+			builder->inferred_count = count;
+		if (!initializer_clear(builder, object->type, object->offset, syntax))
+			return false;
+		store.kind = ast_initializer_write_string;
+		store.bytes = literal->bytes;
+		store.expression = expression;
+		store.length = count > literal->length ? literal->length + 1 : literal->length;
+		return initializer_store(builder, &store, syntax->location);
+	}
+	/* String used for a pointer (or invalid scalar): decay the already typed
+	 * literal directly rather than sending it through sema a second time. */
+	if (string) {
+		const struct array_type *array = (const struct array_type *)expression->type;
+		struct pointer_type *pointer = type_new_pointer(builder->sema->arena, array->element);
+		struct ast_array_decay_expression *decay;
+		if (!pointer || !(decay = ast_new_array_decay(builder->sema->arena, expression, &pointer->type)))
+			return initializer_error(builder, syntax->location, "out of memory decaying string initializer");
+		expression = &decay->expression;
+	}
+	target = unqualified_type(builder->sema, object->type, syntax->location);
+	source = expression;
+	if (!target || !convert_expression(builder->sema, &expression, target))
+		return false;
+	if (expression->depth > builder->expression_depth)
+		builder->expression_depth = expression->depth;
+	store.expression = expression;
+	if (type_is_record(object->type)) {
+		if (builder->is_static)
+			return initializer_error(builder, syntax->location, "static record copy is not a constant initializer");
+		store.kind = ast_initializer_write_copy;
+		initializer_forget_unions(builder, store.type, store.offset);
+	} else {
+		struct static_data_value value;
+		store.kind = ast_initializer_write_expression;
+		if (builder->is_static) {
+			if (!sema_validate_static_initializer(source, expression, &value, builder->sema->diagnostics))
+				return false;
+			initializer_cache_constant(&store.constant, &value);
+		}
+	}
+	return initializer_store(builder, &store, syntax->location);
+}
+
+static struct ast_initializer_plan *sema_initializer(struct sema *sema,
+	const struct type *type, const struct ast_initializer *syntax, bool is_static, unsigned *expression_depth)
+{
+	struct initializer_builder builder = { .sema = sema, .is_static = is_static };
+	struct initializer_path path = { .components = { { .type = type } } };
+	bool incomplete = type->kind == type_kind_array && !((const struct array_type *)type)->count;
+	if ((!incomplete && !type_is_complete_object(type)) ||
+		(incomplete && !type_is_complete_object(((const struct array_type *)type)->element))) {
+		diagnostic_error(sema->diagnostics, syntax->location, "initializer requires a complete object or unknown outer array bound");
+		return NULL;
+	}
+	if ((!incomplete && type_object_size(type) > ast_max_local_storage) ||
+		(incomplete && type_object_size(((const struct array_type *)type)->element) > ast_max_local_storage)) {
+		diagnostic_error(sema->diagnostics, syntax->location, "initializer object exceeds storage limit (1 MiB)");
+		return NULL;
+	}
+	builder.plan = initializer_alloc(&builder, sizeof(*builder.plan), syntax->location);
+	if (!builder.plan)
+		return NULL;
+	builder.plan->type = type;
+	builder.plan->zero_fill = true;
+	if (!initializer_value(&builder, &path, syntax, false))
+		return NULL;
+	if (incomplete) {
+		const struct array_type *array = (const struct array_type *)type;
+		struct array_type *completed;
+		if (!builder.inferred_count || builder.inferred_count > ast_max_local_storage / type_object_size(array->element)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "unknown-bound array initializer must determine a nonempty bound within 1 MiB");
+			return NULL;
+		}
+		completed = type_new_array(sema->arena, array->element, builder.inferred_count);
+		if (!completed) {
+			diagnostic_error(sema->diagnostics, syntax->location, "out of memory completing initialized array");
+			return NULL;
+		}
+		builder.plan->type = &completed->type;
+	}
+	builder.plan->size = type_object_size(builder.plan->type);
+	if (expression_depth)
+		*expression_depth = builder.expression_depth;
+	return builder.plan;
+}
+
 /* Reserve an ordinary name before any initializer is analyzed. */
 static bool reserve_local_name(struct sema *sema, struct ast_local_declaration *local)
 {
@@ -1993,10 +2671,6 @@ static bool complete_local_storage(struct sema *sema, struct ast_local_declarati
 		return false;
 	}
 	sema->local_storage += type_object_size(local->type);
-	if (local->type->kind == type_kind_array && local->initializer) {
-		diagnostic_error(sema->diagnostics, local->name.location, "array initializers are not supported yet");
-		return false;
-	}
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
@@ -2019,6 +2693,20 @@ static bool sema_local_initializer(struct sema *sema, struct ast_local_declarati
 static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 	const struct type *effective_type)
 {
+	if (local->initializer_syntax && (local->initializer_syntax->kind == ast_initializer_list ||
+		effective_type->kind == type_kind_array)) {
+		struct ast_initializer_plan *plan;
+		if (!reserve_local_name(sema, local))
+			return false;
+		/* Bind the source-point type NOW; unknown bounds stay unknown until
+		 * every initializer expression (including self sizeof) is checked. */
+		local->type = effective_type;
+		plan = sema_initializer(sema, effective_type, local->initializer_syntax, false, NULL);
+		if (!plan || !complete_local_storage(sema, local, plan->type))
+			return false;
+		local->initializer_plan = plan;
+		return true;
+	}
 	return reserve_local_name(sema, local) && complete_local_storage(sema, local, effective_type) &&
 		sema_local_initializer(sema, local);
 }
@@ -2059,7 +2747,7 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
 	const struct type *type);
 
-static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
+static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
 
@@ -2088,11 +2776,30 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 	}
 	if (local->is_extern || local->is_static || type->kind == type_kind_function)
 		return sema_block_storage(sema, local, type);
-	if (!type_is_complete_object(type)) {
+	if (!type_is_complete_object(type) && !(type->kind == type_kind_array &&
+		local->initializer_syntax && !((const struct array_type *)type)->count)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
 		return false;
 	}
 	return bind_local(sema, local, type);
+}
+
+static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
+{
+	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
+	struct ast_local_declaration saved = *local;
+	const struct type *written = local->type_syntax->type;
+	if (sema_local_impl(sema, local))
+		return true;
+	struct ast_expression *checked_initializer = local->initializer;
+	initializer_transaction_rollback(sema, &transaction);
+	*local = saved;
+	/* Preserve the legacy checked-expression failure witness. Canonical
+	 * declaration/storage/plan ownership is nevertheless rolled back. */
+	local->initializer = checked_initializer;
+	if (local->type_syntax->kind == type_syntax_inferred)
+		local->type_syntax->type = written;
+	return false;
 }
 
 static bool sema_compound(struct sema *sema, struct ast_compound_statement *node);
@@ -2837,15 +3544,21 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct ast_external_declaration *external, struct token name,
 	const struct type *type, struct ast_expression **initializer,
+	const struct ast_initializer *syntax, struct ast_initializer_plan **published_plan,
 	bool is_static, bool is_extern, bool is_query, bool is_thread_local)
 {
+	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
 	struct external_object_symbol *previous = find_external_object(sema, name);
 	struct external_object_symbol saved = { 0 };
 	struct external_object_symbol *symbol;
 	struct constant_result value;
 	struct address_initializer_result address_value;
 	bool is_address = false;
-	bool zero_definition = !is_extern && !*initializer && (is_thread_local || sema->scope);
+	bool is_boolean_address = false;
+	struct static_data_value boolean_value = { 0 };
+	bool has_initializer = syntax || *initializer;
+	bool promoted = syntax && (syntax->kind == ast_initializer_list || type->kind == type_kind_array);
+	bool zero_definition = !is_extern && !has_initializer && (is_thread_local || sema->scope);
 	const struct type *target;
 
 	if (zero_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
@@ -2857,8 +3570,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		diagnostic_error(sema->diagnostics, name.location, "multiple definitions of thread_local object");
 		return NULL;
 	}
-	if (*initializer) {
-		if (!type_is_integer(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) {
+	if (has_initializer) {
+		if (!promoted && !type_is_integer(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) {
 			diagnostic_error(sema->diagnostics, (*initializer)->location,
 				is_query ? "query-derived external declarations require ';' for non-integer initializers" :
 				is_extern ? "non-integer extern object definitions are not supported yet" :
@@ -2880,7 +3593,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (previous)
 		saved = *previous;
 	symbol = register_external_object(sema, name, type,
-		!is_extern && !*initializer && !zero_definition ? external : NULL, is_static, is_extern, is_thread_local);
+		!is_extern && !has_initializer && !zero_definition ? external : NULL, is_static, is_extern, is_thread_local);
 	if (!symbol)
 		return NULL;
 	if (zero_definition) {
@@ -2893,8 +3606,29 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		symbol->initializer_value = (struct static_data_value) { .kind = static_data_zero };
 		return symbol;
 	}
-	if (!*initializer)
+	if (!has_initializer)
 		return symbol;
+	if (promoted) {
+		/* Prior visible complete declarations supply the bound, not future
+		 * initializer inference. Keep written syntax/type graphs immutable. */
+		const struct type *visible = sema->scope ? type : symbol->file_type;
+		struct ast_initializer_plan *plan = sema_initializer(sema, visible, syntax, true, NULL);
+		const struct type *composite;
+		if (!plan)
+			goto rollback;
+		composite = type_composite(sema->arena, symbol->type, plan->type);
+		if (!composite) {
+			diagnostic_error(sema->diagnostics, name.location, "out of memory completing initialized object");
+			goto rollback;
+		}
+		symbol->type = composite;
+		if (!sema->scope)
+			symbol->file_type = plan->type;
+		symbol->initializer_plan = plan;
+		symbol->definition = external;
+		*published_plan = plan;
+		return symbol;
+	}
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
 	/* Check the original expression before narrowing (notably to _Bool).
@@ -2915,6 +3649,11 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 			}
 			is_address = true;
 		}
+	} else if (type->kind == type_kind_bool &&
+		((*initializer)->type->kind == type_kind_pointer || (*initializer)->type->kind == type_kind_nullptr)) {
+		if (!static_boolean_initializer(*initializer, &boolean_value, sema->diagnostics))
+			goto rollback;
+		is_boolean_address = true;
 	} else {
 		value = evaluate_integer_constant(*initializer);
 		if (value.status != constant_value) {
@@ -2945,6 +3684,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 			/* Codegen selects the target's null encoding, not an ICE. */
 			symbol->initializer_value = (struct static_data_value) { .kind = static_data_null_pointer };
 		}
+	} else if (is_boolean_address) {
+		symbol->initializer_value = boolean_value;
 	} else {
 		value = evaluate_integer_constant(*initializer);
 		if (value.status != constant_value) {
@@ -2960,11 +3701,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 rollback:
 	if (previous)
 		*previous = saved;
-	else {
-		assert(sema->external_objects == symbol);
-		sema->external_objects = symbol->next;
-		sema->external_object_count--;
-	}
+	initializer_transaction_rollback(sema, &transaction);
 	return NULL;
 }
 
@@ -3008,7 +3745,8 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 				"register storage requires an object type");
 			return false;
 		}
-	} else if (local->is_static && !type_is_complete_object(type)) {
+	} else if (local->is_static && !type_is_complete_object(type) &&
+		!(type->kind == type_kind_array && local->initializer_syntax && !((const struct array_type *)type)->count)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "static local object type must be complete");
 		return false;
 	}
@@ -3019,7 +3757,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 			"redeclaration of local in this scope");
 		return false;
 	}
-	if (!local->is_static && local->initializer) {
+	if (!local->is_static && (local->initializer || local->initializer_syntax)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"block-scope extern declaration cannot have an initializer");
 		return false;
@@ -3059,10 +3797,15 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 			return false;
 		local->object_symbol->is_block_static = true;
 		definition->symbol = sema_file_object(sema, &definition->external, name,
-			type, &local->initializer, true, false, false, local->is_thread_local);
+			type, &local->initializer, local->initializer_syntax, &local->initializer_plan,
+			true, false, false, local->is_thread_local);
 		if (!definition->symbol)
 			return false;
 		definition->initializer = local->initializer;
+		definition->initializer_syntax = local->initializer_syntax;
+		definition->initializer_plan = local->initializer_plan;
+		if (local->initializer_plan)
+			definition->type = local->type = local->initializer_plan->type;
 		*sema->static_tail = &definition->external;
 		sema->static_tail = &definition->external.next;
 		return true;
@@ -3132,6 +3875,111 @@ allocation_failure:
 	return false;
 }
 
+static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal_expression *node)
+{
+	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
+	struct literal_publication *publication;
+	const struct type *type;
+	struct ast_initializer_plan *plan;
+	unsigned initializer_depth = 0;
+	bool file_scope = !sema->scope && !sema->prototype_depth;
+	bool static_duration = file_scope || node->is_static || node->is_thread_local;
+	struct source *source;
+	unsigned char *spelling;
+	struct token name = { .location = node->expression.location };
+	if ((node->is_register && (file_scope || node->is_static || node->is_thread_local)) ||
+		(node->is_thread_local && !file_scope && !node->is_static)) {
+		diagnostic_error(sema->diagnostics, node->expression.location,
+			"invalid storage class combination or scope for compound literal");
+		return false;
+	}
+	publication = arena_alloc(sema->arena, sizeof(*publication));
+	if (!publication) {
+		diagnostic_error(sema->diagnostics, node->expression.location, "out of memory recording compound literal");
+		return false;
+	}
+	*publication = (struct literal_publication) {
+		.node = node, .next = sema->literal_publications,
+	};
+	/* Preserve padding too: rollback is an exact AST publication snapshot,
+	 * including on optimized/sanitized builds. */
+	memcpy(&publication->saved, node, sizeof(*node));
+	sema->literal_publications = publication;
+	type = resolve_type_syntax(sema, node->type_syntax);
+	if (!type)
+		goto failure;
+	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, &initializer_depth);
+	if (!plan)
+		goto failure;
+	node->expression.type = plan->type;
+	node->expression.is_lvalue = true;
+	/* Keep parsed depth and all checked source/conversion/designator depths,
+	 * not merely the surviving runtime plan after override normalization. */
+	if (initializer_depth + 1 > node->expression.depth)
+		node->expression.depth = initializer_depth + 1;
+	if (!check_expression_depth(sema, &node->expression))
+		goto failure;
+	node->initializer_plan = plan;
+	node->storage = node->is_thread_local ? ast_compound_literal_thread :
+		static_duration ? ast_compound_literal_static : ast_compound_literal_automatic;
+	/* Prototype/query operands are checked but create no runtime object or
+	 * record snapshot, nor any local/storage-budget charge. */
+	if (sema->unevaluated || sema->prototype_depth)
+		return true;
+	source = arena_alloc(sema->arena, sizeof(*source));
+	spelling = arena_alloc(sema->arena, 64);
+	if (!source || !spelling)
+		goto allocation_failure;
+	int length = snprintf((char *)spelling, 64, ".Lkcc.literal.%zu", node->object_id);
+	assert(length > 0 && length < 64);
+	*source = (struct source) { .data = spelling, .length = (size_t)length };
+	name.spelling_location = (struct source_location) { .source = source };
+	name.length = (size_t)length;
+	if (!static_duration) {
+		struct ast_local_declaration *local = ast_new_local(sema->arena, node->expression.location, name, NULL);
+		if (!local)
+			goto allocation_failure;
+		local->type_syntax = node->type_syntax;
+		local->is_register = node->is_register;
+		/* Backend initializes at the expression evaluation site. Keeping this
+		 * synthetic slot's initializer empty prevents eager declaration stores. */
+		if (!complete_local_storage(sema, local, plan->type))
+			goto failure;
+		node->local = local;
+		return true;
+	}
+	struct ast_external_object_declaration *definition = ast_new_external_object_declaration(
+		sema->arena, node->expression.location, node->type_syntax, name, false);
+	struct external_object_symbol *symbol;
+	if (!definition)
+		goto allocation_failure;
+	symbol = register_external_object(sema, name, plan->type, NULL, true, false, node->is_thread_local);
+	if (!symbol)
+		goto failure;
+	symbol->is_block_static = true;
+	symbol->initializer_plan = plan;
+	symbol->definition = &definition->external;
+	definition->is_static = true;
+	definition->is_thread_local = node->is_thread_local;
+	definition->type = plan->type;
+	definition->symbol = symbol;
+	definition->initializer_syntax = node->initializer_syntax;
+	definition->initializer_plan = plan;
+	node->object = symbol;
+	*sema->static_tail = &definition->external;
+	sema->static_tail = &definition->external.next;
+	if (sema->function && !has_const_subobject(sema, plan->type)) {
+		sema->function->inline_has_modifiable_static = true;
+		sema->function->inline_static_location = node->expression.location;
+	}
+	return true;
+allocation_failure:
+	diagnostic_error(sema->diagnostics, node->expression.location, "out of memory creating compound literal storage");
+failure:
+	initializer_transaction_rollback(sema, &transaction);
+	return false;
+}
+
 static bool sema_external_object_declaration(struct sema *sema,
 	struct ast_external_object_declaration *declaration)
 {
@@ -3145,10 +3993,11 @@ static bool sema_external_object_declaration(struct sema *sema,
 	}
 	declaration->symbol = sema_file_object(sema, &declaration->external,
 		declaration->name, type, &declaration->initializer,
+		declaration->initializer_syntax, &declaration->initializer_plan,
 		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local);
 	if (!declaration->symbol)
 		return false;
-	declaration->type = type;
+	declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
 	return true;
 }
 
@@ -3166,13 +4015,14 @@ static bool sema_external_type_declaration(struct sema *sema,
 		}
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
+			declaration->initializer_syntax, &declaration->initializer_plan,
 			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local);
 		if (!declaration->object_symbol)
 			return false;
-		declaration->type = type;
+		declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
 		return true;
 	}
-	if (declaration->initializer) {
+	if (declaration->initializer || declaration->initializer_syntax) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"query-derived external declarations require ';'; functions cannot have initializers");
 		return false;
