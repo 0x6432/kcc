@@ -8,6 +8,7 @@ A production run requires --frozen-hash and a clean exact compiler checkout.
 """
 import argparse
 import copy
+import hashlib
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -270,15 +271,31 @@ def native_version(cc):
     return r.stdout.strip()
 
 
+# Exact unchanged source identities, not a waiver for arbitrary GCC failures.
+SELF_REINIT_ORIGINALS = {
+    'live array literal self reinitialization': '42502295b76173d677e894bcf5a2562d8b2f44a5f4db5f9c0bb50d5a60a7413b',
+    'live record literal self reinitialization': '12ca3fc6e406b4c358512b6fbcf35737d5e9c1b83aed1bf08d732007d4cf2f7c',
+}
+SELF_REINIT_COMPANION = '833aa24a7c2f00f5b642a706f14fc718fbfa7fc1d52f43d537a6099022e63860'
+
+
+def validate_self_reinit_disagreement(case,version,result):
+    assert re.fullmatch(r'(?:11|13)(?:\.\d+){0,2}',version), ('unreviewed compiler version',version)
+    assert case.gcc11_disagreement and case.expected_exit==42
+    assert case.name in SELF_REINIT_ORIGINALS, ('unreviewed original',case.name)
+    assert hashlib.sha256(case.owner.encode()).hexdigest()==SELF_REINIT_ORIGINALS[case.name]
+    assert hashlib.sha256(case.companion.encode()).hexdigest()==SELF_REINIT_COMPANION
+    assert result.returncode==1 and not result.stdout and not result.stderr, ('GCC self-reinit discrepancy changed; review required',case.name,result)
+
+
 def run_native_case(cc,objects,executable,case,version):
-    if case.gcc11_disagreement and version.split('.')[0]=='11':
+    if case.gcc11_disagreement and re.fullmatch(r'(?:11|13)(?:\.\d+){0,2}',version):
         # N3096 6.5.2.5p5 and 6.7.10p20/22: old explicitly initialized
         # subobjects remain live; default fill does not clobber them before RHS
-        # capture. GCC11 clears too early. Execute the exact original, require
-        # this known outcome, report disagreement and NEVER count agreement.
+        # capture. Independently observed GCC11/13 clear too early. Execute the
+        # exact original, require exit1 with empty streams, NEVER count agreement.
         producer([cc,*objects,'-o',executable],executable)
-        r=invoke([executable])
-        assert r.returncode==1 and not r.stdout and not r.stderr, ('GCC11 self-reinit discrepancy changed; review required',case.name,r)
+        validate_self_reinit_disagreement(case,version,invoke([executable]))
         return False
     run_case(cc,objects,executable,case)
     return True
@@ -441,9 +458,24 @@ def native_constraint(cc, source, output, name):
     validate_native_constraint(cc,source,output,name,result)
 
 
-def validate_native_constraint(cc,source,output,name,result):
+# GCC13 exact-original full-stream observations differ from GCC11 in two
+# diagnostics. These are constraint agreements, unrelated to runtime discrepancies.
+GCC13_CONSTRAINTS = {
+    'function literal': (('error','compound literal has function type'),),
+    'nonconstant file literal content': (
+        ('error','initializer element is not constant'),
+        ('note',"(near initialization for '(anonymous)')")),
+}
+
+
+def validate_native_constraint(cc,source,output,name,result,version=None):
     actual=native_diagnostics(result.stderr,source,source.read_text(),clang_style(cc))
     expected=NATIVE_CONSTRAINTS[name][int(clang_style(cc))]
+    if not clang_style(cc) and name in GCC13_CONSTRAINTS:
+        version=native_version(cc) if version is None else version
+        if re.fullmatch(r'13(?:\.\d+){0,2}',version):
+            assert source.read_text()==dict(CONSTRAINTS)[name]+'\n', ('changed constraint original',name)
+            expected=GCC13_CONSTRAINTS[name]
     assert result.returncode==1 and not result.stdout and not output.exists(), (name,cc,result)
     assert actual==expected, (name,cc,actual,expected,result.stderr)
 
@@ -585,6 +617,47 @@ def controls(d):
     for bad in (old,fakeclang,d/'missing-gcc13'):
         with patch.dict(globals(),{'HOST':str(bad) if bad.exists() else str(gcc13)}), patch.dict(os.environ,{'CLANG_CC':str(bad) if bad.exists() else str(gcc13),'GCC13_CC':str(bad)}):
             must_fail(selected_compilers,'explicit GCC13 validation before dedupe')
+    # No other original, compiler version, status, or stream may acquire the
+    # two independently reviewed GCC semantic-discrepancy classifications.
+    for original in (c for c in fixtures() if c.gcc11_disagreement):
+        clean=subprocess.CompletedProcess([],1,'','')
+        for version in ('11.5.0','13.4.0'):
+            validate_self_reinit_disagreement(original,version,clean)
+        for version in ('10.5.0','12.3.0','14.1.0','clang','13.4.0junk'):
+            must_fail(lambda:validate_self_reinit_disagreement(original,version,clean),'unreviewed discrepancy version')
+        for mutation in ('owner','companion','name','marker','expected','other-original','status0','status42','status2','signal','stdout','stderr'):
+            case=copy.copy(original); bad=copy.copy(clean)
+            if mutation=='owner': case.owner+=' '
+            elif mutation=='companion': case.companion+=' '
+            elif mutation=='name': case.name+=' poisoned'
+            elif mutation=='marker': case.gcc11_disagreement=False
+            elif mutation=='expected': case.expected_exit=1
+            elif mutation=='other-original':
+                case=copy.copy(fixtures()[0]); case.gcc11_disagreement=True
+            elif mutation.startswith('status'): bad.returncode=int(mutation[6:])
+            elif mutation=='signal': bad.returncode=-11
+            elif mutation=='stdout': bad.stdout='unexpected output'
+            else: bad.stderr='unexpected diagnostic'
+            for version in ('11.5.0','13.4.0'):
+                must_fail(lambda:validate_self_reinit_disagreement(case,version,bad),'self-reinit '+mutation)
+    # Each GCC13 diagnostic override remains exact-original/full-stream bound.
+    for name,expected in GCC13_CONSTRAINTS.items():
+        source.write_text(dict(CONSTRAINTS)[name]+'\n'); output.unlink(missing_ok=True)
+        clean=subprocess.CompletedProcess([],1,'',''.join(f'{source}:1:1: {kind}: {message}\n' for kind,message in expected))
+        validate_native_constraint(str(gcc13),source,output,name,clean,'13.4.0')
+        for mutation in ('original','message','note','junk','stdout','status','missing-newline','poison','version'):
+            source.write_text(dict(CONSTRAINTS)[name]+'\n'); bad=copy.copy(clean); version='13.4.0'
+            if mutation=='original': source.write_text(source.read_text()+' ')
+            elif mutation=='message': bad.stderr=bad.stderr.replace(expected[0][1],'wrong reason')
+            elif mutation=='note': bad.stderr+=f'{source}:1:1: note: unexpected note\n'
+            elif mutation=='junk': bad.stderr+='unparsed output\n'
+            elif mutation=='stdout': bad.stdout='unexpected output'
+            elif mutation=='status': bad.returncode=0
+            elif mutation=='missing-newline': bad.stderr=bad.stderr.rstrip('\n')
+            elif mutation=='poison': output.write_bytes(b'poison')
+            else: version='11.5.0'
+            must_fail(lambda:validate_native_constraint(str(gcc13),source,output,name,bad,version),'GCC13 diagnostic '+mutation)
+            output.unlink(missing_ok=True)
     # Complete diagnostic streams, not arbitrary error substrings.
     name,text=CONSTRAINTS[0]; source.write_text(text+'\n')
     expected=NATIVE_CONSTRAINTS[name][0]
@@ -671,7 +744,7 @@ def main():
         print(f'M17 compound: {len(cases)} unchanged originals; KCC/QBE/ELF/runtime {kcc_count}; {len(CONSTRAINTS)} exact native constraints per compiler')
         for cc in compilers:
             print(f'{cc}: {counts[cc]} unchanged runtime agreements; {len(gaps[cc])} explicit capability gaps: {gaps[cc]}; '
-                  f'{len(disagreements[cc])} explicit GCC11 semantic disagreements (expected42/observed1, NOT agreements): {disagreements[cc]}')
+                  f'{len(disagreements[cc])} explicit GCC11/GCC13 semantic disagreements (expected42/observed1, NOT agreements): {disagreements[cc]}')
         if args.native_only: print('NATIVE-ONLY: no frozen KCC coverage/PASS claimed')
         else: print('Frozen production hash: '+args.frozen_hash)
 
