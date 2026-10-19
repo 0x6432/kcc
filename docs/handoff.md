@@ -1,4 +1,87 @@
-# M16 aggregate handoff
+# Current handoff — M17 validation recovery
+
+## Implementation and release status
+
+M17 initializers, designators and compound literals are implemented for the
+existing supported types described in `m17-initializers.md`. **M17 is not yet
+release-approved.** The recovered feature checkpoint is
+`4eb1619404160789e7bd6fe3fd911d4f1a3a8471`; its five remote CI jobs passed in
+run https://github.com/0x6432/kcc/actions/runs/39267728052. That run covers
+that exact checkpoint only, not this documentation update or any later commit.
+All four full local lanes, exact local fuzz and independent manifest-bound
+all-tracked review must be rebuilt on the new computer before release approval.
+Old absolute evidence paths and historical passes below are not recovered proof.
+
+The recovered source includes live compound-literal capture before clearing,
+checking of overridden expressions, rollback snapshots including padding,
+query-only literal identity, bounded actual-domain/union ancestry searches,
+union-copy partial updates and full nominal member paths for private static
+pointer-difference conditions. Public strict ICE rules remain unchanged.
+Native compiler discrepancies are never agreements; tests retain exact protocols.
+
+M18 and M19 already contain implemented subsets as recorded in `milestones.md`;
+neither is declared complete. M18 enum/alignment work remains. M19 remaining
+scope must be audited against the actual implementation, with attributes/VLA
+interactions assigned explicitly to their later milestones. M20 ordinary
+floating types and M21 variadic/aggregate ABI require substantive implementation
+and positive, negative, AST, runtime and host interoperability evidence.
+`long double` remains M24g; it must not be substituted with `double`.
+Do not implement a later milestone before the preceding milestone's gates pass.
+
+## Recovered validation protocol
+
+- Use only `feature/m17-initializers`. Never modify or merge `development`,
+  pinned at `5ad608a7b557f1fd3f077fc73d04796561375deb`.
+- Freeze a clean exact commit and all-tracked file hash manifest. Independently
+  review code and test integrity, including original legacy refusals/promotions.
+  Rebuild evidence from repository/history and identify unavailable evidence.
+- Four isolated complete lanes: GCC13 normal, Clang18 normal, GCC11.5 sanitized,
+  Clang18 sanitized. Each must run **both** `make test` and `make test-codegen`
+  using pinned QBE1.2; a prebuild is not a pass. Toolchain provenance is required.
+- Local ASan/UBSan may use `-fno-pie`/`-no-pie` for this Amazon Linux environment;
+  retain `ASAN_OPTIONS=detect_leaks=1:abort_on_error=1` and
+  `UBSAN_OPTIONS=halt_on_error=1`. Do not change remote Ubuntu sanitizer flags.
+- Run Clang18 lexer and compile-only fuzz with `FUZZ_SECONDS=20` each and
+  unchanged `max_len=4096`, `timeout=5`, `rss_limit_mb=512`. No arbitrary fuzz
+  input execution, weakened tests, version waivers or relabeled earlier passes.
+- Push only the feature branch and require all five remote jobs green on the
+  final exact commit, including documentation changes. Fix genuine failures,
+  refresh the freeze and rerun gates before approval.
+
+## Durable external evidence
+
+New-computer coordination is `/data/kcc-m17-coordination/`:
+`CURRENT-HANDOFF.md`, `M17-original-handoff.md`,
+`RECOVERED_TRACKED_SHA256SUMS` and `recovery-binding.json`.
+Recovered CI API responses are `/data/m17-ci-runs.json` and
+`/data/m17-ci-jobs.json`. New toolchain provenance/readiness belongs under
+`toolchains/`; new isolated lane checkouts/logs belong under
+`/data/kcc-m17-lanes/`. These paths describe evidence locations, not gate passes.
+Credentials are external/private and must never enter repository content/config.
+
+## Copy-ready next-agent prompt
+
+Continue KCC on feature/m17-initializers. Read this current section, then
+`/data/kcc-m17-coordination/CURRENT-HANDOFF.md` and its original handoff, followed
+by `milestones.md` and `m17-initializers.md`. Verify actual clean HEAD, all-tracked
+manifest, toolchain provenance, feature-only remote SHA and the development pin.
+M17 is implemented but local full release approval remains pending. Reuse the
+existing six-person execution team (coordinator plus five workers), isolated
+checkouts and build outputs. Complete all four full local lanes, exact fuzz,
+independent all-tracked review/legacy audit, and five green remote jobs on final
+exact SHA. Do not infer approval from old records. At each validated milestone,
+write factual tracked handoff plus copy-ready next-agent prompt and preserve
+external exact-SHA evidence. Continue M18, M19, M20, M21 strictly in order;
+implement missing scope with real tests, retain explicit later dependencies,
+and never fake long double or aggregate/variadic ABI. On interruption retain
+an honest implemented/pending/release-approved checkpoint.
+
+---
+
+The following handoffs are historical snapshots, not current feature inventories
+or evidence of this recovered release.
+
+# Historical M16 aggregate handoff
 
 Current implementation: M16 records for existing supported types; see
 `m16-records.md`. Record layout/member/copy/query/storage composition is
@@ -19,7 +102,7 @@ historical, not current unsupported-feature inventories.
 
 # Handoff
 
-## Current checkpoint
+## Historical M15 checkpoint
 
 M15i3 extends static pointer values to direct zero-addend object/function/string
 addresses. A distinct address tag stores stable canonical base identity, not a
