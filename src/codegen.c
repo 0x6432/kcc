@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 struct control_codegen {
 	struct control_codegen *parent;
@@ -168,12 +169,18 @@ static size_t codegen_pointer_index(struct codegen *codegen,
 	return result;
 }
 
+static size_t codegen_compound_literal(struct codegen *codegen,
+	const struct ast_compound_literal_expression *literal);
+
 /* Object lvalues produce addresses; value-context loads are separate nodes. */
 static size_t codegen_address(struct codegen *codegen, const struct ast_expression *expression)
 {
 	assert(expression->is_lvalue || expression->type->kind == type_kind_function ||
 		expression->kind == expression_indirection || expression->kind == expression_member);
 	switch (expression->kind) {
+	case expression_compound_literal:
+		return codegen_compound_literal(codegen,
+			(const struct ast_compound_literal_expression *)expression);
 	case expression_function_designator: {
 		const struct ast_function_designator_expression *function =
 			(const struct ast_function_designator_expression *)expression;
@@ -286,6 +293,131 @@ static void codegen_record_copy(struct codegen *codegen, size_t source,
 		emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", value, source_address);
 		emit(codegen, "\tstoreb %%t%zu, %%t%zu\n", value, destination_address);
 	}
+}
+
+/* These helpers keep initialization proportional to syntax, not object size.
+ * Zero-fill and long string/copy writes use bounded loops without libc calls. */
+static size_t codegen_byte_offset(struct codegen *codegen, size_t base, uint64_t offset)
+{
+	if (!offset)
+		return base;
+	size_t result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %ju\n", result, base, (uintmax_t)offset);
+	return result;
+}
+
+static void codegen_zero_bytes(struct codegen *codegen, size_t destination, uint64_t bytes)
+{
+	uint64_t bulk = bytes & ~UINT64_C(7);
+
+	if (bytes > 64) {
+		size_t predecessor = codegen->current_label;
+		size_t loop = new_label(codegen), done = new_label(codegen);
+		size_t index = codegen->next_temporary++, next = codegen->next_temporary++;
+		size_t address = codegen->next_temporary++, condition = codegen->next_temporary++;
+
+		emit(codegen, "\tjmp @b%zu\n", loop);
+		emit_label(codegen, loop);
+		emit(codegen, "\t%%t%zu =l phi @b%zu 0, @b%zu %%t%zu\n", index, predecessor, loop, next);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, %%t%zu\n", address, destination, index);
+		emit(codegen, "\tstorel 0, %%t%zu\n", address);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, 8\n", next, index);
+		emit(codegen, "\t%%t%zu =w cultl %%t%zu, %ju\n", condition, next, (uintmax_t)bulk);
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", condition, loop, done);
+		emit_label(codegen, done);
+	} else {
+		for (uint64_t offset = 0; offset < bulk; offset += 8)
+			emit(codegen, "\tstorel 0, %%t%zu\n", codegen_byte_offset(codegen, destination, offset));
+	}
+	for (uint64_t offset = bulk; offset < bytes; offset++)
+		emit(codegen, "\tstoreb 0, %%t%zu\n", codegen_byte_offset(codegen, destination, offset));
+}
+
+struct initializer_capture {
+	const struct ast_expression *expression;
+	size_t value;
+};
+
+static void codegen_initializer_plan(struct codegen *codegen,
+	const struct ast_initializer_plan *plan, size_t destination)
+{
+	struct initializer_capture *captures = NULL;
+	size_t capacity = 1;
+
+	assert(plan->entry_count <= ast_max_initializer_entries);
+	while (capacity < plan->entry_count * 2)
+		capacity *= 2;
+	if (plan->entry_count) {
+		captures = calloc(capacity, sizeof(*captures));
+		if (!captures) {
+			codegen->output_ok = false;
+			return;
+		}
+	}
+	/* A compound literal is a live object when reevaluated. Capture checked
+	 * initializer values before clearing any of its previous contents; reads
+	 * through an earlier pointer must observe that previous object value. */
+	for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
+		if (!entry->length || entry->kind == ast_initializer_write_zero)
+			continue;
+		assert(entry->expression);
+		size_t i = ((uintptr_t)entry->expression >> 3) & (capacity - 1);
+		while (captures[i].expression && captures[i].expression != entry->expression)
+			i = (i + 1) & (capacity - 1);
+		if (!captures[i].expression) {
+			size_t value = entry->kind == ast_initializer_write_string ?
+				codegen_address(codegen, entry->expression) : codegen_expression(codegen, entry->expression);
+			captures[i] = (struct initializer_capture) { entry->expression, value };
+		}
+	}
+	if (plan->zero_fill)
+		codegen_zero_bytes(codegen, destination, plan->size);
+	for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
+		size_t address, value;
+
+		assert(entry->offset <= plan->size && entry->length <= plan->size - entry->offset);
+		if (!entry->length)
+			continue;
+		address = codegen_byte_offset(codegen, destination, entry->offset);
+		if (entry->kind == ast_initializer_write_zero) {
+			codegen_zero_bytes(codegen, address, entry->length);
+			continue;
+		}
+		size_t i = ((uintptr_t)entry->expression >> 3) & (capacity - 1);
+		while (captures[i].expression != entry->expression) {
+			assert(captures[i].expression);
+			i = (i + 1) & (capacity - 1);
+		}
+		value = captures[i].value;
+		if (entry->kind == ast_initializer_write_copy || entry->kind == ast_initializer_write_string) {
+			value = codegen_byte_offset(codegen, value, entry->source_offset);
+			codegen_record_copy(codegen, value, address, entry->length);
+		} else {
+			assert(entry->kind == ast_initializer_write_expression);
+			assert(entry->length == type_object_size(entry->type));
+			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), value, address);
+		}
+	}
+	free(captures);
+}
+
+static size_t codegen_compound_literal(struct codegen *codegen,
+	const struct ast_compound_literal_expression *literal)
+{
+	size_t address = codegen->next_temporary++;
+
+	if (literal->local) {
+		emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, literal->local->slot);
+		assert(literal->initializer_plan);
+		codegen_initializer_plan(codegen, literal->initializer_plan, address);
+	} else {
+		assert(literal->object);
+		struct token name = literal->object->name;
+		emit(codegen, "\t%%t%zu =l copy %s$%.*s\n", address,
+			literal->object->is_thread_local ? "thread " : "", (int)name.length,
+			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+	}
+	return address;
 }
 
 /* Value conversion tests the whole source, unlike narrow ABI normalization. */
@@ -542,6 +674,8 @@ static size_t codegen_expression(struct codegen *codegen,
 
 	assert(type_is_scalar(expression->type) || type_is_record(expression->type));
 	switch (expression->kind) {
+	case expression_compound_literal:
+		return codegen_compound_literal(codegen, (const struct ast_compound_literal_expression *)expression);
 	case expression_sizeof:
 		return codegen_layout_constant(codegen, ((const struct ast_sizeof_expression *)expression)->size);
 	case expression_sizeof_type:
@@ -949,7 +1083,12 @@ static bool codegen_do(struct codegen *codegen, const struct ast_do_statement *n
 static void codegen_local_initializer(struct codegen *codegen,
 	const struct ast_local_declaration *local)
 {
-	if (local->initializer) {
+	if (local->initializer_plan) {
+		size_t address = codegen->next_temporary++;
+
+		emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
+		codegen_initializer_plan(codegen, local->initializer_plan, address);
+	} else if (local->initializer) {
 		size_t value = codegen_expression(codegen, local->initializer);
 
 		if (type_is_record(local->type)) {
@@ -1232,6 +1371,90 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	return codegen.output_ok;
 }
 
+static int initializer_offset_order(const void *left, const void *right)
+{
+	const struct ast_initializer_plan_entry *a = *(const struct ast_initializer_plan_entry *const *)left;
+	const struct ast_initializer_plan_entry *b = *(const struct ast_initializer_plan_entry *const *)right;
+
+	return (a->offset > b->offset) - (a->offset < b->offset);
+}
+
+static void codegen_static_initializer(struct codegen *codegen, const struct ast_initializer_plan *plan)
+{
+	const struct ast_initializer_plan_entry **entries = NULL;
+	size_t count = 0;
+	uint64_t position = 0;
+
+	if (plan->entry_count) {
+		entries = calloc(plan->entry_count, sizeof(*entries));
+		if (!entries) {
+			codegen->output_ok = false;
+			return;
+		}
+	}
+	for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
+		assert(count < plan->entry_count);
+		entries[count++] = entry;
+	}
+	if (count)
+		qsort(entries, count, sizeof(*entries), initializer_offset_order);
+	for (size_t i = 0; i < count; i++) {
+		const struct ast_initializer_plan_entry *entry = entries[i];
+		const struct ast_initializer_constant *constant = &entry->constant;
+
+		assert(entry->offset >= position && entry->offset <= plan->size &&
+			entry->length <= plan->size - entry->offset);
+		if (entry->offset > position)
+			emit(codegen, "z %ju, ", (uintmax_t)(entry->offset - position));
+		position = entry->offset + entry->length;
+		if (!entry->length)
+			continue;
+		if (entry->kind == ast_initializer_write_zero)
+			emit(codegen, "z %zu, ", entry->length);
+		else if (entry->kind == ast_initializer_write_string) {
+			assert(entry->bytes);
+			for (size_t j = 0; j < entry->length; j++)
+				emit(codegen, "b %u, ", (unsigned)entry->bytes[entry->source_offset + j]);
+		} else if (constant->kind == ast_initializer_constant_address) {
+			struct token name;
+
+			assert(entry->length == 8 && !entry->source_offset);
+			switch (constant->address_kind) {
+			case ast_initializer_address_string:
+				emit(codegen, "l $.Lkcc.string.%zu", constant->base.string->object_id);
+				break;
+			case ast_initializer_address_object:
+			case ast_initializer_address_function:
+				name = constant->address_kind == ast_initializer_address_object ?
+					constant->base.object->name : constant->base.function->name;
+				emit(codegen, "l $%.*s", (int)name.length,
+					(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+				break;
+			case ast_initializer_address_compound_literal:
+				/* Sema resolves static literals to their canonical symbol. */
+				assert(0 && "unresolved compound literal relocation");
+				break;
+			}
+			if (constant->byte_addend)
+				emit(codegen, " + %jd", (intmax_t)constant->byte_addend);
+			emit(codegen, ", ");
+		} else {
+			assert(constant->kind == ast_initializer_constant_integer ||
+				constant->kind == ast_initializer_constant_null);
+			assert(entry->source_offset <= 8 && entry->length <= 8 - entry->source_offset);
+			/* Byte slices preserve explicitly overridden scalar storage too;
+			 * target representation is Linux amd64 little endian. */
+			for (size_t j = 0; j < entry->length; j++)
+				emit(codegen, "b %u, ", (unsigned)((constant->bits >>
+					(8 * (entry->source_offset + j))) & UINT64_C(255)));
+		}
+	}
+	if (position < plan->size)
+		emit(codegen, "z %ju, ", (uintmax_t)(plan->size - position));
+	emit(codegen, "}\n");
+	free(entries);
+}
+
 bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
 {
 	const struct ast_external_declaration *external = unit->declarations;
@@ -1269,7 +1492,9 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 				object->is_internal ? "" : "export ", object->is_thread_local ? "thread " : "", (int)name.length,
 				(const char *)name.spelling_location.source->data + name.spelling_location.offset,
 				type_object_alignment(object->type));
-			if (object->definition) {
+			if (object->definition && object->initializer_plan)
+				codegen_static_initializer(&data_codegen, object->initializer_plan);
+			else if (object->definition) {
 				uint64_t size = type_object_size(object->type);
 				const char *encoding = size == 1 ? "b" : size == 2 ? "h" : size == 4 ? "w" : "l";
 
@@ -1288,6 +1513,9 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 
 					assert(object->type->kind == type_kind_pointer && size == 8);
 					switch (address->kind) {
+					case static_address_compound_literal:
+						assert(0 && "query-only literal address reached emission");
+						break;
 					case static_address_string:
 						emit(&data_codegen, "l $.Lkcc.string.%zu", address->base.string->object_id);
 						break;

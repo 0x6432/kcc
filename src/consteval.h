@@ -42,6 +42,8 @@ enum static_address_base_kind {
 	static_address_object,
 	static_address_function,
 	static_address_string,
+	/* Checked but unevaluated static literal: identity without emitted storage. */
+	static_address_compound_literal,
 };
 
 struct static_address {
@@ -51,6 +53,7 @@ struct static_address {
 		const struct external_object_symbol *object;
 		const struct function_symbol *function;
 		const struct ast_string_expression *string;
+		const struct ast_compound_literal_expression *compound_literal;
 	} base;
 };
 

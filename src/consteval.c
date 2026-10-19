@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <string.h>
 
 static uint64_t integer_mask(const struct type *type)
 {
@@ -54,12 +55,15 @@ static uint64_t converted_bits(struct constant_result value, const struct type *
 	return bits & integer_mask(target);
 }
 
-static struct constant_result evaluate(const struct ast_expression *expression, bool evaluated);
+static struct constant_result evaluate_initializer_condition(const struct ast_expression *expression);
+static struct constant_result compare_initializer_addresses(const struct ast_binary_expression *node);
 
-static struct constant_result evaluate_unary(const struct ast_unary_expression *node, bool evaluated)
+static struct constant_result evaluate(const struct ast_expression *expression, bool evaluated, bool initializer_condition);
+
+static struct constant_result evaluate_unary(const struct ast_unary_expression *node, bool evaluated, bool initializer_condition)
 {
 	const struct ast_expression *expression = &node->expression;
-	struct constant_result operand = evaluate(node->operand, evaluated);
+	struct constant_result operand = evaluate(node->operand, evaluated, initializer_condition);
 	uint64_t sign = UINT64_C(1) << (type_integer_width(expression->type) - 1);
 
 	if (operand.status != constant_value)
@@ -82,10 +86,14 @@ static struct constant_result evaluate_unary(const struct ast_unary_expression *
 	return constant_failure(expression, constant_not_constant, "unknown unary operator");
 }
 
-static struct constant_result evaluate_binary(const struct ast_binary_expression *node, bool evaluated)
+static struct constant_result evaluate_binary(const struct ast_binary_expression *node, bool evaluated, bool initializer_condition)
 {
 	const struct ast_expression *expression = &node->expression;
-	struct constant_result left = evaluate(node->left, evaluated);
+	struct constant_result left;
+	if (initializer_condition && (node->left->type->kind == type_kind_pointer ||
+		node->left->type->kind == type_kind_nullptr))
+		return compare_initializer_addresses(node);
+	left = evaluate(node->left, evaluated, initializer_condition);
 	struct constant_result right;
 	unsigned width;
 	uint64_t mask;
@@ -98,7 +106,7 @@ static struct constant_result evaluate_binary(const struct ast_binary_expression
 
 	if (left.status != constant_value)
 		return left;
-	right = evaluate(node->right, evaluated);
+	right = evaluate(node->right, evaluated, initializer_condition);
 	if (right.status != constant_value)
 		return right;
 	if (!evaluated)
@@ -185,9 +193,14 @@ static struct constant_result evaluate_binary(const struct ast_binary_expression
 /* Even a skipped arm must meet 6.6p8's integer operand/cast form rules.
  * Only arithmetic evaluation and the comma prohibition depend on evaluated.
  */
-static struct constant_result evaluate(const struct ast_expression *expression, bool evaluated)
+static struct constant_result evaluate(const struct ast_expression *expression, bool evaluated, bool initializer_condition)
 {
 	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
+	if (initializer_condition && !evaluated)
+		return (struct constant_result) { .status = constant_value, .type = expression->type,
+			.bits = 0, .location = expression->location };
+	if (initializer_condition && !type_is_integer(expression->type))
+		return evaluate_initializer_condition(expression);
 	if (!type_is_integer(expression->type))
 		return constant_failure(expression, constant_not_constant, "integer constant expression requires integer operands");
 	switch (expression->kind) {
@@ -208,26 +221,29 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 		const struct ast_expression *operand = expression->kind == expression_cast ?
 			((const struct ast_cast_expression *)expression)->operand :
 			((const struct ast_conversion_expression *)expression)->operand;
-		struct constant_result value = evaluate(operand, evaluated);
+		struct constant_result value = evaluate(operand, evaluated, initializer_condition);
 
+		if (initializer_condition && expression->type->kind == type_kind_bool &&
+			!type_is_integer(operand->type) && value.status == constant_value)
+			return constant_success(expression, value.bits != 0);
 		if (value.status != constant_value)
 			return value;
 		return constant_success(expression, evaluated ? converted_bits(value, expression->type) : 0);
 	}
 	case expression_unary:
-		return evaluate_unary((const struct ast_unary_expression *)expression, evaluated);
+		return evaluate_unary((const struct ast_unary_expression *)expression, evaluated, initializer_condition);
 	case expression_binary:
-		return evaluate_binary((const struct ast_binary_expression *)expression, evaluated);
+		return evaluate_binary((const struct ast_binary_expression *)expression, evaluated, initializer_condition);
 	case expression_logical: {
 		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
-		struct constant_result left = evaluate(node->left, evaluated);
+		struct constant_result left = evaluate(node->left, evaluated, initializer_condition);
 		struct constant_result right;
 		bool evaluate_right;
 
 		if (left.status != constant_value)
 			return left;
 		evaluate_right = evaluated && (node->operation == logical_and ? left.bits != 0 : left.bits == 0);
-		right = evaluate(node->right, evaluate_right);
+		right = evaluate(node->right, evaluate_right, initializer_condition);
 		if (right.status != constant_value)
 			return right;
 		return constant_success(expression, evaluated && (node->operation == logical_and ?
@@ -235,16 +251,16 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 	}
 	case expression_conditional: {
 		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
-		struct constant_result condition = evaluate(node->condition, evaluated);
+		struct constant_result condition = evaluate(node->condition, evaluated, initializer_condition);
 		struct constant_result then_value;
 		struct constant_result else_value;
 
 		if (condition.status != constant_value)
 			return condition;
-		then_value = evaluate(node->then_value, evaluated && condition.bits != 0);
+		then_value = evaluate(node->then_value, evaluated && condition.bits != 0, initializer_condition);
 		if (then_value.status != constant_value)
 			return then_value;
-		else_value = evaluate(node->else_value, evaluated && condition.bits == 0);
+		else_value = evaluate(node->else_value, evaluated && condition.bits == 0, initializer_condition);
 		if (else_value.status != constant_value)
 			return else_value;
 		return constant_success(expression, evaluated ? (condition.bits ? then_value.bits : else_value.bits) : 0);
@@ -256,10 +272,10 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 
 		if (evaluated)
 			return constant_failure(expression, constant_not_constant, "evaluated comma is not an integer constant expression");
-		left = evaluate(node->left, false);
+		left = evaluate(node->left, false, initializer_condition);
 		if (left.status != constant_value)
 			return left;
-		right = evaluate(node->right, false);
+		right = evaluate(node->right, false, initializer_condition);
 		return right.status == constant_value ? constant_success(expression, 0) : right;
 	}
 	default:
@@ -269,44 +285,22 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 
 struct constant_result evaluate_integer_constant(const struct ast_expression *expression)
 {
-	return evaluate(expression, true);
+	return evaluate(expression, true, false);
 }
 
+/* Initializer selection is distinct from strict ICE operand validation: an
+ * unselected pointer branch may contain an otherwise valid load or call.
+ * Both branches have already passed sema; this query only evaluates selection. */
 /* The source is checked before assignment conversion. Arbitrary nullptr_t
  * values, pointer loads, address expressions and pointer arithmetic are not
  * proved constant merely because their runtime value might be null.
  */
+static struct null_initializer_result evaluate_pointer_null(const struct ast_expression *expression);
+
 struct null_initializer_result evaluate_null_initializer(const struct ast_expression *expression)
 {
 	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
-	if (type_is_integer(expression->type)) {
-		struct constant_result value = evaluate_integer_constant(expression);
-
-		if (value.status == constant_invalid)
-			return (struct null_initializer_result) { value.status, value.location, value.message };
-		if (value.status == constant_value && value.bits == 0)
-			return (struct null_initializer_result) { constant_value, expression->location, NULL };
-	} else if (expression->kind == expression_address &&
-		((const struct ast_address_expression *)expression)->operand->kind == expression_indirection) {
-		const struct ast_indirection_expression *indirection =
-			(const struct ast_indirection_expression *)((const struct ast_address_expression *)expression)->operand;
-
-		/* &* cancels without accessing the pointed object, even for null. */
-		return evaluate_null_initializer(indirection->operand);
-	} else if (expression->kind == expression_nullptr) {
-		return (struct null_initializer_result) { constant_value, expression->location, NULL };
-	} else if ((expression->kind == expression_cast || expression->kind == expression_conversion) &&
-		(expression->type->kind == type_kind_pointer || expression->type->kind == type_kind_nullptr)) {
-		const struct ast_expression *operand = expression->kind == expression_cast ?
-			((const struct ast_cast_expression *)expression)->operand :
-			((const struct ast_conversion_expression *)expression)->operand;
-
-		return evaluate_null_initializer(operand);
-	}
-	return (struct null_initializer_result) {
-		constant_not_constant, expression->location,
-		"file-scope pointer initializer requires a supported null constant expression",
-	};
+	return evaluate_pointer_null(expression);
 }
 
 /* Address context names storage without reading it. In particular, rejecting
@@ -321,6 +315,16 @@ static struct address_initializer_result direct_address(const struct ast_express
 	};
 
 	switch (expression->kind) {
+	case expression_compound_literal: {
+		const struct ast_compound_literal_expression *literal =
+			(const struct ast_compound_literal_expression *)expression;
+
+		if (!literal->object || literal->object->is_thread_local)
+			break;
+		result.address.kind = static_address_object;
+		result.address.base.object = literal->object;
+		return result;
+	}
 	case expression_external_object:
 		if (((const struct ast_external_object_expression *)expression)->object->is_thread_local)
 			return (struct address_initializer_result) {
@@ -339,11 +343,12 @@ static struct address_initializer_result direct_address(const struct ast_express
 		result.address.base.string = (const struct ast_string_expression *)expression;
 		return result;
 	default:
-		return (struct address_initializer_result) {
-			.status = constant_not_constant, .location = expression->location,
-			.message = "file-scope pointer initializer requires a supported null or direct address constant expression",
-		};
+		break;
 	}
+	return (struct address_initializer_result) {
+		.status = constant_not_constant, .location = expression->location,
+		.message = "file-scope pointer initializer requires a supported null or direct address constant expression",
+	};
 }
 
 /* Assignment-like pointer edges preserve immediate referent qualifiers.
@@ -379,7 +384,11 @@ struct address_domain {
 };
 
 struct address_proof {
+	bool is_null; /* Separate value category, never an integer address sentinel. */
 	struct address_domain original_domain;
+	const struct type *storage_type; /* Immutable source-point root, not a later composite. */
+	const struct type *byte_view_type;
+	uint64_t byte_view_start;
 	struct address_initializer_result result;
 	const struct type *element;
 	uint64_t extent;
@@ -415,6 +424,7 @@ static struct address_proof address_base(const struct ast_expression *expression
 	if (proof.result.status != constant_value)
 		return proof;
 	proof.base_alignment = address_alignment(type);
+	proof.storage_type = type;
 	if (decay && type->kind == type_kind_array) {
 		const struct array_type *array = (const struct array_type *)type;
 
@@ -424,7 +434,8 @@ static struct address_proof address_base(const struct ast_expression *expression
 			proof.known_extent = array->count != 0;
 			proof.stride = type_object_size(array->element);
 		}
-	} else if (!decay && (operand->kind == expression_external_object || operand->kind == expression_string) &&
+	} else if (!decay && (operand->kind == expression_external_object || operand->kind == expression_string ||
+		operand->kind == expression_compound_literal) &&
 		type_is_complete_object(type)) {
 		proof.element = type;
 		proof.extent = 1;
@@ -464,6 +475,140 @@ static bool restore_address_domain(struct address_proof *proof, const struct typ
 	return true;
 }
 
+enum { subobject_search_work_limit = 16384, subobject_search_memo_size = 1024 };
+struct subobject_search_failure {
+	const struct type *root;
+	const struct type *target;
+	uint64_t relative;
+};
+struct subobject_search {
+	size_t work;
+	bool exhausted;
+	struct subobject_search_failure failures[subobject_search_memo_size];
+};
+
+static bool find_actual_domain(const struct type *root, uint64_t start, uint64_t address,
+	const struct type *target, struct address_proof *proof, unsigned depth,
+	struct subobject_search *search);
+
+/* Recover only an ACTUAL captured subobject at this address. This is not
+ * sizeof(target)-based reinterpretation: no array of short is invented inside
+ * an int. Arrays preserve their real element domain; records preserve each
+ * member's singleton or nested-array domain. */
+static bool find_actual_domain_step(const struct type *root, uint64_t start, uint64_t address,
+	const struct type *target, struct address_proof *proof, unsigned depth,
+	struct subobject_search *search)
+{
+	if (!root || depth > ast_max_expression_depth || address < start)
+		return false;
+	uint64_t relative = address - start;
+	if (!relative && type_unqualified_compatible(root, target) && type_is_complete_object(root)) {
+		proof->element = root;
+		proof->extent = 1;
+		proof->known_extent = true;
+		proof->position = 0;
+		proof->start = start;
+		proof->stride = type_object_size(root);
+		return true;
+	}
+	if (root->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)root;
+		if (!type_is_complete_object(array->element))
+			return false;
+		uint64_t stride = type_object_size(array->element);
+		uint64_t index = relative / stride;
+		if (type_unqualified_compatible(array->element, target) && relative % stride == 0 &&
+			(!array->count || index <= array->count)) {
+			proof->element = array->element;
+			proof->extent = array->count;
+			proof->known_extent = array->count != 0;
+			proof->position = index;
+			proof->start = start;
+			proof->stride = stride;
+			return true;
+		}
+		return (!array->count || index < array->count) &&
+			find_actual_domain(array->element, start + index * stride, address, target, proof, depth + 1, search);
+	}
+	if (type_is_record(root) && type_is_complete_object(root)) {
+		for (const struct record_member *member = type_record_definition(root)->members; member; member = member->next) {
+			if (relative >= member->offset && relative - member->offset < type_object_size(member->type) &&
+				find_actual_domain(member->type, start + member->offset, address, target, proof, depth + 1, search))
+				return true;
+		}
+	}
+	return false;
+}
+
+/* Failure memoization collapses shared union/type DAGs. A separate work cap
+ * bounds distinct subobject paths even when the memo table fills. Query-local
+ * state never changes AST/type/arena storage or allocates recursive heap state. */
+static bool find_actual_domain(const struct type *root, uint64_t start, uint64_t address,
+	const struct type *target, struct address_proof *proof, unsigned depth,
+	struct subobject_search *search)
+{
+	if (!root || address < start)
+		return false;
+	if (search->exhausted || depth > ast_max_expression_depth || search->work++ >= subobject_search_work_limit) {
+		search->exhausted = true;
+		return false;
+	}
+	uint64_t relative = address - start;
+	size_t slot = (((uintptr_t)root >> 3) ^ ((uintptr_t)target >> 3) ^
+		(size_t)(relative * UINT64_C(11400714819323198485))) & (subobject_search_memo_size - 1);
+	size_t empty = subobject_search_memo_size;
+	for (size_t i = 0; i < subobject_search_memo_size; i++) {
+		size_t index = (slot + i) & (subobject_search_memo_size - 1);
+		const struct subobject_search_failure *failure = &search->failures[index];
+		if (!failure->root) {
+			empty = index;
+			break;
+		}
+		if (failure->root == root && failure->target == target && failure->relative == relative)
+			return false;
+	}
+	if (find_actual_domain_step(root, start, address, target, proof, depth, search))
+		return true;
+	if (!search->exhausted && empty < subobject_search_memo_size)
+		search->failures[empty] = (struct subobject_search_failure) { root, target, relative };
+	return false;
+}
+
+static bool recover_cast_domain(struct address_proof *proof, const struct type *target)
+{
+	uint64_t address = (uint64_t)proof->result.address.byte_addend;
+	struct address_proof candidate = *proof;
+	struct subobject_search search = { 0 };
+
+	if (proof->byte_view_type && find_actual_domain(proof->byte_view_type,
+		proof->byte_view_start, address, target, &candidate, 0, &search)) {
+		*proof = candidate;
+		return true;
+	}
+	if (!proof->element || (proof->known_extent && proof->position >= proof->extent))
+		goto failure;
+	if (type_is_record(proof->element) && find_actual_domain(proof->element, address,
+		address, target, &candidate, 0, &search)) {
+		*proof = candidate;
+		return true;
+	}
+	/* 6.7.2.1 initial-member/union reciprocal conversion: both the containing
+	 * record and its initial member must really exist at this source address. */
+	struct address_proof member = *proof;
+	if (type_is_record(target) && find_actual_domain(target, address, address,
+		proof->element, &member, 0, &search) && find_actual_domain(proof->storage_type, 0,
+		address, target, &candidate, 0, &search)) {
+		*proof = candidate;
+		return true;
+	}
+failure:
+	if (search.exhausted) {
+		proof->result.status = constant_invalid;
+		proof->result.message = "static address subobject proof exceeds work limit (16384)";
+	}
+	return false;
+}
+
 /* Member selection forms a NEW actual subobject domain. It never reuses an
  * enclosing array/record extent, even if adjacent members share an address. */
 static struct address_proof prove_address(const struct ast_expression *expression);
@@ -488,6 +633,7 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	} else {
 		proof = (struct address_proof) { .result = direct_address(operand, expression->type) };
 		proof.base_alignment = address_alignment(record);
+		proof.storage_type = record;
 		if (type_is_complete_object(record)) {
 			proof.element = record;
 			proof.stride = type_object_size(record);
@@ -512,6 +658,7 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	proof.result.address.byte_addend = (int64_t)addend;
 	proof.result.origin_type = expression->type;
 	proof.original_domain = (struct address_domain) { 0 };
+	proof.byte_view_type = NULL;
 	proof.start = addend;
 	proof.position = 0;
 	proof.known_extent = true;
@@ -534,7 +681,28 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 	const struct ast_expression *operand;
 	struct address_proof proof;
 
+	if (type_is_integer(expression->type)) {
+		struct constant_result integer = evaluate_integer_constant(expression);
+		if (integer.status == constant_value && !integer.bits)
+			return (struct address_proof) { .is_null = true, .result = {
+				.status = constant_value, .location = expression->location,
+			} };
+		return address_failure(expression, integer.status == constant_invalid ? constant_invalid : constant_not_constant,
+			integer.status == constant_invalid ? integer.message : "integer source is not a null pointer constant");
+	}
 	switch (expression->kind) {
+	case expression_nullptr:
+		return (struct address_proof) { .is_null = true, .result = {
+			.status = constant_value, .location = expression->location,
+		} };
+	case expression_conditional: {
+		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+		struct constant_result condition = evaluate_initializer_condition(node->condition);
+
+		if (condition.status != constant_value)
+			return address_failure(expression, condition.status, condition.message);
+		return prove_address(condition.bits ? node->then_value : node->else_value);
+	}
 	case expression_address:
 		operand = ((const struct ast_address_expression *)expression)->operand;
 		/* Subscripts are already lowered to *(base + index). The address
@@ -574,6 +742,7 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 			proof.stride = type_object_size(array->element);
 			proof.result.origin_type = expression->type;
 			proof.original_domain = (struct address_domain) { 0 };
+			proof.byte_view_type = NULL;
 			return proof;
 		}
 		return address_base(expression, operand, true);
@@ -591,6 +760,13 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 
 		operand = explicit_cast ? ((const struct ast_cast_expression *)expression)->operand :
 			((const struct ast_conversion_expression *)expression)->operand;
+		if (expression->type->kind != type_kind_pointer && expression->type->kind != type_kind_nullptr)
+			break;
+		proof = prove_address(operand);
+		if (proof.result.status != constant_value)
+			return proof;
+		if (proof.is_null)
+			return proof;
 		if (operand->type->kind != type_kind_pointer || expression->type->kind != type_kind_pointer)
 			break;
 		source = ((const struct pointer_type *)operand->type)->referent;
@@ -599,9 +775,6 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 			break;
 		if ((source->kind == type_kind_function) != (target->kind == type_kind_function))
 			break;
-		proof = prove_address(operand);
-		if (proof.result.status != constant_value)
-			return proof;
 		/* Function-to-function casts preserve one function identity, not a
 		 * promise that an incompatible signature can safely be called.
 		 */
@@ -626,6 +799,11 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		if ((!proof.element || !type_unqualified_compatible(proof.element, target)) &&
 			restore_address_domain(&proof, target))
 			return proof;
+		if ((!proof.element || !type_unqualified_compatible(proof.element, target)) &&
+			recover_cast_domain(&proof, target))
+			return proof;
+		if (proof.result.status != constant_value)
+			return proof;
 		if (proof.element && !type_unqualified_compatible(proof.element, target)) {
 			bool character = target->kind == type_kind_char || target->kind == type_kind_schar ||
 				target->kind == type_kind_uchar;
@@ -643,6 +821,8 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 				/* A character view covers the pointed object, not an invented
 				 * larger enclosing array. &array legitimately views all its bytes.
 				 */
+				proof.byte_view_type = proof.element;
+				proof.byte_view_start = (uint64_t)proof.result.address.byte_addend;
 				proof.extent = type_object_size(proof.element);
 				proof.known_extent = true;
 				proof.start = (uint64_t)proof.result.address.byte_addend;
@@ -670,6 +850,9 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		proof = prove_address(offset->base);
 		if (proof.result.status != constant_value)
 			return proof;
+		if (proof.is_null)
+			return address_failure(expression, constant_not_constant,
+				"pointer arithmetic on null is not a static address constant");
 		index = evaluate_integer_constant(offset->index);
 		if (index.status != constant_value) {
 			proof.result.status = index.status;
@@ -717,5 +900,96 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 struct address_initializer_result evaluate_address_initializer(const struct ast_expression *expression)
 {
 	assert(expression && expression->type && expression->depth <= ast_max_expression_depth);
-	return prove_address(expression).result;
+	struct address_proof proof = prove_address(expression);
+	if (proof.result.status == constant_value && proof.is_null)
+		return (struct address_initializer_result) { .status = constant_not_constant,
+			.location = expression->location, .message = "null constant is not a symbolic address" };
+	return proof.result;
 }
+
+static struct null_initializer_result evaluate_pointer_null(const struct ast_expression *expression)
+{
+	struct address_proof proof = prove_address(expression);
+	if (proof.result.status == constant_invalid)
+		return (struct null_initializer_result) { proof.result.status, proof.result.location, proof.result.message };
+	if (proof.result.status == constant_value && proof.is_null)
+		return (struct null_initializer_result) { constant_value, expression->location, NULL };
+	return (struct null_initializer_result) { constant_not_constant, expression->location,
+		"file-scope pointer initializer requires a supported null constant expression" };
+}
+
+static struct constant_result evaluate_initializer_condition(const struct ast_expression *expression)
+{
+	if (type_is_integer(expression->type))
+		return evaluate(expression, true, true);
+	struct address_proof proof = prove_address(expression);
+	return (struct constant_result) { .status = proof.result.status,
+		.bits = proof.result.status == constant_value && !proof.is_null,
+		.location = proof.result.location, .message = proof.result.message };
+}
+
+/* Symbol identity is enough for same-object equality and offsets. Do not
+ * invent linker placement or assume distinct potentially merged strings differ. */
+static struct constant_result compare_initializer_addresses(const struct ast_binary_expression *node)
+{
+	const struct ast_expression *expression = &node->expression;
+	struct address_proof left_proof = prove_address(node->left);
+	struct address_proof right_proof = prove_address(node->right);
+	struct address_initializer_result left = left_proof.result, right = right_proof.result;
+	bool equal;
+	int order = 0;
+
+	if (left.status != constant_value)
+		return constant_failure(expression, left.status, left.message);
+	if (right.status != constant_value)
+		return constant_failure(expression, right.status, right.message);
+	if (left_proof.is_null || right_proof.is_null) {
+		if (node->operation != binary_equal && node->operation != binary_not_equal)
+			return constant_failure(expression, constant_not_constant, "null address ordering is not a constant condition");
+		equal = left_proof.is_null == right_proof.is_null;
+	} else {
+		bool same = left.address.kind == right.address.kind;
+		if (same) {
+			switch (left.address.kind) {
+			case static_address_object: same = left.address.base.object == right.address.base.object; break;
+			case static_address_function: same = left.address.base.function == right.address.base.function; break;
+			case static_address_string: same = left.address.base.string == right.address.base.string; break;
+			case static_address_compound_literal:
+				same = left.address.base.compound_literal == right.address.base.compound_literal;
+				break;
+			}
+		}
+		if (!same) {
+			bool distinct = left.address.kind == static_address_function &&
+				right.address.kind == static_address_function;
+			if (left.address.kind == static_address_object && right.address.kind == static_address_object &&
+				!left.address.byte_addend && !right.address.byte_addend) {
+				struct token a = left.address.base.object->name, b = right.address.base.object->name;
+				const char *prefix = ".Lkcc.literal.";
+				size_t length = 14;
+				bool literal_a = a.length >= length && !memcmp(a.spelling_location.source->data +
+					a.spelling_location.offset, prefix, length);
+				bool literal_b = b.length >= length && !memcmp(b.spelling_location.source->data +
+					b.spelling_location.offset, prefix, length);
+				distinct = !literal_a && !literal_b;
+			}
+			if (distinct && (node->operation == binary_equal || node->operation == binary_not_equal))
+				return constant_success(expression, node->operation == binary_not_equal);
+			return constant_failure(expression, constant_not_constant,
+				"comparison of distinct symbolic bases is not a supported constant condition");
+		}
+		order = (left.address.byte_addend > right.address.byte_addend) -
+			(left.address.byte_addend < right.address.byte_addend);
+		equal = order == 0;
+	}
+	switch (node->operation) {
+	case binary_equal: return constant_success(expression, equal);
+	case binary_not_equal: return constant_success(expression, !equal);
+	case binary_less: return constant_success(expression, order < 0);
+	case binary_less_equal: return constant_success(expression, order <= 0);
+	case binary_greater: return constant_success(expression, order > 0);
+	case binary_greater_equal: return constant_success(expression, order >= 0);
+	default: return constant_failure(expression, constant_not_constant, "unsupported constant address operation");
+	}
+}
+
