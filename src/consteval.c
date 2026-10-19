@@ -57,6 +57,7 @@ static uint64_t converted_bits(struct constant_result value, const struct type *
 
 static struct constant_result evaluate_initializer_condition(const struct ast_expression *expression);
 static struct constant_result compare_initializer_addresses(const struct ast_binary_expression *node);
+static struct constant_result difference_initializer_addresses(const struct ast_pointer_difference_expression *node);
 
 static struct constant_result evaluate(const struct ast_expression *expression, bool evaluated, bool initializer_condition);
 
@@ -234,6 +235,11 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 		return evaluate_unary((const struct ast_unary_expression *)expression, evaluated, initializer_condition);
 	case expression_binary:
 		return evaluate_binary((const struct ast_binary_expression *)expression, evaluated, initializer_condition);
+	case expression_pointer_difference:
+		if (initializer_condition)
+			return difference_initializer_addresses((const struct ast_pointer_difference_expression *)expression);
+		return constant_failure(expression, constant_not_constant,
+			"expression is not an integer constant expression");
 	case expression_logical: {
 		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
 		struct constant_result left = evaluate(node->left, evaluated, initializer_condition);
@@ -382,7 +388,14 @@ static bool direct_pointer_conversion(const struct type *source, const struct ty
  * domain through a void detour. Character views explicitly capture the pointed
  * object's byte extent. One-past is a position, not a new object.
  */
+struct address_path {
+	const struct record_member *members[ast_max_expression_depth];
+	unsigned count;
+	bool ambiguous;
+};
+
 struct address_domain {
+	struct address_path path;
 	const struct type *element;
 	uint64_t extent;
 	uint64_t stride;
@@ -391,6 +404,8 @@ struct address_domain {
 };
 
 struct address_proof {
+	struct address_path path;
+	struct address_path byte_view_path;
 	bool is_null; /* Separate value category, never an integer address sentinel. */
 	struct address_domain original_domain;
 	const struct type *storage_type; /* Immutable source-point root, not a later composite. */
@@ -457,7 +472,7 @@ static void save_address_domain(struct address_proof *proof)
 	if (proof->element && !proof->original_domain.element)
 		proof->original_domain = (struct address_domain) {
 			.element = proof->element, .extent = proof->extent, .stride = proof->stride,
-			.start = proof->start, .known_extent = proof->known_extent,
+			.start = proof->start, .known_extent = proof->known_extent, .path = proof->path,
 		};
 }
 
@@ -473,6 +488,7 @@ static bool restore_address_domain(struct address_proof *proof, const struct typ
 	position = (addend - domain->start) / domain->stride;
 	if (domain->known_extent && position > domain->extent)
 		return false;
+	proof->path = domain->path;
 	proof->element = domain->element;
 	proof->extent = domain->extent;
 	proof->stride = domain->stride;
@@ -539,9 +555,21 @@ static bool find_actual_domain_step(const struct type *root, uint64_t start, uin
 	}
 	if (type_is_record(root) && type_is_complete_object(root)) {
 		for (const struct record_member *member = type_record_definition(root)->members; member; member = member->next) {
-			if (relative >= member->offset && relative - member->offset < type_object_size(member->type) &&
-				find_actual_domain(member->type, start + member->offset, address, target, proof, depth + 1, search))
+			if (relative < member->offset || relative - member->offset >= type_object_size(member->type))
+				continue;
+			struct address_path saved = proof->path;
+			if (proof->path.count >= ast_max_expression_depth) {
+				search->exhausted = true;
+				return false;
+			}
+			proof->path.members[proof->path.count++] = member;
+			/* A cast cannot choose between overlapping union alternatives. Direct
+			 * member syntax, unlike this physical search, supplies that identity. */
+			if (type_record_definition(root)->is_union && type_record_definition(root)->members->next)
+				proof->path.ambiguous = true;
+			if (find_actual_domain(member->type, start + member->offset, address, target, proof, depth + 1, search))
 				return true;
+			proof->path = saved;
 		}
 	}
 	return false;
@@ -587,6 +615,8 @@ static bool recover_cast_domain(struct address_proof *proof, const struct type *
 	struct address_proof candidate = *proof;
 	struct subobject_search search = { 0 };
 
+	if (proof->byte_view_type)
+		candidate.path = proof->byte_view_path;
 	if (proof->byte_view_type && find_actual_domain(proof->byte_view_type,
 		proof->byte_view_start, address, target, &candidate, 0, &search)) {
 		*proof = candidate;
@@ -594,6 +624,7 @@ static bool recover_cast_domain(struct address_proof *proof, const struct type *
 	}
 	if (!proof->element || (proof->known_extent && proof->position >= proof->extent))
 		goto failure;
+	candidate.path = proof->path;
 	if (type_is_record(proof->element) && find_actual_domain(proof->element, address,
 		address, target, &candidate, 0, &search)) {
 		*proof = candidate;
@@ -602,6 +633,7 @@ static bool recover_cast_domain(struct address_proof *proof, const struct type *
 	/* 6.7.2.1 initial-member/union reciprocal conversion: both the containing
 	 * record and its initial member must really exist at this source address. */
 	struct address_proof member = *proof;
+	candidate.path = (struct address_path) { 0 };
 	if (type_is_record(target) && find_actual_domain(target, address, address,
 		proof->element, &member, 0, &search) && find_actual_domain(proof->storage_type, 0,
 		address, target, &candidate, 0, &search)) {
@@ -612,6 +644,27 @@ failure:
 	if (search.exhausted) {
 		proof->result.status = constant_invalid;
 		proof->result.message = "static address subobject proof exceeds work limit (16384)";
+	}
+	return false;
+}
+
+/* Written member identity includes anonymous promotion ancestors. The bounded
+ * lookup never substitutes offset equality for nominal member identity. */
+static bool append_member_path(const struct type *record, const struct record_member *selected,
+	struct address_path *path, unsigned *work)
+{
+	if (!type_is_record(record) || ++*work > subobject_search_work_limit ||
+		path->count >= ast_max_expression_depth)
+		return false;
+	for (const struct record_member *member = type_record_definition(record)->members; member; member = member->next) {
+		if (++*work > subobject_search_work_limit)
+			return false;
+		unsigned count = path->count;
+		path->members[path->count++] = member;
+		if (member == selected || (member->anonymous &&
+			append_member_path(member->type, selected, path, work)))
+			return true;
+		path->count = count;
 	}
 	return false;
 }
@@ -657,6 +710,10 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	if (proof.known_extent && proof.position >= proof.extent)
 		return address_failure(expression, constant_invalid,
 			"static member address requires an existing record subobject");
+	unsigned path_work = 0;
+	if (!append_member_path(record, member->member, &proof.path, &path_work))
+		return address_failure(expression, constant_invalid,
+			"static member identity proof exceeds work limit (16384)");
 	addend = (uint64_t)proof.result.address.byte_addend;
 	if (member->offset > (uint64_t)INT64_MAX - addend)
 		return address_failure(expression, constant_invalid,
@@ -828,6 +885,7 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 				/* A character view covers the pointed object, not an invented
 				 * larger enclosing array. &array legitimately views all its bytes.
 				 */
+				proof.byte_view_path = proof.path;
 				proof.byte_view_type = proof.element;
 				proof.byte_view_start = (uint64_t)proof.result.address.byte_addend;
 				proof.extent = type_object_size(proof.element);
@@ -998,4 +1056,49 @@ static struct constant_result compare_initializer_addresses(const struct ast_bin
 	case binary_greater_equal: return constant_success(expression, order >= 0);
 	default: return constant_failure(expression, constant_not_constant, "unsupported constant address operation");
 	}
+}
+
+/* Only the private address-initializer predicate context admits this form.
+ * Strict integer/arithmetic constant expression operand rules are unchanged. */
+static struct constant_result difference_initializer_addresses(const struct ast_pointer_difference_expression *node)
+{
+	const struct ast_expression *expression = &node->expression;
+	struct address_proof left = prove_address(node->left), right = prove_address(node->right);
+	if (left.result.status != constant_value)
+		return constant_failure(expression, left.result.status, left.result.message);
+	if (right.result.status != constant_value)
+		return constant_failure(expression, right.result.status, right.result.message);
+	bool same = left.result.address.kind == right.result.address.kind;
+	if (same) {
+		switch (left.result.address.kind) {
+		case static_address_object:
+			same = left.result.address.base.object == right.result.address.base.object; break;
+		case static_address_function:
+			same = left.result.address.base.function == right.result.address.base.function; break;
+		case static_address_string:
+			same = left.result.address.base.string == right.result.address.base.string; break;
+		case static_address_compound_literal:
+			same = left.result.address.base.compound_literal == right.result.address.base.compound_literal; break;
+		}
+	}
+	if (!same || left.is_null || right.is_null || !left.element || !right.element ||
+		!node->element_size || left.stride != node->element_size || right.stride != node->element_size ||
+		left.start != right.start || left.known_extent != right.known_extent || (left.known_extent && left.extent != right.extent) ||
+		left.path.ambiguous || right.path.ambiguous || left.path.count != right.path.count ||
+		memcmp(left.path.members, right.path.members, left.path.count * sizeof(left.path.members[0])) ||
+		!type_unqualified_compatible(left.element, right.element))
+		return constant_failure(expression, constant_not_constant,
+			"static pointer difference requires the same captured array domain");
+	uint64_t a = (uint64_t)left.result.address.byte_addend, b = (uint64_t)right.result.address.byte_addend;
+	bool negative = a < b;
+	uint64_t magnitude = negative ? b - a : a - b;
+	if (magnitude % node->element_size)
+		return constant_failure(expression, constant_not_constant,
+			"static pointer difference is not an integral element distance");
+	magnitude /= node->element_size;
+	uint64_t sign = UINT64_C(1) << (type_integer_width(expression->type) - 1);
+	if (magnitude > (negative ? sign : sign - 1))
+		return constant_failure(expression, constant_invalid,
+			"static pointer difference is not representable in ptrdiff_t");
+	return constant_success(expression, negative ? UINT64_C(0) - magnitude : magnitude);
 }

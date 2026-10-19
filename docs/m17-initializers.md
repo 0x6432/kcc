@@ -42,13 +42,17 @@ Static writes cache target integer/null/symbolic-address values after validating
 the original source before narrowing. Pointer-result constant conditionals may
 select a valid address/null arm without applying strict ICE operand restrictions
 to an unselected arm. Conditions can use proved pointer truth, logical operators,
-same-base comparisons and definitely distinct named-object/function starts;
+same-base comparisons, same-array pointer differences and definitely distinct
+named-object/function starts;
 loads and evaluated calls/comma remain nonconstant. Strict integer constant
 expression rules remain unchanged for bounds, designators and assertions.
 Pointer-to-bool initialization converts a proved address/null to target 1/0.
 
 Address proofs retain canonical base plus checked signed addend and immutable
-source-point domains. Initial struct/union member reciprocal conversions and
+source-point domains. Pointer differences additionally compare the full canonical
+member path, distinguishing overlapping union arrays; unknown outer bounds do not
+erase identity. Ambiguous cast recovery cannot manufacture nominal array identity.
+Initial struct/union member reciprocal conversions and
 character views can recover actual captured subobjects and real array domains;
 casts never invent an array of an unrelated type. Member/row decay does not
 launder a one-past position into a new object. TLS addresses are not static
