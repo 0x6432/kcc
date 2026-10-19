@@ -1250,3 +1250,50 @@ struct ast_external_tag_declaration *ast_new_external_tag_declaration(struct are
 		};
 	return node;
 }
+
+struct ast_initializer *ast_new_initializer(struct arena *arena,
+	enum ast_initializer_kind kind, struct source_location location)
+{
+	struct ast_initializer *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_initializer) { .kind = kind, .location = location,
+			.end_location = location };
+	return node;
+}
+
+struct ast_initializer_entry *ast_new_initializer_entry(struct arena *arena,
+	struct source_location location, struct ast_initializer *value)
+{
+	struct ast_initializer_entry *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_initializer_entry) { .location = location, .value = value };
+	return node;
+}
+
+struct ast_designator *ast_new_designator(struct arena *arena,
+	enum ast_designator_kind kind, struct source_location location)
+{
+	struct ast_designator *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_designator) { .kind = kind, .location = location,
+			.end_location = location };
+	return node;
+}
+
+struct ast_compound_literal_expression *ast_new_compound_literal(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax,
+	struct ast_initializer *initializer_syntax)
+{
+	struct ast_compound_literal_expression *node = arena_alloc(arena, sizeof(*node));
+
+	if (node)
+		*node = (struct ast_compound_literal_expression) {
+			.expression = { .kind = expression_compound_literal,
+				.location = location, .depth = 1 },
+			.type_syntax = type_syntax, .initializer_syntax = initializer_syntax,
+		};
+	return node;
+}

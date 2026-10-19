@@ -42,9 +42,16 @@ enum expression_kind {
 	expression_alignof,
 	expression_call,
 	expression_member,
+	expression_compound_literal,
 };
 
 enum {
+	ast_max_initializer_nesting = 64,
+	ast_max_initializer_nodes = 16384,
+	ast_max_initializer_entries = 16384,
+	ast_max_designators = 16384,
+	ast_max_designator_depth = 64,
+	ast_max_compound_literals = 4096,
 	ast_max_record_nesting = 64,
 	ast_max_record_temporaries = 256,
 	ast_max_record_members = 1024,
@@ -81,6 +88,123 @@ struct ast_expression {
 	const struct type *type;
 	unsigned depth;
 	bool is_lvalue;
+};
+
+/* Written initializer syntax is immutable after parsing. */
+enum ast_initializer_kind {
+	ast_initializer_expression,
+	ast_initializer_list,
+};
+
+enum ast_designator_kind {
+	ast_designator_member,
+	ast_designator_index,
+};
+
+struct ast_designator {
+	enum ast_designator_kind kind;
+	struct source_location location;
+	struct source_location end_location;
+	struct token member;
+	struct ast_expression *index;
+	struct ast_designator *next;
+};
+
+struct ast_initializer {
+	enum ast_initializer_kind kind;
+	struct source_location location;
+	struct source_location end_location;
+	struct ast_expression *expression;
+	struct ast_initializer_entry *entries;
+	size_t entry_count;
+};
+
+struct ast_initializer_entry {
+	struct source_location location;
+	struct ast_designator *designators;
+	struct ast_initializer *value;
+	struct ast_initializer_entry *next;
+};
+
+enum ast_initializer_write_kind {
+	ast_initializer_write_expression,
+	ast_initializer_write_string,
+	ast_initializer_write_copy,
+};
+
+enum ast_initializer_constant_kind {
+	ast_initializer_constant_none,
+	ast_initializer_constant_integer,
+	ast_initializer_constant_null,
+	ast_initializer_constant_address,
+};
+
+enum ast_initializer_address_kind {
+	ast_initializer_address_object,
+	ast_initializer_address_function,
+	ast_initializer_address_string,
+	ast_initializer_address_compound_literal,
+};
+
+struct ast_initializer_constant {
+	enum ast_initializer_constant_kind kind;
+	uint64_t bits;
+	enum ast_initializer_address_kind address_kind;
+	int64_t byte_addend;
+	union {
+		const struct external_object_symbol *object;
+		const struct function_symbol *function;
+		const struct ast_string_expression *string;
+		const struct ast_compound_literal_expression *compound_literal;
+	} base;
+};
+
+/* Sema publishes surviving writes in evaluation order after override pruning.
+ * zero_fill clears the complete object before these writes. */
+struct ast_initializer_plan_entry {
+	uint64_t offset;
+	uint64_t size; /* Reserved extent mirror; length is authoritative. */
+	uint64_t source_offset;
+	const struct type *type;
+	enum ast_initializer_write_kind kind;
+	struct ast_expression *expression;
+	const unsigned char *bytes;
+	size_t length; /* Exact byte write extent for every entry kind. */
+	struct ast_initializer_constant constant;
+	const struct ast_initializer *syntax;
+	struct ast_initializer_plan_entry *next;
+};
+
+struct ast_initializer_plan {
+	const struct type *type;
+	uint64_t size;
+	struct ast_initializer_plan_entry *entries;
+	struct ast_initializer_plan_entry *tail;
+	size_t entry_count;
+	bool zero_fill;
+};
+
+enum ast_compound_literal_storage {
+	ast_compound_literal_unresolved,
+	ast_compound_literal_automatic,
+	ast_compound_literal_static,
+	ast_compound_literal_thread,
+};
+
+/* One syntax node is one canonical object, including repeated evaluations. */
+struct ast_compound_literal_expression {
+	struct ast_expression expression;
+	struct ast_type_syntax *type_syntax;
+	struct ast_initializer *initializer_syntax;
+	struct ast_initializer_plan *initializer_plan;
+	bool file_scope;
+	bool is_static;
+	bool is_register;
+	bool is_thread_local;
+	enum ast_compound_literal_storage storage;
+	size_t object_id;
+	struct ast_local_declaration *local;
+	struct external_object_symbol *object;
 };
 
 struct ast_sizeof_expression {
@@ -640,6 +764,8 @@ struct ast_local_declaration {
 	struct ast_type_syntax *type_syntax;
 	struct token name;
 	struct ast_expression *initializer;
+	struct ast_initializer *initializer_syntax;
+	struct ast_initializer_plan *initializer_plan;
 	bool is_register;
 	bool is_auto; /* Written auto; explicit auto still requires an object. */
 	bool is_extern;
@@ -712,6 +838,8 @@ struct ast_external_object_declaration {
 	const struct type *type;
 	struct external_object_symbol *symbol;
 	struct ast_expression *initializer;
+	struct ast_initializer *initializer_syntax;
+	struct ast_initializer_plan *initializer_plan;
 };
 
 /* Written alias/query root; sema classifies the resolved function/object type. */
@@ -727,6 +855,8 @@ struct ast_external_type_declaration {
 	const struct type *type;
 	struct function_symbol *symbol;
 	struct ast_expression *initializer;
+	struct ast_initializer *initializer_syntax;
+	struct ast_initializer_plan *initializer_plan;
 };
 
 struct ast_parameter {
@@ -777,6 +907,16 @@ struct ast_translation_unit {
 	struct ast_external_declaration *declarations;
 	struct ast_string_expression *strings;
 };
+
+struct ast_initializer *ast_new_initializer(struct arena *arena,
+	enum ast_initializer_kind kind, struct source_location location);
+struct ast_initializer_entry *ast_new_initializer_entry(struct arena *arena,
+	struct source_location location, struct ast_initializer *value);
+struct ast_designator *ast_new_designator(struct arena *arena,
+	enum ast_designator_kind kind, struct source_location location);
+struct ast_compound_literal_expression *ast_new_compound_literal(struct arena *arena,
+	struct source_location location, struct ast_type_syntax *type_syntax,
+	struct ast_initializer *initializer_syntax);
 
 struct ast_record_type_syntax *ast_new_record_type_syntax(struct arena *arena,
 	struct token keyword, struct token tag);
