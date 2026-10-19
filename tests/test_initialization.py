@@ -7,6 +7,7 @@ No /data tool defaults, source rewrites, warning waivers or padding mandates.
 """
 import argparse
 import ast
+import hashlib
 from collections import Counter
 import copy
 from dataclasses import dataclass, field
@@ -50,6 +51,7 @@ class Case:
     bounded_work: bool = False
     standalone: bool = False
     success_exit: int = 42
+    companion: str = 'int test(void); int main(void) { return test(); }\n'
 
 
 def integer(n, width=4):
@@ -249,13 +251,13 @@ def fixtures():
         compact=True,bounded_work=True))
     add('promoted exact conditional null','int *cell=1?(int *)0:(int *)0;', '!cell', [Object('cell',8,8,((0,bytes(8)),))])
     cases.append(Case('N3096 union retention exact reviewer original','union U{struct S{int x,y;}s;long l;};struct R{union U u;};int main(void){union U seed={.s={3,4}};struct R r={.u=seed,.u.s.x=9};return r.u.s.x==9&&r.u.s.y==4?0:1;}',
-        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True,companion=''))
     cases.append(Case('N3096 union retention direct union destination struct member copy','union U{struct S{int x,y;}s;long l;};int main(void){union U seed={.s={3,4}};union U r={.s=seed.s,.s.x=9};return r.s.x==9&&r.s.y==4?0:1;}',
-        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True,companion=''))
     cases.append(Case('N3096 union retention whole parent record containing union','union U{struct S{int x,y;}s;long l;};struct R{union U u;};struct O{struct R r;};int main(void){struct R seed={.u.s={3,4}};struct O o={.r=seed,.r.u.s.x=9};return o.r.u.s.x==9&&o.r.u.s.y==4?0:1;}',
-        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True,companion=''))
     cases.append(Case('N3096 union retention copy fragment evaluation once','union U{struct S{int x,y,z;}s;long l;};struct R{union U u;};int main(void){int n=0;union U seed={.s={3,4,5}};struct R r={.u=(++n,seed),.u.s.y=9};return n==1&&r.u.s.x==3&&r.u.s.y==9&&r.u.s.z==5?0:1;}',
-        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True))
+        warnings=((), (('warning', 'initializer partially overrides prior initialization of this subobject [-Winitializer-overrides]'), ('note', 'previous initialization is here'))),gcc_discrepancy=True,standalone=True,success_exit=0,compact=True,companion=''))
     for case in cases:
         for obj in case.objects:
             for offset,contents in obj.fields:
@@ -601,13 +603,57 @@ def empty_probe(cc,source,output):
     return False
 
 
+# These hashes are immutable observations, NOT derived from mutable fixtures at
+# test runtime. Exact owner bytes include their terminating newline; standalone
+# originals have an empty companion. Only these two observed GCC releases may
+# explain their exact defined-runtime exit1 discrepancy.
+KNOWN_GCC_DISCREPANCY_FIXTURES={'N3096 p37 partial aggregate copy': ('f0257e0e0a17f0334056e1a1e3c7545c0d01c8fd4a819f9c37d45f097b6a1513',
+                                      'ad332b625bcde878c4f9d19f89c1554aa8ee022df9dd7e4c6aed6d16a1467b21',
+                                      42,
+                                      False),
+ 'N3096 union retention exact reviewer original': ('392a2525fa830e6af58af354f67372eb51c3e78dd8c0b5eafe570225525bb0be',
+                                                   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                                                   0,
+                                                   True),
+ 'N3096 union retention direct union destination struct member copy': ('69aa5732d23ae5f0d846b41702eeabfe36b3ff40b8f88cd6e30eead008e95a18',
+                                                                       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                                                                       0,
+                                                                       True),
+ 'N3096 union retention whole parent record containing union': ('2998788e698ee19bbb1a6732609e5209ba7ce40ea77557a740cbc1f6591fa5ca',
+                                                                'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                                                                0,
+                                                                True),
+ 'N3096 union retention copy fragment evaluation once': ('049b262c2af1c1600c450cfbee2696ffae5cea1ed6f33e68f3f7adec6c9fe6ea',
+                                                         'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                                                         0,
+                                                         True)}
+KNOWN_GCC_DISCREPANCY_VERSIONS=frozenset(('11.5.0','13.4.0'))
+
+
+def observed_gcc_discrepancy_version(compiler):
+    banner=invoke([compiler,'--version'])
+    version=invoke([compiler,'-dumpfullversion','-dumpversion'])
+    assert banner.returncode==0 and not banner.stderr and banner.stdout.endswith('\n'),('GCC identity banner',compiler,banner)
+    assert version.returncode==0 and not version.stderr and version.stdout.endswith('\n'),('GCC identity version',compiler,version)
+    value=version.stdout.removesuffix('\n')
+    assert value in KNOWN_GCC_DISCREPANCY_VERSIONS,('unobserved GCC discrepancy version',compiler,value)
+    first=banner.stdout.splitlines()[0]
+    assert ('(GCC)' in first or ('gcc' in first.lower() and '(Ubuntu ' in first)) and 'clang' not in first.lower(),('not observed GNU compiler identity',compiler,first)
+    assert re.search(r'(?<![0-9.])'+re.escape(value)+r'(?![0-9.])',first),('GCC banner/version mismatch',compiler,first,value)
+    return value
+
+
 def validate_case_runtime(case,compiler,result,native=False):
     assert not result.stdout and not result.stderr,(case.name,compiler,result)
-    if native and case.gcc_discrepancy and not clang_style(compiler):
-        # ONLY curated exact originals independently observed on GCC11/13.
-        # A signal, diagnostic/tool failure, or another return is never a gap.
+    if native and case.gcc_discrepancy:
+        expected=KNOWN_GCC_DISCREPANCY_FIXTURES.get(case.name)
+        actual=(hashlib.sha256((case.owner+'\n').encode()).hexdigest(),
+                hashlib.sha256(case.companion.encode()).hexdigest(),case.success_exit,case.standalone)
+        assert expected is not None and actual==expected,('uncurated discrepancy fixture bytes/name/protocol',case.name,actual,expected)
         assert result.returncode in (1,case.success_exit),(case.name,compiler,result)
-        return result.returncode==case.success_exit
+        if result.returncode==case.success_exit: return True
+        observed_gcc_discrepancy_version(compiler)
+        return False
     assert result.returncode==case.success_exit,(case.name,compiler,result)
     return True
 
@@ -741,21 +787,40 @@ def controls(d):
     check_il(valid_dag_il,valid_dag)
     for bad in (valid_dag_il.replace('z 4','z 3'),valid_dag_il.replace('align 4','align 1'),valid_dag_il.replace('export ',''),valid_dag_il.replace('z 4','w 1')):
         must_fail(lambda:check_il(bad,valid_dag),'initialized DAG exact acceptance storage')
+    identity=d/'gcc-observed-identity-control'
+    identity.write_text('#!/bin/sh\ncase "$1" in\n--version) printf "gcc (GCC) 13.4.0\\n";;\n-dumpfullversion) printf "13.4.0\\n";;\n*) exit 90;;\nesac\n')
+    identity.chmod(0o755)
     exact_runtime=next(c for c in fixtures() if c.name=='N3096 union retention exact reviewer original')
     normative=subprocess.CompletedProcess([],0,'','')
     discrepancy=subprocess.CompletedProcess([],1,'','')
-    assert validate_case_runtime(exact_runtime,'gcc',normative,native=True)
-    assert not validate_case_runtime(exact_runtime,'gcc',discrepancy,native=True)
-    must_fail(lambda:validate_case_runtime(exact_runtime,'gcc',discrepancy),'KCC may not inherit native discrepancy')
+    assert validate_case_runtime(exact_runtime,str(identity),normative,native=True)
+    assert not validate_case_runtime(exact_runtime,str(identity),discrepancy,native=True)
+    must_fail(lambda:validate_case_runtime(exact_runtime,str(identity),discrepancy),'KCC may not inherit native discrepancy')
     ordinary=Case('ordinary source','',success_exit=0)
-    must_fail(lambda:validate_case_runtime(ordinary,'gcc',discrepancy,native=True),'no generic GCC waiver')
+    must_fail(lambda:validate_case_runtime(ordinary,str(identity),discrepancy,native=True),'no generic GCC waiver')
     for kind in ('signal','stdout','stderr','wrong-exit'):
         bad=copy.copy(discrepancy)
         if kind=='signal': bad.returncode=-11
         elif kind=='stdout': bad.stdout='tool noise\n'
         elif kind=='stderr': bad.stderr='unexpected diagnostic\n'
         else: bad.returncode=42
-        must_fail(lambda:validate_case_runtime(exact_runtime,'gcc',bad,native=True),'exact discrepancy fullstream '+kind)
+        must_fail(lambda:validate_case_runtime(exact_runtime,str(identity),bad,native=True),'exact discrepancy fullstream '+kind)
+    for kind in ('name','owner','companion','marker','exit','standalone'):
+        changed=copy.copy(exact_runtime)
+        if kind=='name': changed.name+=' changed'
+        elif kind=='owner': changed.owner+=' '
+        elif kind=='companion': changed.companion+=' '
+        elif kind=='marker': changed.gcc_discrepancy=False
+        elif kind=='exit': changed.success_exit=42
+        else: changed.standalone=False
+        must_fail(lambda:validate_case_runtime(changed,str(identity),discrepancy,native=True),'changed discrepancy '+kind)
+    unknown=copy.copy(exact_runtime); unknown.name='unregistered marked source'
+    must_fail(lambda:validate_case_runtime(unknown,str(identity),discrepancy,native=True),'unregistered true marker')
+    for fake_version,banner_version in (('12.4.0','12.4.0'),('17.0.1','17.0.1'),('13.4.0','11.5.0')):
+        fake=d/'gcc-identity-control'
+        fake.write_text('#!/bin/sh\ncase "$1" in\n--version) printf "gcc (GCC) '+banner_version+'\\n";;\n-dumpfullversion) printf "'+fake_version+'\\n";;\n*) exit 90;;\nesac\n')
+        fake.chmod(0o755)
+        must_fail(lambda:validate_case_runtime(exact_runtime,str(fake),discrepancy,native=True),'unobserved/mismatched compiler version')
     print('M17 poison controls: imported fresh producers/fullstream/selection/relocations; initializer IL/ELF/padding')
 
 
@@ -768,7 +833,6 @@ def main():
         if args.harness_self_test: return
         compilers=selected_compilers()
         source,other,obj,peer,ssa,asm,kobj,exe=[d/n for n in ('owner.c','peer.c','native.o','peer.o','k.ssa','k.s','k.o','program')]
-        other.write_text('int test(void); int main(void) { return test(); }\n')
         features={cc:features_for(cc,source,obj) for cc in compilers}
         for cc in compilers:
             if empty_probe(cc,source,obj): features[cc].add('empty')
@@ -783,6 +847,7 @@ def main():
         cases=fixtures(); assert len({c.name for c in cases})==len(cases)
         for case in cases:
             source.write_text(case.owner+'\n')
+            other.write_text(case.companion)
             for cc in compilers:
                 if not set(case.features)<=features[cc]: counts[cc][1]+=1; continue
                 producer([cc,*diagnostic_flags(cc),'-std=c2x','-pedantic-errors','-fno-common','-O0','-c',source,'-o',obj],obj,case.warnings[int(clang_style(cc))])
