@@ -1411,6 +1411,15 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
  * Existing tokens cover static/register/thread_local; constexpr is not yet a
  * supported type/storage feature. Nested type-names keep their normal context.
  */
+static bool is_constexpr_keyword(struct token token)
+{
+	static const char spelling[] = "constexpr";
+
+	return token.kind == token_unsupported_keyword && token.length == sizeof(spelling) - 1 &&
+		memcmp(token.spelling_location.source->data + token.spelling_location.offset,
+			spelling, sizeof(spelling) - 1) == 0;
+}
+
 static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 	struct declaration_head *storage)
 {
@@ -1420,6 +1429,11 @@ static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 		struct token token = preprocess_peek(parser->preprocessor);
 		struct token *slot;
 
+		if (is_constexpr_keyword(token)) {
+			diagnostic_error(parser->diagnostics, token.location,
+				"constexpr compound literals require M23h constant-object support");
+			return NULL;
+		}
 		if (token.kind != token_static && token.kind != token_register && token.kind != token_thread_local)
 			break;
 		slot = token.kind == token_thread_local ? &storage->thread_keyword : &storage->keyword;
@@ -1487,7 +1501,8 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 	struct ast_type_syntax *type_syntax;
 	struct declaration_head storage = { 0 };
 
-	if (!begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+	if (!begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor)) &&
+		!is_constexpr_keyword(preprocess_peek(parser->preprocessor))) {
 		operand = parse_expression(parser, 0);
 		if (!operand || !expect_token(parser, token_right_paren, "expected ')'", NULL))
 			return NULL;
@@ -1530,7 +1545,8 @@ static struct ast_expression *parse_sizeof_expression(struct parser *parser)
 
 	if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
 		struct token opening = preprocess_next(parser->preprocessor);
-		if (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+		if (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor)) ||
+			is_constexpr_keyword(preprocess_peek(parser->preprocessor))) {
 			struct declaration_head storage = { 0 };
 			struct ast_type_syntax *type_syntax = parse_cast_or_literal_type(parser, &storage);
 			struct ast_sizeof_type_expression *type_node;
