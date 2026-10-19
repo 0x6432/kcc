@@ -644,8 +644,9 @@ def empty_probe(cc,source,output):
 
 # These hashes are immutable observations, NOT derived from mutable fixtures at
 # test runtime. Exact owner bytes include their terminating newline; standalone
-# originals have an empty companion. Only these two observed GCC releases may
-# explain their exact defined-runtime exit1 discrepancy.
+# originals have an empty companion. GCC11.5/13.4 discrepancies were observed
+# locally; exact GCC13.3.0 is a requested CI candidate, not a prior agreement.
+# Every discrepancy still requires actual exit1 and empty runtime streams.
 KNOWN_GCC_DISCREPANCY_FIXTURES={'N3096 p37 partial aggregate copy': ('f0257e0e0a17f0334056e1a1e3c7545c0d01c8fd4a819f9c37d45f097b6a1513',
                                       'ad332b625bcde878c4f9d19f89c1554aa8ee022df9dd7e4c6aed6d16a1467b21',
                                       42,
@@ -666,7 +667,7 @@ KNOWN_GCC_DISCREPANCY_FIXTURES={'N3096 p37 partial aggregate copy': ('f0257e0e0a
                                                          'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
                                                          0,
                                                          True)}
-KNOWN_GCC_DISCREPANCY_VERSIONS=frozenset(('11.5.0','13.4.0'))
+KNOWN_GCC_DISCREPANCY_VERSIONS=frozenset(('11.5.0','13.4.0','13.3.0'))
 
 
 def observed_gcc_discrepancy_version(compiler):
@@ -855,7 +856,12 @@ def controls(d):
         must_fail(lambda:validate_case_runtime(changed,str(identity),discrepancy,native=True),'changed discrepancy '+kind)
     unknown=copy.copy(exact_runtime); unknown.name='unregistered marked source'
     must_fail(lambda:validate_case_runtime(unknown,str(identity),discrepancy,native=True),'unregistered true marker')
-    for fake_version,banner_version in (('12.4.0','12.4.0'),('17.0.1','17.0.1'),('13.4.0','11.5.0')):
+    # Eligibility protocol only, NOT an observed GCC13.3 native result.
+    candidate=d/'gcc-13.3-identity-control'
+    candidate.write_text('#!/bin/sh\ncase "$1" in\n--version) printf "gcc (Ubuntu 13.3.0-6ubuntu2) 13.3.0\\n";;\n-dumpfullversion) printf "13.3.0\\n";;\n*) exit 90;;\nesac\n')
+    candidate.chmod(0o755)
+    assert not validate_case_runtime(exact_runtime,str(candidate),discrepancy,native=True)
+    for fake_version,banner_version in (('12.4.0','12.4.0'),('17.0.1','17.0.1'),('13.4.0','11.5.0'),('13.3.1','13.3.1'),('13.3','13.3'),('13.3.0','13.3.1')):
         fake=d/'gcc-identity-control'
         fake.write_text('#!/bin/sh\ncase "$1" in\n--version) printf "gcc (GCC) '+banner_version+'\\n";;\n-dumpfullversion) printf "'+fake_version+'\\n";;\n*) exit 90;;\nesac\n')
         fake.chmod(0o755)
