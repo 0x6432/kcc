@@ -14,8 +14,11 @@ successful initializer, never early enough to rescue invalid self-size queries.
 The same checked plans serve automatic, file, internal, block-static and thread
 storage. Later whole-subaggregate initializers reset the subaggregate's omitted
 remainder; later partial updates retain disjoint earlier explicit fields,
-including slices of an earlier record copy (N3096 6.7.10 example 12). All written
-initializers receive type/constraint/depth checks even when later overridden.
+including slices of an earlier record copy (N3096 6.7.10 example 12 and DR413).
+This includes a copied union followed by a partial update of its selected member.
+Bytes made unspecified by changing union members (6.2.6.1p7) are not portable
+retained-value oracles. All written initializers receive type/constraint/depth
+checks even when later overridden.
 Wholly overridden runtime expressions are omitted as a permitted implementation
 choice. Surviving expressions are captured once in source order before destination
 clearing and ordered writes. This also preserves previous live compound-literal
