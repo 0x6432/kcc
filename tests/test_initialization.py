@@ -58,6 +58,24 @@ def vector(values, width=4):
     return b''.join(integer(n, width) for n in values)
 
 
+def shared_union_initializer(depth):
+    """Compact shared TYPE DAG, not exponentially expanded source/storage."""
+    assert 0<=depth<=40
+    text='union U0{int a,b;};\n'
+    text+=''.join(f'union U{level}{{union U{level-1} a,b;}};\n' for level in range(1,depth+1))
+    text+=f'union O{{union U{depth} d;int z;}}o={{.d={{0}}}};'
+    assert len(text)<2048
+    return text
+
+
+def compile_only_fixtures():
+    # Standard-valid pre-C23 acceptance, NOT an expected resource refusal.
+    # Deep case compiles through QBE/ELF under the same hard work deadline;
+    # only the separate depth4 equivalent is ever executed.
+    return (Case('bounded initialized shared union DAG depth40',shared_union_initializer(40),
+                 (Object('o',4,4,((0,bytes(4)),)),),compact=True,bounded_work=True),)
+
+
 def fixtures():
     cases=[]
     def add(name, declarations, expression, objects=(), features=(), warnings=((),()), compact=False):
@@ -213,6 +231,10 @@ def fixtures():
         typ='struct S *' if name=='struct initial member reciprocal' else 'union U *' if name=='union member reciprocal' else 'int *'
         add(name,header+typ+'cell='+expression+';', 'cell=='+expected,
             [Object('target',size,align,fields),Object('cell',8,8,(),refs={0:OffsetReference('object','target',byte_addend=offset)})])
+    cases.append(Case('initialized shared union DAG depth4 runtime',
+        shared_union_initializer(4)+' int test(void) { if(o.d.a.a.a.a.a!=0) return 1; '
+        'o.d.a.a.a.a.a=42; return o.d.a.a.a.a.a; }',
+        (Object('o',4,4,((0,bytes(4)),)),),compact=True,bounded_work=True))
     cases.append(Case('automatic one MiB compact zero',
         'int test(void) { unsigned char cell[1048576]={0}; return cell[0]==0 && cell[1048575]==0?42:1; }',compact=True))
     cases.append(Case('automatic one MiB compact string',
@@ -497,10 +519,7 @@ KCC_REFUSALS={'excess array': (1, 16, 'excess elements in initializer'),
  'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
  'M22 flexible array': (1, 24, 'flexible array members are not supported yet (M22)'),
  'array beyond onepast': (1, 59, 'static pointer offset is outside its captured object bounds'),
- 'null arithmetic': (1,
-                     38,
-                     'file-scope pointer initializer requires a supported null or direct address constant '
-                     'expression'),
+ 'null arithmetic': (1,45,'pointer arithmetic on null is not a static address constant'),
  'no fabricated short subobject': (1,
                                    67,
                                    'file-scope pointer initializer requires a supported null or direct address '
@@ -688,6 +707,11 @@ def controls(d):
     must_fail(lambda:bounded_domain_refusal(source,domain_name,runner=expired),'domain proof timeout is failure, not refusal')
     bad_domain=copy.copy(bounded_clean); bad_domain.stdout='partial IL\n'
     must_fail(lambda:bounded_domain_refusal(source,domain_name,runner=lambda *a,**k:bad_domain),'domain refusal no partial IL')
+    valid_dag=compile_only_fixtures()[0]
+    valid_dag_il='export data $o = align 4 { z 4 }\n'
+    check_il(valid_dag_il,valid_dag)
+    for bad in (valid_dag_il.replace('z 4','z 3'),valid_dag_il.replace('align 4','align 1'),valid_dag_il.replace('export ',''),valid_dag_il.replace('z 4','w 1')):
+        must_fail(lambda:check_il(bad,valid_dag),'initialized DAG exact acceptance storage')
     print('M17 poison controls: imported fresh producers/fullstream/selection/relocations; initializer IL/ELF/padding')
 
 
@@ -734,6 +758,16 @@ def main():
             producer([HOST,'-Wa,-L','-c',asm,'-o',kobj],kobj); check_elf(ElfRelocations(kobj),case,True)
             producer([HOST,'-std=c2x','-pedantic-errors','-fno-common','-c',other,'-o',peer],peer)
             run_program(HOST,[kobj,peer],exe); kcount+=1
+        if not args.native_only:
+            for case in compile_only_fixtures():
+                source.write_text(case.owner+'\n')
+                r=bounded_kcc_work(source,case.name)
+                assert r.returncode==0 and not r.stderr and r.stdout,(case.name,r)
+                check_il(r.stdout,case); ssa.write_text(r.stdout)
+                producer([QBE,'-t','amd64_sysv','-o',asm,ssa],asm)
+                producer([HOST,'-Wa,-L','-c',asm,'-o',kobj],kobj)
+                check_elf(ElfRelocations(kobj),case,True)
+            print(f'{len(compile_only_fixtures())} bounded standard-valid compile-only KCC/QBE/ELF acceptance (NOT runtime)')
         for name,text in CONSTRAINTS.items():
             source.write_text(text+'\n')
             for cc in compilers: native_constraint(cc,source,obj,name); counts[cc][2]+=1
