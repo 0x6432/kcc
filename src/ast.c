@@ -1283,6 +1283,24 @@ struct ast_designator *ast_new_designator(struct arena *arena,
 	return node;
 }
 
+/* Initializer-list nesting is independently bounded by the parser. Include
+ * contained expression paths so compound literals cannot reset AST depth. */
+static unsigned initializer_expression_depth(const struct ast_initializer *syntax)
+{
+	unsigned depth = syntax->expression ? syntax->expression->depth : 0;
+
+	for (const struct ast_initializer_entry *entry = syntax->entries; entry; entry = entry->next) {
+		unsigned child = initializer_expression_depth(entry->value);
+
+		if (child > depth)
+			depth = child;
+		for (const struct ast_designator *path = entry->designators; path; path = path->next)
+			if (path->index && path->index->depth > depth)
+				depth = path->index->depth;
+	}
+	return depth;
+}
+
 struct ast_compound_literal_expression *ast_new_compound_literal(struct arena *arena,
 	struct source_location location, struct ast_type_syntax *type_syntax,
 	struct ast_initializer *initializer_syntax)
@@ -1292,7 +1310,7 @@ struct ast_compound_literal_expression *ast_new_compound_literal(struct arena *a
 	if (node)
 		*node = (struct ast_compound_literal_expression) {
 			.expression = { .kind = expression_compound_literal,
-				.location = location, .depth = 1 },
+				.location = location, .depth = initializer_expression_depth(initializer_syntax) + 1 },
 			.type_syntax = type_syntax, .initializer_syntax = initializer_syntax,
 		};
 	return node;

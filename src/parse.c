@@ -26,6 +26,13 @@ struct parser {
 	unsigned declarator_nesting;
 	unsigned type_query_nesting;
 	unsigned record_nesting;
+	unsigned initializer_nesting;
+	size_t initializer_nodes;
+	size_t initializer_entries;
+	size_t designators;
+	size_t compound_literals;
+	bool in_function;
+	unsigned parameter_nesting;
 	size_t record_declarations;
 	size_t block_items;
 	size_t string_bytes;
@@ -484,8 +491,10 @@ static bool parse_function_suffix(struct parser *parser,
 		allocation_error(parser, opening.location);
 		return false;
 	}
+	parser->parameter_nesting++;
 	success = parse_parameters(parser, function) &&
 		expect_token(parser, token_right_paren, "expected ')' after parameter list", NULL);
+	parser->parameter_nesting--;
 	/* Callback names and parameter masks do not escape into return syntax. */
 	parser->names = saved_names;
 	if (!success)
@@ -1038,6 +1047,133 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 	return &node->expression;
 }
 
+/* initializer ::= assignment-expression | "{" [ initializer-list [","] ] "}"
+ * designation ::= ("." identifier | "[" constant-expression "]")+ "="
+ * Keep source tokens and paths; target resolution and ICE checks belong to sema.
+ */
+static struct ast_initializer *parse_initializer(struct parser *parser);
+
+static struct ast_designator *parse_designators(struct parser *parser)
+{
+	struct ast_designator *head = NULL;
+	struct ast_designator **tail = &head;
+	size_t depth = 0;
+
+	for (;;) {
+		struct token token = preprocess_peek(parser->preprocessor);
+		struct ast_designator *node;
+		struct token ending;
+
+		if (token.kind != token_dot && token.kind != token_left_bracket)
+			break;
+		if (depth == ast_max_designator_depth || parser->designators == ast_max_designators) {
+			diagnostic_error(parser->diagnostics, token.location, "initializer designator limit exceeded");
+			return NULL;
+		}
+		depth++;
+		parser->designators++;
+		preprocess_next(parser->preprocessor);
+		node = ast_new_designator(parser->arena, token.kind == token_dot ?
+			ast_designator_member : ast_designator_index, token.location);
+		if (!node) {
+			allocation_error(parser, token.location);
+			return NULL;
+		}
+		if (token.kind == token_dot) {
+			if (!expect_token(parser, token_identifier, "expected member name in designator", &node->member))
+				return NULL;
+			node->end_location = node->member.location;
+		} else {
+			node->index = parse_expression(parser, 2);
+			if (!node->index || !expect_token(parser, token_right_bracket,
+				"expected ']' after initializer index", &ending))
+				return NULL;
+			node->end_location = ending.location;
+		}
+		*tail = node;
+		tail = &node->next;
+	}
+	if (!expect_token(parser, token_equal, "expected '=' after initializer designation", NULL))
+		return NULL;
+	return head;
+}
+
+static struct ast_initializer *parse_initializer_contents(struct parser *parser)
+{
+	struct token token = preprocess_peek(parser->preprocessor);
+	struct ast_initializer *node;
+	struct ast_initializer_entry **tail;
+	struct token ending;
+
+	if (parser->initializer_nodes == ast_max_initializer_nodes) {
+		diagnostic_error(parser->diagnostics, token.location, "initializer syntax node limit exceeded");
+		return NULL;
+	}
+	parser->initializer_nodes++;
+	node = ast_new_initializer(parser->arena, token.kind == token_left_brace ?
+		ast_initializer_list : ast_initializer_expression, token.location);
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	if (node->kind == ast_initializer_expression) {
+		node->expression = parse_expression(parser, 1);
+		return node->expression ? node : NULL;
+	}
+	preprocess_next(parser->preprocessor);
+	tail = &node->entries;
+	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
+		struct ast_initializer_entry *entry;
+		struct ast_designator *designators = NULL;
+
+		token = preprocess_peek(parser->preprocessor);
+		if (parser->initializer_entries == ast_max_initializer_entries) {
+			diagnostic_error(parser->diagnostics, token.location, "initializer entry limit exceeded");
+			return NULL;
+		}
+		parser->initializer_entries++;
+		if (token.kind == token_dot || token.kind == token_left_bracket) {
+			designators = parse_designators(parser);
+			if (!designators)
+				return NULL;
+		}
+		entry = ast_new_initializer_entry(parser->arena, token.location, NULL);
+		if (!entry) {
+			allocation_error(parser, token.location);
+			return NULL;
+		}
+		entry->designators = designators;
+		entry->value = parse_initializer(parser);
+		if (!entry->value)
+			return NULL;
+		*tail = entry;
+		tail = &entry->next;
+		node->entry_count++;
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
+	}
+	if (!expect_token(parser, token_right_brace, "expected '}' after initializer list", &ending))
+		return NULL;
+	node->end_location = ending.location;
+	return node;
+}
+
+static struct ast_initializer *parse_initializer(struct parser *parser)
+{
+	struct ast_initializer *node;
+
+	if (parser->initializer_nesting == ast_max_initializer_nesting) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"initializer nesting limit exceeded");
+		return NULL;
+	}
+	parser->initializer_nesting++;
+	node = parse_initializer_contents(parser);
+	parser->initializer_nesting--;
+	return node;
+}
+
 struct infix_operator {
 	enum token_kind token;
 	unsigned left_binding_power;
@@ -1271,6 +1407,73 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 	return parse_postfix_suffix(parser, parse_primary_expression(parser));
 }
 
+/* C23 storage-class prefix belongs only to compound literals, never casts.
+ * Existing tokens cover static/register/thread_local; constexpr is not yet a
+ * supported type/storage feature. Nested type-names keep their normal context.
+ */
+static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
+	struct declaration_head *storage)
+{
+	struct token beginning;
+
+	for (;;) {
+		struct token token = preprocess_peek(parser->preprocessor);
+		struct token *slot;
+
+		if (token.kind != token_static && token.kind != token_register && token.kind != token_thread_local)
+			break;
+		slot = token.kind == token_thread_local ? &storage->thread_keyword : &storage->keyword;
+		if (slot->kind != token_eof) {
+			diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting compound literal storage class");
+			return NULL;
+		}
+		*slot = preprocess_next(parser->preprocessor);
+	}
+	if (storage->thread_keyword.kind == token_thread_local && storage->keyword.kind == token_register) {
+		diagnostic_error(parser->diagnostics, storage->keyword.location, "thread_local cannot combine with register");
+		return NULL;
+	}
+	return parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+}
+
+static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
+	struct source_location location, struct ast_type_syntax *type_syntax,
+	struct declaration_head storage)
+{
+	struct ast_compound_literal_expression *node;
+	struct ast_initializer *initializer;
+	size_t object_id;
+
+	if (parser->compound_literals == ast_max_compound_literals) {
+		diagnostic_error(parser->diagnostics, location, "compound literal count limit exceeded");
+		return NULL;
+	}
+	object_id = ++parser->compound_literals;
+	initializer = parse_initializer(parser);
+	if (!initializer)
+		return NULL;
+	node = ast_new_compound_literal(parser->arena, location, type_syntax, initializer);
+	if (!node) {
+		allocation_error(parser, location);
+		return NULL;
+	}
+	if (node->expression.depth > ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, location, "expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node->file_scope = !parser->in_function && !parser->parameter_nesting;
+	node->is_static = storage.keyword.kind == token_static;
+	node->is_register = storage.keyword.kind == token_register;
+	node->is_thread_local = storage.thread_keyword.kind == token_thread_local;
+	node->object_id = object_id;
+	return parse_postfix_suffix(parser, &node->expression);
+}
+
+static bool literal_storage_present(struct declaration_head storage)
+{
+	return storage.keyword.kind != token_eof || storage.thread_keyword.kind != token_eof;
+}
+
 /* parenthesized-or-cast ::= '(' expression ')' postfix-suffix
  *                        | '(' type-name ')' cast-expression
  * One opening token is consumed before choosing from the current token.
@@ -1282,7 +1485,7 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 	struct ast_expression *operand;
 	struct ast_cast_expression *node;
 	struct ast_type_syntax *type_syntax;
-	struct token beginning;
+	struct declaration_head storage = { 0 };
 
 	if (!begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		operand = parse_expression(parser, 0);
@@ -1290,10 +1493,16 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 			return NULL;
 		return parse_postfix_suffix(parser, operand);
 	}
-	type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+	type_syntax = parse_cast_or_literal_type(parser, &storage);
 	if (!type_syntax ||
 		!expect_token(parser, token_right_paren, "expected ')' after cast type", NULL))
 		return NULL;
+	if (preprocess_peek(parser->preprocessor).kind == token_left_brace)
+		return parse_compound_literal_tail(parser, opening.location, type_syntax, storage);
+	if (literal_storage_present(storage)) {
+		diagnostic_error(parser->diagnostics, opening.location, "storage class requires a compound literal initializer");
+		return NULL;
+	}
 	operand = parse_expression(parser, 30);
 	if (!operand)
 		return NULL;
@@ -1320,14 +1529,31 @@ static struct ast_expression *parse_sizeof_expression(struct parser *parser)
 	struct ast_sizeof_expression *node;
 
 	if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
-		preprocess_next(parser->preprocessor);
+		struct token opening = preprocess_next(parser->preprocessor);
 		if (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
-			struct token beginning;
-			struct ast_type_syntax *type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+			struct declaration_head storage = { 0 };
+			struct ast_type_syntax *type_syntax = parse_cast_or_literal_type(parser, &storage);
 			struct ast_sizeof_type_expression *type_node;
 
 			if (!type_syntax || !expect_token(parser, token_right_paren, "expected ')' after sizeof type", NULL))
 				return NULL;
+			if (preprocess_peek(parser->preprocessor).kind == token_left_brace) {
+				operand = parse_compound_literal_tail(parser, opening.location, type_syntax, storage);
+				if (!operand)
+					return NULL;
+				if (operand->depth >= ast_max_expression_depth) {
+					diagnostic_error(parser->diagnostics, keyword.location, "expression tree exceeds depth limit (128)");
+					return NULL;
+				}
+				node = ast_new_sizeof(parser->arena, keyword.location, operand);
+				if (!node)
+					allocation_error(parser, keyword.location);
+				return node ? &node->expression : NULL;
+			}
+			if (literal_storage_present(storage)) {
+				diagnostic_error(parser->diagnostics, opening.location, "storage class requires a compound literal initializer");
+				return NULL;
+			}
 			type_node = ast_new_sizeof_type(parser->arena, keyword.location, type_syntax);
 			if (!type_node)
 				allocation_error(parser, keyword.location);
@@ -2335,11 +2561,11 @@ static bool parse_inferred_identifier(struct parser *parser, struct token *name)
 
 /* local-declaration ::= declaration-specifiers init-declarator
  *                       { "," init-declarator } ";"
- * init-declarator ::= declarator [ "=" assignment-expression ]
+ * init-declarator ::= declarator [ "=" initializer ]
  * inferred-declaration ::= auto-specifiers inferred-identifier "=" assignment-expression ";"
  * auto-specifiers ::= permutation of "auto", [ "register" ] and { "const" }
  * inferred-identifier ::= identifier | "(" inferred-identifier ")"
- * Array initializers are diagnosed by sema (braced lists are not parsed yet).
+ * Target-dependent initializer constraints are diagnosed by sema.
  * Assignment expressions stop before a declarator comma, not call-argument commas.
  */
 static struct ast_block_item *parse_local_declaration_tail(struct parser *parser,
@@ -2391,6 +2617,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct token name;
 		struct ast_type_syntax *type_syntax;
 		struct ast_expression *initializer = NULL;
+		struct ast_initializer *initializer_syntax = NULL;
 		struct ast_local_declaration *node;
 
 		if (!count_block_item(parser, head.inferred_name.kind == token_identifier ?
@@ -2421,9 +2648,10 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 			preprocess_next(parser->preprocessor);
-			initializer = parse_expression(parser, 1);
-			if (!initializer)
+			initializer_syntax = parse_initializer(parser);
+			if (!initializer_syntax)
 				return NULL;
+			initializer = initializer_syntax->expression;
 		}
 		node = ast_new_local(parser->arena, beginning.location, name, initializer);
 		if (!node) {
@@ -2431,6 +2659,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		}
 		node->type_syntax = type_syntax;
+		node->initializer_syntax = initializer_syntax;
 		node->is_inline = head.inline_keyword.kind == token_inline;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
@@ -2775,43 +3004,36 @@ static bool parse_parameters(struct parser *parser,
 	}
 }
 
-/* A comma separates declarators, not the optional assignment-expression.
- * Braced/aggregate initialization is a separate future increment.
- */
+/* The initializer parser owns list commas; this level owns declarator commas. */
 static bool parse_external_initializer(struct parser *parser,
-	struct ast_expression **initializer, const char *unsupported)
+	struct ast_expression **initializer, struct ast_initializer **syntax)
 {
 	if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 		preprocess_next(parser->preprocessor);
-		if (preprocess_peek(parser->preprocessor).kind == token_left_brace) {
-			diagnostic_error(parser->diagnostics,
-				preprocess_peek(parser->preprocessor).location, unsupported);
+		*syntax = parse_initializer(parser);
+		if (!*syntax)
 			return false;
-		}
-		*initializer = parse_expression(parser, 1);
-		if (!*initializer)
-			return false;
+		*initializer = (*syntax)->expression;
 	}
 	if (preprocess_peek(parser->preprocessor).kind != token_comma &&
 		preprocess_peek(parser->preprocessor).kind != token_semicolon) {
 		diagnostic_error(parser->diagnostics,
-			preprocess_peek(parser->preprocessor).location, unsupported);
+			preprocess_peek(parser->preprocessor).location, "expected comma or semicolon after initializer");
 		return false;
 	}
 	return true;
 }
 
-/* object-declaration-tail ::= declarator [ "=" assignment-expression ] */
+/* object-declaration-tail ::= declarator [ "=" initializer ] */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
 	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
 {
 	struct ast_external_object_declaration *declaration;
 	struct ast_expression *initializer = NULL;
+	struct ast_initializer *initializer_syntax = NULL;
 
-	if (!parse_external_initializer(parser, &initializer,
-		is_extern ? "extern object definitions are not supported yet" :
-		"file-scope object initializers are not supported yet"))
+	if (!parse_external_initializer(parser, &initializer, &initializer_syntax))
 		return NULL;
 	declaration = ast_new_external_object_declaration(parser->arena,
 		beginning.location, type_syntax, name, is_extern);
@@ -2822,6 +3044,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->initializer = initializer;
+		declaration->initializer_syntax = initializer_syntax;
 	}
 	return declaration ? &declaration->external : NULL;
 }
@@ -2836,14 +3059,14 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
 	struct ast_expression *initializer = NULL;
+	struct ast_initializer *initializer_syntax = NULL;
 
 	while (base->kind == type_syntax_qualified)
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name)
 		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline);
-	if (!parse_external_initializer(parser, &initializer,
-		"query-derived external declarations require ';'"))
+	if (!parse_external_initializer(parser, &initializer, &initializer_syntax))
 		return NULL;
 	declaration = ast_new_external_type_declaration(parser->arena,
 		beginning.location, type_syntax, name);
@@ -2855,6 +3078,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		declaration->is_static = is_static;
 		declaration->is_extern = is_extern;
 		declaration->initializer = initializer;
+		declaration->initializer_syntax = initializer_syntax;
 	}
 	return declaration ? &declaration->external : NULL;
 }
@@ -2927,7 +3151,9 @@ static struct ast_compound_statement *parse_function_body(struct parser *parser,
 			goto done;
 	}
 	parser->block_items = 0;
+	parser->in_function = true;
 	body = parse_compound_statement(parser);
+	parser->in_function = false;
 done:
 	parser->names = saved_names;
 	return body;
