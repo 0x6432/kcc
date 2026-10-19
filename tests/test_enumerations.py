@@ -870,6 +870,12 @@ def native_constraint(cc, source, name):
     else:
         records=native_diagnostics(result.stderr,source,source.read_text(),clang_style(cc))
         assert records==tuple(tuple(r) for r in expected['records']), (name,cc,records,expected)
+    if name=='standalone completed enum reference' and family!='gcc13':
+        # GCC11/Clang invent a shadow incomplete tag instead of diagnosing the
+        # actual C23 empty declaration. Rejection is observed, but its reason
+        # disagrees: never count this as correct-reason constraint agreement.
+        print('ENUM NATIVE CONSTRAINT REASON DISAGREEMENT (NOT agreement): '+json.dumps(dict(original=name,compiler=cc)))
+        return False
     return True
 
 
