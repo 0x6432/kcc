@@ -40,6 +40,36 @@ and positive, negative, AST, runtime and host interoperability evidence.
 `long double` remains M24g; it must not be substituted with `double`.
 Do not implement a later milestone before the preceding milestone's gates pass.
 
+## Byte-exact legacy promotion repair
+
+Independent recovery audit found that the promotion suite appended a final
+newline to every original, although the baseline string-literal writer emitted
+one original without a final newline. The repaired suite preserves each actual
+writer's bytes, pins all 26 original file hashes, and rejects newline, byte,
+origin, writer and hash mutations. Raw literal identity and actual file-byte
+identity are distinct; semantic whitespace equivalence is not an exact-source
+waiver. KCC and every native comparison read the same original byte sequence.
+
+The exact no-final-newline original exposes an actual strict Clang18.1.3 EOF
+source-form rejection. Its separately observed exact identity/version, exit 1,
+empty stdout, absent ELF and complete diagnostics are checked without adding a
+newline or suppressing warnings. It is a source-form gap/discrepancy, never an
+agreement. GCC's acceptance of that non-strict source form is also kept separate
+from semantic agreements. The one unchanged original main run is a documented
+KCC source-form-extension run: **zero strict-defined original runtimes, one
+extension main run**, not an inflated defined-program count. Other initializer
+and compound-literal runtime suites retain their separate defined oracles.
+
+Fresh expanded audit reconstructed 9,943 actual compiler invocations, 9,831
+unique per-origin sources and 108 origins; 2,759 actual baseline compile refusals
+partition into 2,733 retained refusals and 26 exact promotions, without unmapped
+originals. Includes retain actual header/argument contexts. This independently
+defined inventory is not the unavailable historical 1,508-input inventory.
+Independent review scope explicitly distinguishes targeted/delta semantic
+inspection from unchanged-file structural integrity. None of these component
+observations alone approves a new final commit: every full exact-SHA release
+gate must run after this tracked repair and its handoff update.
+
 ## Recovered validation protocol
 
 - Use only `feature/m17-initializers`. Never modify or merge `development`,
