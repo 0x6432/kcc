@@ -120,6 +120,8 @@ struct preprocessor {
 	bool stopped;
 	bool has_lookahead;
 	struct token lookahead;
+	bool has_second_lookahead;
+	struct token second_lookahead;
 };
 
 void preprocess_init(struct preprocessor *preprocessor, const struct source *source,
@@ -139,5 +141,7 @@ void preprocess_destroy(struct preprocessor *preprocessor);
 struct pp_token preprocess_next_pp(struct preprocessor *preprocessor);
 struct token preprocess_next(struct preprocessor *preprocessor);
 struct token preprocess_peek(struct preprocessor *preprocessor);
+/* Peek one token beyond preprocess_peek without consuming either. */
+struct token preprocess_peek_second(struct preprocessor *preprocessor);
 
 #endif

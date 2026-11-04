@@ -23,6 +23,7 @@ struct parser {
 	struct parser_name *names;
 	unsigned depth;
 	unsigned statement_nesting;
+	unsigned switch_nesting;
 	unsigned declarator_nesting;
 	unsigned type_query_nesting;
 	unsigned record_nesting;
@@ -59,17 +60,29 @@ static bool expect_token(struct parser *parser, enum token_kind kind,
 	return true;
 }
 
-/* Deliberately narrow C23 attribute subset: maybe_unused on ordinary
- * declaration prefixes only. The compiler emits no unused-entity warnings,
- * so its diagnostic effect is already satisfied. Never silently erase unknown
- * or semantics-bearing attributes. Bound the work for hostile input. */
-static bool parse_declaration_attributes(struct parser *parser, bool *present)
+/* Recognize only attributes whose behavior this compiler implements. Unknown
+ * attributes are rejected rather than silently dropping potentially important
+ * semantics. Limit total lists and tokens per sequence, including empty lists. */
+struct parsed_attributes {
+	bool present;
+	bool maybe_unused;
+	bool fallthrough;
+};
+
+static bool token_spells(struct token token, const char *name, size_t length)
+{
+	return token.kind == token_identifier && token.length == length &&
+		memcmp(token.spelling_location.source->data + token.spelling_location.offset,
+			name, length) == 0;
+}
+
+static bool parse_attributes(struct parser *parser, struct parsed_attributes *attributes)
 {
 	unsigned count = 0;
-	*present = false;
+	*attributes = (struct parsed_attributes) { 0 };
 	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
 		struct token token = preprocess_next(parser->preprocessor);
-		*present = true;
+		attributes->present = true;
 		if (!expect_token(parser, token_left_bracket, "expected second '[' in attribute", NULL))
 			return false;
 		for (;;) {
@@ -80,11 +93,18 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 				diagnostic_error(parser->diagnostics, token.location, "attribute limit exceeded (256)");
 				return false;
 			}
-			if (token.kind != token_identifier || token.length != 12 ||
-				memcmp(token.spelling_location.source->data + token.spelling_location.offset,
-					"maybe_unused", 12) != 0) {
+			if (token_spells(token, "maybe_unused", 12)) {
+				attributes->maybe_unused = true;
+			} else if (token_spells(token, "fallthrough", 11)) {
+				if (attributes->fallthrough) {
+					diagnostic_error(parser->diagnostics, token.location,
+						"multiple fallthrough attributes are not supported");
+					return false;
+				}
+				attributes->fallthrough = true;
+			} else {
 				diagnostic_error(parser->diagnostics, token.location,
-					"unsupported or unknown attribute (only maybe_unused is supported)");
+					"unsupported or unknown attribute (only maybe_unused and fallthrough are supported)");
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
@@ -95,7 +115,7 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 			}
 			if (token.kind != token_right_bracket) {
 				diagnostic_error(parser->diagnostics, token.location,
-					"maybe_unused takes no arguments; expected ',' or ']]'");
+					"supported attributes take no arguments; expected ',' or ']]'");
 				return false;
 			}
 			break;
@@ -103,12 +123,27 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 		preprocess_next(parser->preprocessor);
 		if (!expect_token(parser, token_right_bracket, "expected ']]' after attribute", NULL))
 			return false;
-		/* Count even empty specifiers. */
 		if (++count > 256) {
 			diagnostic_error(parser->diagnostics, token.location, "attribute limit exceeded (256)");
 			return false;
 		}
 	}
+	return true;
+}
+
+static bool parse_declaration_attributes(struct parser *parser, bool *present)
+{
+	struct parsed_attributes attributes;
+	struct token location = preprocess_peek(parser->preprocessor);
+
+	if (!parse_attributes(parser, &attributes))
+		return false;
+	if (attributes.fallthrough) {
+		diagnostic_error(parser->diagnostics, location.location,
+			"fallthrough is only supported on a null statement in a switch");
+		return false;
+	}
+	*present = attributes.present;
 	return true;
 }
 
@@ -684,7 +719,8 @@ static bool parse_function_suffix(struct parser *parser,
 static bool parse_object_array_suffixes(struct parser *parser,
 	struct parsed_declarator *declarator)
 {
-	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
+	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket &&
+		preprocess_peek_second(parser->preprocessor).kind != token_left_bracket) {
 		struct token opening = preprocess_next(parser->preprocessor);
 		struct ast_expression *bound = NULL;
 		struct ast_array_type_syntax *array;
@@ -793,6 +829,8 @@ static bool parse_declarator_contents(struct parser *parser,
 	for (;;) {
 		token = preprocess_peek(parser->preprocessor);
 		if (token.kind == token_left_bracket) {
+			if (preprocess_peek_second(parser->preprocessor).kind == token_left_bracket)
+				break;
 			if (!parse_object_array_suffixes(parser, declarator))
 				return false;
 		} else if (token.kind == token_left_paren) {
@@ -994,7 +1032,16 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 		struct token beginning;
 		struct ast_type_syntax *base;
 		struct declaration_head head = { 0 };
+		bool attributes;
 
+		if (!parse_declaration_attributes(parser, &attributes))
+			return false;
+		if (attributes && (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
+			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert)) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"attributes on static assertions are not supported");
+			return false;
+		}
 		if (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
 			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert) {
 			struct ast_static_assertion *assertion = parse_static_assertion(parser);
@@ -1032,6 +1079,12 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 					"alignment on an anonymous member is not supported yet");
 				return false;
 			}
+			if (attributes) {
+				diagnostic_error(parser->diagnostics, beginning.location,
+					"attributes on anonymous members are not supported");
+				return false;
+			}
+
 			/* 6.7.2.1p2: a tag declaration alone is not a member. Only
 			 * an untagged definition can omit its member declarator list. */
 			if (!nested || !nested->has_definition || nested->tag.kind == token_identifier) {
@@ -1057,6 +1110,11 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			syntax = parse_derived_type(parser, base, &name, &has_name, declarator_parameter);
 			if (!syntax)
 				return false;
+			{
+				bool suffix_attributes;
+				if (!parse_declaration_attributes(parser, &suffix_attributes))
+					return false;
+			}
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
 				diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
 					"bit-fields are not supported yet (M22)");
@@ -2526,7 +2584,9 @@ static struct ast_switch_statement *parse_switch_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_right_paren, "expected ')' after switch control", NULL))
 		return NULL;
+	parser->switch_nesting++;
 	body = parse_statement(parser);
+	parser->switch_nesting--;
 	if (!body)
 		return NULL;
 	node = ast_new_switch(parser->arena, keyword.location, control, body);
@@ -2654,7 +2714,21 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
-	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
+	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
+		bool attributes;
+		if (!parse_declaration_attributes(parser, &attributes))
+			return NULL;
+		if (!begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				"for attributes require a declaration");
+			return NULL;
+		}
+		parser->declaration_attributes = attributes;
+		initializer_declarations = parse_local_declaration(parser);
+		parser->declaration_attributes = false;
+		if (!initializer_declarations)
+			return NULL;
+	} else if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
 		initializer_declarations = parse_block_item(parser);
@@ -3010,6 +3084,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				name = head.inferred_name;
 			else if (!parse_inferred_identifier(parser, &name))
 				return NULL;
+			{
+				bool attributes;
+				if (!parse_declaration_attributes(parser, &attributes))
+					return NULL;
+			}
 			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
 				diagnostic_error(parser->diagnostics, name.location,
 					"inferred auto requires an assignment initializer");
@@ -3019,6 +3098,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 			if (!type_syntax)
 				return NULL;
+			{
+				bool attributes;
+				if (!parse_declaration_attributes(parser, &attributes))
+					return NULL;
+			}
 		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
 			diagnostic_error(parser->diagnostics, name.location,
@@ -3168,6 +3252,11 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_typedef);
 		if (!type_syntax)
 			return NULL;
+		{
+			bool attributes;
+			if (!parse_declaration_attributes(parser, &attributes))
+				return NULL;
+		}
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
@@ -3295,15 +3384,44 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
 		struct ast_block_item *item;
 		struct token token = preprocess_peek(parser->preprocessor);
-		bool attributes = false;
+		struct parsed_attributes attributes = { 0 };
 
 		if (token.kind == token_left_bracket) {
-			if (!parse_declaration_attributes(parser, &attributes))
+			struct token first = token;
+			if (!parse_attributes(parser, &attributes))
 				return NULL;
 			token = preprocess_peek(parser->preprocessor);
-			if (!begins_declaration_specifier(parser, token)) {
+			if (attributes.fallthrough) {
+				struct ast_statement *statement;
+				struct ast_statement_item *statement_item;
+				if (attributes.maybe_unused || !parser->switch_nesting || token.kind != token_semicolon) {
+					diagnostic_error(parser->diagnostics, first.location,
+						"fallthrough requires a null statement within a switch");
+					return NULL;
+				}
+				if (!count_block_item(parser, first.location))
+					return NULL;
+				statement = parse_empty_statement(parser);
+				token = preprocess_peek(parser->preprocessor);
+				if (token.kind != token_case && token.kind != token_default) {
+					diagnostic_error(parser->diagnostics, token.location,
+						"fallthrough must be immediately followed by a case or default label");
+					return NULL;
+				}
+				statement_item = statement ? ast_new_statement_item(parser->arena, statement) : NULL;
+				if (!statement_item) {
+					allocation_error(parser, first.location);
+					return NULL;
+				}
+				*tail = &statement_item->item;
+				tail = &statement_item->item.next;
+				continue;
+			}
+			if (!begins_declaration_specifier(parser, token) && token.kind != token_case &&
+				token.kind != token_default && !(token.kind == token_identifier &&
+				preprocess_peek_second(parser->preprocessor).kind == token_colon)) {
 				diagnostic_error(parser->diagnostics, token.location,
-					"attributes are supported only on declarations here");
+					"attributes are supported only on declarations or labels here");
 				return NULL;
 			}
 		}
@@ -3316,7 +3434,7 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 		if (token.kind != token_typedef && !begins_declaration_specifier(parser, token) &&
 			!count_block_item(parser, token.location))
 			return NULL;
-		parser->declaration_attributes = attributes;
+		parser->declaration_attributes = attributes.present;
 		item = parse_block_item(parser);
 		parser->declaration_attributes = false;
 		if (!item)
@@ -3365,6 +3483,7 @@ static bool parse_parameters(struct parser *parser,
 		struct ast_type_syntax *type_syntax;
 		struct declaration_head head = { 0 };
 		bool has_name = false;
+		bool prefix_attributes, suffix_attributes;
 
 		if (preprocess_peek(parser->preprocessor).kind == token_ellipsis) {
 			preprocess_next(parser->preprocessor);
@@ -3377,10 +3496,17 @@ static bool parse_parameters(struct parser *parser,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
+		if (!parse_declaration_attributes(parser, &prefix_attributes))
+			return false;
 		type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
 		type_syntax = parse_derived_type(parser, type_syntax, &name, &has_name, declarator_parameter);
-		if (!type_syntax)
+		if (!type_syntax || !parse_declaration_attributes(parser, &suffix_attributes))
 			return false;
+		if ((prefix_attributes || suffix_attributes) && !has_name) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"attributes on unnamed parameters are not supported");
+			return false;
+		}
 		/* Keep written register void for the semantic subset diagnostic. */
 		if (!function->parameter_count && !has_name && head.keyword.kind != token_register &&
 			type_syntax->kind == type_syntax_void &&
@@ -3510,6 +3636,11 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_typedef);
 		if (!type_syntax)
 			return NULL;
+		{
+			bool attributes;
+			if (!parse_declaration_attributes(parser, &attributes))
+				return NULL;
+		}
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
@@ -3588,6 +3719,11 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 		if (!type_syntax)
 			return NULL;
+		{
+			bool attributes;
+			if (!parse_declaration_attributes(parser, &attributes))
+				return NULL;
+		}
 		/* Its scope starts after the complete declarator, before an
 		 * initializer or a later declarator in the same declaration.
 		 */

@@ -1,4 +1,4 @@
-"""Bounded C23 maybe_unused prefix subset; unknown semantics must not disappear."""
+"""Bounded C23 maybe_unused and fallthrough subset; unknown semantics must not disappear."""
 import os
 import subprocess
 import tempfile
@@ -22,23 +22,30 @@ pairs = [
      'int main(void){ auto x=42; return x; }'),
     ('[[maybe_unused]] struct S { int x; } s; int main(void){ s.x=42; return s.x; }',
      'struct S { int x; } s; int main(void){ s.x=42; return s.x; }'),
+    ('int x [[maybe_unused]]; int f([[maybe_unused]] int n){return n;} int main(void){return f(x);}',
+     'int x; int f(int n){return n;} int main(void){return f(x);}'),
+    ('struct S { [[maybe_unused]] int a; int b [[maybe_unused]]; }; int main(void){return 0;}',
+     'struct S { int a; int b; }; int main(void){return 0;}'),
+    ('int f(int x){switch(x){case 0: x++; [[fallthrough]]; case 1: return x; default: return 0;}}',
+     'int f(int x){switch(x){case 0: x++; ; case 1: return x; default: return 0;}}'),
+    ('int f(void){for ([[maybe_unused]] int i=0; i<1; i++) {} return 0;}',
+     'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
     ('[[nodiscard]] int f(void);', 'unsupported or unknown attribute'),
-    ('[[fallthrough]] int x;', 'unsupported or unknown attribute'),
+    ('[[fallthrough]] int x;', 'fallthrough is only supported'),
     ('[[deprecated("reason")]] int x;', 'unsupported or unknown attribute'),
     ('[[vendor::unknown]] int x;', 'unsupported or unknown attribute'),
     ('[[unknown]] int x;', 'unsupported or unknown attribute'),
-    ('[[maybe_unused(1)]] int x;', 'takes no arguments'),
+    ('[[maybe_unused(1)]] int x;', 'take no arguments'),
     ('[[maybe_unused] int x;', "expected ']]'"),
     ('[[maybe_unused]] struct S;', 'tag-only'),
     ('int f(void){ [[maybe_unused]] struct S; return 0; }', 'tag-only'),
     ('int f(void){ [[maybe_unused]] return 0; }', 'only on declarations'),
     ('[[maybe_unused]] static_assert(1);', 'only on declarations'),
     ('[[maybe_unused]] ;', 'only on declarations'),
-    ('int f(void){ for ([[maybe_unused]] int i=0; i<1; i++) {} return 0; }', None),
-    ('int x [[maybe_unused]];', None),
-    ('int f([[maybe_unused]] int x);', None),
+    ('int f(void){[[fallthrough]]; return 0;}', 'within a switch'),
+    ('int f(int x){switch(x){case 0: [[fallthrough]]; return 0;} return 1;}', 'immediately followed'),
     ('[[maybe_unused, unknown]] int x;', 'unsupported or unknown attribute'),
     ('[[maybe_unused]] [[nodiscard]] int f(void);', 'unsupported or unknown attribute'),
 ]

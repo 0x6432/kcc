@@ -2811,8 +2811,14 @@ void preprocess_destroy(struct preprocessor *preprocessor)
 struct token preprocess_next(struct preprocessor *preprocessor)
 {
 	if (preprocessor->has_lookahead) {
-		preprocessor->has_lookahead = false;
-		return preprocessor->lookahead;
+		struct token result = preprocessor->lookahead;
+		if (preprocessor->has_second_lookahead) {
+			preprocessor->lookahead = preprocessor->second_lookahead;
+			preprocessor->has_second_lookahead = false;
+		} else {
+			preprocessor->has_lookahead = false;
+		}
+		return result;
 	}
 	return read_preprocessed_token(preprocessor);
 }
@@ -2824,4 +2830,17 @@ struct token preprocess_peek(struct preprocessor *preprocessor)
 		preprocessor->has_lookahead = true;
 	}
 	return preprocessor->lookahead;
+}
+
+struct token preprocess_peek_second(struct preprocessor *preprocessor)
+{
+	(void)preprocess_peek(preprocessor);
+	if (!preprocessor->has_second_lookahead) {
+		/* Raw expansion requires no pending language-token peek. */
+		preprocessor->has_lookahead = false;
+		preprocessor->second_lookahead = read_preprocessed_token(preprocessor);
+		preprocessor->has_lookahead = true;
+		preprocessor->has_second_lookahead = true;
+	}
+	return preprocessor->second_lookahead;
 }
