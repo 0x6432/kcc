@@ -18,3 +18,13 @@ floating-to-integer constant folding is not supported and this addition is
 untested.
 
 Not supported: `long double`, `_Complex`, decimal floats, floating suffixes beyond `f`, and general floating constant-expression evaluation beyond the subsets above. File-scope tentative objects and zero-filled aggregates use zero bytes. The preprocessor continues to require integer `#if` expressions. Aggregate ABI is outside this scope. The recently restored conversions and updates have not been integration-tested. Unsupported operations must be diagnosed rather than approximated. Host/target rounding modes and subnormal/exception behavior beyond what the host converter and QBE supply are not modeled; literal underflow is conservatively rejected.
+
+Static integer and boolean initializers can also convert the supported finite
+floating-expression subset, including scalar globals and aggregate elements.
+The conversion truncates toward zero and diagnoses non-finite or out-of-range
+results; signed values slightly below the negative limit are conservatively
+rejected even if truncation would bring them into range. This is a static
+initializer extension only: it does not broaden integer constant expressions
+in array bounds or case labels. Floating-to-integer casts nested inside a larger
+constant expression remain limited. The file-scope scalar gate now permits
+floating object initializers. These changes have not been tested.

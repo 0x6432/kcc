@@ -2795,6 +2795,8 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				double converted;
 				memcpy(&source, &raw, sizeof(source));
 				converted = (double)source;
+				if (!isfinite(converted))
+					return false;
 				memcpy(bits, &converted, sizeof(converted));
 			} else {
 				double source;
@@ -2802,6 +2804,8 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				uint32_t raw;
 				memcpy(&source, &source_bits, sizeof(source));
 				converted = (float)source;
+				if (!isfinite(converted))
+					return false;
 				memcpy(&raw, &converted, sizeof(raw));
 				*bits = raw;
 			}
@@ -2836,12 +2840,65 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 	return false;
 }
 
+/* Fold the bounded floating constant subset into an integer static object.
+ * This is separate from ICE evaluation: accepting an arithmetic initializer
+ * must not allow floating arithmetic in array bounds or case labels. */
+static bool static_floating_to_integer(const struct ast_expression *source,
+	const struct type *target, struct static_data_value *value, struct diagnostics *diagnostics)
+{
+	uint64_t raw, bits, mask;
+	double number, boundary;
+	unsigned width = type_integer_width(target);
+
+	if (!static_floating_literal_bits(source, &raw)) {
+		diagnostic_error(diagnostics, source->location,
+			"static integer initializer requires a supported finite floating constant expression");
+		return false;
+	}
+	if (source->type->kind == type_kind_float) {
+		uint32_t word = (uint32_t)raw;
+		float single;
+		memcpy(&single, &word, sizeof(single));
+		number = single;
+	} else {
+		memcpy(&number, &raw, sizeof(number));
+	}
+	if (!isfinite(number)) {
+		diagnostic_error(diagnostics, source->location, "non-finite floating-to-integer static initializer");
+		return false;
+	}
+	if (target->kind == type_kind_bool)
+		bits = number != 0.0;
+	else {
+		boundary = (double)(UINT64_C(1) << (width - 1));
+		if (type_is_unsigned(target)) {
+			boundary *= 2.0;
+			if (number <= -1.0 || number >= boundary)
+				goto out_of_range;
+			bits = number < 0.0 ? 0 : (uint64_t)number;
+		} else {
+			if (number < -boundary || number >= boundary)
+				goto out_of_range;
+			bits = (uint64_t)(int64_t)number;
+		}
+		mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+		bits &= mask;
+	}
+	*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = bits };
+	return true;
+out_of_range:
+	diagnostic_error(diagnostics, source->location, "floating-to-integer static initializer is out of range");
+	return false;
+}
+
 /* The source is checked before conversion so narrowing cannot hide invalid
  * evaluated arithmetic. Both queries are pure: no lowered node is re-sema'd. */
 bool sema_validate_static_initializer(const struct ast_expression *source,
 	const struct ast_expression *converted, struct static_data_value *value,
 	struct diagnostics *diagnostics)
 {
+	if (type_is_floating(source->type) && type_is_integer(converted->type))
+		return static_floating_to_integer(source, converted->type, value, diagnostics);
 	if (type_is_floating(converted->type)) {
 		uint64_t bits;
 		if (!static_floating_literal_bits(converted, &bits)) {
@@ -4678,7 +4735,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		return NULL;
 	}
 	if (has_initializer) {
-		if (!promoted && !type_is_integer(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) {
+		if (!promoted && !type_is_integer(type) && !type_is_floating(type) &&
+			type->kind != type_kind_pointer && type->kind != type_kind_nullptr) {
 			diagnostic_error(sema->diagnostics, (*initializer)->location,
 				is_query ? "query-derived external declarations require ';' for non-integer initializers" :
 				is_extern ? "non-integer extern object definitions are not supported yet" :
@@ -4740,6 +4798,16 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	}
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
+	if (type_is_floating((*initializer)->type) && type_is_integer(type)) {
+		struct ast_expression *source_expression = *initializer;
+		target = unqualified_type(sema, type, name.location);
+		if (!target || !convert_expression(sema, initializer, target) ||
+			!sema_validate_static_initializer(source_expression, *initializer,
+				&symbol->initializer_value, sema->diagnostics))
+			goto rollback;
+		symbol->definition = external;
+		return symbol;
+	}
 	if (type_is_floating(type)) {
 		target = unqualified_type(sema, type, name.location);
 		if (!target || !convert_expression(sema, initializer, target) ||
