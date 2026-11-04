@@ -19,6 +19,9 @@ valid = [
     'int main(void) { int n=2; int a[n]; int i=0; while(i<2) { a[i]=42; i++; } return a[1]; }',
     'int main(void) { int n=2; int a[n++]; long b[n++]; a[1]=20; b[2]=22; return n==4 && sizeof a==8 && sizeof b==24 ? a[1]+b[2] : 1; }',
     'int main(void) { int n=2; char a[n], b[n+1]; a[1]=20; b[2]=22; return sizeof a==2 && sizeof b==3 ? a[1]+b[2] : 1; }',
+    'int main(void) { int n=2; int x=42; int *a[n]; a[1]=&x; return sizeof a==16 ? *a[1] : 1; }',
+    'int main(void) { int n=2; double a[n]; a[1]=42.0; return sizeof a==16 ? (int)a[1] : 1; }',
+    'struct S { int x; int y; }; int main(void) { int n=2; struct S a[n]; a[1].x=20; a[1].y=22; return sizeof a==16 ? a[1].x+a[1].y : 1; }',
 ]
 rejected = [
     ('int f(int n) { { int a[n]; } return 0; }', 'variable-length arrays'),
@@ -34,7 +37,6 @@ rejected = [
     ('int f(int n) { typedef int A[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { static int a[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { int a[2][n]; return 0; }', 'variable-length arrays'),
-    ('int f(int n) { int *a[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n, int a[n]);', 'variable-length arrays'),
 ]
 # Bounds fail before allocation, including a negative signed input, unsigned
