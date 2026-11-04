@@ -29,6 +29,13 @@ float neg(float x) { return -x; }
 int truth(double x) { return !x || (x && x==x); }
 float choose(int x, float a, float b) { return x ? a : b; }
 float pass(float (*fn)(float, float), float x, float y) { return fn(x,y); }
+double widen(float x) { return x; }
+float narrow(double x) { return x; }
+double mixed(float x, int y) { return x+y; }
+long to_long(double x) { return (long)x; }
+_Bool as_bool(double x) { return x; }
+float update(float *p) { float old=(*p)++; *p += 1.5; return old+*p; }
+int compound_int(int x) { x += 1.5; return x; }
 double stack(int a, double b, int c, double d, int e, double f, int g, double h, int i, double j, double k, double l, double m, double n) { return b+d+f+h+j+k+l+m+n; }
 '''
 harness = '''
@@ -36,6 +43,8 @@ harness = '''
 float add(float,float); double prod(double,double); float literal(void); double dlit(void);
 double f(void); int unequal(double,double); float neg(float); int truth(double); float choose(int,float,float);
 float pass(float (*)(float,float),float,float);
+double widen(float); float narrow(double); double mixed(float,int); long to_long(double); _Bool as_bool(double);
+float update(float *); int compound_int(int);
 double stack(int,double,int,double,int,double,int,double,int,double,double,double,double,double);
 int main(void) {
  if (add(1.25f,2.5f)!=3.75f || prod(1.5,4.0)!=6.0 || literal()!=3.0f || dlit()!=1.25 || f()!=1.5) return 1;
@@ -43,6 +52,9 @@ int main(void) {
  if (!truth(0.0) || !truth(2.0) || truth(NAN) || !unequal(NAN, 1.0)) return 3;
  if (choose(1,3.0f,5.0f)!=3.0f || pass(add,1.0f,2.0f)!=3.0f) return 4;
  if (stack(1,1.0,2,2.0,3,3.0,4,4.0,5,5.0,6.0,7.0,8.0,9.0)!=45.0) return 5;
+ if (widen(2.25f)!=2.25 || narrow(2.25)!=2.25f || mixed(1.5f,2)!=3.5) return 6;
+ if (to_long(-3.5)!=-3 || as_bool(0.0) || !as_bool(1.0)) return 7;
+ { float x=1.0f; if (update(&x)!=4.5f || x!=3.5f || compound_int(1)!=2) return 8; }
  return 0;
 }
 '''
@@ -59,10 +71,8 @@ int main(void) {
 hostimpl = 'float hf(float x,float y){return x+y;} double hd(double x,double y){return x+y;} float host_zero(void){return -0.0f;}'
 reject = [
  'long double x;', 'unsigned float x;', 'double double x;', 'float long x;',
- 'float f(void){return 1.0;}', 'double f(float x){return x;}',
- 'float f(float x){return x+1;}', 'double f(float x,double y){return x+y;}',
- 'int f(float x){return (int)x;}', 'float f(float x){return x++;}',
- 'float f(float x){return x+=x;}', 'float f(void){return 1.0L;}',
+ 'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
+ 'float f(void){return 1.0L;}',
  'float f(void){return 1e9999f;}', 'float f(void){return 1e-9999f;}',
  'float f(void){return 1\'2.0f;}', 'double x=1.0;',
  'struct X {double x;}; struct X x={1.0};',

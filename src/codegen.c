@@ -474,6 +474,30 @@ static size_t codegen_convert_value(struct codegen *codegen, size_t value,
 	}
 	if (target->kind == type_kind_bool)
 		return codegen_truth_value(codegen, value, source);
+	if (type_is_floating(source) && type_is_floating(target)) {
+		result = codegen->next_temporary++;
+		instruction = source->kind == target->kind ? "copy" :
+			(source->kind == type_kind_float ? "exts" : "truncd");
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
+		return result;
+	}
+	if (type_is_integer(source) && type_is_floating(target)) {
+		bool wide = type_value_width(source) == 64;
+		result = codegen->next_temporary++;
+		instruction = wide ? (type_is_unsigned(source) ? "ultof" : "sltof") :
+			(type_is_unsigned(source) ? "uwtof" : "swtof");
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
+		return result;
+	}
+	if (type_is_floating(source) && type_is_integer(target)) {
+		bool wide = type_value_width(target) == 64;
+		result = codegen->next_temporary++;
+		instruction = source->kind == type_kind_float ?
+			(type_is_unsigned(target) ? "stoui" : "stosi") :
+			(type_is_unsigned(target) ? "dtoui" : "dtosi");
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, wide ? 'l' : 'w', instruction, value);
+		return type_value_width(target) < 32 ? codegen_canonicalize(codegen, result, target) : result;
+	}
 	if (type_value_width(target) < 32)
 		return codegen_canonicalize(codegen, value, target);
 	result = codegen->next_temporary++;
@@ -561,8 +585,13 @@ static struct update_values codegen_update(struct codegen *codegen,
 
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
 		qbe_load_instruction(operand->type), address);
-	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(calculation_type),
-		operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
+	if (type_is_floating(calculation_type))
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %s\n", value, qbe_type(calculation_type),
+			operation == update_increment ? "add" : "sub", previous,
+			calculation_type->kind == type_kind_float ? "s_1.0" : "d_1.0");
+	else
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(calculation_type),
+			operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
 	/* _Bool conversion tests the promoted value, never its low bit. */
 	if (operand->type->kind == type_kind_bool)
 		value = codegen_truth_value(codegen, value, calculation_type);

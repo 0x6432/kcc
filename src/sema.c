@@ -1126,6 +1126,8 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 	}
 	if (type_compatible(source, target) || implicit_pointer_conversion(source, target) ||
 		(type_is_integer(source) && type_is_integer(target)) ||
+		((type_is_floating(source) || type_is_integer(source)) &&
+		 (type_is_floating(target) || type_is_integer(target))) ||
 		((source->kind == type_kind_pointer || source->kind == type_kind_nullptr) && target->kind == type_kind_bool))
 		return true;
 	if (type_is_floating(source) || type_is_floating(target)) {
@@ -1430,9 +1432,10 @@ static const struct type *sema_update_operand(struct sema *sema,
 		return NULL;
 	}
 	if (!(*operand)->is_lvalue || (operand_type->qualifiers & type_qualifier_const) ||
-		(!type_is_integer(operand_type) && operand_type->kind != type_kind_pointer)) {
+		(!type_is_integer(operand_type) && !type_is_floating(operand_type) &&
+		 operand_type->kind != type_kind_pointer)) {
 		diagnostic_error(sema->diagnostics, expression->location,
-			"update requires a modifiable integer or pointer lvalue");
+			"update requires a modifiable arithmetic or pointer lvalue");
 		return NULL;
 	}
 	result_type = unqualified_type(sema, operand_type, expression->location);
@@ -1448,6 +1451,9 @@ static const struct type *sema_update_operand(struct sema *sema,
 		}
 		*calculation_type = result_type;
 		*element_size = type_object_size(referent);
+	} else if (type_is_floating(result_type)) {
+		*calculation_type = result_type;
+		*element_size = 0;
 	} else {
 		*calculation_type = type_integer_promotion(result_type);
 		*element_size = 0;
@@ -1603,6 +1609,9 @@ static bool sema_expression(struct sema *sema,
 				if (!convert_expression(sema, &argument->value, parameter->type))
 					return false;
 				parameter = parameter->next;
+			} else if (type_is_floating(argument->value->type)) {
+				if (!convert_expression(sema, &argument->value, &type_double))
+					return false;
 			} else if (type_is_integer(argument->value->type)) {
 				if (!convert_expression(sema, &argument->value,
 					type_integer_promotion(argument->value->type)))
@@ -1610,7 +1619,7 @@ static bool sema_expression(struct sema *sema,
 			} else if (argument->value->type->kind != type_kind_pointer &&
 				!(sema->unevaluated && type_is_record(argument->value->type))) {
 				diagnostic_error(sema->diagnostics, argument->value->location,
-					"unsupported variadic argument type (only integers and pointers)");
+					"unsupported variadic argument type");
 				return false;
 			}
 			if (argument->value->depth + 1 > expression->depth)
@@ -1964,13 +1973,20 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if (type_is_floating(node->left->type) || type_is_floating(node->right->type)) {
-			if (!type_is_floating(node->left->type) || !type_compatible(node->left->type, node->right->type) ||
+			const struct type *common;
+			if ((!type_is_floating(node->left->type) && !type_is_integer(node->left->type)) ||
+				(!type_is_floating(node->right->type) && !type_is_integer(node->right->type)) ||
 				!(node->operation == binary_add || node->operation == binary_subtract ||
 				  node->operation == binary_multiply || node->operation == binary_divide || comparison_operator(node->operation))) {
-				diagnostic_error(sema->diagnostics, expression->location, "floating operator requires same-type operands and supports only arithmetic or comparison");
+				diagnostic_error(sema->diagnostics, expression->location, "floating operator requires arithmetic operands and supports only arithmetic or comparison");
 				return false;
 			}
-			result_type = comparison_operator(node->operation) ? &type_int : node->left->type;
+			common = node->left->type->kind == type_kind_double || node->right->type->kind == type_kind_double ?
+				&type_double : &type_float;
+			if (!convert_expression(sema, &node->left, common) ||
+				!convert_expression(sema, &node->right, common))
+				return false;
+			result_type = comparison_operator(node->operation) ? &type_int : common;
 		} else if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
 			if (node->operation == binary_add || node->operation == binary_subtract)
 				return lower_pointer_arithmetic(sema, expression_slot, node);
@@ -2030,8 +2046,11 @@ static bool sema_expression(struct sema *sema,
 		}
 		a = node->then_value->type;
 		b = node->else_value->type;
-		if (type_is_floating(a) && type_compatible(a, b)) {
-			result_type = a;
+		if ((type_is_floating(a) || type_is_floating(b)) &&
+			(type_is_floating(a) || type_is_integer(a)) &&
+			(type_is_floating(b) || type_is_integer(b))) {
+			result_type = a->kind == type_kind_double || b->kind == type_kind_double ?
+				&type_double : &type_float;
 		} else if (type_is_integer(a) && type_is_integer(b)) {
 			result_type = type_usual_arithmetic(a, b);
 		} else if (type_is_record(a) && type_is_record(b) && type_unqualified_compatible(a, b)) {
@@ -2113,16 +2132,17 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if (!node->left->is_lvalue || (left_type->qualifiers & type_qualifier_const) ||
-			(!type_is_integer(left_type) && left_type->kind != type_kind_pointer)) {
+			(!type_is_integer(left_type) && !type_is_floating(left_type) &&
+			 left_type->kind != type_kind_pointer)) {
 			diagnostic_error(sema->diagnostics, node->left->location,
-				"compound assignment requires a modifiable integer or pointer lvalue");
+				"compound assignment requires a modifiable arithmetic or pointer lvalue");
 			return false;
 		}
 		if (!sema_expression(sema, &node->right, true))
 			return false;
-		if (!type_is_integer(node->right->type)) {
+		if (!type_is_integer(node->right->type) && !type_is_floating(node->right->type)) {
 			diagnostic_error(sema->diagnostics, node->right->location,
-				"compound assignment requires an integer right operand");
+				"compound assignment requires an arithmetic right operand");
 			return false;
 		}
 		result_type = unqualified_type(sema, left_type, expression->location);
@@ -2131,6 +2151,11 @@ static bool sema_expression(struct sema *sema,
 		if (left_type->kind == type_kind_pointer) {
 			const struct type *referent = ((const struct pointer_type *)left_type)->referent;
 
+			if (!type_is_integer(node->right->type)) {
+				diagnostic_error(sema->diagnostics, node->right->location,
+					"pointer compound assignment requires an integer right operand");
+				return false;
+			}
 			if (node->operation != binary_add && node->operation != binary_subtract) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"only additive compound assignment accepts a pointer left operand");
@@ -2144,6 +2169,18 @@ static bool sema_expression(struct sema *sema,
 			node->calculation_type = result_type;
 			node->element_size = type_object_size(referent);
 			if (!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+				return false;
+		} else if (type_is_floating(result_type) || type_is_floating(node->right->type)) {
+			if (node->operation != binary_add && node->operation != binary_subtract &&
+				node->operation != binary_multiply && node->operation != binary_divide) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"floating compound assignment requires +, -, * or /");
+				return false;
+			}
+			node->calculation_type = result_type->kind == type_kind_double ||
+				node->right->type->kind == type_kind_double ? &type_double : &type_float;
+			node->element_size = 0;
+			if (!convert_expression(sema, &node->right, node->calculation_type))
 				return false;
 		} else if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
 			/* Shift operands promote independently; unsigned RHS does not change left. */
