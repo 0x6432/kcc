@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 struct include_source {
 	struct source source;
@@ -194,11 +195,17 @@ static bool is_predefined_location(struct pp_token name)
 		(pp_spelling_is(name, "__LINE__") || pp_spelling_is(name, "__FILE__"));
 }
 
+static bool is_predefined_clock(struct pp_token name)
+{
+	return name.kind == pp_identifier &&
+		(pp_spelling_is(name, "__DATE__") || pp_spelling_is(name, "__TIME__"));
+}
+
 static bool macro_is_defined(struct preprocessor *preprocessor, struct pp_token name)
 {
 	struct macro *macro = find_macro(preprocessor, name);
 
-	return is_predefined_location(name) || (macro && macro->defined);
+	return is_predefined_location(name) || is_predefined_clock(name) || (macro && macro->defined);
 }
 
 /* Reserved implementation names are deliberately outside this milestone. */
@@ -1535,6 +1542,23 @@ static bool expand_predefined_location(struct preprocessor *preprocessor,
 	return spend_expansion_work(preprocessor, input->token, error);
 }
 
+/* Clock values are captured once per translation, with stable macro provenance. */
+static bool expand_predefined_clock(struct preprocessor *preprocessor,
+	struct rescan_token *input, struct token *error)
+{
+	const char *value = pp_spelling_is(input->token, "__DATE__") ?
+		preprocessor->translation_date : preprocessor->translation_time;
+	size_t length = strlen(value);
+	struct source *spelling = allocate_spelling(preprocessor, length + 1, input->token, error);
+	if (!spelling)
+		return false;
+	memcpy(spelling->data, value, length + 1);
+	input->token.kind = pp_string;
+	input->token.location = (struct source_location) { spelling, 0 };
+	input->token.length = length;
+	return spend_expansion_work(preprocessor, input->token, error);
+}
+
 /* Stringize raw tokens, not the prescan cache. Two bounded passes avoid a
  * growing temporary buffer; literal-token quotes/backslashes alone are escaped.
  */
@@ -2281,6 +2305,12 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 		}
 		if (is_predefined_location(input.token)) {
 			if (!expand_predefined_location(preprocessor, &input, error))
+				return false;
+			*result = input;
+			return true;
+		}
+		if (is_predefined_clock(input.token)) {
+			if (!expand_predefined_clock(preprocessor, &input, error))
 				return false;
 			*result = input;
 			return true;
@@ -3220,7 +3250,27 @@ static struct token read_preprocessed_token(struct preprocessor *preprocessor)
 void preprocess_init(struct preprocessor *preprocessor, const struct source *source,
 	struct diagnostics *diagnostics)
 {
+	static const char *const months[] = {
+		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+	};
+	time_t now = time(NULL);
+	struct tm *clock = now == (time_t)-1 ? NULL : gmtime(&now);
+
 	*preprocessor = (struct preprocessor) { .diagnostics = diagnostics };
+	memcpy(preprocessor->translation_date, "\"??? ?? ????\"", 14);
+	memcpy(preprocessor->translation_time, "\"??:??:??\"", 11);
+	if (clock && clock->tm_mon >= 0 && clock->tm_mon < 12 &&
+		clock->tm_mday >= 1 && clock->tm_mday <= 31 &&
+		clock->tm_year >= -1900 && clock->tm_year <= 8099 &&
+		clock->tm_hour >= 0 && clock->tm_hour <= 23 &&
+		clock->tm_min >= 0 && clock->tm_min <= 59 &&
+		clock->tm_sec >= 0 && clock->tm_sec <= 60) {
+		snprintf(preprocessor->translation_date, sizeof(preprocessor->translation_date),
+			"\"%s %2d %04d\"", months[clock->tm_mon], clock->tm_mday, clock->tm_year + 1900);
+		snprintf(preprocessor->translation_time, sizeof(preprocessor->translation_time),
+			"\"%02d:%02d:%02d\"", clock->tm_hour, clock->tm_min, clock->tm_sec);
+	}
 	pp_lexer_init(&preprocessor->input, source, diagnostics);
 	preprocessor->cursor.source_input = true;
 	preprocessor->cursor.end = (struct source_location) { source, source->length };

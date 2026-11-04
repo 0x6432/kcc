@@ -120,6 +120,8 @@ struct preprocessor {
 	size_t prescan_depth;
 	size_t optional_depth;
 	size_t paste_depth;
+	char translation_date[14];
+	char translation_time[11];
 	bool stopped;
 	bool has_lookahead;
 	struct token lookahead;

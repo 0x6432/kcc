@@ -15,6 +15,10 @@ source_text = r"""
 #include <stdint.h>
 #include <limits.h>
 #include <float.h>
+#if !defined(__DATE__) || !defined(__TIME__)
+#error missing translation clock macros
+#endif
+static_assert(sizeof(__DATE__)==12 && sizeof(__TIME__)==9);
 static_assert(sizeof(size_t)==8 && sizeof(ptrdiff_t)==8);
 static_assert(alignof(max_align_t)==16 && sizeof(max_align_t)==32);
 static_assert(sizeof(int8_t)==1 && sizeof(uint16_t)==2);
