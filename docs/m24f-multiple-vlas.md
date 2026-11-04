@@ -21,3 +21,5 @@ the whole VLA remains rejected because runtime referent size is not modeled;
 `sizeof` of a VLA expression still requires the array's name. Functions
 containing VLAs reject `goto`. The compiler was built;
 the added regression cases and runtime behavior have not been tested.
+Runtime-bound markers are retained when array qualification is copied or when
+two unknown-bound array types are combined.

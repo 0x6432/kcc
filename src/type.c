@@ -306,6 +306,8 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 			return NULL;
 		copy = array->count ? type_new_array(arena, element, array->count) :
 			type_new_incomplete_array(arena, element);
+		if (copy)
+			copy->runtime_bound = array->runtime_bound;
 		return copy ? &copy->type : NULL;
 	}
 	if (type->kind == type_kind_pointer) {
@@ -461,13 +463,16 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 		const struct array_type *b = (const struct array_type *)right;
 		const struct type *element = type_composite(arena, a->element, b->element);
 		uint64_t count = a->count ? a->count : b->count;
+		bool runtime_bound = !count && (a->runtime_bound || b->runtime_bound);
 		struct array_type *array;
 
 		if (!element)
 			return NULL;
-		if (count == a->count && element == a->element)
+		if (count == a->count && element == a->element && runtime_bound == a->runtime_bound)
 			return left;
 		array = count ? type_new_array(arena, element, count) : type_new_incomplete_array(arena, element);
+		if (array)
+			array->runtime_bound = runtime_bound;
 		return array ? &array->type : NULL;
 	}
 	if (left->kind == type_kind_function) {

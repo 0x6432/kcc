@@ -270,11 +270,28 @@ static void test_enum_types(struct arena *arena)
 	}
 }
 
+static void test_runtime_array_qualification(struct arena *arena)
+{
+	struct array_type *runtime = type_new_incomplete_array(arena, &type_int);
+	struct array_type *incomplete = type_new_incomplete_array(arena, &type_int);
+	const struct type *qualified, *unqualified, *composite;
+	assert(runtime && incomplete);
+	runtime->runtime_bound = true;
+	qualified = type_qualified(arena, &runtime->type, type_qualifier_const);
+	assert(qualified && ((const struct array_type *)qualified)->runtime_bound);
+	unqualified = type_unqualified(arena, qualified);
+	assert(unqualified && ((const struct array_type *)unqualified)->runtime_bound);
+	composite = type_composite(arena, &incomplete->type, &runtime->type);
+	assert(composite && ((const struct array_type *)composite)->runtime_bound);
+	assert(!incomplete->runtime_bound && runtime->runtime_bound);
+}
+
 int main(void)
 {
 	struct arena arena = {0};
 
 	test_enum_types(&arena);
+	test_runtime_array_qualification(&arena);
 	test_nullptr_type(&arena);
 	test_leaf_qualification(&arena);
 	test_pointer_levels(&arena);
