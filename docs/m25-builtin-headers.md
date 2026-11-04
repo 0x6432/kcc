@@ -1,7 +1,8 @@
 # Bounded compiler-provided headers
 
 After explicit include paths have been searched, the x86-64 SysV compiler
-provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h` and `limits.h`, in addition
+provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`
+and `assert.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -18,6 +19,11 @@ include directories take precedence.
   the target's 8-bit signed `char`, 16-bit short, 32-bit int and 64-bit long
   and long long. `MB_LEN_MAX` is 16, matching glibc. Bit-precise limits are
   not provided.
+- `assert.h` responds to `NDEBUG` at each inclusion, evaluates its condition
+  once when enabled, and calls glibc's `__assert_fail` on failure. Because
+  `__func__` is not yet available, the failure message uses `(unknown)` for the
+  function name. This fallback therefore does not yet provide full standard
+  diagnostic behavior and requires a compatible libc.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.

@@ -45,3 +45,24 @@ with tempfile.TemporaryDirectory(prefix="kcc-headers-") as directory:
     source.write_text("#include <stdint.h>\nint main(void){return PROVIDED;}\n")
     result = subprocess.run([str(compiler), "-I", str(path), str(source)], capture_output=True, text=True)
     assert result.returncode == 0 and "copy 42" in result.stdout, result.stderr
+    source.write_text(r'''
+#include <assert.h>
+int main(void) {
+  int x=40;
+  assert(++x==41);
+#define NDEBUG
+#include <assert.h>
+  assert(++x==0);
+#undef NDEBUG
+#include <assert.h>
+  assert(++x==42);
+  return x;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42

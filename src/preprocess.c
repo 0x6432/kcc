@@ -898,6 +898,14 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
+		/* assert.h is intentionally re-evaluated on each inclusion for NDEBUG. */
+		static const char assert_header[] =
+			"#undef assert\n"
+			"#ifdef NDEBUG\n#define assert(...) ((void)0)\n#else\n"
+			"void __assert_fail(const char *, const char *, unsigned int, const char *);\n"
+			"#define assert(...) ((__VA_ARGS__) ? (void)0 : "
+			"__assert_fail(#__VA_ARGS__, __FILE__, __LINE__, \"(unknown)\"))\n"
+			"#endif\n";
 		static const char stddef_header[] =
 			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
 			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
@@ -960,6 +968,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		if (strcmp(name->path, "stdbool.h") == 0) {
 			header = stdbool_header;
 			source_name = "<kcc/stdbool.h>";
+		} else if (strcmp(name->path, "assert.h") == 0) {
+			header = assert_header;
+			source_name = "<kcc/assert.h>";
 		} else if (strcmp(name->path, "stddef.h") == 0) {
 			header = stddef_header;
 			source_name = "<kcc/stddef.h>";
