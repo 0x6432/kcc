@@ -991,6 +991,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
 			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
 			"typedef int wchar_t;\ntypedef typeof(nullptr) nullptr_t;\n"
+			"typedef struct { long long __kcc_ll; alignas(16) long long __kcc_ld; } max_align_t;\n"
 			"#define NULL ((void *)0)\n"
 			"#define offsetof(type,member) __kcc_offsetof(type,member)\n#endif\n";
 		static const char limits_header[] =
