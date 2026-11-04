@@ -1523,6 +1523,131 @@ static void check_include_stream(const char *text, struct test_include_context *
 	source_destroy(&source);
 }
 
+static void assert_file_token(struct token token, const char *name)
+{
+	unsigned char decoded[256];
+	size_t length;
+
+	assert(token.kind == token_string);
+	assert(!parse_string_spelling(token.spelling_location.source->data +
+		token.spelling_location.offset, token.length, decoded, sizeof(decoded), &length));
+	assert(length == strlen(name) && memcmp(decoded, name, length) == 0);
+}
+
+static void test_predefined_locations(void)
+{
+	const char *text =
+		"#define ID(x) x\n"                         /* 1 */
+		"#define INDIRECT __LINE__\n"               /* 2 */
+		"#define TWO(x) ID(x)\n"                   /* 3 */
+		"#define CAT(a,b) a##b\n"                  /* 4 */
+		"#define SHOW(x) #x\n"                     /* 5 */
+		"#define AT(x) __LINE__ x\n"               /* 6 */
+		"ID(\n__LINE__\n)\n"                      /* 7-9 */
+		"TWO(\nINDIRECT\n)\n"                     /* 10-12 */
+		"CAT(__LI,NE__)\n"                         /* 13 */
+		"CAT(\nINDIRECT,\n)\n"                    /* 14-16 */
+		"AT(\n__LINE__\n)\n"                      /* 17-19 */
+		"SHOW(__LINE__)\n"                         /* 20 */
+		"__LI\\\nNE__\n"                          /* 21-22 */
+		"#if defined(__LINE__) && defined __FILE__ && __LINE__ == 23\n"
+		"99\n#endif\n"
+		"#ifdef __FILE__\n100\n#endif\n"
+		"#ifndef __LINE__\n#error wrong\n#endif\n";
+	const uint64_t values[] = { 8, 11, 13, 14, 17, 18 };
+	const size_t diagnostic_lines[] = { 7, 10, 13, 14, 17, 17 };
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct token token;
+
+	assert(source_from_bytes(&source, "loc.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+		size_t line, column;
+		token = preprocess_next(&preprocessor);
+		assert(token.kind == token_integer && token.integer == values[i]);
+		source_line_column(token.location, &line, &column);
+		assert(line == diagnostic_lines[i]);
+	}
+	token = preprocess_next(&preprocessor);
+	assert_file_token(token, "__LINE__"); /* stringizing never expands */
+	token = preprocess_next(&preprocessor);
+	assert(token.kind == token_integer && token.integer == 21);
+	token = preprocess_next(&preprocessor);
+	assert(token.kind == token_integer && token.integer == 99);
+	token = preprocess_next(&preprocessor);
+	assert(token.kind == token_integer && token.integer == 100);
+	assert(preprocess_next(&preprocessor).kind == token_eof && !diagnostics.errors);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+
+	/* Filename escapes round-trip arbitrary non-NUL bytes through C strings. */
+	{
+		const char name[] = "dir/a\"\\\n?\200.c";
+		const char body[] = "__FILE__\n";
+
+		assert(source_from_bytes(&source, name, (const unsigned char *)body, strlen(body)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		assert_file_token(preprocess_next(&preprocessor), name);
+		assert(preprocess_next(&preprocessor).kind == token_eof && !diagnostics.errors);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+	}
+	/* A line-lookup budget failure must latch, not return a guessed value. */
+	{
+		const char body[] = " __LINE__";
+
+		assert(source_from_bytes(&source, "limits.c", (const unsigned char *)body, strlen(body)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		preprocessor.line_scan_bytes = preprocess_line_scan_limit;
+		assert(preprocess_next(&preprocessor).kind == token_invalid);
+		assert(diagnostics.errors == 1 && preprocessor.stopped);
+		assert(preprocess_next(&preprocessor).kind == token_eof);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		diagnostics.errors = 0;
+	}
+	{
+		const struct expected_token rejected[] = {
+			{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+		};
+		check_stream("#define __LINE__ 4\nint", rejected, 3, 1, "reserved macro");
+		check_stream("#undef __FILE__\nint", rejected, 3, 1, "reserved macro");
+		check_stream("#line 10\nint", rejected, 3, 1, "not supported");
+		check_stream("#if __FILE__\nint", rejected, 3, 1, "expected an operand");
+	}
+}
+
+static void test_predefined_include_locations(void)
+{
+	const char text[] = "#define HERE __FILE__\n#define LINE __LINE__\n#include \"h\"\nHERE LINE FROM_H\n";
+	struct test_include_context context = { .text = "HERE LINE\n#define FROM_H __FILE__\n" };
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+	struct token token;
+
+	assert(source_from_bytes(&source, "dir/root.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	preprocess_set_include_loader(&preprocessor, load_test_include, &context);
+	assert_file_token(preprocess_next(&preprocessor), "dir/h");
+	token = preprocess_next(&preprocessor);
+	assert(token.kind == token_integer && token.integer == 1);
+	assert_file_token(preprocess_next(&preprocessor), "dir/root.c");
+	token = preprocess_next(&preprocessor);
+	assert(token.kind == token_integer && token.integer == 4);
+	assert_file_token(preprocess_next(&preprocessor), "dir/root.c");
+	assert(preprocess_next(&preprocessor).kind == token_eof && !diagnostics.errors);
+	assert(context.calls == 1);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+}
+
 static void test_quoted_includes(void)
 {
 	struct test_include_context context = { .text = "#define VALUE 42\n" };
@@ -1730,6 +1855,8 @@ static void test_include_search(void)
 int main(void)
 {
 	test_pragma_directives();
+	test_predefined_locations();
+	test_predefined_include_locations();
 	test_include_search();
 	test_computed_include_operands();
 	test_include_byte_budget();

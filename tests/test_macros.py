@@ -333,6 +333,19 @@ for _ in range(40):
     lines.append(' '.join(name + '(7)' for name in names) + '\n')
     pp_examples.append(''.join(lines))
 
+# Predefined location macros: semantic sites differ from diagnostic call sites.
+pp_examples += [
+    '__LINE__ __FILE__\n',
+    '#define I(x) x\n#define M __LINE__\nI(\n__LINE__\n) I(\nM\n)\n',
+    '#define I(x) x\n#define W(x) I(x)\nW(\nI(\n__LINE__\n)\n)\n',
+    '#define C(a,b) a##b\n#define L __LINE__\nC(__LI,NE__)\nC(\nL,\n)\n',
+    '#define C(a,b) a##b\nC(,\n__LINE__\n)\n',
+    '#define S(x) #x\n#define X(x) S(x)\nS(__LINE__) X(__LINE__)\n',
+    '#if defined(__LINE__) && defined __FILE__ && __LINE__ == 1\n42\n#endif\n',
+    '#define L __LINE__\n#if L == 2\n42\n#endif\n',
+    '#define C(a,b) a##b\n#if C(__LI,NE__) == 2\n42\n#endif\n',
+]
+
 # Observed GCC/Clang whitespace disagreements are explicit policy regressions,
 # not claimed cross-host agreement or a ruling on ISO's intended interpretation.
 policy_prefix = '#define S(x) #x\n#define X(x) S(x)\n'

@@ -564,8 +564,8 @@ recovery except fatal resource errors. Allocation fault injection remains absent
 
 Spelling slices stay original; substituted diagnostics use the outermost call.
 Raw lexical errors keep their original lexer locations. No full expansion chain
-is retained. M25 predefined-location macros need additional provenance review:
-outermost diagnostic position alone is not the semantic __LINE__ expansion site.
+is retained. M25 predefined-location semantics are specified below: outermost diagnostic
+position alone is not the semantic __LINE__ expansion site.
 The host oracle now has 374 streams, retaining all 198 prior cases, under both
 hosts; it includes cyclic fixed-parameter graphs, callbacks and unused arguments.
 
@@ -2200,3 +2200,31 @@ unevaluated queries do not allocate these. Codegen consumes checked layout and
 uses address-backed record values without pretending aggregate ABI support.
 Static member proofs retain canonical relocation bases and start a selected
 subobject domain, not a fabricated enclosing-object domain. See m16-records.md.
+
+## M25 predefined location macros
+
+`__LINE__` and `__FILE__` are protected, always defined, object-like predefined
+macros. Literal `defined`, `#ifdef`, `#ifndef`, and conditional variants see
+them without expansion. Redefinition and undefinition remain rejected, as does
+`#line`, including macro-expanded forms; no presumed-file or presumed-line
+remapping is implemented. Such remapping requires a separate, scoped logical
+location model and is not approximated with physical source locations. A file
+literal in an integer `#if` is rejected by the conditional parser.
+
+Rescan tokens separately carry a semantic expansion site and the existing
+outermost diagnostic location. Source tokens begin at their own physical source
+location; replacement-list tokens inherit the invocation's semantic site;
+argument tokens retain their own through collection, prescan and substitution.
+Pasting assigns the operation's semantic site to the resulting token, including
+placemarker cases. Stringizing uses the unexpanded spelling. Included sources
+retain their loader-provided names and their sites through macro expansion.
+Generated filename literals escape quotes, backslashes, question marks, control
+and non-ASCII bytes and preserve the filename's non-NUL bytes on decoding.
+
+The existing synthesized-spelling and macro-work bounds apply. Line-number
+calculation additionally has a cumulative 64 MiB physical-byte scan budget;
+exhaustion is diagnosed and latches EOF, rather than performing unbounded
+quadratic work. Source names are NUL-terminated and cannot encode embedded NUL.
+The existing computed-include restriction on backslashes still applies to
+escaped generated filenames. Existing restrictions on directives within macro
+arguments, macro-produced `defined`, and include operands remain unchanged.

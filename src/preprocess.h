@@ -25,6 +25,7 @@
 #define preprocess_include_directory_limit 32
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
+#define preprocess_line_scan_limit (64 * 1024 * 1024)
 
 struct macro;
 struct macro_token;
@@ -41,6 +42,8 @@ struct macro_hide_set {
 struct rescan_token {
 	struct pp_token token;
 	struct macro_hide_set hide;
+	/* Actual expansion site, independent of outermost diagnostic location. */
+	struct source_location semantic_location;
 	bool from_source;
 };
 
@@ -50,6 +53,7 @@ struct expansion_frame {
 	struct argument_token *argument;
 	struct macro_argument *arguments;
 	struct source_location invocation;
+	struct source_location semantic_location;
 	struct macro_hide_set hide;
 	bool first;
 	bool leading_space;
@@ -109,6 +113,7 @@ struct preprocessor {
 	struct expansion_cursor cursor;
 	size_t auxiliary_records;
 	size_t spelling_bytes;
+	size_t line_scan_bytes;
 	size_t prescan_depth;
 	size_t optional_depth;
 	size_t paste_depth;
