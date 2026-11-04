@@ -256,7 +256,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			}
 			/* Resolve these operands before the declared type, preserving the
 			 * source order of tag definitions and typeof queries. */
-			if (query || seen_int || seen_void || seen_char || seen_short ||
+			if (query || seen_float || seen_double || seen_int || seen_void || seen_char || seen_short ||
 				seen_bool || seen_sign || long_count) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"alignment specifiers must precede the type specifier in this subset");
