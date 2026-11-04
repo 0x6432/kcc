@@ -206,7 +206,8 @@ static bool macro_is_defined(struct preprocessor *preprocessor, struct pp_token 
 	struct macro *macro = find_macro(preprocessor, name);
 
 	return is_predefined_location(name) || is_predefined_clock(name) ||
-		(name.kind == pp_identifier && pp_spelling_is(name, "__has_c_attribute")) ||
+		(name.kind == pp_identifier && (pp_spelling_is(name, "__has_c_attribute") ||
+			pp_spelling_is(name, "__has_include"))) ||
 		(macro && macro->defined);
 }
 
@@ -857,13 +858,15 @@ static bool include_path(struct preprocessor *preprocessor, struct include_name 
  */
 static bool load_include_source(struct preprocessor *preprocessor,
 	struct pp_token marker, struct include_name *name, struct source *source,
-	struct token *error)
+	struct token *error, bool *found)
 {
 	const char *parent = marker.location.source->name;
 	bool absolute = name->path[0] == '/';
 	size_t candidates = absolute ? 1 : preprocessor->include_directory_count + !name->angled;
 	char path[preprocess_include_path_limit];
 
+	if (found)
+		*found = true;
 	for (size_t i = 0; i < candidates; i++) {
 		const char *directory = "";
 		size_t length = 0;
@@ -1225,6 +1228,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		}
 	}
 
+	if (found) {
+		*found = false;
+		return true;
+	}
 	{
 		char message[preprocess_include_path_limit + 64];
 
@@ -1266,7 +1273,7 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 		return false;
 	*child = (struct include_source) { 0 };
 	preprocessor->include_count++;
-	if (!load_include_source(preprocessor, marker, &name, &child->source, error))
+	if (!load_include_source(preprocessor, marker, &name, &child->source, error, NULL))
 		return false;
 	if (once_file_seen(preprocessor, child->source.name)) {
 		source_destroy(&child->source);
@@ -2592,6 +2599,123 @@ static struct condition_value parse_condition_integer(struct condition_parser *p
 static struct condition_value parse_condition_expression(struct condition_parser *parser,
 	unsigned minimum_power, bool evaluate);
 
+static bool append_include_piece(struct preprocessor *preprocessor,
+	struct include_name *name, struct pp_token piece, size_t *length, struct token *error);
+
+/* Preserve a directly written angle header from identifier macro expansion;
+ * computed names are expanded using the ordinary conditional cursor. */
+static void advance_include_condition(struct condition_parser *parser, bool raw)
+{
+	struct rescan_token next;
+	if (parser->failed)
+		return;
+	if (!(raw ? read_rescan_token(parser->preprocessor, parser->cursor, &next, parser->error) :
+		read_expanded_token(parser->preprocessor, parser->cursor, &next, parser->error))) {
+		parser->failed = true;
+		return;
+	}
+	parser->token = next.token;
+	if (next.token.kind == pp_invalid)
+		parser->failed = true;
+}
+
+static struct condition_value parse_has_include(struct condition_parser *parser,
+	struct pp_token operator, bool evaluate)
+{
+	struct preprocessor *preprocessor = parser->preprocessor;
+	struct include_name name = { .invocation = operator };
+	struct rescan_token first;
+	struct source source = { 0 };
+	size_t length = 0;
+	bool direct, found = false;
+
+	advance_condition(parser);
+	if (!is_punctuator(parser->token, "(")) {
+		condition_error(parser, parser->token, "expected '(' after __has_include");
+		return signed_condition(0);
+	}
+	if (!read_rescan_token(preprocessor, parser->cursor, &first, parser->error)) {
+		parser->failed = true;
+		return signed_condition(0);
+	}
+	direct = is_punctuator(first.token, "<");
+	parser->cursor->pending = first;
+	parser->cursor->has_pending = true;
+	advance_include_condition(parser, direct);
+	if (is_punctuator(parser->token, "<")) {
+		name.angled = true;
+		advance_include_condition(parser, direct);
+		while (!parser->failed && !is_punctuator(parser->token, ">")) {
+			if (parser->token.kind == pp_eof || is_punctuator(parser->token, ")")) {
+				condition_error(parser, parser->token, "expected '>' in __has_include");
+				return signed_condition(0);
+			}
+			if (!append_include_piece(preprocessor, &name, parser->token, &length, parser->error)) {
+				parser->failed = true;
+				return signed_condition(0);
+			}
+			advance_include_condition(parser, direct);
+		}
+		if (!length || parser->token.leading_space) {
+			condition_error(parser, parser->token, "angle include name must be nonempty with no internal whitespace");
+			return signed_condition(0);
+		}
+	} else {
+		struct pp_token token = parser->token;
+		const unsigned char *text = token.location.source->data + token.location.offset;
+		if (token.kind != pp_string || token.length < 3 || text[0] != '"') {
+			condition_error(parser, token, "__has_include requires a nonempty header name");
+			return signed_condition(0);
+		}
+		length = token.length - 2;
+		if (length >= sizeof(name.path)) {
+			condition_error(parser, token, "include path limit exceeded");
+			return signed_condition(0);
+		}
+		for (size_t i = 1; i <= length; i++) {
+			if (text[i] == '\\') {
+				condition_error(parser, token, "backslashes in quoted include names are not supported yet");
+				return signed_condition(0);
+			}
+		}
+		memcpy(name.path, text + 1, length);
+		name.path[length] = 0;
+	}
+	advance_condition(parser);
+	if (!is_punctuator(parser->token, ")")) {
+		condition_error(parser, parser->token, "expected ')' after __has_include header name");
+		return signed_condition(0);
+	}
+	if (evaluate) {
+		if (!preprocessor->include_loader) {
+			condition_error(parser, operator, "includes require a configured source loader");
+			return signed_condition(0);
+		}
+		if (preprocessor->include_count == preprocess_include_count_limit) {
+			*parser->error = stop_preprocessing(preprocessor, operator, "include attempt limit (128) exceeded");
+			parser->failed = true;
+			return signed_condition(0);
+		}
+		preprocessor->include_count++;
+		if (!load_include_source(preprocessor, operator, &name, &source, parser->error, &found)) {
+			parser->failed = true;
+			return signed_condition(0);
+		}
+		if (found) {
+			if (source.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
+				source_destroy(&source);
+				*parser->error = stop_preprocessing(preprocessor, operator, "include input byte limit exceeded");
+				parser->failed = true;
+				return signed_condition(0);
+			}
+			preprocessor->include_bytes += source.length;
+			source_destroy(&source);
+		}
+	}
+	advance_condition(parser);
+	return signed_condition(found);
+}
+
 /* condition-operand = condition-integer | condition-character | identifier | '(' condition-expression ')'
  *                   | ('+' | '-' | '!' | '~') condition-operand
  * defined was handled before expansion; other identifiers are zero (C23 true is 1).
@@ -2636,6 +2760,8 @@ static struct condition_value parse_condition_operand(struct condition_parser *p
 		advance_condition(parser);
 		return value;
 	}
+	if (token.kind == pp_identifier && pp_spelling_is(token, "__has_include"))
+		return parse_has_include(parser, token, evaluate);
 	if (token.kind == pp_identifier && pp_spelling_is(token, "__has_c_attribute")) {
 		advance_condition(parser);
 		if (!is_punctuator(parser->token, "(")) {

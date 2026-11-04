@@ -58,6 +58,29 @@ with tempfile.TemporaryDirectory(prefix="kcc-headers-") as directory:
         subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
+    (path / "present.h").write_text("#define PRESENT 1\n")
+    source.write_text(r'''
+#define HEADER "present.h"
+#define present nonexistent
+#if !defined(__has_include)
+#error missing query operator
+#endif
+#if !__has_include("present.h") || !__has_include(HEADER)
+#error quoted header query failed
+#endif
+#if !__has_include(<present.h>) || !__has_include(<stddef.h>)
+#error angle header query failed
+#endif
+#if __has_include("missing.h") || __has_include(<missing.h>)
+#error nonexistent header was found
+#endif
+int main(void) { return 0; }
+''')
+    result = subprocess.run([str(compiler), "-I", str(path), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    source.write_text('#if __has_include("")\n#endif\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode != 0, "empty header names must be rejected"
     (path / "stdint.h").write_text("#define PROVIDED 42\n")
     source.write_text("#include <stdint.h>\nint main(void){return PROVIDED;}\n")
     result = subprocess.run([str(compiler), "-I", str(path), str(source)], capture_output=True, text=True)
