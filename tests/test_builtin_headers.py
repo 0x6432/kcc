@@ -114,7 +114,8 @@ int main(void) {
   memory_order order=memory_order_relaxed;
   int prior=atomic_fetch_add_explicit(&x,2,order);
   int old=atomic_exchange(&x,42);
-  return prior==40 && old==42 ? atomic_load(&x) : 1;
+  atomic_store_explicit(&x,42,memory_order_release);
+  return prior==40 && old==42 ? atomic_load_explicit(&x,memory_order_acquire) : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)

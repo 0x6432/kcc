@@ -1560,7 +1560,8 @@ static bool sema_expression(struct sema *sema,
 		struct ast_atomic_expression *node = (struct ast_atomic_expression *)expression;
 		const struct type *referent;
 
-		if (!sema_expression(sema, &node->object, true) || !sema_expression(sema, &node->argument, true))
+		if (!sema_expression(sema, &node->object, true) ||
+			(node->argument && !sema_expression(sema, &node->argument, true)))
 			return false;
 		if (node->object->type->kind != type_kind_pointer) {
 			diagnostic_error(sema->diagnostics, expression->location, "atomic operation requires a pointer to an atomic object");
@@ -1568,15 +1569,15 @@ static bool sema_expression(struct sema *sema,
 		}
 		referent = ((const struct pointer_type *)node->object->type)->referent;
 		if (!(referent->qualifiers & type_qualifier_atomic) ||
-			(referent->qualifiers & type_qualifier_const) ||
+			(node->operation != ast_atomic_load && (referent->qualifiers & type_qualifier_const)) ||
 			(referent->kind != type_kind_int && referent->kind != type_kind_uint) ||
-			!type_is_integer(node->argument->type)) {
+			(node->argument && !type_is_integer(node->argument->type))) {
 			diagnostic_error(sema->diagnostics, expression->location,
-				"atomic operation requires a mutable atomic int or unsigned int and an integer value");
+				"atomic operation requires a suitable atomic int or unsigned int and an integer value");
 			return false;
 		}
 		result_type = unqualified_type(sema, referent, expression->location);
-		if (!result_type || !convert_expression(sema, &node->argument, result_type))
+		if (!result_type || (node->argument && !convert_expression(sema, &node->argument, result_type)))
 			return false;
 		if (node->order) {
 			if (!sema_expression(sema, &node->order, true))
@@ -1589,8 +1590,9 @@ static bool sema_expression(struct sema *sema,
 			if (!convert_expression(sema, &node->order, &type_int))
 				return false;
 		}
-		expression->depth = 1 + (node->object->depth > node->argument->depth ?
-			node->object->depth : node->argument->depth);
+		expression->depth = node->object->depth + 1;
+		if (node->argument && node->argument->depth + 1 > expression->depth)
+			expression->depth = node->argument->depth + 1;
 		if (node->order && node->order->depth + 1 > expression->depth)
 			expression->depth = node->order->depth + 1;
 		break;

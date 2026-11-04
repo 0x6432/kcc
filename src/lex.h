@@ -118,6 +118,8 @@ enum token_kind {
 	token_kcc_atomic_fetch_or,
 	token_kcc_atomic_fetch_xor,
 	token_kcc_atomic_exchange,
+	token_kcc_atomic_load,
+	token_kcc_atomic_store,
 	token_arrow,
 };
 

@@ -764,10 +764,25 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_atomic_fetch: {
 		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
 		size_t object = codegen_expression(codegen, node->object);
-		size_t argument = codegen_expression(codegen, node->argument);
+		size_t argument = node->argument ? codegen_expression(codegen, node->argument) : 0;
 		size_t order = node->order ? codegen_expression(codegen, node->order) : 0;
 		const char *operation;
 
+		if (node->operation == ast_atomic_load) {
+			temporary = codegen->next_temporary++;
+			if (node->order)
+				emit(codegen, "\t%%t%zu =w call $__atomic_load_4(l %%t%zu, w %%t%zu)\n", temporary, object, order);
+			else
+				emit(codegen, "\t%%t%zu =w call $__atomic_load_4(l %%t%zu, w 5)\n", temporary, object);
+			return temporary;
+		}
+		if (node->operation == ast_atomic_store) {
+			if (node->order)
+				emit(codegen, "\tcall $__atomic_store_4(l %%t%zu, w %%t%zu, w %%t%zu)\n", object, argument, order);
+			else
+				emit(codegen, "\tcall $__atomic_store_4(l %%t%zu, w %%t%zu, w 5)\n", object, argument);
+			return argument;
+		}
 		switch (node->operation) {
 		case ast_atomic_fetch_add: operation = "fetch_add"; break;
 		case ast_atomic_fetch_sub: operation = "fetch_sub"; break;
