@@ -8,7 +8,7 @@ embed resources. The raw bytes are emitted as comma-separated decimal integer
 preprocessing tokens, with no source text transformations. An empty resource
 produces no tokens. A missing or unreadable resource is diagnosed.
 
-The optional `limit(expression)` parameter selects at most that many bytes; its
+The optional `limit(expression)` or `__limit__(expression)` parameter selects at most that many bytes; its
 nonnegative preprocessing integer expression uses the existing bounded #if
 expression rules and may use macro expansion. A zero limit emits no tokens.
 After applying the limit, resources are limited to 4,096 emitted bytes and share the include-attempt,
@@ -24,8 +24,9 @@ in short-circuited operands. The loader's boolean interface cannot distinguish
 missing from unreadable resources.
 
 Parameters such as `prefix`, `suffix`, and `if_empty`, and
-implementation-defined embed parameters remain unsupported in both directives
-and queries and are rejected rather than ignored. Existing include-name
+implementation-defined embed parameters remain unsupported. Directives using
+them are rejected; syntactically valid queries using them return
+`__STDC_EMBED_NOT_FOUND__`. Balanced parameter tokens are limited to 128 levels. Existing include-name
 restrictions, including quoted backslashes and whitespace in angle names, apply.
 
 The compiler builds with this feature; the added positive, negative, search and

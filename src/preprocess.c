@@ -2656,7 +2656,8 @@ static struct condition_value parse_condition_expression(struct condition_parser
 static bool parse_embed_limit(struct condition_parser *parser, uint64_t *limit)
 {
 	struct condition_value value;
-	if (!(parser->token.kind == pp_identifier && pp_spelling_is(parser->token, "limit")))
+	if (!(parser->token.kind == pp_identifier &&
+		(pp_spelling_is(parser->token, "limit") || pp_spelling_is(parser->token, "__limit__"))))
 		return true;
 	advance_condition(parser);
 	if (!is_punctuator(parser->token, "(")) {
@@ -2677,6 +2678,75 @@ static bool parse_embed_limit(struct condition_parser *parser, uint64_t *limit)
 	}
 	*limit = value.bits;
 	advance_condition(parser);
+	return !parser->failed;
+}
+
+/* A syntactically valid unsupported embed parameter makes a query return
+ * NOT_FOUND; it is not an error merely because this compiler cannot honor it. */
+static bool parse_embed_query_parameters(struct condition_parser *parser,
+	uint64_t *limit, bool *supported)
+{
+	bool seen_limit = false;
+	while (!parser->failed && !is_punctuator(parser->token, ")")) {
+		char expected[preprocess_parentheses_limit];
+		size_t depth = 0;
+		if (parser->token.kind != pp_identifier) {
+			condition_error(parser, parser->token, "expected embed parameter name");
+			return false;
+		}
+		if (pp_spelling_is(parser->token, "limit") || pp_spelling_is(parser->token, "__limit__")) {
+			if (seen_limit) {
+				condition_error(parser, parser->token, "duplicate embed limit parameter");
+				return false;
+			}
+			seen_limit = true;
+			if (!parse_embed_limit(parser, limit))
+				return false;
+			continue;
+		}
+		*supported = false;
+		advance_condition(parser);
+		if (is_punctuator(parser->token, "::")) {
+			advance_condition(parser);
+			if (parser->token.kind != pp_identifier) {
+				condition_error(parser, parser->token, "expected scoped embed parameter name");
+				return false;
+			}
+			advance_condition(parser);
+		}
+		if (!is_punctuator(parser->token, "("))
+			continue;
+		expected[depth++] = ')';
+		advance_condition(parser);
+		while (!parser->failed && depth) {
+			struct pp_token token = parser->token;
+			char closing = 0;
+			if (token.kind == pp_eof) {
+				condition_error(parser, token, "unterminated embed parameter");
+				return false;
+			}
+			if (is_punctuator(token, "(")) closing = ')';
+			else if (is_punctuator(token, "[") || is_punctuator(token, "<:")) closing = ']';
+			else if (is_punctuator(token, "{") || is_punctuator(token, "<%")) closing = '}';
+			if (closing) {
+				if (depth == sizeof(expected)) {
+					condition_error(parser, token, "embed parameter nesting limit exceeded");
+					return false;
+				}
+				expected[depth++] = closing;
+			} else if (is_punctuator(token, ")") || is_punctuator(token, "]") ||
+				is_punctuator(token, "}") || is_punctuator(token, ":>") || is_punctuator(token, "%>")) {
+				char actual = is_punctuator(token, ":>") ? ']' : is_punctuator(token, "%>") ? '}' :
+					(char)token.location.source->data[token.location.offset];
+				if (actual != expected[depth - 1]) {
+					condition_error(parser, token, "mismatched embed parameter delimiter");
+					return false;
+				}
+				depth--;
+			}
+			advance_condition(parser);
+		}
+	}
 	return !parser->failed;
 }
 
@@ -2708,7 +2778,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	struct rescan_token first;
 	struct source source = { 0 };
 	size_t length = 0;
-	bool direct, found = false;
+	bool direct, found = false, supported = true;
 	int status = 0;
 	uint64_t limit = UINT64_MAX;
 
@@ -2765,13 +2835,13 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 		name.path[length] = 0;
 	}
 	advance_condition(parser);
-	if (embed && !parse_embed_limit(parser, &limit))
+	if (embed && !parse_embed_query_parameters(parser, &limit, &supported))
 		return signed_condition(0);
 	if (!is_punctuator(parser->token, ")")) {
 		condition_error(parser, parser->token, "expected ')' after resource name or supported parameters");
 		return signed_condition(0);
 	}
-	if (evaluate) {
+	if (evaluate && supported) {
 		if (!preprocessor->include_loader) {
 			condition_error(parser, operator, "includes require a configured source loader");
 			return signed_condition(0);

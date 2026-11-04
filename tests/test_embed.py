@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
 #if __has_embed("missing.bin") != __STDC_EMBED_NOT_FOUND__ || __has_embed("oversized.bin") != __STDC_EMBED_NOT_FOUND__
 #error unavailable resource was reported usable
 #endif
-#if __has_embed("asset.bin" limit(0)) != __STDC_EMBED_EMPTY__ || __has_embed("oversized.bin" limit(2+1)) != __STDC_EMBED_FOUND__
+#if __has_embed("asset.bin" __limit__(0)) != __STDC_EMBED_EMPTY__ || __has_embed("oversized.bin" limit(2+1)) != __STDC_EMBED_FOUND__
 #error limited resource query failed
 #endif
 static_assert(__STDC_EMBED_NOT_FOUND__==0 && __STDC_EMBED_FOUND__==1 && __STDC_EMBED_EMPTY__==2);
@@ -60,9 +60,12 @@ int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==
         source.write_text('unsigned char a[] = {\n#embed ' + operand + '\n};\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode != 0 and result.stderr, operand
-    source.write_text('#if __has_embed("asset.bin" prefix(1))\n#endif\n')
+    source.write_text('#if __has_embed("asset.bin" prefix((1,[2]))) != __STDC_EMBED_NOT_FOUND__\n#error unsupported parameter was advertised\n#endif\nint main(void) { return 0; }\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
-    assert result.returncode != 0 and result.stderr, 'unsupported embed query parameter must fail'
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    source.write_text('#if __has_embed("asset.bin" prefix([1)))\n#endif\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode != 0 and result.stderr, 'malformed embed query must fail'
     source.write_text('unsigned char a[] = {\n#embed <asset.bin>\n};\nint main(void){return a[2];}\n')
     result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
