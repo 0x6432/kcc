@@ -53,6 +53,7 @@ struct record_member {
 	struct token name;
 	const struct type *type;
 	uint64_t offset;
+	unsigned alignment; /* Explicit member alignment; zero means natural. */
 	bool anonymous;
 	struct record_member *next;
 };

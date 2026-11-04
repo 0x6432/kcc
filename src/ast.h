@@ -507,6 +507,7 @@ struct ast_record_type_syntax {
 
 struct ast_record_member_declaration {
 	struct ast_type_syntax *type_syntax;
+	struct ast_alignment_group *alignments;
 	struct token name;
 	bool anonymous;
 	struct ast_record_member_declaration *next;
@@ -782,6 +783,13 @@ struct ast_alignment_specifier {
 	struct ast_alignment_specifier *next;
 };
 
+/* Shared once per declarator list; checked in the specifier's source scope. */
+struct ast_alignment_group {
+	struct ast_alignment_specifier *specifiers;
+	bool evaluated;
+	unsigned alignment;
+};
+
 struct ast_local_declaration {
 	struct ast_block_item item;
 	struct ast_type_syntax *type_syntax;
@@ -789,7 +797,7 @@ struct ast_local_declaration {
 	struct ast_expression *initializer;
 	struct ast_initializer *initializer_syntax;
 	struct ast_initializer_plan *initializer_plan;
-	struct ast_alignment_specifier *alignments;
+	struct ast_alignment_group *alignments;
 	unsigned alignment; /* Effective storage alignment; zero means natural. */
 	bool enum_constant;
 	int64_t enum_value;
@@ -828,6 +836,7 @@ enum external_declaration_kind {
 
 struct ast_external_declaration {
 	enum external_declaration_kind kind;
+	struct ast_alignment_group *alignments;
 	struct source_location location;
 	struct ast_external_declaration *next;
 };

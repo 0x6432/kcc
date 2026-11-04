@@ -33,6 +33,7 @@ struct external_object_symbol {
 	bool is_thread_local;
 	bool is_block_static; /* Local object has no C linkage, despite private emission. */
 	bool is_internal;
+	unsigned alignment; /* Nonzero declared storage alignment, shared by entity. */
 	/* First successful tentative declaration; NULL for extern-only symbols. */
 	struct ast_external_declaration *tentative_definition;
 	/* Explicit initialized definition supersedes tentative emission only. */

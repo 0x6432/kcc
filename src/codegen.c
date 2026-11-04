@@ -1493,7 +1493,8 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 			emit(&data_codegen, "%s%sdata $%.*s = align %u { ",
 				object->is_internal ? "" : "export ", object->is_thread_local ? "thread " : "", (int)name.length,
 				(const char *)name.spelling_location.source->data + name.spelling_location.offset,
-				type_object_alignment(object->type));
+				object->alignment > type_object_alignment(object->type) ?
+					object->alignment : type_object_alignment(object->type));
 			if (object->definition && object->initializer_plan)
 				codegen_static_initializer(&data_codegen, object->initializer_plan);
 			else if (object->definition) {

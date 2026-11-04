@@ -191,6 +191,24 @@ static void layout_boundaries(void)
  assert(!type_record_layout(excess->definition));
  assert(memcmp(&before,excess->definition,sizeof before)==0);
  assert(too_full.offset==91 && one_more.offset==92);
+ /* Explicit member alignment is checked transactionally, then contributes
+  * to member placement, tail padding, nested arrays, and aggregate alignment. */
+ struct record_type *aligned=type_new_record(&a,false);
+ struct record_member pre={0}, member={0};
+ pre.type=&type_char; pre.offset=41; pre.next=&member;
+ member.type=&type_int; member.offset=42; member.alignment=3;
+ aligned->definition->members=&pre;
+ before=*aligned->definition;
+ assert(!type_record_layout(aligned->definition));
+ assert(memcmp(&before,aligned->definition,sizeof before)==0);
+ assert(pre.offset==41 && member.offset==42);
+ member.alignment=16;
+ assert(type_record_layout(aligned->definition));
+ assert(pre.offset==0 && member.offset==16 && aligned->definition->size==32);
+ assert(aligned->definition->alignment==16);
+ struct array_type *aligned_array=type_new_array(&a,&aligned->type,2);
+ assert(aligned_array && type_object_size(&aligned_array->type)==64);
+ assert(type_object_alignment(&aligned_array->type)==16);
  arena_destroy(&a);
 }
 

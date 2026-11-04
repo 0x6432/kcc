@@ -276,6 +276,9 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax);
 static bool sema_static_assertion(struct sema *sema, struct ast_static_assertion *node);
+static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *group);
+static bool check_object_alignment(struct sema *sema, const struct type *type,
+	unsigned alignment, struct source_location location);
 static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal_expression *node);
 
 /* Records are nominal leaves in ordinary type graphs. Only this bounded,
@@ -491,6 +494,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				goto done;
 			continue;
 		}
+		if (member->alignments && !sema_alignment_group(sema, member->alignments))
+			goto done;
 		type = resolve_type_syntax(sema, member->type_syntax);
 		if (!type)
 			goto done;
@@ -510,6 +515,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				"record member must have complete object type (no void, function or incomplete member)");
 			goto done;
 		}
+		if (!check_object_alignment(sema, type,
+			member->alignments ? member->alignments->alignment : 0, member->type_syntax->location))
+			goto done;
 		if (definition->member_count == sema_max_record_members ||
 			sema->member_count == sema_max_total_members) {
 			diagnostic_error(sema->diagnostics, member->type_syntax->location,
@@ -536,7 +544,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			diagnostic_error(sema->diagnostics, member->type_syntax->location, "out of memory creating record member");
 			goto done;
 		}
-		*resolved = (struct record_member) { .name = member->name, .type = type, .anonymous = member->anonymous };
+		*resolved = (struct record_member) { .name = member->name, .type = type,
+			.anonymous = member->anonymous,
+			.alignment = member->alignments ? member->alignments->alignment : 0 };
 		*tail = resolved;
 		tail = &resolved->next;
 		definition->member_count++;
@@ -3010,12 +3020,14 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
 	const struct type *type);
 
-/* Alignment is object storage metadata, not a type mutation. This first
- * subset intentionally excludes linkage/redeclaration and member layout. */
-static bool sema_local_alignment(struct sema *sema, struct ast_local_declaration *local)
+/* A shared declaration-specifier group is evaluated once, before any of
+ * its declarators introduces a name. Alignment is storage metadata, not type. */
+static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *group)
 {
 	unsigned requested = 0;
-	for (struct ast_alignment_specifier *a = local->alignments; a; a = a->next) {
+	if (group->evaluated)
+		return true;
+	for (struct ast_alignment_specifier *a = group->specifiers; a; a = a->next) {
 		uint64_t value;
 		if (a->type_syntax) {
 			const struct type *operand = resolve_unevaluated_type_syntax(sema, a->type_syntax);
@@ -3054,7 +3066,28 @@ static bool sema_local_alignment(struct sema *sema, struct ast_local_declaration
 		if (value > requested)
 			requested = (unsigned)value;
 	}
-	local->alignment = requested;
+	group->alignment = requested;
+	group->evaluated = true;
+	return true;
+}
+
+/* An incomplete outer array has a known element alignment. An incomplete
+ * record has no known natural alignment; refuse it rather than guessing. */
+static bool check_object_alignment(struct sema *sema, const struct type *type,
+	unsigned alignment, struct source_location location)
+{
+	if (!alignment)
+		return true;
+	if (!type_is_complete_object(type) && !(type->kind == type_kind_array &&
+		type_is_complete_object(((const struct array_type *)type)->element))) {
+		diagnostic_error(sema->diagnostics, location,
+			"aligned object requires a known natural alignment");
+		return false;
+	}
+	if (alignment < type_object_alignment(type)) {
+		diagnostic_error(sema->diagnostics, location, "alignment cannot weaken the natural alignment");
+		return false;
+	}
 	return true;
 }
 
@@ -3078,8 +3111,11 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		}
 		return sema_inferred_local(sema, local);
 	}
-	if (local->alignments && !sema_local_alignment(sema, local))
-		return false;
+	if (local->alignments) {
+		if (!sema_alignment_group(sema, local->alignments))
+			return false;
+		local->alignment = local->alignments->alignment;
+	}
 	type = resolve_type_syntax(sema, local->type_syntax);
 	if (!type)
 		return false;
@@ -3095,15 +3131,13 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		diagnostic_error(sema->diagnostics, local->name.location, "alignment requires an object type");
 		return false;
 	}
+	if (!check_object_alignment(sema, type, local->alignment, local->name.location))
+		return false;
 	if (local->is_extern || local->is_static || type->kind == type_kind_function)
 		return sema_block_storage(sema, local, type);
 	if (!type_is_complete_object(type) && !(type->kind == type_kind_array &&
 		local->initializer_syntax && !((const struct array_type *)type)->count)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
-		return false;
-	}
-	if (local->alignment && local->alignment < type_object_alignment(type)) {
-		diagnostic_error(sema->diagnostics, local->name.location, "alignment cannot weaken the natural alignment");
 		return false;
 	}
 	return bind_local(sema, local, type);
@@ -3113,10 +3147,16 @@ static bool sema_local(struct sema *sema, struct ast_local_declaration *local)
 {
 	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
 	struct ast_local_declaration saved = *local;
+	struct external_object_symbol *previous = find_external_object(sema, local->name);
+	struct external_object_symbol saved_object = { 0 };
 	const struct type *written = local->type_syntax->type;
+	if (previous)
+		saved_object = *previous;
 	if (sema_local_impl(sema, local))
 		return true;
 	struct ast_expression *checked_initializer = local->initializer;
+	if (previous)
+		*previous = saved_object;
 	initializer_transaction_rollback(sema, &transaction);
 	*local = saved;
 	/* Preserve the legacy checked-expression failure witness. Canonical
@@ -3862,6 +3902,25 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	return symbol;
 }
 
+/* C23 6.7.6p8 has open wording questions (WG14 issue 1044). This bounded
+ * policy treats zero as absent, compares maximum nonzero requests, and makes
+ * tentative-only definitions inherit the entity's request at TU finalization. */
+static bool check_alignment_redeclaration(struct sema *sema,
+	const struct external_object_symbol *previous, unsigned alignment,
+	bool is_definition, struct source_location location)
+{
+	if (!previous)
+		return true;
+	if ((alignment && previous->alignment && alignment != previous->alignment) ||
+		(alignment && previous->definition && !previous->alignment) ||
+		(is_definition && !alignment && previous->alignment)) {
+		diagnostic_error(sema->diagnostics, location,
+			"object alignment conflicts with another declaration or definition");
+		return false;
+	}
+	return true;
+}
+
 /* Make the declaration's own name visible during initialization, but publish
  * neither ownership nor a changed canonical composite on failure. Existing
  * expressions always retain the same canonical symbol identity.
@@ -3870,7 +3929,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct ast_external_declaration *external, struct token name,
 	const struct type *type, struct ast_expression **initializer,
 	const struct ast_initializer *syntax, struct ast_initializer_plan **published_plan,
-	bool is_static, bool is_extern, bool is_query, bool is_thread_local)
+	bool is_static, bool is_extern, bool is_query, bool is_thread_local, unsigned alignment)
 {
 	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
 	struct external_object_symbol *previous = find_external_object(sema, name);
@@ -3886,6 +3945,9 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	bool zero_definition = !is_extern && !has_initializer && (is_thread_local || sema->scope);
 	const struct type *target;
 
+	if (!check_alignment_redeclaration(sema, previous, alignment,
+		has_initializer || zero_definition, name.location))
+		return NULL;
 	if (zero_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
 		name.spelling_location.offset, "main", 4) == 0) {
 		diagnostic_error(sema->diagnostics, name.location, "main object definition is not supported on the Linux target");
@@ -3921,6 +3983,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		!is_extern && !has_initializer && !zero_definition ? external : NULL, is_static, is_extern, is_thread_local);
 	if (!symbol)
 		return NULL;
+	if (alignment)
+		symbol->alignment = alignment;
 	if (zero_definition) {
 		const struct type *visible = sema->scope ? type : symbol->file_type;
 		if (!type_is_complete_object(visible)) {
@@ -4123,7 +4187,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		local->object_symbol->is_block_static = true;
 		definition->symbol = sema_file_object(sema, &definition->external, name,
 			type, &local->initializer, local->initializer_syntax, &local->initializer_plan,
-			true, false, false, local->is_thread_local);
+			true, false, false, local->is_thread_local, local->alignment);
 		if (!definition->symbol)
 			return false;
 		definition->initializer = local->initializer;
@@ -4180,10 +4244,14 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 			false, local->name.location))
 			return false;
 	} else {
+		if (!check_alignment_redeclaration(sema, object, local->alignment, false, local->name.location))
+			return false;
 		local->object_symbol = register_external_object(sema, local->name, type,
 			NULL, inherited_internal, true, local->is_thread_local);
 		if (!local->object_symbol)
 			return false;
+		if (local->alignment)
+			local->object_symbol->alignment = local->alignment;
 	}
 	local->type = type;
 	if (same) {
@@ -4308,9 +4376,12 @@ failure:
 static bool sema_external_object_declaration(struct sema *sema,
 	struct ast_external_object_declaration *declaration)
 {
-	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
-
-	if (!type)
+	struct ast_alignment_group *group = declaration->external.alignments;
+	const struct type *type;
+	if (group && !sema_alignment_group(sema, group))
+		return false;
+	type = resolve_type_syntax(sema, declaration->type_syntax);
+	if (!type || !check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
 	if (declaration->is_inline) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "inline requires a function declaration");
@@ -4319,7 +4390,8 @@ static bool sema_external_object_declaration(struct sema *sema,
 	declaration->symbol = sema_file_object(sema, &declaration->external,
 		declaration->name, type, &declaration->initializer,
 		declaration->initializer_syntax, &declaration->initializer_plan,
-		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local);
+		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local,
+		group ? group->alignment : 0);
 	if (!declaration->symbol)
 		return false;
 	declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
@@ -4329,9 +4401,18 @@ static bool sema_external_object_declaration(struct sema *sema,
 static bool sema_external_type_declaration(struct sema *sema,
 	struct ast_external_type_declaration *declaration)
 {
-	const struct type *type = resolve_type_syntax(sema, declaration->type_syntax);
-
+	struct ast_alignment_group *group = declaration->external.alignments;
+	const struct type *type;
+	if (group && !sema_alignment_group(sema, group))
+		return false;
+	type = resolve_type_syntax(sema, declaration->type_syntax);
 	if (!type)
+		return false;
+	if (group && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment requires an object type");
+		return false;
+	}
+	if (!check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
 	if (type->kind != type_kind_function) {
 		if (declaration->is_inline) {
@@ -4341,7 +4422,8 @@ static bool sema_external_type_declaration(struct sema *sema,
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
 			declaration->initializer_syntax, &declaration->initializer_plan,
-			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local);
+			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local,
+			group ? group->alignment : 0);
 		if (!declaration->object_symbol)
 			return false;
 		declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;

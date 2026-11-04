@@ -1,35 +1,50 @@
-# M18: declaration alignment, bounded automatic-object slice
+# M18: declaration alignment (implementation checkpoint)
 
-This is an implementation checkpoint, not M18 completion or a tested/release
-checkpoint. Under the x86-64 SysV/QBE target, `alignas` and `_Alignas` are
-recognized after preprocessing and accepted on a single ordinary automatic
-block object declarator (including for-init declarations). Up to 32 specifiers
-per declaration are retained in source order and must precede the declared
-type specifier (storage and qualifiers may precede them). The operand is a complete object
-type-name or checked integer constant expression. Zero has no effect; nonzero
-requests are combined by maximum and must not weaken the object's natural
-alignment. The supported requested values are 1, 2, 4, 8 and 16. The request
-is storage metadata, not a type qualifier: sizeof, alignof(type), compatible
-types and array stride remain unchanged. QBE local slots use alloc4/8/16.
+This is not M18 completion or a tested/release checkpoint. Both `alignas` and
+`_Alignas` are recognized after preprocessing. This slice supports automatic,
+static, file-scope and thread-local objects, including linked extern objects,
+and named struct/union members. A declaration list shares one specifier group;
+the group is resolved exactly once before the declared type and before any
+list identifier enters semantic scope. Up to 32 specifiers are allowed. They
+must precede the declared type specifier, though storage and qualifiers may
+precede them.
 
-Out of scope and explicitly rejected: file-scope objects; block static,
-thread-local, extern and register objects; record members; parameters;
-typedefs and type-names; functions; inferred-auto declarations; multiple
-aligned declarators; alignment specifiers after a type specifier; and requests
-above 16. These are implementation limits,
-not claims that all such C programs are invalid. In particular, linkage and
-cross-declaration alignment consistency, record padding/stride, external ELF
-alignment, and larger extended alignments need separate end-to-end designs.
+An operand is a complete object type-name or checked integer constant
+expression. Zero has no effect; nonzero requests combine by maximum and cannot
+weaken the natural alignment. Supported values are 1, 2, 4, 8 and 16. An
+incomplete record object with a nonzero request is rejected until its natural
+alignment is known; an unknown-bound array with complete element type has a
+known alignment. Object alignment is storage metadata, not a type qualifier.
+QBE local slots use alloc4/8/16 and static/TLS data use the effective alignment.
 
-Alignment operands are checked in order before the declared type is resolved
-and before the object is bound; they generate no runtime evaluation. Type names and expressions use existing bounded parsers and
-constant evaluation. The maximum effective request is checked against the
-natural alignment after resolving the declared type. The ordering restriction avoids resolving a later type definition before an
-earlier alignment operand. Full C23 specifier-order support requires additional
-work and tests before broadening this slice.
+For named members, the request affects struct offsets, union/struct alignment,
+tail padding, aggregate size and array stride. Nested record layouts retain
+these properties. Anonymous aligned members, bit-fields, and flexible members
+remain unsupported. Cross-scope C23 structural compatibility and common-initial-
+sequence interactions remain separate work (see WG14 issue 1041).
 
-Added focused acceptance, rejection, IL and optional QBE-runtime tests, wired into
-both project test targets. Per task instruction no tests, fuzzing, or test suites
-were run; a compiler build alone was performed. Full normal/sanitizer, native
-oracle, QBE/runtime, bounded fuzz and exact-source CI gates remain outstanding.
-No conclusion about M17 approval follows from this work.
+For linkage, a canonical object stores its nonzero request; definitions and
+nonzero redeclarations must agree, and a definition without a request cannot
+follow a nonzero requested declaration (nor vice versa). Zero is treated as
+absent. Tentative-only definitions inherit the canonical request at TU end.
+Different nonzero extern-only requests are conservatively rejected even before
+a definition exists. C23 6.7.6p8 has open interpretation questions about
+zero, equivalent requests and tentative definitions (WG14 issue 1044); this is
+an explicit implementation policy, not a claim those questions are resolved.
+Across translation units kcc cannot verify matching declarations; callers must
+supply consistent alignment themselves.
+
+Still unsupported: specifiers after the declared type, alignment on typedefs,
+parameters, register objects, functions, inferred-auto declarations, anonymous
+members, or requests above 16. These are implementation limits, not claims that
+all such programs violate C. No broader C23 alignment conformance is claimed.
+
+Focused acceptance, rejection, IL, transactional layout and optional
+QBE/native-runtime tests are added to the project test targets. Per task
+instruction, no tests, fuzzing, or test suites were run; only a compiler build
+was performed. Normal/sanitizer, native-oracle, QBE/runtime, bounded fuzz and
+exact-source CI gates remain outstanding. No conclusion about M17 approval
+follows from this work.
+
+References: https://www.open-std.org/jtc1/sc22/wg14/issues/c23/issue1044.html
+and https://www.open-std.org/jtc1/sc22/wg14/issues/c23/issue1041.html.

@@ -191,6 +191,7 @@ enum declarator_context {
 	declarator_external,
 	declarator_typedef,
 	declarator_parameter,
+	declarator_member,
 	declarator_cast,
 };
 
@@ -201,7 +202,7 @@ struct declaration_head {
 	struct token keyword;
 	struct token auto_keyword;
 	struct token inferred_name;
-	struct ast_alignment_specifier *alignments;
+	struct ast_alignment_group *alignments;
 	size_t alignment_count;
 };
 
@@ -245,9 +246,9 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			struct ast_alignment_specifier *alignment;
 			struct token beginning_type;
 
-			if (!head || context != declarator_local) {
+			if (!head || (context != declarator_local && context != declarator_external && context != declarator_member)) {
 				diagnostic_error(parser->diagnostics, token.location,
-					"alignment specifiers are supported only on automatic block objects");
+					"alignment specifier is not permitted in this context");
 				return NULL;
 			}
 			/* Resolve these operands before the declared type, preserving the
@@ -282,15 +283,23 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			}
 			if (!expect_token(parser, token_right_paren, "expected ')' after alignment specifier", NULL))
 				return NULL;
-			/* Preserve source order for semantic analysis. */
-			struct ast_alignment_specifier **tail = &head->alignments;
+			/* Share this group across a declarator list and evaluate it once. */
+			if (!head->alignments) {
+				head->alignments = arena_alloc(parser->arena, sizeof(*head->alignments));
+				if (!head->alignments) {
+					allocation_error(parser, token.location);
+					return NULL;
+				}
+				*head->alignments = (struct ast_alignment_group) { 0 };
+			}
+			struct ast_alignment_specifier **tail = &head->alignments->specifiers;
 			while (*tail)
 				tail = &(*tail)->next;
 			*tail = alignment;
 			continue;
 		}
 		if (token.kind == token_inline) {
-			if (!head || context == declarator_parameter || head->keyword.kind == token_typedef) {
+			if (!head || context == declarator_parameter || context == declarator_member || head->keyword.kind == token_typedef) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"inline is not permitted in a type name, typedef, or parameter declaration");
 				return NULL;
@@ -299,7 +308,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		if (token.kind == token_thread_local) {
-			if (!head || context == declarator_parameter) {
+			if (!head || context == declarator_parameter || context == declarator_member) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"thread_local is not permitted in a type name or parameter declaration");
 				return NULL;
@@ -319,7 +328,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			token.kind == token_extern || token.kind == token_static || token.kind == token_auto) {
 			struct token *slot;
 
-			if (!head || (context == declarator_parameter && token.kind != token_register)) {
+			if (!head || context == declarator_member || (context == declarator_parameter && token.kind != token_register)) {
 				const char *message = "register storage is not supported in this context";
 
 				if (token.kind == token_typedef)
@@ -462,10 +471,9 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		}
 	}
 	if (head && head->alignments && (head->keyword.kind == token_typedef ||
-		head->keyword.kind == token_register || head->keyword.kind == token_extern ||
-		head->keyword.kind == token_static || head->thread_keyword.kind == token_thread_local)) {
+		head->keyword.kind == token_register)) {
 		diagnostic_error(parser->diagnostics, beginning->location,
-			"alignment specifiers are supported only on automatic block objects");
+			"alignment specifier is not permitted on a typedef or register object");
 		return NULL;
 	}
 	if (head && head->thread_keyword.kind == token_thread_local &&
@@ -887,7 +895,7 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 
 static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
 	struct ast_record_member_declaration ***tail, struct ast_type_syntax *syntax,
-	struct token name, bool anonymous)
+	struct token name, bool anonymous, struct ast_alignment_group *alignments)
 {
 	struct ast_record_member_declaration *member;
 
@@ -903,7 +911,7 @@ static bool append_record_member(struct parser *parser, struct ast_record_type_s
 		return false;
 	}
 	*member = (struct ast_record_member_declaration) {
-		.type_syntax = syntax, .name = name, .anonymous = anonymous,
+		.type_syntax = syntax, .name = name, .anonymous = anonymous, .alignments = alignments,
 	};
 	**tail = member;
 	*tail = &member->next;
@@ -919,6 +927,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
 		struct token beginning;
 		struct ast_type_syntax *base;
+		struct declaration_head head = { 0 };
 
 		if (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
 			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert) {
@@ -945,13 +954,18 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			parser->record_declarations++;
 			continue;
 		}
-		base = parse_declaration_specifiers(parser, &beginning, NULL, declarator_parameter);
+		base = parse_declaration_specifiers(parser, &beginning, &head, declarator_member);
 		if (!base)
 			return false;
 		if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 			struct ast_record_type_syntax *nested = record_specifier_base(base);
 			struct token name = { 0 };
 
+			if (head.alignments) {
+				diagnostic_error(parser->diagnostics, beginning.location,
+					"alignment on an anonymous member is not supported yet");
+				return false;
+			}
 			/* 6.7.2.1p2: a tag declaration alone is not a member. Only
 			 * an untagged definition can omit its member declarator list. */
 			if (!nested || !nested->has_definition || nested->tag.kind == token_identifier) {
@@ -960,7 +974,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name, true))
+			if (!append_record_member(parser, record, &tail, base, name, true, NULL))
 				return false;
 			continue;
 		}
@@ -992,7 +1006,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 					"flexible array members are not supported yet (M22)");
 				return false;
 			}
-			if (!append_record_member(parser, record, &tail, syntax, name, false))
+			if (!append_record_member(parser, record, &tail, syntax, name, false, head.alignments))
 				return false;
 			if (preprocess_peek(parser->preprocessor).kind != token_comma)
 				break;
@@ -2916,11 +2930,6 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		tail = &node->item.next;
 		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			break;
-		if (head.alignments) {
-			diagnostic_error(parser->diagnostics, name.location,
-				"aligned declarations with multiple declarators are not supported yet");
-			return NULL;
-		}
 		if (base->kind == type_syntax_inferred) {
 			diagnostic_error(parser->diagnostics, name.location,
 				"multiple inferred auto declarators are not supported");
@@ -3432,7 +3441,8 @@ done:
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline,
+	struct ast_alignment_group *alignments)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -3462,6 +3472,10 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
 
+			if (alignments) {
+				diagnostic_error(parser->diagnostics, name.location, "alignment requires an object type");
+				return NULL;
+			}
 			declaration = ast_new_function_declaration(parser->arena, beginning.location, name);
 			if (!declaration) {
 				allocation_error(parser, beginning.location);
@@ -3498,6 +3512,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		}
 		if (!item)
 			return NULL;
+		item->alignments = alignments;
 		*tail = item;
 		tail = &item->next;
 		count++;
@@ -3552,6 +3567,10 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	if (head.auto_keyword.kind == token_auto) {
 		diagnostic_error(parser->diagnostics, head.auto_keyword.location,
 			"file-scope auto declarations are not supported yet");
+		return NULL;
+	}
+	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
 		return NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
@@ -3613,7 +3632,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
-		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline);
+		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline, head.alignments);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */
