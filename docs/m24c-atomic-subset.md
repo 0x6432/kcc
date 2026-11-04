@@ -46,6 +46,11 @@ and `atomic_signal_fence` functions. They take a runtime memory order and requir
 a libatomic providing these functions. Signal handling and volatile atomic
 objects remain outside the compiler's supported subset. Fence interactions have
 not been tested.
+The fallback `atomic_flag` uses the naturally aligned four-byte atomic unsigned
+representation and implements test-and-set and clear using exchange and store.
+This relies on the target libatomic providing lock-free 4-byte operations on
+x86-64. Explicit variants accept runtime orders; a clear order must be valid for
+an atomic store. Flag interoperability and concurrency remain untested.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.

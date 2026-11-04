@@ -109,6 +109,7 @@ int main(void) {
     source.write_text(r'''
 #include <stdatomic.h>
 atomic_int x=ATOMIC_VAR_INIT(0);
+atomic_flag flag=ATOMIC_FLAG_INIT;
 int main(void) {
   atomic_init(&x,40);
   memory_order order=memory_order_relaxed;
@@ -119,8 +120,13 @@ int main(void) {
   _Bool failure=atomic_compare_exchange_strong(&x,&missing,50);
   atomic_thread_fence(memory_order_seq_cst);
   atomic_signal_fence(memory_order_acquire);
+  _Bool first=atomic_flag_test_and_set_explicit(&flag,memory_order_acquire);
+  _Bool second=atomic_flag_test_and_set(&flag);
+  atomic_flag_clear_explicit(&flag,memory_order_release);
+  _Bool third=atomic_flag_test_and_set(&flag);
+  atomic_flag_clear(&flag);
   atomic_store_explicit(&x,42,memory_order_release);
-  return prior==40 && old==42 && success && !failure && missing==41
+  return prior==40 && old==42 && success && !failure && missing==41 && !first && second && !third
     ? atomic_load_explicit(&x,memory_order_acquire) : 1;
 }
 ''')
