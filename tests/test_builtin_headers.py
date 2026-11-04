@@ -60,6 +60,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-headers-") as directory:
         assert subprocess.run([str(exe)]).returncode == 42
     (path / "present.h").write_text("#define PRESENT 1\n")
     (path / "defined.h").write_text("/* header named like a conditional operator */\n")
+    (path / "__VA_ARGS__.h").write_text("/* header named like a variadic token */\n")
     source.write_text(r'''
 #define HEADER "present.h"
 #define present nonexistent
@@ -69,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-headers-") as directory:
 #if !__has_include("present.h") || !__has_include(HEADER)
 #error quoted header query failed
 #endif
-#if !__has_include(<present.h>) || !__has_include(<stddef.h>) || !__has_include(<defined.h>)
+#if !__has_include(<present.h>) || !__has_include(<stddef.h>) || !__has_include(<defined.h>) || !__has_include(<__VA_ARGS__.h>)
 #error angle header query failed
 #endif
 #if __has_include("missing.h") || __has_include(<missing.h>)

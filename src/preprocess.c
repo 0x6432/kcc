@@ -2999,7 +2999,8 @@ static struct condition_value parse_condition_expression(struct condition_parser
 
 /* A raw directive is bounded independently of its expanded macro stream. */
 static bool read_condition_input(struct preprocessor *preprocessor,
-	struct pp_token marker, struct pp_token *token, size_t *count, struct token *error)
+	struct pp_token marker, struct pp_token *token, size_t *count, struct token *error,
+	bool in_direct_header)
 {
 	*token = pp_lexer_next(&preprocessor->input);
 	if (token->kind == pp_invalid || token->has_non_directive_space) {
@@ -3008,7 +3009,7 @@ static bool read_condition_input(struct preprocessor *preprocessor,
 			"only space and tab are allowed in a preprocessing directive");
 		return false;
 	}
-	if (is_variadic_identifier(*token)) {
+	if (!in_direct_header && is_variadic_identifier(*token)) {
 		*error = reject_directive(preprocessor, marker, *token,
 			"variadic identifiers require a variadic macro replacement list");
 		return false;
@@ -3032,10 +3033,10 @@ static bool replace_defined_operand(struct preprocessor *preprocessor,
 	struct source *spelling;
 	bool parenthesized;
 
-	if (!read_condition_input(preprocessor, marker, &name, count, error))
+	if (!read_condition_input(preprocessor, marker, &name, count, error, false))
 		return false;
 	parenthesized = is_punctuator(name, "(");
-	if (parenthesized && !read_condition_input(preprocessor, marker, &name, count, error))
+	if (parenthesized && !read_condition_input(preprocessor, marker, &name, count, error, false))
 		return false;
 	if (name.kind != pp_identifier) {
 		*error = reject_directive(preprocessor, marker, name,
@@ -3045,7 +3046,7 @@ static bool replace_defined_operand(struct preprocessor *preprocessor,
 	if (parenthesized) {
 		struct pp_token close;
 
-		if (!read_condition_input(preprocessor, marker, &close, count, error))
+		if (!read_condition_input(preprocessor, marker, &close, count, error, false))
 			return false;
 		if (!is_punctuator(close, ")")) {
 			*error = reject_directive(preprocessor, marker, close,
@@ -3086,7 +3087,7 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 	for (;;) {
 		struct argument_token *copy;
 
-		if (!read_condition_input(preprocessor, marker, &token, &count, error))
+		if (!read_condition_input(preprocessor, marker, &token, &count, error, direct_header_state == 3))
 			return false;
 		if (is_directive_end(token))
 			break;
