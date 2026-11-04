@@ -29,6 +29,8 @@ double global_signed=(-9223372036854775807L-1L);
 float global_arithmetic=1.5f+2.25f;
 double global_mixed=2.5*4-1.0;
 int static_int=4.75-10.0;
+long static_cast=(int)(1.25-4.75);
+unsigned long static_unsigned_cast=(int)(1.25-4.75);
 unsigned int static_unsigned=-0.75;
 _Bool static_bool=-0.0;
 struct StaticInts { int a; unsigned int b; _Bool c; };
@@ -65,6 +67,7 @@ extern double global_float; extern float global_negzero;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 extern float global_arithmetic; extern double global_mixed;
 extern int static_int; extern unsigned int static_unsigned; extern _Bool static_bool;
+extern long static_cast; extern unsigned long static_unsigned_cast;
 struct StaticInts { int a; unsigned int b; _Bool c; }; extern struct StaticInts static_ints;
 struct Holder { double x; float y; }; extern struct Holder global_holder;
 double stack(int,double,int,double,int,double,int,double,int,double,double,double,double,double);
@@ -81,7 +84,7 @@ int main(void) {
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
      global_unsigned!=(double)18446744073709551615UL || global_signed!=(double)(-9223372036854775807L-1L)) return 10;
  if (global_arithmetic!=3.75f || global_mixed!=9.0) return 11;
- if (static_int!=-5 || static_unsigned!=0 || static_bool ||
+ if (static_int!=-5 || static_cast!=-3 || static_unsigned_cast!=(unsigned long)-3 || static_unsigned!=0 || static_bool ||
      static_ints.a!=6 || static_ints.b!=42 || !static_ints.c) return 12;
  return 0;
 }
@@ -105,6 +108,7 @@ reject = [
  'float f(void){return 1.0e1\'f;}', 'double x=1.0/0.0;',
  'int x[1.0];', '#if 1.0\nint x;\n#endif\n',
  'int x=2147483648.0;', 'unsigned x=-1.0;', 'int x=1.0/0.0;',
+ 'int x=(int)(1.0/0.0);',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-float-') as directory:
     d = Path(directory)

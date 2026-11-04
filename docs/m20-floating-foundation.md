@@ -28,3 +28,9 @@ initializer extension only: it does not broaden integer constant expressions
 in array bounds or case labels. Floating-to-integer casts nested inside a larger
 constant expression remain limited. The file-scope scalar gate now permits
 floating object initializers. These changes have not been tested.
+
+A top-level explicit integer cast of a supported floating constant expression
+is also accepted for static integer and boolean initializers, including when
+the result is converted again to the object type. This does not relax integer
+constant-expression rules, and arbitrary integer arithmetic containing such a
+cast remains unsupported. Regression cases were added but not run.

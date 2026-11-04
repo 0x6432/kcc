@@ -2906,6 +2906,35 @@ out_of_range:
 	return false;
 }
 
+/* A top-level cast of a floating constant expression is valid for static
+ * initialization but does not extend the stricter ICE rules. */
+static bool is_static_float_cast(const struct ast_expression *source)
+{
+	return source->kind == expression_cast && type_is_integer(source->type) &&
+		type_is_floating(((const struct ast_cast_expression *)source)->operand->type);
+}
+
+static bool static_float_cast_to_integer(const struct ast_expression *source,
+	const struct type *target, struct static_data_value *value, struct diagnostics *diagnostics)
+{
+	const struct ast_expression *operand = ((const struct ast_cast_expression *)source)->operand;
+	uint64_t source_mask, target_mask, bits;
+	unsigned source_width = type_integer_width(source->type), target_width = type_integer_width(target);
+	if (!static_floating_to_integer(operand, source->type, value, diagnostics))
+		return false;
+	bits = value->integer_bits;
+	if (target->kind == type_kind_bool) {
+		value->integer_bits = bits != 0;
+		return true;
+	}
+	source_mask = source_width == 64 ? UINT64_MAX : (UINT64_C(1) << source_width) - 1;
+	if (!type_is_unsigned(source->type) && (bits & (UINT64_C(1) << (source_width - 1))))
+		bits |= ~source_mask;
+	target_mask = target_width == 64 ? UINT64_MAX : (UINT64_C(1) << target_width) - 1;
+	value->integer_bits = bits & target_mask;
+	return true;
+}
+
 /* The source is checked before conversion so narrowing cannot hide invalid
  * evaluated arithmetic. Both queries are pure: no lowered node is re-sema'd. */
 bool sema_validate_static_initializer(const struct ast_expression *source,
@@ -2914,6 +2943,8 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 {
 	if (type_is_floating(source->type) && type_is_integer(converted->type))
 		return static_floating_to_integer(source, converted->type, value, diagnostics);
+	if (is_static_float_cast(source) && type_is_integer(converted->type))
+		return static_float_cast_to_integer(source, converted->type, value, diagnostics);
 	if (type_is_floating(converted->type)) {
 		uint64_t bits;
 		if (!static_floating_literal_bits(converted, &bits)) {
@@ -4813,7 +4844,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	}
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
-	if (type_is_floating((*initializer)->type) && type_is_integer(type)) {
+	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer)) &&
+		type_is_integer(type)) {
 		struct ast_expression *source_expression = *initializer;
 		target = unqualified_type(sema, type, name.location);
 		if (!target || !convert_expression(sema, initializer, target) ||
