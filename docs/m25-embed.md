@@ -1,4 +1,4 @@
-# Parameter-free binary embedding
+# Bounded binary embedding
 
 The C23 `#embed` directive accepts one quoted, angle, or macro-computed resource
 name using the compiler's bounded include-name and search rules. Quoted resources
@@ -8,18 +8,22 @@ embed resources. The raw bytes are emitted as comma-separated decimal integer
 preprocessing tokens, with no source text transformations. An empty resource
 produces no tokens. A missing or unreadable resource is diagnosed.
 
-Resources are limited to 4,096 bytes each, and share the include-attempt,
+The optional `limit(expression)` parameter selects at most that many bytes; its
+nonnegative preprocessing integer expression uses the existing bounded #if
+expression rules and may use macro expansion. A zero limit emits no tokens.
+After applying the limit, resources are limited to 4,096 emitted bytes and share the include-attempt,
 input-byte, synthesized-spelling, expansion-work and auxiliary-storage budgets.
 The configured loader reads the complete resource before this limit is checked.
-Parameter-free `__has_embed` is available in conditional expressions. It
+`__has_embed` with the same optional limit is available in conditional expressions. It
 returns `__STDC_EMBED_FOUND__` (1), `__STDC_EMBED_EMPTY__` (2), or
 `__STDC_EMBED_NOT_FOUND__` (0); the three names are predefined integer macros.
-Resources exceeding 4,096 bytes are reported unavailable. Queries share the
+Resources exceeding 4,096 bytes after applying the limit are reported unavailable.
+A zero effective length is reported empty. Queries share the
 same search rules and budgets, do not use built-in headers, and are not loaded
 in short-circuited operands. The loader's boolean interface cannot distinguish
 missing from unreadable resources.
 
-Parameters such as `limit`, `prefix`, `suffix`, and `if_empty`, and
+Parameters such as `prefix`, `suffix`, and `if_empty`, and
 implementation-defined embed parameters remain unsupported in both directives
 and queries and are rejected rather than ignored. Existing include-name
 restrictions, including quoted backslashes and whitespace in angle names, apply.

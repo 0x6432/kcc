@@ -840,7 +840,7 @@ static bool read_pragma_directive(struct preprocessor *preprocessor,
 }
 
 static bool expand_include_operand(struct preprocessor *preprocessor,
-	struct pp_token marker, struct include_name *header, struct token *error);
+	struct pp_token marker, struct include_name *header, struct token *error, uint64_t *limit);
 
 /* Join bounded path slices without changing the process working directory. */
 static bool include_path(struct preprocessor *preprocessor, struct include_name *name,
@@ -1260,7 +1260,7 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 	struct include_name name;
 	struct include_source *child;
 
-	if (!expand_include_operand(preprocessor, marker, &name, error))
+	if (!expand_include_operand(preprocessor, marker, &name, error, NULL))
 		return false;
 	if (!preprocessor->include_loader) {
 		diagnostic_error(preprocessor->diagnostics, name.invocation.expansion_location,
@@ -2634,6 +2634,35 @@ static struct condition_value parse_condition_integer(struct condition_parser *p
 static struct condition_value parse_condition_expression(struct condition_parser *parser,
 	unsigned minimum_power, bool evaluate);
 
+/* Optional bounded C23 limit parameter. The current token is either the
+ * parameter name or the caller's closing delimiter; the latter is left alone. */
+static bool parse_embed_limit(struct condition_parser *parser, uint64_t *limit)
+{
+	struct condition_value value;
+	if (!(parser->token.kind == pp_identifier && pp_spelling_is(parser->token, "limit")))
+		return true;
+	advance_condition(parser);
+	if (!is_punctuator(parser->token, "(")) {
+		condition_error(parser, parser->token, "expected '(' after embed limit");
+		return false;
+	}
+	advance_condition(parser);
+	value = parse_condition_expression(parser, 0, true);
+	if (parser->failed)
+		return false;
+	if (!is_punctuator(parser->token, ")")) {
+		condition_error(parser, parser->token, "expected ')' after embed limit expression");
+		return false;
+	}
+	if (!value.unsigned_type && condition_signed_value(value) < 0) {
+		condition_error(parser, parser->token, "embed limit must be nonnegative");
+		return false;
+	}
+	*limit = value.bits;
+	advance_condition(parser);
+	return !parser->failed;
+}
+
 static bool append_include_piece(struct preprocessor *preprocessor,
 	struct include_name *name, struct pp_token piece, size_t *length, struct token *error);
 
@@ -2664,6 +2693,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	size_t length = 0;
 	bool direct, found = false;
 	int status = 0;
+	uint64_t limit = UINT64_MAX;
 
 	advance_condition(parser);
 	if (!is_punctuator(parser->token, "(")) {
@@ -2718,8 +2748,10 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 		name.path[length] = 0;
 	}
 	advance_condition(parser);
+	if (embed && !parse_embed_limit(parser, &limit))
+		return signed_condition(0);
 	if (!is_punctuator(parser->token, ")")) {
-		condition_error(parser, parser->token, "expected ')' after resource name (parameters are not supported)");
+		condition_error(parser, parser->token, "expected ')' after resource name or supported parameters");
 		return signed_condition(0);
 	}
 	if (evaluate) {
@@ -2745,7 +2777,11 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 				return signed_condition(0);
 			}
 			preprocessor->include_bytes += source.length;
-			status = embed ? (source.length > 4096 ? 0 : source.length ? 1 : 2) : 1;
+			if (embed) {
+				uint64_t effective = source.length < limit ? source.length : limit;
+				status = effective > 4096 ? 0 : effective ? 1 : 2;
+			} else
+				status = 1;
 			source_destroy(&source);
 		}
 	}
@@ -3229,7 +3265,8 @@ static bool read_include_token(struct preprocessor *preprocessor,
 }
 
 static bool read_include_name(struct preprocessor *preprocessor,
-	struct expansion_cursor *cursor, bool direct, struct include_name *header, struct token *error)
+	struct expansion_cursor *cursor, bool direct, struct include_name *header, struct token *error,
+	uint64_t *limit)
 {
 	struct rescan_token input;
 	struct pp_token first;
@@ -3285,11 +3322,20 @@ static bool read_include_name(struct preprocessor *preprocessor,
 		memcpy(header->path, text + 1, length);
 		header->path[length] = 0;
 	}
-	if (!read_include_token(preprocessor, cursor, direct, &input, error))
+	if (limit) {
+		struct condition_parser parser = { .preprocessor = preprocessor, .cursor = cursor, .error = error };
+		*limit = UINT64_MAX;
+		advance_condition(&parser);
+		if (!parse_embed_limit(&parser, limit) || parser.failed) {
+			*error = invalid_token(first);
+			return false;
+		}
+		input.token = parser.token;
+	} else if (!read_include_token(preprocessor, cursor, direct, &input, error))
 		return false;
 	if (input.token.kind != pp_eof) {
 		diagnostic_error(preprocessor->diagnostics, input.token.expansion_location,
-			"expected exactly one include name after macro expansion");
+			"expected end of include or supported embed operand");
 		*error = invalid_token(first);
 		return false;
 	}
@@ -3301,7 +3347,7 @@ static bool read_include_name(struct preprocessor *preprocessor,
  * in isolation. Validation must never drain the following source line.
  */
 static bool expand_include_operand(struct preprocessor *preprocessor,
-	struct pp_token marker, struct include_name *header, struct token *error)
+	struct pp_token marker, struct include_name *header, struct token *error, uint64_t *limit)
 {
 	struct argument_token *head = NULL;
 	struct argument_token **tail = &head;
@@ -3349,14 +3395,14 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 	}
 	cursor->input = head;
 	cursor->end = token.location;
-	success = read_include_name(preprocessor, cursor, direct, header, error);
+	success = read_include_name(preprocessor, cursor, direct, header, error, limit);
 	free(cursor);
 	if (!success && !preprocessor->stopped)
 		*error = invalid_token(marker);
 	return success;
 }
 
-/* Bounded parameter-free C23 embed: the resource stays raw binary, never
+/* Bounded C23 embed: the resource stays raw binary, never
  * source-prepared; each byte becomes a decimal pp-number separated by commas. */
 static bool read_embed_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, struct token *error)
@@ -3366,9 +3412,10 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 	struct source *spelling;
 	struct argument_token *head = NULL, **tail = &head;
 	bool found;
-	size_t offset = 0;
+	size_t offset = 0, effective;
+	uint64_t limit;
 
-	if (!expand_include_operand(preprocessor, marker, &name, error))
+	if (!expand_include_operand(preprocessor, marker, &name, error, &limit))
 		return false;
 	if (!preprocessor->include_loader) {
 		diagnostic_error(preprocessor->diagnostics, marker.expansion_location,
@@ -3388,23 +3435,24 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 		*error = invalid_token(marker);
 		return false;
 	}
-	if (resource.length > 4096 || resource.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
+	effective = resource.length < limit ? resource.length : (size_t)limit;
+	if (effective > 4096 || resource.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
 		source_destroy(&resource);
 		*error = stop_preprocessing(preprocessor, marker, "embed resource byte limit exceeded (4096)");
 		return false;
 	}
 	preprocessor->include_bytes += resource.length;
-	if (!resource.length) {
+	if (!effective) {
 		source_destroy(&resource);
 		preprocessor->cursor.deferred_space = true;
 		return true;
 	}
-	spelling = allocate_spelling(preprocessor, resource.length * 4 + 1, marker, error);
+	spelling = allocate_spelling(preprocessor, effective * 4 + 1, marker, error);
 	if (!spelling) {
 		source_destroy(&resource);
 		return false;
 	}
-	for (size_t i = 0; i < resource.length; i++) {
+	for (size_t i = 0; i < effective; i++) {
 		for (unsigned part = 0; part < (i ? 2u : 1u); part++) {
 			bool comma = i && !part;
 			size_t length;
@@ -3415,7 +3463,7 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 				length = 1;
 			} else {
 				int written = snprintf((char *)spelling->data + offset,
-					resource.length * 4 + 1 - offset, "%u", (unsigned)resource.data[i]);
+					effective * 4 + 1 - offset, "%u", (unsigned)resource.data[i]);
 				assert(written > 0 && written <= 3);
 				length = (size_t)written;
 			}
