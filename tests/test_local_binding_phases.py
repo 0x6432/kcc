@@ -51,7 +51,6 @@ c23_constraints = [
     ('int main(void) { register int x=0; typeof(&x) p; return 0; }', 'cannot take the address'),
 ]
 subset_errors = [
-    ('int f(int n) { int a[n]; return 0; }', 'variable-length arrays'),
     ('int main(void) { int a[2]=0; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc binding phases ') as directory:

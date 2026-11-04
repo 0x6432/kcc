@@ -98,7 +98,8 @@ struct pointer_type {
 struct array_type {
 	struct type type;
 	const struct type *element;
-	uint64_t count; /* Zero means unknown bound, never a zero-length array. */
+	uint64_t count; /* Zero means unknown or runtime bound. */
+	bool runtime_bound; /* Runtime object only; never a fixed-size surrogate. */
 };
 
 struct function_parameter_type {

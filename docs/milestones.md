@@ -42,7 +42,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M24c | Atomic types/load/store | Memory model, alignment, target code inspection | planned |
 | M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | planned |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |
-| M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | planned |
+| M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (single outermost automatic integer-element VLA subset; broader VM types remain unsupported) |
 | M24g | long double, floating environment and remaining backend gaps | Correct target representation and runtime/ABI tests | planned |
 | M25a | Predefined macros and translation/environment audit | Standard clause matrix and implementation-defined docs | planned |
 | M25b | Compiler-provided headers and runtime helpers | Header compile tests and link resolution | planned |
@@ -3586,3 +3586,24 @@ Tag-only declarations, labels, statements, members, parameters, for-initializer
 declarations and attributes after declarators or inside types remain unsupported.
 Attribute arguments are rejected. This is a strict supported subset, not the
 standard's general handling of unrecognized attributes.
+
+### M24f1: bounded outermost VLA subset
+
+One uninitialized, naturally aligned, one-dimensional automatic integer-element
+VLA is supported per function, declared in the function's outermost block. The
+bound is evaluated exactly once at the declaration and checked at runtime for
+positivity and the remaining 1 MiB local-storage budget before dynamic allocation.
+An invalid or oversized bound calls `abort` and terminates. The saved byte size is
+used by `sizeof array-name`; indexing and ordinary element-pointer decay work.
+Storage persists to function return; outermost-block-only allocation ensures the
+object's lifetime matches that scope without stack restoration. The implementation
+rejects all goto statements in such functions, conservatively preventing entry,
+re-entry, and bypass of the declaration.
+
+Nested-block and repeated/loop VLAs, multidimensional and non-integer-element
+VLAs, VLA typedefs, pointer-to-VLA declarators, VM parameters and type names,
+VLA initializers, explicit alignment, whole-array address and typeof of a VLA
+are not supported. Other nonconstant bounds continue to be rejected. `sizeof`
+a VLA is not an integer constant expression. The runtime `abort` symbol must be
+provided when linking. Tests are added but were not run for this development
+step; only the compiler build was run.

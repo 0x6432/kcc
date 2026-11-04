@@ -214,6 +214,7 @@ struct ast_sizeof_expression {
 	struct ast_expression expression;
 	struct ast_expression *operand;
 	uint64_t size;
+	struct ast_local_declaration *vla_local;
 };
 
 struct ast_sizeof_type_expression {
@@ -824,6 +825,8 @@ struct ast_local_declaration {
 	const struct type *type;
 	size_t slot;
 	struct ast_local_declaration *next_local;
+	struct ast_expression *vla_bound;
+	uint64_t vla_max_count;
 };
 
 struct ast_statement_item {

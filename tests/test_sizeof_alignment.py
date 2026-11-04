@@ -69,7 +69,6 @@ constraints = [
     ('int main(void) { return sizeof(int; }', "expected ')'"),
     ('int main(void) { return alignof(int; }', "expected ')'"),
     ('int main(void) { return sizeof(int)1; }', 'expected'),
-    ('int main(void) { int n=sizeof(int); int a[n]; return 0; }', 'integer constant expression'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc sizeof ') as directory:
     directory = Path(directory)

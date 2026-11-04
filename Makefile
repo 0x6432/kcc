@@ -102,6 +102,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	QBE="$(QBE)" python3 tests/test_pointer_arithmetic.py
 	QBE="$(QBE)" python3 tests/test_pointer_subscripts.py
 	QBE="$(QBE)" python3 tests/test_local_arrays.py
+	QBE="$(QBE)" python3 tests/test_vla_outer.py
 	QBE="$(QBE)" python3 tests/test_multidimensional_arrays.py
 	QBE="$(QBE)" python3 tests/test_string_literals.py
 	QBE="$(QBE)" python3 tests/test_string_concatenation.py
@@ -274,6 +275,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_
 	python3 tests/test_pointer_arithmetic.py
 	python3 tests/test_pointer_subscripts.py
 	python3 tests/test_local_arrays.py
+	python3 tests/test_vla_outer.py
 	python3 tests/test_multidimensional_arrays.py
 	python3 tests/test_string_literals.py
 	python3 tests/test_string_concatenation.py

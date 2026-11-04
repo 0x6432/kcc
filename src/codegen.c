@@ -705,8 +705,15 @@ static size_t codegen_expression(struct codegen *codegen,
 	switch (expression->kind) {
 	case expression_compound_literal:
 		return codegen_compound_literal(codegen, (const struct ast_compound_literal_expression *)expression);
-	case expression_sizeof:
-		return codegen_layout_constant(codegen, ((const struct ast_sizeof_expression *)expression)->size);
+	case expression_sizeof: {
+		const struct ast_sizeof_expression *node = (const struct ast_sizeof_expression *)expression;
+		if (node->vla_local) {
+			size_t value = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l copy %%z%zu\n", value, node->vla_local->slot);
+			return value;
+		}
+		return codegen_layout_constant(codegen, node->size);
+	}
 	case expression_sizeof_type:
 		return codegen_layout_constant(codegen, ((const struct ast_sizeof_type_expression *)expression)->size);
 	case expression_alignof:
@@ -1165,6 +1172,32 @@ static void codegen_local_initializer(struct codegen *codegen,
 	}
 }
 
+/* One outermost VLA is allocated exactly once per invocation. Invalid or
+ * implementation-limit bounds terminate rather than overflowing the stack. */
+static void codegen_vla(struct codegen *codegen, const struct ast_local_declaration *local)
+{
+	const struct array_type *array = (const struct array_type *)local->type;
+	size_t bound = codegen_expression(codegen, local->vla_bound);
+	size_t wide = codegen_convert_value(codegen, bound, local->vla_bound->type, &type_ulong);
+	size_t positive = codegen->next_temporary++;
+	size_t within = codegen->next_temporary++;
+	size_t valid = codegen->next_temporary++;
+	size_t good = new_label(codegen), bad = new_label(codegen);
+	unsigned alignment = type_object_alignment(array->element);
+	if (alignment < 4)
+		alignment = 4;
+	emit(codegen, "\t%%t%zu =w cnel %%t%zu, 0\n", positive, wide);
+	emit(codegen, "\t%%t%zu =w culel %%t%zu, %ju\n", within, wide, (uintmax_t)local->vla_max_count);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", valid, positive, within);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", valid, good, bad);
+	emit_label(codegen, bad);
+	emit(codegen, "\tcall $abort()\n\thlt\n");
+	emit_label(codegen, good);
+	emit(codegen, "\t%%z%zu =l mul %%t%zu, %ju\n", local->slot, wide,
+		(uintmax_t)type_object_size(array->element));
+	emit(codegen, "\t%%v%zu =l alloc%u %%z%zu\n", local->slot, alignment, local->slot);
+}
+
 static bool codegen_for(struct codegen *codegen, const struct ast_for_statement *node)
 {
 	size_t condition_label = new_label(codegen);
@@ -1344,7 +1377,9 @@ static bool codegen_block_items(struct codegen *codegen,
 				emit_label(codegen, new_label(codegen));
 				terminated = false;
 			}
-			if (!local->object_symbol && !local->function_symbol)
+			if (local->vla_bound)
+				codegen_vla(codegen, local);
+			else if (!local->object_symbol && !local->function_symbol)
 				codegen_local_initializer(codegen, local);
 			break;
 		}
@@ -1397,6 +1432,11 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	emit(&codegen, ") {\n");
 	emit_label(&codegen, 0);
 	while (local) {
+		/* Dynamic storage is allocated at its declaration, not at entry. */
+		if (local->vla_bound) {
+			local = local->next_local;
+			continue;
+		}
 		/* Slots are allocated at entry; initialization is in source order. */
 		uint64_t bytes = type_object_size(local->type);
 		unsigned alignment = type_object_alignment(local->type);

@@ -89,6 +89,8 @@ struct sema {
 	size_t goto_count;
 	size_t local_count;
 	uint64_t local_storage;
+	struct ast_type_syntax *vla_candidate;
+	struct ast_local_declaration *vla_local;
 	struct function_symbol *functions;
 	struct external_object_symbol *external_objects;
 	size_t external_object_count;
@@ -866,10 +868,15 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		struct ast_typeof_expression_syntax *query = (struct ast_typeof_expression_syntax *)syntax;
 
 		/* Preserve only the root load/decay boundary; children keep their constraints.
-		 * Variably modified types are unsupported, so no operand evaluation occurs.
+		 * Direct VLA operands are explicitly rejected; no operand evaluation occurs.
 		 */
 		if (!sema_unevaluated_expression(sema, &query->operand))
 			return NULL;
+		if (query->operand->type->kind == type_kind_array &&
+			((const struct array_type *)query->operand->type)->runtime_bound) {
+			diagnostic_error(sema->diagnostics, syntax->location, "typeof of variable-length array is not supported");
+			return NULL;
+		}
 		syntax->type = query->unqualify ?
 			unqualified_type(sema, query->operand->type, syntax->location) : query->operand->type;
 		if (!syntax->type)
@@ -928,6 +935,17 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			if (!sema_expression(sema, &array->bound, true))
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
+			if (result.status == constant_not_constant && syntax == sema->vla_candidate &&
+				type_is_integer(array->bound->type) && type_is_integer(element)) {
+				type = type_new_incomplete_array(sema->arena, element);
+				if (!type) {
+					diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating variable-length array type");
+					return NULL;
+				}
+				type->runtime_bound = true;
+				syntax->type = &type->type;
+				break;
+			}
 			if (result.status != constant_value) {
 				diagnostic_error(sema->diagnostics, result.location,
 					result.status == constant_not_constant ?
@@ -1611,6 +1629,11 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
 			return false;
 		}
+		if (node->operand->type->kind == type_kind_array &&
+			((const struct array_type *)node->operand->type)->runtime_bound) {
+			diagnostic_error(sema->diagnostics, expression->location, "address of variable-length array is not supported");
+			return false;
+		}
 		if (has_register_root(node->operand)) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"cannot take the address of a register object");
@@ -1809,6 +1832,17 @@ static bool sema_expression(struct sema *sema,
 		/* No immediate load/array/function decay; constraints still apply inside. */
 		if (!sema_unevaluated_expression(sema, &node->operand))
 			return false;
+		if (node->operand->type->kind == type_kind_array &&
+			((const struct array_type *)node->operand->type)->runtime_bound) {
+			if (node->operand->kind != expression_name) {
+				diagnostic_error(sema->diagnostics, expression->location, "sizeof variable-length array requires its name");
+				return false;
+			}
+			node->vla_local = ((struct ast_name_expression *)node->operand)->declaration;
+			result_type = &type_ulong;
+			expression->depth = node->operand->depth + 1;
+			break;
+		}
 		if (!type_is_complete_object(node->operand->type)) {
 			diagnostic_error(sema->diagnostics, expression->location, "sizeof requires a complete object type");
 			return false;
@@ -3261,9 +3295,36 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 			return false;
 		local->alignment = local->alignments->alignment;
 	}
+	/* Only a direct outermost automatic array declarator is eligible. All other
+	 * VM syntax retains the ordinary explicit rejection. */
+	if (sema->function && sema->scope && !sema->scope->parent &&
+		local->type_syntax->kind == type_syntax_array && !local->is_static &&
+		!local->is_extern && !local->is_thread_local && !local->is_register)
+		sema->vla_candidate = local->type_syntax;
 	type = resolve_type_syntax(sema, local->type_syntax);
+	sema->vla_candidate = NULL;
 	if (!type)
 		return false;
+	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
+		if (local->initializer_syntax || local->initializer || local->alignments || local->is_inline || sema->vla_local) {
+			diagnostic_error(sema->diagnostics, local->name.location,
+				"variable-length array subset permits one uninitialized, naturally aligned array per function");
+			return false;
+		}
+		if (sema->local_count == ast_max_locals) {
+			diagnostic_error(sema->diagnostics, local->name.location, "function exceeds local limit (256)");
+			return false;
+		}
+		if (!reserve_local_name(sema, local))
+			return false;
+		local->type = type;
+		local->vla_bound = ((struct ast_array_type_syntax *)local->type_syntax)->bound;
+		local->slot = sema->local_count++;
+		local->next_local = sema->function->locals;
+		sema->function->locals = local;
+		sema->vla_local = local;
+		return true;
+	}
 	if (local->is_inline && type->kind != type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location, "inline requires a function declaration");
 		return false;
@@ -3808,6 +3869,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	sema->goto_count = 0;
 	sema->local_count = 0;
 	sema->local_storage = 0;
+	sema->vla_local = NULL;
 	sema->scope = &scope;
 	for (struct ast_parameter *parameter = definition->declaration->parameters; parameter;
 		parameter = parameter->next) {
@@ -3828,6 +3890,16 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	}
 	/* Parameters and outermost body declarations inhabit the same scope. */
 	success = sema_block_items(sema, definition->body->items) && resolve_gotos(sema);
+	if (success && sema->vla_local && sema->goto_count) {
+		diagnostic_error(sema->diagnostics, sema->gotos->statement->statement.location,
+			"goto in a function containing a variable-length array is not supported");
+		success = false;
+	}
+	if (success && sema->vla_local) {
+		const struct array_type *array = (const struct array_type *)sema->vla_local->type;
+		sema->vla_local->vla_max_count = (ast_max_local_storage - sema->local_storage) /
+			type_object_size(array->element);
+	}
 	if (success) {
 		definition->label_count = sema->label_count;
 		definition->switch_label_count = sema->switch_label_count;
@@ -3836,6 +3908,7 @@ done:
 	sema->typedefs = saved_typedefs;
 	sema->scope = NULL;
 	sema->function = NULL;
+	sema->vla_local = NULL;
 	sema->labels = NULL;
 	sema->label_count = 0;
 	sema->switch_label_count = 0;
