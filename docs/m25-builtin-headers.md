@@ -65,8 +65,10 @@ include directories take precedence.
   max-width print format macros plus `imaxabs`, `strtoimax` and `strtoumax`.
   It does not yet provide scanning or least/fast-width format macros.
 - `time.h` supplies glibc x86-64 `time_t`, `clock_t` and `struct tm` layout,
-  `CLOCKS_PER_SEC`, and common clock, calendar and formatting declarations.
-  It depends on compatible glibc and omits `timespec` and newer time interfaces.
+  `struct timespec`, `CLOCKS_PER_SEC`, `TIME_UTC`, and common clock, calendar
+  and formatting declarations including `timespec_get` and `timespec_getres`.
+  It depends on compatible glibc; `timespec_getres` requires glibc 2.34 or
+  later. Other time interfaces remain omitted.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.

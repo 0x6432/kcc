@@ -911,13 +911,16 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#ifndef __KCC_TIME_H\n#define __KCC_TIME_H 1\n"
 			"#include <stddef.h>\n"
 			"typedef long time_t; typedef long clock_t;\n"
+			"#ifndef _STRUCT_TIMESPEC\n#define _STRUCT_TIMESPEC 1\n"
+			"struct timespec { time_t tv_sec; long tv_nsec; };\n#endif\n"
 			"struct tm { int tm_sec,tm_min,tm_hour,tm_mday,tm_mon,tm_year,tm_wday,tm_yday,tm_isdst;"
 			" long __kcc_gmtoff; const char *__kcc_zone; };\n"
-			"#define CLOCKS_PER_SEC 1000000L\n"
+			"#define CLOCKS_PER_SEC 1000000L\n#define TIME_UTC 1\n"
 			"time_t time(time_t *); clock_t clock(void); double difftime(time_t,time_t);\n"
 			"time_t mktime(struct tm *); struct tm *gmtime(const time_t *);\n"
 			"struct tm *localtime(const time_t *); char *asctime(const struct tm *);\n"
 			"char *ctime(const time_t *); size_t strftime(char *,size_t,const char *,const struct tm *);\n"
+			"int timespec_get(struct timespec *,int); int timespec_getres(struct timespec *,int);\n"
 			"#endif\n";
 		static const char errno_header[] =
 			"#ifndef __KCC_ERRNO_H\n#define __KCC_ERRNO_H 1\n"

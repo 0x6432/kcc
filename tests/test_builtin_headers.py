@@ -101,11 +101,13 @@ int main(void) {
     assert result.returncode != 0 and 'invalid SOURCE_DATE_EPOCH' in result.stderr
     source.write_text(r'''
 #include <time.h>
-static_assert(sizeof(time_t)==8 && sizeof(struct tm)==56);
+static_assert(sizeof(time_t)==8 && sizeof(struct tm)==56 && sizeof(struct timespec)==16);
 int main(void) {
   time_t epoch=0;
   struct tm *p=gmtime(&epoch);
-  return p && p->tm_year==70 && p->tm_mon==0 && p->tm_mday==1 ? 42 : 1;
+  struct timespec ts;
+  return p && p->tm_year==70 && p->tm_mon==0 && p->tm_mday==1 &&
+    timespec_get(&ts,TIME_UTC)==TIME_UTC && ts.tv_nsec>=0 && ts.tv_nsec<1000000000L ? 42 : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
