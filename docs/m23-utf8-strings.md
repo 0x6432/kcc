@@ -16,8 +16,9 @@ UTF-16/UTF-32/wide string literals remain unsupported. Bounded `u`, `U`, and `L`
 character constants have unsigned-short, unsigned-int, and int types
 respectively. They accept one UTF-8 source character or fixed-width UCN in the
 range U+00A0–U+10FFFF (excluding surrogates), plus ASCII and byte escapes.
-`u` rejects characters requiring a UTF-16 surrogate pair; numeric escapes
-above 255 remain unsupported.
+`u` rejects characters requiring a UTF-16 surrogate pair. Octal and
+hexadecimal escapes are accepted up to the target character type maximum:
+65535 for `u`, 4294967295 for `U`, and 2147483647 for `L`.
 `u8` character constants
 are supported for a single ASCII source character or one byte escape; they
 have unsigned-char type, so `u8'\\377'` has value 255. Multibyte source

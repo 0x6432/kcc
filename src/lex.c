@@ -500,8 +500,8 @@ const char *parse_integer_spelling(const unsigned char *text, size_t length,
 }
 
 /* Cursor begins immediately after a backslash; end excludes the quote. */
-static const char *parse_byte_escape(const unsigned char *text, size_t end,
-	size_t *cursor, unsigned *result)
+static const char *parse_character_escape(const unsigned char *text, size_t end,
+	size_t *cursor, unsigned *result, unsigned maximum)
 {
 	size_t offset = *cursor;
 	unsigned value;
@@ -530,8 +530,9 @@ static const char *parse_byte_escape(const unsigned char *text, size_t end,
 
 			if (digit < 0)
 				break;
-			if (value > (255 - (unsigned)digit) / 16)
-				return "character escape exceeds one byte";
+			if ((unsigned)digit > maximum || value > (maximum - (unsigned)digit) / 16)
+				return maximum == 255 ? "character escape exceeds one byte" :
+					"character escape exceeds target range";
 			value = value * 16 + (unsigned)digit;
 			offset++;
 			digits++;
@@ -552,8 +553,9 @@ static const char *parse_byte_escape(const unsigned char *text, size_t end,
 			value = value * 8 + next - '0';
 			offset++;
 		}
-		if (value > 255)
-			return "character escape exceeds one byte";
+		if (value > maximum)
+			return maximum == 255 ? "character escape exceeds one byte" :
+				"character escape exceeds target range";
 		break;
 	}
 
@@ -562,12 +564,18 @@ static const char *parse_byte_escape(const unsigned char *text, size_t end,
 	return NULL;
 }
 
+static const char *parse_byte_escape(const unsigned char *text, size_t end,
+	size_t *cursor, unsigned *result)
+{
+	return parse_character_escape(text, end, cursor, result, 255);
+}
+
 /* One character in the target encoding, with a bounded UCN subset. */
 const char *parse_character_spelling(const unsigned char *text, size_t length,
 	int64_t *result)
 {
 	size_t offset = 1, end;
-	unsigned value;
+	unsigned value, maximum = 255;
 	bool prefixed = false, wide_unicode = false, utf16 = false;
 
 	if (!length)
@@ -577,6 +585,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 		prefixed = true;
 	} else if (length >= 2 && (text[0] == 'u' || text[0] == 'U' || text[0] == 'L') && text[1] == '\'') {
 		utf16 = text[0] == 'u';
+		maximum = utf16 ? 65535u : text[0] == 'U' ? UINT32_MAX : INT32_MAX;
 		wide_unicode = prefixed = true;
 		offset = 2;
 	} else if (text[0] != '\'') {
@@ -600,7 +609,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 		if (value < 0xa0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
 			return "unsupported or invalid universal character name";
 	} else if (value == '\\') {
-		const char *error = parse_byte_escape(text, end, &offset, &value);
+		const char *error = parse_character_escape(text, end, &offset, &value, maximum);
 		if (error)
 			return error;
 	} else if (value >= 128 && wide_unicode) {
