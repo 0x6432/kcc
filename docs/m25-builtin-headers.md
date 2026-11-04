@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `ctype.h`, `inttypes.h` and `time.h`, in addition
+`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h` and `time.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -55,6 +55,10 @@ include directories take precedence.
   evaluating each argument once after conversion to double. Long double,
   other classifications and many math interfaces remain unsupported; link
   math functions with `-lm`.
+- `tgmath.h` provides the unary real functions listed in `math.h` as generic
+  macros for float, double and integer arguments. Float selects the `f`
+  variant; double and integer select the double variant. Arguments are evaluated
+  once. Binary, complex and long-double generic math is not provided.
 - `ctype.h` declares the usual narrow-character classification and conversion
   functions from libc. `inttypes.h` supplies exact-width, pointer-width and
   max-width print format macros plus `imaxabs`, `strtoimax` and `strtoumax`.

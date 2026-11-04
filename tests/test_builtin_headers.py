@@ -126,6 +126,24 @@ int main(void) {
         subprocess.run([host, str(asm), "-lm", "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
+#include <tgmath.h>
+static_assert(sizeof(sqrt(4.0f))==sizeof(float));
+static_assert(sizeof(sqrt(4.0))==sizeof(double));
+static_assert(sizeof(sqrt(4))==sizeof(double));
+int main(void) {
+  int n=4;
+  float f=4.0f;
+  return sqrt(n++)==2.0 && n==5 && sqrt(f)==2.0f ? 42 : 1;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-lm", "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
+    source.write_text(r'''
 #include <stdio.h>
 #include <errno.h>
 #include <ctype.h>

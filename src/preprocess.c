@@ -940,6 +940,26 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"double trunc(double); float truncf(float); double round(double); float roundf(float);\n"
 			"double fmod(double,double); float fmodf(float,float);\n"
 			"#endif\n";
+		static const char tgmath_header[] =
+			"#ifndef __KCC_TGMATH_H\n#define __KCC_TGMATH_H 1\n"
+			"#include <math.h>\n"
+			"#define fabs(x) _Generic((x),float:fabsf,default:fabs)(x)\n"
+			"#define sqrt(x) _Generic((x),float:sqrtf,default:sqrt)(x)\n"
+			"#define cbrt(x) _Generic((x),float:cbrtf,default:cbrt)(x)\n"
+			"#define sin(x) _Generic((x),float:sinf,default:sin)(x)\n"
+			"#define cos(x) _Generic((x),float:cosf,default:cos)(x)\n"
+			"#define tan(x) _Generic((x),float:tanf,default:tan)(x)\n"
+			"#define asin(x) _Generic((x),float:asinf,default:asin)(x)\n"
+			"#define acos(x) _Generic((x),float:acosf,default:acos)(x)\n"
+			"#define atan(x) _Generic((x),float:atanf,default:atan)(x)\n"
+			"#define exp(x) _Generic((x),float:expf,default:exp)(x)\n"
+			"#define log(x) _Generic((x),float:logf,default:log)(x)\n"
+			"#define log10(x) _Generic((x),float:log10f,default:log10)(x)\n"
+			"#define floor(x) _Generic((x),float:floorf,default:floor)(x)\n"
+			"#define ceil(x) _Generic((x),float:ceilf,default:ceil)(x)\n"
+			"#define trunc(x) _Generic((x),float:truncf,default:trunc)(x)\n"
+			"#define round(x) _Generic((x),float:roundf,default:round)(x)\n"
+			"#endif\n";
 		static const char ctype_header[] =
 			"#ifndef __KCC_CTYPE_H\n#define __KCC_CTYPE_H 1\n"
 			"int isalnum(int); int isalpha(int); int isblank(int); int iscntrl(int);\n"
@@ -1145,6 +1165,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "math.h") == 0) {
 			header = math_header;
 			source_name = "<kcc/math.h>";
+		} else if (strcmp(name->path, "tgmath.h") == 0) {
+			header = tgmath_header;
+			source_name = "<kcc/tgmath.h>";
 		} else if (strcmp(name->path, "ctype.h") == 0) {
 			header = ctype_header;
 			source_name = "<kcc/ctype.h>";
