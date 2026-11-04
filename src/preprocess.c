@@ -904,6 +904,23 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define EDOM 33\n#define ERANGE 34\n#define EILSEQ 84\n"
 			"#define ENOENT 2\n#define EIO 5\n#define ENOMEM 12\n#define EINVAL 22\n#define EFBIG 27\n"
 			"#endif\n";
+		static const char math_header[] =
+			"#ifndef __KCC_MATH_H\n#define __KCC_MATH_H 1\n"
+			"int __finite(double); int __isinf(double); int __isnan(double); int __signbit(double);\n"
+			"#define isfinite(x) __finite(x)\n#define isinf(x) __isinf(x)\n"
+			"#define isnan(x) __isnan(x)\n#define signbit(x) __signbit(x)\n"
+			"double fabs(double); float fabsf(float);\n"
+			"double sqrt(double); float sqrtf(float); double cbrt(double); float cbrtf(float);\n"
+			"double sin(double); float sinf(float); double cos(double); float cosf(float);\n"
+			"double tan(double); float tanf(float); double asin(double); float asinf(float);\n"
+			"double acos(double); float acosf(float); double atan(double); float atanf(float);\n"
+			"double atan2(double,double); float atan2f(float,float);\n"
+			"double exp(double); float expf(float); double log(double); float logf(float);\n"
+			"double log10(double); float log10f(float); double pow(double,double); float powf(float,float);\n"
+			"double floor(double); float floorf(float); double ceil(double); float ceilf(float);\n"
+			"double trunc(double); float truncf(float); double round(double); float roundf(float);\n"
+			"double fmod(double,double); float fmodf(float,float);\n"
+			"#endif\n";
 		/* assert.h is intentionally re-evaluated on each inclusion for NDEBUG. */
 		static const char assert_header[] =
 			"#undef assert\n"
@@ -1051,6 +1068,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "errno.h") == 0) {
 			header = errno_header;
 			source_name = "<kcc/errno.h>";
+		} else if (strcmp(name->path, "math.h") == 0) {
+			header = math_header;
+			source_name = "<kcc/math.h>";
 		} else if (strcmp(name->path, "assert.h") == 0) {
 			header = assert_header;
 			source_name = "<kcc/assert.h>";
