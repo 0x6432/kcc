@@ -28,6 +28,7 @@ enum token_kind {
 	token_true,
 	token_false,
 	token_nullptr,
+	token_generic,
 	token_void,
 	token_const,
 	token_atomic,

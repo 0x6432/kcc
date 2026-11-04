@@ -1660,6 +1660,73 @@ static struct ast_expression *parse_va_expression(struct parser *parser)
 	return &node->expression;
 }
 
+static struct ast_expression *parse_generic_expression(struct parser *parser)
+{
+	struct token keyword = preprocess_next(parser->preprocessor);
+	struct ast_generic_expression *node = arena_alloc(parser->arena, sizeof(*node));
+	struct ast_generic_association **tail;
+	unsigned count = 0;
+
+	if (!node) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	*node = (struct ast_generic_expression) {
+		.expression = { .kind = expression_generic, .location = keyword.location, .depth = 1 },
+	};
+	if (!expect_token(parser, token_left_paren, "expected '(' after _Generic", NULL))
+		return NULL;
+	node->control = parse_expression(parser, 1);
+	if (!node->control || !expect_token(parser, token_comma, "expected ',' after generic control", NULL))
+		return NULL;
+	if (node->control->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, keyword.location, "expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node->expression.depth = node->control->depth + 1;
+	tail = &node->associations;
+	do {
+		struct token beginning = preprocess_peek(parser->preprocessor);
+		struct ast_generic_association *item;
+		if (++count > 128) {
+			diagnostic_error(parser->diagnostics, beginning.location, "generic association limit exceeded (128)");
+			return NULL;
+		}
+		item = arena_alloc(parser->arena, sizeof(*item));
+		if (!item) {
+			allocation_error(parser, beginning.location);
+			return NULL;
+		}
+		*item = (struct ast_generic_association) { .location = beginning.location };
+		if (beginning.kind == token_default)
+			preprocess_next(parser->preprocessor);
+		else {
+			item->syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+			if (!item->syntax)
+				return NULL;
+		}
+		if (!expect_token(parser, token_colon, "expected ':' in generic association", NULL))
+			return NULL;
+		item->value = parse_expression(parser, 1);
+		if (!item->value)
+			return NULL;
+		if (item->value->depth >= ast_max_expression_depth) {
+			diagnostic_error(parser->diagnostics, item->location, "expression tree exceeds depth limit (128)");
+			return NULL;
+		}
+		if (item->value->depth + 1 > node->expression.depth)
+			node->expression.depth = item->value->depth + 1;
+		*tail = item;
+		tail = &item->next;
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
+	} while (true);
+	if (!expect_token(parser, token_right_paren, "expected ')' after generic associations", NULL))
+		return NULL;
+	return &node->expression;
+}
+
 static struct ast_expression *parse_atomic_expression(struct parser *parser)
 {
 	struct token token = preprocess_next(parser->preprocessor);
@@ -1753,6 +1820,8 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 		node->expression.type = token.floating_single ? &type_float : &type_double;
 		return &node->expression;
 	}
+	if (token.kind == token_generic)
+		return parse_generic_expression(parser);
 	if (token.kind == token_kcc_va_start || token.kind == token_kcc_va_arg ||
 		token.kind == token_kcc_va_copy || token.kind == token_kcc_va_end)
 		return parse_va_expression(parser);

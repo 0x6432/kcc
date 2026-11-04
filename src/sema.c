@@ -1556,6 +1556,54 @@ static bool sema_expression(struct sema *sema,
 	const struct type *result_type = &type_int;
 
 	switch (expression->kind) {
+	case expression_generic: {
+		struct ast_generic_expression *node = (struct ast_generic_expression *)expression;
+		struct ast_generic_association *selected = NULL, *fallback = NULL;
+		bool saved = sema->unevaluated;
+		bool ok;
+
+		sema->unevaluated = true;
+		ok = sema_expression(sema, &node->control, true);
+		sema->unevaluated = saved;
+		if (!ok)
+			return false;
+		for (struct ast_generic_association *item = node->associations; item; item = item->next) {
+			if (!item->syntax) {
+				if (fallback) {
+					diagnostic_error(sema->diagnostics, item->location, "duplicate generic default association");
+					return false;
+				}
+				fallback = item;
+				continue;
+			}
+			item->type = resolve_unevaluated_type_syntax(sema, item->syntax);
+			if (!item->type)
+				return false;
+			if (!type_is_complete_object(item->type)) {
+				diagnostic_error(sema->diagnostics, item->location, "generic association requires a complete object type");
+				return false;
+			}
+			for (struct ast_generic_association *prior = node->associations; prior != item; prior = prior->next) {
+				if (prior->type && type_compatible(prior->type, item->type)) {
+					diagnostic_error(sema->diagnostics, item->location, "generic association types must be distinct");
+					return false;
+				}
+			}
+			if (type_compatible(node->control->type, item->type))
+				selected = item;
+		}
+		if (!selected)
+			selected = fallback;
+		if (!selected) {
+			diagnostic_error(sema->diagnostics, expression->location, "generic selection has no matching association");
+			return false;
+		}
+		for (struct ast_generic_association *item = node->associations; item; item = item->next)
+			if (item != selected && !sema_unevaluated_expression(sema, &item->value))
+				return false;
+		*expression_slot = selected->value;
+		return sema_expression(sema, expression_slot, value_required);
+	}
 	case expression_atomic_fetch: {
 		struct ast_atomic_expression *node = (struct ast_atomic_expression *)expression;
 		const struct type *referent;

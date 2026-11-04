@@ -1077,6 +1077,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		return temporary;
 	}
 	case expression_function_designator:
+	case expression_generic:
 	case expression_external_object:
 	case expression_string:
 	case expression_subscript:

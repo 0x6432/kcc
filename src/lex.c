@@ -368,6 +368,7 @@ static const struct keyword keywords[] = {
 	{ "struct", token_struct }, { "union", token_union }, { "enum", token_enum },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
+	{ "_Generic", token_generic },
 	{ "float", token_float }, { "double", token_double },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
@@ -966,6 +967,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_kcc_atomic_store: return "__kcc_atomic_store";
 	case token_kcc_atomic_compare_exchange: return "__kcc_atomic_compare_exchange";
 	case token_kcc_atomic_is_lock_free: return "__kcc_atomic_is_lock_free";
+	case token_generic: return "_Generic";
 	case token_arrow: return "->";
 	}
 	return "unknown";

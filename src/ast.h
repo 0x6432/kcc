@@ -45,6 +45,7 @@ enum expression_kind {
 	expression_call,
 	expression_va,
 	expression_atomic_fetch,
+	expression_generic,
 	expression_member,
 	expression_compound_literal,
 };
@@ -92,6 +93,20 @@ struct ast_expression {
 	const struct type *type;
 	unsigned depth;
 	bool is_lvalue;
+};
+
+struct ast_generic_association {
+	struct ast_type_syntax *syntax; /* NULL for default */
+	const struct type *type;
+	struct ast_expression *value;
+	struct source_location location;
+	struct ast_generic_association *next;
+};
+
+struct ast_generic_expression {
+	struct ast_expression expression;
+	struct ast_expression *control;
+	struct ast_generic_association *associations;
 };
 
 /* Written initializer syntax is immutable after parsing. */
