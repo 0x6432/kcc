@@ -201,6 +201,24 @@ int main(void) {
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
+#include <stdio.h>
+#include <inttypes.h>
+int main(void) {
+  char buf[64]; int8_t a=0; uint16_t b=0; int_fast32_t c=0;
+  int n=snprintf(buf,sizeof buf,"%" PRIdLEAST8 " %" PRIuLEAST16 " %" PRIdFAST32,
+                 (int_least8_t)-3,(uint_least16_t)21,(int_fast32_t)42);
+  int fields=sscanf(buf,"%" SCNd8 " %" SCNu16 " %" SCNdFAST32,&a,&b,&c);
+  return n==8 && fields==3 && a==-3 && b==21 && c==42 ? 42 : 1;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
+    source.write_text(r'''
 #include <stdatomic.h>
 atomic_int x=ATOMIC_VAR_INIT(0);
 atomic_flag flag=ATOMIC_FLAG_INIT;

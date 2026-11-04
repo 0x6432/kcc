@@ -64,7 +64,7 @@ include directories take precedence.
 - `ctype.h` declares the usual narrow-character classification and conversion
   functions from libc. `inttypes.h` supplies exact-width, pointer-width and
   max-width print format macros plus `imaxabs`, `strtoimax` and `strtoumax`.
-  It does not yet provide scanning or least/fast-width format macros.
+  It also supplies scanning and least/fast-width format macros for the target integer types.
 - `uchar.h` supplies the C23 character typedefs, glibc-compatible `mbstate_t`,
   and 16/32-bit conversion function declarations. C23 8-bit conversion
   functions are omitted on the current glibc 2.34 target.
