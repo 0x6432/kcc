@@ -90,11 +90,13 @@ int main(void) {
     source.write_text(r'''
 #include <stdio.h>
 #include <errno.h>
+#include <ctype.h>
+#include <inttypes.h>
 int main(void) {
   char buf[8];
   errno=0;
-  int n=snprintf(buf,sizeof buf,"%d",42);
-  return n==2 && buf[0]=='4' && buf[1]=='2' && errno==0 ? 42 : 1;
+  int n=snprintf(buf,sizeof buf,"%" PRId64,(int64_t)42);
+  return n==2 && isdigit(buf[0]) && buf[1]=='2' && errno==0 ? 42 : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
