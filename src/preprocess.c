@@ -914,6 +914,32 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define atomic_load(object) (*(object))\n"
 			"#define atomic_store(object,value) ((void)(*(object)=(value)))\n"
 			"#endif\n";
+		static const char stdlib_header[] =
+			"#ifndef __KCC_STDLIB_H\n#define __KCC_STDLIB_H 1\n"
+			"#include <stddef.h>\n"
+			"#define EXIT_SUCCESS 0\n#define EXIT_FAILURE 1\n#define RAND_MAX 2147483647\n"
+			"void *malloc(size_t); void *calloc(size_t,size_t); void *realloc(void *,size_t);\n"
+			"void free(void *); void abort(void); void exit(int); void _Exit(int);\n"
+			"int atoi(const char *); long atol(const char *); long long atoll(const char *);\n"
+			"long strtol(const char *,char **,int); unsigned long strtoul(const char *,char **,int);\n"
+			"int rand(void); void srand(unsigned int);\n"
+			"int abs(int); long labs(long); long long llabs(long long);\n"
+			"void qsort(void *,size_t,size_t,int (*)(const void *,const void *));\n"
+			"void *bsearch(const void *,const void *,size_t,size_t,int (*)(const void *,const void *));\n"
+			"#endif\n";
+		static const char string_header[] =
+			"#ifndef __KCC_STRING_H\n#define __KCC_STRING_H 1\n"
+			"#include <stddef.h>\n"
+			"void *memcpy(void *,const void *,size_t); void *memmove(void *,const void *,size_t);\n"
+			"void *memset(void *,int,size_t); int memcmp(const void *,const void *,size_t);\n"
+			"void *memchr(const void *,int,size_t);\n"
+			"size_t strlen(const char *); char *strcpy(char *,const char *);\n"
+			"char *strncpy(char *,const char *,size_t); char *strcat(char *,const char *);\n"
+			"char *strncat(char *,const char *,size_t); int strcmp(const char *,const char *);\n"
+			"int strncmp(const char *,const char *,size_t); char *strchr(const char *,int);\n"
+			"char *strrchr(const char *,int); char *strstr(const char *,const char *);\n"
+			"char *strerror(int);\n"
+			"#endif\n";
 		static const char stddef_header[] =
 			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
 			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
@@ -998,6 +1024,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "stdatomic.h") == 0) {
 			header = stdatomic_header;
 			source_name = "<kcc/stdatomic.h>";
+		} else if (strcmp(name->path, "stdlib.h") == 0) {
+			header = stdlib_header;
+			source_name = "<kcc/stdlib.h>";
+		} else if (strcmp(name->path, "string.h") == 0) {
+			header = string_header;
+			source_name = "<kcc/string.h>";
 		} else if (strcmp(name->path, "stddef.h") == 0) {
 			header = stddef_header;
 			source_name = "<kcc/stddef.h>";

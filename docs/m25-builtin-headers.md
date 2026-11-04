@@ -2,7 +2,7 @@
 
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
-`assert.h` and `stdatomic.h`, in addition
+`assert.h`, `stdatomic.h`, `stdlib.h` and `string.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -34,6 +34,10 @@ include directories take precedence.
   store; load and store use sequential consistency and require `-latomic`.
   Volatile atomic objects, other atomic types, explicit orders, fences,
   exchange/fetch operations and lock-free queries are not provided.
+- `stdlib.h` and `string.h` declare a bounded set of common allocation,
+  conversion, sorting, memory and string functions with x86-64 libc-compatible
+  signatures. They omit many standard interfaces and require a compatible
+  linked libc; they do not provide implementations.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.

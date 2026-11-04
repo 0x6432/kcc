@@ -84,3 +84,23 @@ int main(void) {
         subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), "-latomic", "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
+    source.write_text(r'''
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+  char *p=malloc(4);
+  if (!p) return EXIT_FAILURE;
+  memcpy(p,"42",3);
+  int value=atoi(p);
+  size_t n=strlen(p);
+  free(p);
+  return n==2 ? value : 1;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
