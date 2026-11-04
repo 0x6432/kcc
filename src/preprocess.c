@@ -967,12 +967,16 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define atomic_fetch_or(object,value) __kcc_atomic_fetch_or(object,value)\n"
 			"#define atomic_fetch_xor(object,value) __kcc_atomic_fetch_xor(object,value)\n"
 			"#define atomic_exchange(object,value) __kcc_atomic_exchange(object,value)\n"
+			"#define atomic_compare_exchange_strong(object,expected,desired) __kcc_atomic_compare_exchange(object,expected,desired)\n"
+			"#define atomic_compare_exchange_weak(object,expected,desired) __kcc_atomic_compare_exchange(object,expected,desired)\n"
 			"#define atomic_fetch_add_explicit(object,value,order) __kcc_atomic_fetch_add(object,value,order)\n"
 			"#define atomic_fetch_sub_explicit(object,value,order) __kcc_atomic_fetch_sub(object,value,order)\n"
 			"#define atomic_fetch_and_explicit(object,value,order) __kcc_atomic_fetch_and(object,value,order)\n"
 			"#define atomic_fetch_or_explicit(object,value,order) __kcc_atomic_fetch_or(object,value,order)\n"
 			"#define atomic_fetch_xor_explicit(object,value,order) __kcc_atomic_fetch_xor(object,value,order)\n"
 			"#define atomic_exchange_explicit(object,value,order) __kcc_atomic_exchange(object,value,order)\n"
+			"#define atomic_compare_exchange_strong_explicit(object,expected,desired,success,failure) __kcc_atomic_compare_exchange(object,expected,desired,success,failure)\n"
+			"#define atomic_compare_exchange_weak_explicit(object,expected,desired,success,failure) __kcc_atomic_compare_exchange(object,expected,desired,success,failure)\n"
 			"#endif\n";
 		static const char stdlib_header[] =
 			"#ifndef __KCC_STDLIB_H\n#define __KCC_STDLIB_H 1\n"

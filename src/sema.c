@@ -1561,6 +1561,7 @@ static bool sema_expression(struct sema *sema,
 		const struct type *referent;
 
 		if (!sema_expression(sema, &node->object, true) ||
+			(node->expected && !sema_expression(sema, &node->expected, true)) ||
 			(node->argument && !sema_expression(sema, &node->argument, true)))
 			return false;
 		if (node->object->type->kind != type_kind_pointer) {
@@ -1579,6 +1580,21 @@ static bool sema_expression(struct sema *sema,
 		result_type = unqualified_type(sema, referent, expression->location);
 		if (!result_type || (node->argument && !convert_expression(sema, &node->argument, result_type)))
 			return false;
+		if (node->expected) {
+			const struct type *expected_type;
+			if (node->expected->type->kind != type_kind_pointer) {
+				diagnostic_error(sema->diagnostics, node->expected->location,
+					"compare exchange expected argument must point to a mutable matching integer");
+				return false;
+			}
+			expected_type = ((const struct pointer_type *)node->expected->type)->referent;
+			if (expected_type->qualifiers || !type_same(expected_type, result_type)) {
+				diagnostic_error(sema->diagnostics, node->expected->location,
+					"compare exchange expected argument must point to a mutable matching integer");
+				return false;
+			}
+			result_type = &type_bool;
+		}
 		if (node->order) {
 			if (!sema_expression(sema, &node->order, true))
 				return false;
@@ -1590,11 +1606,26 @@ static bool sema_expression(struct sema *sema,
 			if (!convert_expression(sema, &node->order, &type_int))
 				return false;
 		}
+		if (node->failure_order) {
+			if (!sema_expression(sema, &node->failure_order, true))
+				return false;
+			if (!type_is_integer(node->failure_order->type)) {
+				diagnostic_error(sema->diagnostics, node->failure_order->location,
+					"atomic memory order must be an integer");
+				return false;
+			}
+			if (!convert_expression(sema, &node->failure_order, &type_int))
+				return false;
+		}
 		expression->depth = node->object->depth + 1;
+		if (node->expected && node->expected->depth + 1 > expression->depth)
+			expression->depth = node->expected->depth + 1;
 		if (node->argument && node->argument->depth + 1 > expression->depth)
 			expression->depth = node->argument->depth + 1;
 		if (node->order && node->order->depth + 1 > expression->depth)
 			expression->depth = node->order->depth + 1;
+		if (node->failure_order && node->failure_order->depth + 1 > expression->depth)
+			expression->depth = node->failure_order->depth + 1;
 		break;
 	}
 	case expression_va: {

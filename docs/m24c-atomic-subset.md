@@ -35,7 +35,13 @@ and explicit loads/stores also accept a runtime `memory_order`, evaluated once
 and passed to libatomic. The six order values follow GCC/libatomic's 0–5 ABI;
 invalid values, release or acquire-release loads, and consume, acquire or
 acquire-release stores are outside the supported contract. These additions are
-not yet tested. Atomic record or
+not yet tested. Strong and weak compare-exchange, including explicit-order
+variants, use `__atomic_compare_exchange_4`. The weak form is implemented as
+strong and may therefore never fail spuriously. The expected argument must point
+to a mutable matching non-atomic integer; failure updates that object. All
+arguments are evaluated once. Callers must supply valid success/failure orders:
+failure cannot be release or acquire-release or stronger than success.
+Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
 Atomic pointer, other integer widths, bool, enum, floating, aggregate and array

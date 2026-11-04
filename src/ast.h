@@ -334,15 +334,17 @@ struct ast_va_expression {
 enum ast_atomic_operation {
 	ast_atomic_fetch_add, ast_atomic_fetch_sub, ast_atomic_fetch_and,
 	ast_atomic_fetch_or, ast_atomic_fetch_xor, ast_atomic_exchange,
-	ast_atomic_load, ast_atomic_store,
+	ast_atomic_load, ast_atomic_store, ast_atomic_compare_exchange,
 };
 
 struct ast_atomic_expression {
 	struct ast_expression expression;
 	enum ast_atomic_operation operation;
 	struct ast_expression *object;
+	struct ast_expression *expected;
 	struct ast_expression *argument;
 	struct ast_expression *order;
+	struct ast_expression *failure_order;
 };
 
 struct ast_call_expression {

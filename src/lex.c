@@ -363,6 +363,7 @@ static const struct keyword keywords[] = {
 	{ "__kcc_atomic_fetch_xor", token_kcc_atomic_fetch_xor },
 	{ "__kcc_atomic_exchange", token_kcc_atomic_exchange },
 	{ "__kcc_atomic_load", token_kcc_atomic_load }, { "__kcc_atomic_store", token_kcc_atomic_store },
+	{ "__kcc_atomic_compare_exchange", token_kcc_atomic_compare_exchange },
 	{ "struct", token_struct }, { "union", token_union }, { "enum", token_enum },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
@@ -962,6 +963,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_kcc_atomic_exchange: return "__kcc_atomic_exchange";
 	case token_kcc_atomic_load: return "__kcc_atomic_load";
 	case token_kcc_atomic_store: return "__kcc_atomic_store";
+	case token_kcc_atomic_compare_exchange: return "__kcc_atomic_compare_exchange";
 	case token_arrow: return "->";
 	}
 	return "unknown";

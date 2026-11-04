@@ -764,10 +764,24 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_atomic_fetch: {
 		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
 		size_t object = codegen_expression(codegen, node->object);
+		size_t expected = node->expected ? codegen_expression(codegen, node->expected) : 0;
 		size_t argument = node->argument ? codegen_expression(codegen, node->argument) : 0;
 		size_t order = node->order ? codegen_expression(codegen, node->order) : 0;
+		size_t failure_order = node->failure_order ? codegen_expression(codegen, node->failure_order) : 0;
 		const char *operation;
 
+		if (node->operation == ast_atomic_compare_exchange) {
+			size_t result = codegen->next_temporary++;
+			temporary = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_4(l %%t%zu, l %%t%zu, w %%t%zu, ",
+				result, object, expected, argument);
+			if (node->order)
+				emit(codegen, "w %%t%zu, w %%t%zu)\n", order, failure_order);
+			else
+				emit(codegen, "w 5, w 5)\n");
+			emit(codegen, "\t%%t%zu =w and %%t%zu, 1\n", temporary, result);
+			return temporary;
+		}
 		if (node->operation == ast_atomic_load) {
 			temporary = codegen->next_temporary++;
 			if (node->order)

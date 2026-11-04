@@ -30,9 +30,10 @@ include directories take precedence.
   once when enabled, and calls glibc's `__assert_fail` on failure with source
   and function information. It requires a compatible libc.
 - `stdatomic.h` exposes `atomic_int`, `atomic_uint`, `ATOMIC_VAR_INIT`,
-  `atomic_init`, `atomic_load`, `atomic_store`, `atomic_exchange` and
-  `atomic_fetch_add/sub/and/or/xor`, with explicit-order variants of load,
-  store, exchange and fetch operations, for the compiler's bounded
+  `atomic_init`, `atomic_load`, `atomic_store`, `atomic_exchange`,
+  strong and weak compare-exchange, and `atomic_fetch_add/sub/and/or/xor`,
+  with explicit-order variants of load, store, exchange, compare-exchange
+  and fetch operations, for the compiler's bounded
   atomic int/unsigned-int subset. Initialization uses a sequentially consistent
   store; load and store use sequential consistency and require `-latomic`.
   Volatile atomic objects, other atomic types, fences,

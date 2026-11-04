@@ -1677,6 +1677,7 @@ static struct ast_expression *parse_atomic_expression(struct parser *parser)
 			token.kind == token_kcc_atomic_fetch_or ? ast_atomic_fetch_or :
 			token.kind == token_kcc_atomic_fetch_xor ? ast_atomic_fetch_xor :
 			token.kind == token_kcc_atomic_load ? ast_atomic_load :
+			token.kind == token_kcc_atomic_compare_exchange ? ast_atomic_compare_exchange :
 			token.kind == token_kcc_atomic_store ? ast_atomic_store : ast_atomic_exchange,
 	};
 	if (!expect_token(parser, token_left_paren, "expected '(' after atomic intrinsic", NULL))
@@ -1684,6 +1685,13 @@ static struct ast_expression *parse_atomic_expression(struct parser *parser)
 	node->object = parse_expression(parser, 1);
 	if (!node->object)
 		return NULL;
+	if (node->operation == ast_atomic_compare_exchange) {
+		if (!expect_token(parser, token_comma, "expected ',' in atomic intrinsic", NULL))
+			return NULL;
+		node->expected = parse_expression(parser, 1);
+		if (!node->expected)
+			return NULL;
+	}
 	if (node->operation != ast_atomic_load) {
 		if (!expect_token(parser, token_comma, "expected ',' in atomic intrinsic", NULL))
 			return NULL;
@@ -1696,20 +1704,33 @@ static struct ast_expression *parse_atomic_expression(struct parser *parser)
 		node->order = parse_expression(parser, 1);
 		if (!node->order)
 			return NULL;
+		if (node->operation == ast_atomic_compare_exchange) {
+			if (!expect_token(parser, token_comma, "expected failure order in compare exchange", NULL))
+				return NULL;
+			node->failure_order = parse_expression(parser, 1);
+			if (!node->failure_order)
+				return NULL;
+		}
 	}
 	if (!expect_token(parser, token_right_paren, "expected ')' after atomic intrinsic", NULL))
 		return NULL;
 	if (node->object->depth >= ast_max_expression_depth ||
+		(node->expected && node->expected->depth >= ast_max_expression_depth) ||
 		(node->argument && node->argument->depth >= ast_max_expression_depth) ||
-		(node->order && node->order->depth >= ast_max_expression_depth)) {
+		(node->order && node->order->depth >= ast_max_expression_depth) ||
+		(node->failure_order && node->failure_order->depth >= ast_max_expression_depth)) {
 		diagnostic_error(parser->diagnostics, token.location, "expression tree exceeds depth limit (128)");
 		return NULL;
 	}
 	node->expression.depth = node->object->depth + 1;
+	if (node->expected && node->expected->depth + 1 > node->expression.depth)
+		node->expression.depth = node->expected->depth + 1;
 	if (node->argument && node->argument->depth + 1 > node->expression.depth)
 		node->expression.depth = node->argument->depth + 1;
 	if (node->order && node->order->depth + 1 > node->expression.depth)
 		node->expression.depth = node->order->depth + 1;
+	if (node->failure_order && node->failure_order->depth + 1 > node->expression.depth)
+		node->expression.depth = node->failure_order->depth + 1;
 	return &node->expression;
 }
 
@@ -1738,7 +1759,8 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 	if (token.kind == token_kcc_atomic_fetch_add || token.kind == token_kcc_atomic_fetch_sub ||
 		token.kind == token_kcc_atomic_fetch_and || token.kind == token_kcc_atomic_fetch_or ||
 		token.kind == token_kcc_atomic_fetch_xor || token.kind == token_kcc_atomic_exchange ||
-		token.kind == token_kcc_atomic_load || token.kind == token_kcc_atomic_store)
+		token.kind == token_kcc_atomic_load || token.kind == token_kcc_atomic_store ||
+		token.kind == token_kcc_atomic_compare_exchange)
 		return parse_atomic_expression(parser);
 	if (token.kind == token_nullptr)
 		return parse_nullptr_expression(parser);
