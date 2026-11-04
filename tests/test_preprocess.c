@@ -117,8 +117,8 @@ static void test_null_directives_in_code(void)
 static void test_known_and_unknown_directives(void)
 {
 	const char *names[] = {
-		"embed", "line",
-			};
+		"embed",
+	};
 	const struct expected_token expected[] = {
 		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
 	};
@@ -1617,9 +1617,40 @@ static void test_predefined_locations(void)
 		};
 		check_stream("#define __LINE__ 4\nint", rejected, 3, 1, "reserved macro");
 		check_stream("#undef __FILE__\nint", rejected, 3, 1, "reserved macro");
-		check_stream("#line 10\nint", rejected, 3, 1, "not supported");
 		check_stream("#if __FILE__\nint", rejected, 3, 1, "expected an operand");
 	}
+}
+
+static void test_line_directives(void)
+{
+	const char text[] =
+		"#define NUMBER 120\n#define FILENAME \"virtual.c\"\n"
+		"#line NUMBER FILENAME\n__LINE__ __FILE__\n"
+		"#line 9\n__LINE__ __FILE__\n"
+		"#if 0\n#line 200 \"ignored.c\"\n#endif\n"
+		"__LINE__ __FILE__\n";
+	const uint64_t expected[] = { 120, 9, 13 };
+	const struct expected_token rejected[] = {
+		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+	};
+	struct source source;
+	struct preprocessor preprocessor;
+	struct diagnostics diagnostics = { 0 };
+
+	assert(source_from_bytes(&source, "original.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+		struct token token = preprocess_next(&preprocessor);
+
+		assert(token.kind == token_integer && token.integer == expected[i]);
+		assert_file_token(preprocess_next(&preprocessor), "virtual.c");
+	}
+	assert(preprocess_next(&preprocessor).kind == token_eof && !diagnostics.errors);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	check_stream("#line 0\nint", rejected, 3, 1, "between 1 and 2147483647");
+	check_stream("#line 2147483648\nint", rejected, 3, 1, "between 1 and 2147483647");
 }
 
 static void test_predefined_include_locations(void)
@@ -1856,6 +1887,7 @@ int main(void)
 {
 	test_pragma_directives();
 	test_predefined_locations();
+	test_line_directives();
 	test_predefined_include_locations();
 	test_include_search();
 	test_computed_include_operands();

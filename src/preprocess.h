@@ -25,6 +25,7 @@
 #define preprocess_include_directory_limit 32
 #define preprocess_parentheses_limit 128
 #define preprocess_spelling_limit 1048576
+#define preprocess_line_directive_token_limit 1024
 #define preprocess_line_scan_limit (64 * 1024 * 1024)
 
 struct macro;
@@ -33,6 +34,7 @@ struct macro_argument;
 struct argument_token;
 struct include_source;
 struct pragma_once_file;
+struct line_remap;
 
 /* A bit per stable macro identity; sets travel with tokens, not the C AST. */
 struct macro_hide_set {
@@ -94,6 +96,7 @@ struct preprocessor {
 	struct include_source *include_sources;
 	struct pragma_once_file *once_files;
 	size_t once_file_count;
+	struct line_remap *line_remaps;
 	bool (*include_loader)(void *context, struct source *source, const char *path);
 	void *include_context;
 	const char *const *include_directories;

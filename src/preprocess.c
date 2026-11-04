@@ -17,6 +17,15 @@ struct pragma_once_file {
 	struct pragma_once_file *next;
 };
 
+/* Per-physical-source mappings remain arena-owned for the whole translation. */
+struct line_remap {
+	const struct source *source;
+	size_t physical_start;
+	size_t logical_start;
+	const char *name;
+	struct line_remap *next;
+};
+
 struct include_name {
 	char path[preprocess_include_path_limit];
 	struct pp_token invocation;
@@ -958,10 +967,13 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 }
 
 /* control-line = '#' newline | define-directive | undef-directive | diagnostic-directive | pragma
- *              | include-directive
+ *              | include-directive | line-directive
  *              | conditional-control
  * Other C23 control lines are recognized but not implemented yet.
  */
+static bool read_line_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct token *error);
+
 static bool read_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, struct token *error)
 {
@@ -998,6 +1010,8 @@ static bool read_directive(struct preprocessor *preprocessor,
 	}
 	if (pp_spelling_is(token, "include"))
 		return read_include_directive(preprocessor, marker, error);
+	if (pp_spelling_is(token, "line"))
+		return read_line_directive(preprocessor, marker, error);
 	if (pp_spelling_is(token, "define") || pp_spelling_is(token, "undef"))
 		return read_macro_directive(preprocessor, marker,
 			pp_spelling_is(token, "define"), error);
@@ -1145,6 +1159,45 @@ static struct source *allocate_spelling(struct preprocessor *preprocessor, size_
 	return spelling;
 }
 
+/* The stored sites are physical; maps are selected by both source identity and
+ * physical line so cached/macro-origin tokens cannot inherit a later mapping. */
+static bool logical_position(struct preprocessor *preprocessor, struct source_location site,
+	struct pp_token blame, size_t *physical, size_t *logical, const char **name,
+	struct token *error)
+{
+	size_t column, scan;
+
+	if (!site.source || !site.source->name || site.offset > site.source->length) {
+		*error = stop_preprocessing(preprocessor, blame, "invalid semantic source location");
+		return false;
+	}
+	scan = source_physical_offset(site);
+	if (scan > preprocess_line_scan_limit - preprocessor->line_scan_bytes) {
+		*error = stop_preprocessing(preprocessor, blame, "predefined line lookup work limit exceeded");
+		return false;
+	}
+	preprocessor->line_scan_bytes += scan;
+	source_line_column(site, physical, &column);
+	*logical = *physical;
+	*name = site.source->name;
+	for (struct line_remap *map = preprocessor->line_remaps; map; map = map->next) {
+		if (!spend_expansion_work(preprocessor, blame, error))
+			return false;
+		if (map->source == site.source && map->physical_start <= *physical) {
+			size_t delta = *physical - map->physical_start;
+
+			if (delta > SIZE_MAX - map->logical_start) {
+				*error = stop_preprocessing(preprocessor, blame, "logical line number overflow");
+				return false;
+			}
+			*logical = map->logical_start + delta;
+			*name = map->name;
+			break;
+		}
+	}
+	return true;
+}
+
 /* Generate ordinary pp literals without changing diagnostic provenance. The
  * semantic site belongs to the identifier, not its spelling or outer call. */
 static bool expand_predefined_location(struct preprocessor *preprocessor,
@@ -1152,27 +1205,16 @@ static bool expand_predefined_location(struct preprocessor *preprocessor,
 {
 	struct source_location site = input->semantic_location;
 	struct source *spelling;
-	size_t length;
+	const char *logical_name;
+	size_t length, physical_line, line;
 
-	if (!site.source || !site.source->name || site.offset > site.source->length) {
-		*error = stop_preprocessing(preprocessor, input->token,
-			"predefined macro has no valid expansion location");
+	if (!logical_position(preprocessor, site, input->token, &physical_line, &line,
+		&logical_name, error))
 		return false;
-	}
 	if (pp_spelling_is(input->token, "__LINE__")) {
 		char buffer[3 * sizeof(size_t) + 2];
-		size_t line, column;
 		int written;
 
-		size_t scan = source_physical_offset(site);
-
-		if (scan > preprocess_line_scan_limit - preprocessor->line_scan_bytes) {
-			*error = stop_preprocessing(preprocessor, input->token,
-				"predefined line lookup work limit exceeded");
-			return false;
-		}
-		preprocessor->line_scan_bytes += scan;
-		source_line_column(site, &line, &column);
 		written = snprintf(buffer, sizeof(buffer), "%zu", line);
 		if (written < 0 || (size_t)written >= sizeof(buffer)) {
 			*error = stop_preprocessing(preprocessor, input->token,
@@ -1186,7 +1228,7 @@ static bool expand_predefined_location(struct preprocessor *preprocessor,
 		memcpy(spelling->data, buffer, length + 1);
 		input->token.kind = pp_number;
 	} else {
-		const unsigned char *name = (const unsigned char *)site.source->name;
+		const unsigned char *name = (const unsigned char *)logical_name;
 		size_t size = 3; /* quotes and NUL */
 
 		for (const unsigned char *p = name; *p; p++) {
@@ -2744,6 +2786,138 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 	free(cursor);
 	if (!success && !preprocessor->stopped)
 		*error = invalid_token(marker);
+	return success;
+}
+
+/* The directive line is fully collected before rescan, so a malformed or
+ * function-like operand cannot consume tokens from the following source line. */
+static bool read_line_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct token *error)
+{
+	struct argument_token *head = NULL;
+	struct argument_token **tail = &head;
+	struct expansion_cursor *cursor;
+	struct rescan_token result;
+	struct pp_token end, number, filename = { 0 };
+	struct line_remap *map;
+	struct source *name_storage = NULL;
+	const char *name, *failure = NULL;
+	size_t count = 0, physical, logical, value = 0, decoded = 0;
+	bool success = false;
+
+	for (;;) {
+		struct argument_token *copy;
+		struct pp_token token = pp_lexer_next(&preprocessor->input);
+
+		if (token.kind == pp_invalid || token.has_non_directive_space) {
+			*error = reject_directive(preprocessor, marker, token,
+				token.kind == pp_invalid ? NULL :
+				"only space and tab are allowed in a preprocessing directive");
+			return false;
+		}
+		if (is_directive_end(token)) {
+			end = token;
+			break;
+		}
+		if (++count > preprocess_line_directive_token_limit) {
+			*error = reject_directive(preprocessor, marker, token,
+				"line directive token limit (1024) exceeded");
+			return false;
+		}
+		if (is_variadic_identifier(token)) {
+			*error = reject_directive(preprocessor, marker, token,
+				"variadic identifiers require a variadic macro replacement list");
+			return false;
+		}
+		copy = copy_argument_token(preprocessor,
+			(struct rescan_token) { .token = token, .semantic_location = token.location }, token, error);
+		if (!copy)
+			return false;
+		*tail = copy;
+		tail = &copy->next;
+	}
+	cursor = calloc(1, sizeof(*cursor));
+	if (!cursor) {
+		*error = stop_preprocessing(preprocessor, marker, "cannot allocate line directive cursor");
+		return false;
+	}
+	cursor->input = head;
+	cursor->end = end.location;
+	if (!read_expanded_token(preprocessor, cursor, &result, error))
+		goto done;
+	number = result.token;
+	if (number.kind != pp_number || !number.length) {
+		failure = "line directive requires a decimal line number";
+		goto invalid;
+	}
+	for (size_t i = 0; i < number.length; i++) {
+		unsigned char c = number.location.source->data[number.location.offset + i];
+
+		if (c < '0' || c > '9' || value > (2147483647u - (unsigned)(c - '0')) / 10u) {
+			failure = "line directive number must be decimal and between 1 and 2147483647";
+			goto invalid;
+		}
+		value = value * 10 + (size_t)(c - '0');
+	}
+	if (!value) {
+		failure = "line directive number must be decimal and between 1 and 2147483647";
+		goto invalid;
+	}
+	if (!read_expanded_token(preprocessor, cursor, &result, error))
+		goto done;
+	if (result.token.kind != pp_eof) {
+		const char *message;
+		const unsigned char *text;
+
+		filename = result.token;
+		text = filename.location.source->data + filename.location.offset;
+		if (filename.kind != pp_string || !filename.length || text[0] != '"') {
+			failure = "line directive filename must be an ordinary string literal";
+			goto invalid;
+		}
+		message = parse_string_spelling(text, filename.length, NULL, 0, &decoded);
+		if (message) {
+			failure = "unsupported line directive filename string";
+			goto invalid;
+		}
+		if (!read_expanded_token(preprocessor, cursor, &result, error))
+			goto done;
+		if (result.token.kind != pp_eof) {
+			failure = "unexpected token after line directive filename";
+			goto invalid;
+		}
+		name_storage = allocate_spelling(preprocessor, decoded + 1, filename, error);
+		if (!name_storage)
+			goto done;
+		message = parse_string_spelling(text, filename.length, name_storage->data, decoded, &decoded);
+		if (message || memchr(name_storage->data, 0, decoded)) {
+			failure = "line directive filename cannot contain NUL";
+			goto invalid;
+		}
+		name_storage->data[decoded] = 0;
+	}
+	if (!logical_position(preprocessor, end.location, marker, &physical, &logical, &name, error))
+		goto done;
+	if (physical == SIZE_MAX) {
+		*error = stop_preprocessing(preprocessor, marker, "line directive physical location overflow");
+		goto done;
+	}
+	map = allocate_auxiliary(preprocessor, 1, sizeof(*map), marker, error);
+	if (!map)
+		goto done;
+	*map = (struct line_remap) {
+		.source = marker.location.source, .physical_start = physical + 1,
+		.logical_start = value, .name = name_storage ? (const char *)name_storage->data : name,
+		.next = preprocessor->line_remaps,
+	};
+	preprocessor->line_remaps = map;
+	success = true;
+	goto done;
+invalid:
+	diagnostic_error(preprocessor->diagnostics, marker.location, failure);
+	*error = invalid_token(marker);
+done:
+	free(cursor);
 	return success;
 }
 
