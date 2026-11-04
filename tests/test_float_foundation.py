@@ -25,7 +25,7 @@ struct Holder { double x; float y; };
 struct Holder global_holder={-2.5, 3.0f};
 float add(float a, float b) { CF x = a; return x+b; }
 double prod(double a, double b) { return a*b; }
-float literal(void) { return 0x1.8p+1f; }
+float literal(void) { return 0x1.8'0p+1f; }
 double dlit(void) { return .125e1; }
 double f(void) { return (double){1.5}; }
 int unequal(double x,double y) { return x!=y; }
@@ -81,7 +81,7 @@ reject = [
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
  'float f(void){return 1.0L;}',
  'float f(void){return 1e9999f;}', 'float f(void){return 1e-9999f;}',
- 'float f(void){return 1\'2.0f;}', 'float x=1.0;', 'double x=1.0+2.0;',
+ 'float f(void){return 1.0e1\'f;}', 'float x=1.0;', 'double x=1.0+2.0;',
  'int x[1.0];', '#if 1.0\nint x;\n#endif\n',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-float-') as directory:

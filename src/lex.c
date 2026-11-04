@@ -663,6 +663,15 @@ static struct token convert_floating(struct token token, struct diagnostics *dia
 	while (i < n) {
 		int d = integer_digit(text[i]);
 		if (d >= 0 && d < (hex ? 16 : 10)) { digits++; i++; continue; }
+		if (text[i] == '\'') {
+			int before = i ? integer_digit(text[i - 1]) : -1;
+			int after = i + 1 < n ? integer_digit(text[i + 1]) : -1;
+			int base = hex ? 16 : 10;
+			if (before < 0 || before >= base || after < 0 || after >= base)
+				goto invalid;
+			i++;
+			continue;
+		}
 		if (text[i] == '.' && !dot) { dot = true; i++; continue; }
 		break;
 	}
@@ -672,14 +681,25 @@ static struct token convert_floating(struct token token, struct diagnostics *dia
 		exponent = true; i++;
 		if (i < n && (text[i] == '+' || text[i] == '-')) i++;
 		first = i;
-		while (i < n && text[i] >= '0' && text[i] <= '9') i++;
+		while (i < n) {
+			if (text[i] >= '0' && text[i] <= '9') { i++; continue; }
+			if (text[i] == '\'' && i > first && i + 1 < n &&
+				text[i - 1] >= '0' && text[i - 1] <= '9' &&
+				text[i + 1] >= '0' && text[i + 1] <= '9') { i++; continue; }
+			break;
+		}
 		if (first == i) goto invalid;
 	}
 	if ((hex && !exponent) || (!hex && !dot && !exponent)) goto invalid;
 	if (i < n && (text[i] == 'f' || text[i] == 'F')) { single = true; i++; }
 	if (i != n) goto invalid;
-	memcpy(buf, text, n); buf[n] = 0;
-	if (single) buf[n-1] = 0;
+	/* The host conversion functions do not recognize C23 separators. */
+	{
+		size_t length = 0;
+		for (size_t j = 0; j < n - (single ? 1u : 0u); j++)
+			if (text[j] != '\'') buf[length++] = (char)text[j];
+		buf[length] = 0;
+	}
 	errno = 0;
 	if (single) {
 		float v = strtof(buf, &end);

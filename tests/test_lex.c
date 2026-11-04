@@ -146,6 +146,13 @@ static void test_errors(void)
 			sizeof(floats) / sizeof(floats[0]), 0);
 	}
 	{
+		const enum token_kind floats[] = { token_floating, token_floating, token_floating };
+		check_tokens("1'2.3'4 0x1'a.b'cp1'2 1e1'0f", floats, 3, 0);
+		check_tokens("1'e2", invalid, 1, 1);
+		check_tokens("1.0e1'f", invalid, 1, 1);
+		check_tokens("0x1'p2", invalid, 1, 1);
+	}
+	{
 		const enum token_kind atomic[] = { token_atomic, token_identifier };
 		check_tokens("_Atomic _Atomicity", atomic, 2, 0);
 		assert(strcmp(token_kind_name(token_atomic), "_Atomic") == 0);
