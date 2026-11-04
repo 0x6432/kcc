@@ -17,6 +17,19 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
     source = path / 'main.c'
     source.write_text('''
 #define RESOURCE "asset.bin"
+#if !defined(__has_embed) || !defined(__STDC_EMBED_FOUND__)
+#error embed query macros unavailable
+#endif
+#if __has_embed(RESOURCE) != __STDC_EMBED_FOUND__
+#error present binary resource not found
+#endif
+#if __has_embed("empty.bin") != __STDC_EMBED_EMPTY__
+#error empty resource not identified
+#endif
+#if __has_embed("missing.bin") != __STDC_EMBED_NOT_FOUND__ || __has_embed("oversized.bin") != __STDC_EMBED_NOT_FOUND__
+#error unavailable resource was reported usable
+#endif
+static_assert(__STDC_EMBED_NOT_FOUND__==0 && __STDC_EMBED_FOUND__==1 && __STDC_EMBED_EMPTY__==2);
 unsigned char a[] = {
 #embed RESOURCE
 };
@@ -37,6 +50,9 @@ int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==
         source.write_text('unsigned char a[] = {\n#embed ' + operand + '\n};\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode != 0 and result.stderr, operand
+    source.write_text('#if __has_embed("asset.bin" limit(1))\n#endif\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode != 0 and result.stderr, 'embed query parameters are unsupported'
     source.write_text('unsigned char a[] = {\n#embed <asset.bin>\n};\nint main(void){return a[2];}\n')
     result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr

@@ -201,13 +201,21 @@ static bool is_predefined_clock(struct pp_token name)
 		(pp_spelling_is(name, "__DATE__") || pp_spelling_is(name, "__TIME__"));
 }
 
+static bool is_predefined_embed_status(struct pp_token name)
+{
+	return name.kind == pp_identifier &&
+		(pp_spelling_is(name, "__STDC_EMBED_NOT_FOUND__") ||
+		 pp_spelling_is(name, "__STDC_EMBED_FOUND__") ||
+		 pp_spelling_is(name, "__STDC_EMBED_EMPTY__"));
+}
+
 static bool macro_is_defined(struct preprocessor *preprocessor, struct pp_token name)
 {
 	struct macro *macro = find_macro(preprocessor, name);
 
-	return is_predefined_location(name) || is_predefined_clock(name) ||
+	return is_predefined_location(name) || is_predefined_clock(name) || is_predefined_embed_status(name) ||
 		(name.kind == pp_identifier && (pp_spelling_is(name, "__has_c_attribute") ||
-			pp_spelling_is(name, "__has_include"))) ||
+			pp_spelling_is(name, "__has_include") || pp_spelling_is(name, "__has_embed"))) ||
 		(macro && macro->defined);
 }
 
@@ -1629,6 +1637,22 @@ static bool expand_predefined_clock(struct preprocessor *preprocessor,
 	return spend_expansion_work(preprocessor, input->token, error);
 }
 
+static bool expand_predefined_embed_status(struct preprocessor *preprocessor,
+	struct rescan_token *input, struct token *error)
+{
+	unsigned char digit = pp_spelling_is(input->token, "__STDC_EMBED_FOUND__") ? '1' :
+		pp_spelling_is(input->token, "__STDC_EMBED_EMPTY__") ? '2' : '0';
+	struct source *spelling = allocate_spelling(preprocessor, 2, input->token, error);
+	if (!spelling)
+		return false;
+	spelling->data[0] = digit;
+	spelling->data[1] = 0;
+	input->token.kind = pp_number;
+	input->token.location = (struct source_location) { spelling, 0 };
+	input->token.length = 1;
+	return spend_expansion_work(preprocessor, input->token, error);
+}
+
 /* Stringize raw tokens, not the prescan cache. Two bounded passes avoid a
  * growing temporary buffer; literal-token quotes/backslashes alone are escaped.
  */
@@ -2385,6 +2409,12 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 			*result = input;
 			return true;
 		}
+		if (is_predefined_embed_status(input.token)) {
+			if (!expand_predefined_embed_status(preprocessor, &input, error))
+				return false;
+			*result = input;
+			return true;
+		}
 		macro = input.token.kind == pp_identifier ? find_macro(preprocessor, input.token) : NULL;
 		if (!macro || !macro->defined || hide_contains(&input.hide, macro)) {
 			*result = input;
@@ -2625,7 +2655,7 @@ static void advance_include_condition(struct condition_parser *parser, bool raw)
 }
 
 static struct condition_value parse_has_include(struct condition_parser *parser,
-	struct pp_token operator, bool evaluate)
+	struct pp_token operator, bool evaluate, bool embed)
 {
 	struct preprocessor *preprocessor = parser->preprocessor;
 	struct include_name name = { .invocation = operator };
@@ -2633,10 +2663,11 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	struct source source = { 0 };
 	size_t length = 0;
 	bool direct, found = false;
+	int status = 0;
 
 	advance_condition(parser);
 	if (!is_punctuator(parser->token, "(")) {
-		condition_error(parser, parser->token, "expected '(' after __has_include");
+		condition_error(parser, parser->token, "expected '(' after resource availability operator");
 		return signed_condition(0);
 	}
 	if (!read_rescan_token(preprocessor, parser->cursor, &first, parser->error)) {
@@ -2652,7 +2683,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 		advance_include_condition(parser, direct);
 		while (!parser->failed && !is_punctuator(parser->token, ">")) {
 			if (parser->token.kind == pp_eof || is_punctuator(parser->token, ")")) {
-				condition_error(parser, parser->token, "expected '>' in __has_include");
+				condition_error(parser, parser->token, "expected '>' in resource availability operator");
 				return signed_condition(0);
 			}
 			if (!append_include_piece(preprocessor, &name, parser->token, &length, parser->error)) {
@@ -2669,7 +2700,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 		struct pp_token token = parser->token;
 		const unsigned char *text = token.location.source->data + token.location.offset;
 		if (token.kind != pp_string || token.length < 3 || text[0] != '"') {
-			condition_error(parser, token, "__has_include requires a nonempty header name");
+			condition_error(parser, token, "resource availability operator requires a nonempty name");
 			return signed_condition(0);
 		}
 		length = token.length - 2;
@@ -2688,7 +2719,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	}
 	advance_condition(parser);
 	if (!is_punctuator(parser->token, ")")) {
-		condition_error(parser, parser->token, "expected ')' after __has_include header name");
+		condition_error(parser, parser->token, "expected ')' after resource name (parameters are not supported)");
 		return signed_condition(0);
 	}
 	if (evaluate) {
@@ -2702,7 +2733,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 			return signed_condition(0);
 		}
 		preprocessor->include_count++;
-		if (!load_include_source(preprocessor, operator, &name, &source, parser->error, &found, true)) {
+		if (!load_include_source(preprocessor, operator, &name, &source, parser->error, &found, !embed)) {
 			parser->failed = true;
 			return signed_condition(0);
 		}
@@ -2714,11 +2745,12 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 				return signed_condition(0);
 			}
 			preprocessor->include_bytes += source.length;
+			status = embed ? (source.length > 4096 ? 0 : source.length ? 1 : 2) : 1;
 			source_destroy(&source);
 		}
 	}
 	advance_condition(parser);
-	return signed_condition(found);
+	return signed_condition(status);
 }
 
 /* condition-operand = condition-integer | condition-character | identifier | '(' condition-expression ')'
@@ -2765,8 +2797,9 @@ static struct condition_value parse_condition_operand(struct condition_parser *p
 		advance_condition(parser);
 		return value;
 	}
-	if (token.kind == pp_identifier && pp_spelling_is(token, "__has_include"))
-		return parse_has_include(parser, token, evaluate);
+	if (token.kind == pp_identifier &&
+		(pp_spelling_is(token, "__has_include") || pp_spelling_is(token, "__has_embed")))
+		return parse_has_include(parser, token, evaluate, pp_spelling_is(token, "__has_embed"));
 	if (token.kind == pp_identifier && pp_spelling_is(token, "__has_c_attribute")) {
 		advance_condition(parser);
 		if (!is_punctuator(parser->token, "(")) {
@@ -3109,7 +3142,8 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 			direct_header_state = is_punctuator(token, "<") ? 3 : 0;
 		else if (direct_header_state == 1)
 			direct_header_state = is_punctuator(token, "(") ? 2 : 0;
-		else if (token.kind == pp_identifier && pp_spelling_is(token, "__has_include"))
+		else if (token.kind == pp_identifier &&
+			(pp_spelling_is(token, "__has_include") || pp_spelling_is(token, "__has_embed")))
 			direct_header_state = 1;
 		/* Directive tokens retain their individual source invocation sites. */
 		copy = copy_argument_token(preprocessor, (struct rescan_token) { .token = token, .semantic_location = token.location }, token, error);
