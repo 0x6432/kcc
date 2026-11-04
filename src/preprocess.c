@@ -2154,6 +2154,10 @@ static struct condition_value parse_condition_integer(struct condition_parser *p
 		condition_error(parser, token, error);
 		return signed_condition(0);
 	}
+	if (spelling.bit_precise_suffix) {
+		condition_error(parser, token, "bit-precise integer literals are not supported yet");
+		return signed_condition(0);
+	}
 	if (!spelling.unsigned_suffix && spelling.base == 10 && spelling.value > INT64_MAX) {
 		condition_error(parser, token, "conditional integer exceeds signed 64-bit range");
 		return signed_condition(0);

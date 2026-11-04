@@ -138,6 +138,7 @@ static void test_errors(void)
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
 		check_tokens(cases[i], invalid, 1, 1);
 	check_tokens("integer", separate, 1, 0);
+	check_tokens("_BitInt", invalid, 1, 1);
 	{
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };
@@ -223,7 +224,7 @@ static void test_integer_spellings(void)
 	const char *suffixes[] = { "", "u", "U", "l", "L", "ll", "LL", "ul", "uL", "Ull",
 		"ULL", "lu", "LU", "llU", "LLu" };
 	const char *bad[] = { "", "0x", "0b", "08", "0b2", "0x'1", "1''2", "1'",
-		"1'u", "1uu", "1lL", "1Ll", "1LLL", "1wb", "1.0", "1e2",
+		"1'u", "1uu", "1lL", "1Ll", "1LLL", "1.0", "1e2",
 		"18446744073709551616", "0x10000000000000000", "0B", "0b102", "0B10a", "0b'1",
 		"0B1'2", "0b1'u", "0b1'", "0b1''0", "0'8", "0x1'g",
 		"123'L", "0b10000000000000000000000000000000000000000000000000000000000000000" };
@@ -241,6 +242,7 @@ static void test_integer_spellings(void)
 				if (*p == 'l' || *p == 'L')
 					longs++;
 			assert(spelling.value == 42 && spelling.long_suffix == longs);
+			assert(!spelling.bit_precise_suffix);
 			assert(spelling.unsigned_suffix == (strchr(suffixes[j], 'u') != NULL ||
 				strchr(suffixes[j], 'U') != NULL));
 			assert(spelling.base == (i == 1 ? 8u : i == 2 || i == 5 ? 16u : i == 3 ? 2u : 10u));
@@ -294,6 +296,136 @@ static void test_integer_spellings(void)
 		};
 
 		check_tokens("00 052 0x2a 0b101010 4'2", kinds, sizeof(kinds) / sizeof(kinds[0]), 0);
+	}
+}
+
+static void check_bit_precise_diagnostic(const char *text)
+{
+	struct source source;
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	char message[512];
+	size_t length;
+
+	assert(stream);
+	assert(source_from_bytes(&source, "bit-precise.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	assert(preprocess_next(&preprocessor).kind == token_invalid);
+	assert(preprocess_next(&preprocessor).kind == token_eof);
+	assert(diagnostics.errors == 1);
+	assert(fflush(stream) == 0 && fseek(stream, 0, SEEK_SET) == 0);
+	length = fread(message, 1, sizeof(message) - 1, stream);
+	message[length] = '\0';
+	assert(strstr(message, "bit-precise integer literals are not supported yet"));
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
+/* Recognition is spelling-only: language tokens and #if reject these until
+ * bit-precise integer types are supported. */
+static void test_bit_precise_integer_spellings(void)
+{
+	const char *bases[] = { "42", "052", "0x2a", "0B101010", "4'2", "0x2'a" };
+	const char *suffixes[] = { "wb", "WB", "uwb", "uWB", "Uwb", "UWB",
+		"wbu", "wbU", "WBu", "WBU" };
+	const char *bad[] = { "1w", "1W", "1b", "1B", "1wB", "1Wb",
+		"1uwB", "1Wbu", "1wbwb", "1WBWB", "1uwbu", "1wbuu",
+		"1uUwb", "1wbUu", "1lwb", "1wbL", "1LLWB", "1WBll",
+		"1uwbL", "1Luwb", "1wbx", "1wb1", "1'wb", "0xwb", "0b2wb",
+		"18446744073709551616wb", "0x10000000000000000UWB" };
+	const char *bad_tokens[] = { "1wB", "1Wb", "1wbwb", "1uwbu",
+		"1lwb", "1wbL", "1wbx", "1wb1" };
+	const enum token_kind invalid[] = { token_invalid };
+	const enum token_kind rejected_condition[] = { token_invalid, token_int };
+	const unsigned char bounded[] = { '4', '2', 'U', 'W', 'B', 'x' };
+	const unsigned char embedded_nul[] = { '4', '2', 'w', 'b', 0 };
+	struct integer_spelling spelling;
+	char text[128];
+
+	for (size_t i = 0; i < sizeof(bases) / sizeof(bases[0]); i++) {
+		for (size_t j = 0; j < sizeof(suffixes) / sizeof(suffixes[0]); j++) {
+			bool unsign = strchr(suffixes[j], 'u') || strchr(suffixes[j], 'U');
+
+			assert(snprintf(text, sizeof(text), "%s%s", bases[i], suffixes[j]) > 0);
+			assert(!parse_integer_spelling((const unsigned char *)text, strlen(text), &spelling));
+			assert(spelling.value == 42 && spelling.bit_precise_suffix);
+			assert(spelling.unsigned_suffix == unsign && spelling.long_suffix == 0);
+			assert(spelling.base == (i == 1 ? 8u : i == 2 || i == 5 ? 16u : i == 3 ? 2u : 10u));
+			check_tokens(text, invalid, 1, 1);
+			assert(snprintf(text, sizeof(text), "#if %s%s\nint", bases[i], suffixes[j]) > 0);
+			check_tokens(text, rejected_condition, 2, 1);
+		}
+	}
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+		assert(parse_integer_spelling((const unsigned char *)bad[i], strlen(bad[i]), &spelling));
+	for (size_t i = 0; i < sizeof(bad_tokens) / sizeof(bad_tokens[0]); i++)
+		check_tokens(bad_tokens[i], invalid, 1, 1);
+
+	assert(!parse_integer_spelling(bounded, 2, &spelling));
+	assert(spelling.value == 42 && !spelling.bit_precise_suffix && !spelling.unsigned_suffix);
+	assert(!parse_integer_spelling(bounded, 3, &spelling));
+	assert(spelling.value == 42 && !spelling.bit_precise_suffix && spelling.unsigned_suffix);
+	assert(parse_integer_spelling(bounded, 4, &spelling));
+	assert(!parse_integer_spelling(bounded, 5, &spelling));
+	assert(spelling.value == 42 && spelling.bit_precise_suffix && spelling.unsigned_suffix);
+	assert(!parse_integer_spelling(bounded, 2, &spelling));
+	assert(spelling.value == 42 && !spelling.bit_precise_suffix && !spelling.unsigned_suffix);
+	assert(parse_integer_spelling(bounded, sizeof(bounded), &spelling));
+	assert(parse_integer_spelling(embedded_nul, sizeof(embedded_nul), &spelling));
+	assert(!parse_integer_spelling((const unsigned char *)"0xffffffffffffffffWB", 20, &spelling));
+	assert(spelling.value == UINT64_MAX && spelling.base == 16 && spelling.bit_precise_suffix);
+
+	/* Macro expansion and token pasting must not bypass either rejection. */
+	check_tokens("#define B 1wb\nB", invalid, 1, 1);
+	check_tokens("#define JOIN(a,b) a##b\nJOIN(1,WB)", invalid, 1, 1);
+	check_tokens("#define B 1UWB\n#if B\nint", rejected_condition, 2, 1);
+	check_tokens("#define JOIN(a,b) a##b\n#if JOIN(1,wb)\nint", rejected_condition, 2, 1);
+	check_bit_precise_diagnostic("1wb");
+	check_bit_precise_diagnostic("#if 1UWB\n");
+	check_bit_precise_diagnostic("#if 0 && 1wb\n");
+	{
+		const enum token_kind integer[] = { token_integer };
+
+		check_tokens("#if 42u == 42 && 0x2aLL == 42\n42\n#endif", integer, 1, 0);
+	}
+}
+
+static void test_legacy_integer_token_metadata(void)
+{
+	const struct {
+		const char *text;
+		unsigned base, longs;
+		bool unsign;
+	} cases[] = {
+		{ "42", 10, 0, false }, { "052u", 8, 0, true },
+		{ "0x2aL", 16, 1, false }, { "0b101010uLL", 2, 2, true },
+		{ "4'2LLu", 10, 2, true },
+	};
+
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		struct source source;
+		FILE *stream = tmpfile();
+		struct diagnostics diagnostics = { .stream = stream };
+		struct preprocessor preprocessor;
+		struct token token;
+
+		assert(stream);
+		assert(source_from_bytes(&source, "legacy.c", (const unsigned char *)cases[i].text,
+			strlen(cases[i].text)));
+		assert(source_prepare(&source));
+		preprocess_init(&preprocessor, &source, &diagnostics);
+		token = preprocess_next(&preprocessor);
+		assert(token.kind == token_integer && token.integer == 42);
+		assert(token.integer_base == cases[i].base && token.integer_long_suffix == cases[i].longs);
+		assert(token.integer_unsigned_suffix == cases[i].unsign);
+		assert(token.length == strlen(cases[i].text));
+		assert(preprocess_next(&preprocessor).kind == token_eof && diagnostics.errors == 0);
+		preprocess_destroy(&preprocessor);
+		source_destroy(&source);
+		assert(fclose(stream) == 0);
 	}
 }
 
@@ -557,6 +689,8 @@ int main(void)
 	test_const_tokens();
 	test_character_spellings();
 	test_integer_spellings();
+	test_bit_precise_integer_spellings();
+	test_legacy_integer_token_metadata();
 	{
 		const enum token_kind kinds[] = { token_bool, token_c23_bool, token_true, token_false };
 

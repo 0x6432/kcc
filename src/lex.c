@@ -398,8 +398,10 @@ static int integer_digit(unsigned char byte)
 }
 
 /* integer-constant = (decimal | octal | hexadecimal | binary) integer-suffix?
- * integer-suffix = unsigned-suffix long-suffix? | long-suffix unsigned-suffix?
+ * integer-suffix = unsigned-suffix (long-suffix | bit-precise-suffix)?
+ *                | (long-suffix | bit-precise-suffix) unsigned-suffix?
  * long-suffix = 'l' | 'L' | 'll' | 'LL'
+ * bit-precise-suffix = 'wb' | 'WB'
  * A separator must have a valid base digit on both sides.
  */
 const char *parse_integer_spelling(const unsigned char *text, size_t length,
@@ -453,7 +455,12 @@ const char *parse_integer_spelling(const unsigned char *text, size_t length,
 		result->unsigned_suffix = true;
 		offset++;
 	}
-	if (offset < length && (text[offset] == 'l' || text[offset] == 'L')) {
+	if (length - offset >= 2 &&
+		((text[offset] == 'w' && text[offset + 1] == 'b') ||
+		 (text[offset] == 'W' && text[offset + 1] == 'B'))) {
+		result->bit_precise_suffix = true;
+		offset += 2;
+	} else if (offset < length && (text[offset] == 'l' || text[offset] == 'L')) {
 		unsigned char first = text[offset++];
 
 		result->long_suffix = 1;
@@ -643,6 +650,9 @@ static struct token convert_number(struct token token, struct diagnostics *diagn
 		snprintf(message, sizeof(message), "unsupported numeric literal: %s", error);
 		return invalid_language_token(token, diagnostics, message);
 	}
+	if (spelling.bit_precise_suffix)
+		return invalid_language_token(token, diagnostics,
+			"bit-precise integer literals are not supported yet");
 	token.kind = token_integer;
 	token.integer = spelling.value;
 	token.integer_base = spelling.base;
@@ -714,6 +724,12 @@ struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostic
 	case pp_invalid:
 		return token;
 	case pp_identifier:
+		/* Do not let the parser, type system or ABI mistake this reserved
+		 * type keyword for an implemented integer type. Preprocessing itself
+		 * still sees the unchanged identifier token. */
+		if (spelling_is(token, "_BitInt"))
+			return invalid_language_token(token, diagnostics,
+				"_BitInt types and their ABI are not supported yet");
 		return convert_identifier(token);
 	case pp_number:
 		return convert_number(token, diagnostics);

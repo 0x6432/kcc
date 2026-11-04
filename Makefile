@@ -9,7 +9,7 @@ QBE = qbe
 
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
 PREPROCESS_SOURCES = $(LEX_SOURCES) src/preprocess.c src/arena.c
-COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/ast.c src/type.c src/parse.c src/sema.c src/consteval.c src/codegen.c
+COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/bitint.c src/ast.c src/type.c src/parse.c src/sema.c src/consteval.c src/codegen.c
 HEADERS = $(wildcard src/*.h)
 
 .PHONY: all test test-codegen clean fuzz-lex fuzz-compile
@@ -188,6 +188,9 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 build/consteval_oracle: tests/consteval_oracle.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/consteval_oracle.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
 
+build/test_bitint: tests/test_bitint.c src/bitint.c src/bitint.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_bitint.c src/bitint.c $(LDFLAGS) $(LDLIBS) -o $@
+
 build/test_type: tests/test_type.c src/type.c src/arena.c src/type.h src/arena.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_type.c src/type.c src/arena.c $(LDFLAGS) $(LDLIBS) -o $@
 
@@ -211,7 +214,7 @@ build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
 
 test: export QBE := $(QBE)
 test: export KCC_SOURCE := $(CURDIR)
-test: build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
+test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
@@ -219,6 +222,8 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	./build/test_pp_lex
 	./build/test_preprocess
 	python3 tests/test_macros.py
+	./build/test_bitint
+	python3 tests/test_bitint_rejection.py
 	./build/test_type
 	./build/test_sema
 	./build/test_static_array_ast

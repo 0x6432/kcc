@@ -37,8 +37,8 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | in progress (M23g1 bounded maybe_unused declaration prefixes; other attributes/placements remain) |
 | M23h | constexpr objects, expanded record compatibility/redefinitions and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
-| M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | planned |
-| M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | planned |
+| M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | in progress (bounded internal width/arithmetic foundation only; all source _BitInt types rejected pending type/layout integration) |
+| M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (internal <=64-bit primitives only; no source, backend or ABI support) |
 | M24c | Atomic types/load/store | Memory model, alignment, target code inspection | planned |
 | M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | planned |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |

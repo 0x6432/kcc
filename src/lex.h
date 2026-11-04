@@ -112,6 +112,7 @@ struct integer_spelling {
 	unsigned base;
 	unsigned long_suffix;
 	bool unsigned_suffix;
+	bool bit_precise_suffix;
 };
 
 /* Explicit byte slice, no allocation/diagnostics; NULL means success. */
