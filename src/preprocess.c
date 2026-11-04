@@ -955,6 +955,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef _Atomic int atomic_int;\ntypedef _Atomic unsigned int atomic_uint;\n"
 			"typedef enum { memory_order_relaxed=0, memory_order_consume=1, memory_order_acquire=2,"
 			" memory_order_release=3, memory_order_acq_rel=4, memory_order_seq_cst=5 } memory_order;\n"
+			"void atomic_thread_fence(memory_order);\n"
+			"void atomic_signal_fence(memory_order);\n"
 			"#define ATOMIC_VAR_INIT(value) (value)\n"
 			"#define atomic_init(object,value) ((void)(*(object)=(value)))\n"
 			"#define atomic_load(object) __kcc_atomic_load(object)\n"

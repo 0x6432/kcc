@@ -36,7 +36,8 @@ include directories take precedence.
   and fetch operations, for the compiler's bounded
   atomic int/unsigned-int subset. Initialization uses a sequentially consistent
   store; load and store use sequential consistency and require `-latomic`.
-  Volatile atomic objects, other atomic types, fences,
+  Thread and signal fences use out-of-line libatomic functions. Volatile atomic
+  objects, other atomic types,
   other fetch operations and lock-free queries are not provided.
 - `stdlib.h` and `string.h` declare a bounded set of common allocation,
   conversion, sorting, memory and string functions with x86-64 libc-compatible

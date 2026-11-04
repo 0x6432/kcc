@@ -117,6 +117,8 @@ int main(void) {
   int expected=42, missing=40;
   _Bool success=atomic_compare_exchange_weak_explicit(&x,&expected,41,memory_order_acq_rel,memory_order_acquire);
   _Bool failure=atomic_compare_exchange_strong(&x,&missing,50);
+  atomic_thread_fence(memory_order_seq_cst);
+  atomic_signal_fence(memory_order_acquire);
   atomic_store_explicit(&x,42,memory_order_release);
   return prior==40 && old==42 && success && !failure && missing==41
     ? atomic_load_explicit(&x,memory_order_acquire) : 1;

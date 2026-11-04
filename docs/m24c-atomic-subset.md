@@ -41,11 +41,16 @@ strong and may therefore never fail spuriously. The expected argument must point
 to a mutable matching non-atomic integer; failure updates that object. All
 arguments are evaluated once. Callers must supply valid success/failure orders:
 failure cannot be release or acquire-release or stronger than success.
+The fallback header declares the out-of-line libatomic `atomic_thread_fence`
+and `atomic_signal_fence` functions. They take a runtime memory order and require
+a libatomic providing these functions. Signal handling and volatile atomic
+objects remain outside the compiler's supported subset. Fence interactions have
+not been tested.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
 Atomic pointer, other integer widths, bool, enum, floating, aggregate and array
-atomic types, volatile/restrict, fences, other atomic
+atomic types, volatile/restrict, other atomic
 library operations and lock-free queries are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
