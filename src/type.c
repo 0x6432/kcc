@@ -293,7 +293,7 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 {
 	struct type *leaf;
 
-	assert(!(qualifiers & ~type_qualifier_const));
+	assert(!(qualifiers & ~(type_qualifier_const | type_qualifier_atomic)));
 	assert(type->kind != type_kind_function || !qualifiers);
 	if (type->qualifiers == qualifiers)
 		return type;

@@ -529,6 +529,11 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		const struct type *element = type;
 		while (element->kind == type_kind_array)
 			element = ((const struct array_type *)element)->element;
+		if (element->qualifiers & type_qualifier_atomic) {
+			diagnostic_error(sema->diagnostics, member->type_syntax->location,
+				"atomic record members are not supported");
+			goto done;
+		}
 		if (type_is_record(element)) {
 			struct record_state *child = record_state(sema, element);
 			assert(child && child->depth);
@@ -826,11 +831,20 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!base)
 			return NULL;
+		if ((qualified->qualifiers & type_qualifier_atomic_specifier) && base->qualifiers) {
+			diagnostic_error(sema->diagnostics, syntax->location, "_Atomic type specifier requires an unqualified type");
+			return NULL;
+		}
+		if ((qualified->qualifiers & type_qualifier_atomic) &&
+			base->kind != type_kind_int && base->kind != type_kind_uint) {
+			diagnostic_error(sema->diagnostics, syntax->location, "atomic subset supports only int and unsigned int");
+			return NULL;
+		}
 		if (base->kind == type_kind_function && qualified->qualifiers) {
 			diagnostic_error(sema->diagnostics, syntax->location, "function type cannot be qualified");
 			return NULL;
 		}
-		syntax->type = type_qualified(sema->arena, base, qualified->qualifiers);
+		syntax->type = type_qualified(sema->arena, base, qualified->qualifiers & ~type_qualifier_atomic_specifier);
 		if (!syntax->type) {
 			diagnostic_error(sema->diagnostics, syntax->location, "out of memory qualifying type");
 			return NULL;
@@ -1393,6 +1407,10 @@ static const struct type *sema_update_operand(struct sema *sema,
 	if (!sema_expression(sema, operand, false))
 		return NULL;
 	operand_type = (*operand)->type;
+	if (operand_type->qualifiers & type_qualifier_atomic) {
+		diagnostic_error(sema->diagnostics, expression->location, "atomic read-modify-write is not supported");
+		return NULL;
+	}
 	if (!(*operand)->is_lvalue || (operand_type->qualifiers & type_qualifier_const) ||
 		(!type_is_integer(operand_type) && operand_type->kind != type_kind_pointer)) {
 		diagnostic_error(sema->diagnostics, expression->location,
@@ -2056,6 +2074,10 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->left, false))
 			return false;
 		left_type = node->left->type;
+		if (left_type->qualifiers & type_qualifier_atomic) {
+			diagnostic_error(sema->diagnostics, expression->location, "atomic read-modify-write is not supported");
+			return false;
+		}
 		if (!node->left->is_lvalue || (left_type->qualifiers & type_qualifier_const) ||
 			(!type_is_integer(left_type) && left_type->kind != type_kind_pointer)) {
 			diagnostic_error(sema->diagnostics, node->left->location,
@@ -3120,6 +3142,11 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if ((!type_is_scalar(type) && !type_is_record(type)) || !type_is_complete_object(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"inferred auto requires a complete scalar or aggregate initializer type");
+		return false;
+	}
+	if ((syntax->qualifiers & type_qualifier_atomic) &&
+		type->kind != type_kind_int && type->kind != type_kind_uint) {
+		diagnostic_error(sema->diagnostics, local->name.location, "atomic subset supports only int and unsigned int");
 		return false;
 	}
 	type = type_qualified(sema->arena, type, syntax->qualifiers);

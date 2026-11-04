@@ -42,6 +42,9 @@ struct enum_definition {
 
 enum type_qualifier {
 	type_qualifier_const = 1u << 0,
+	type_qualifier_atomic = 1u << 1,
+	/* Syntax-only marker: _Atomic(type-name) rejects a qualified operand. */
+	type_qualifier_atomic_specifier = 1u << 2,
 };
 
 struct type {

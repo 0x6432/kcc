@@ -361,6 +361,7 @@ static const struct keyword keywords[] = {
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
+	{ "_Atomic", token_atomic },
 	{ "thread_local", token_thread_local }, { "_Thread_local", token_thread_local },
 	{ "inline", token_inline }, { "extern", token_extern }, { "static", token_static }, { "auto", token_auto }, { "register", token_register }, { "typedef", token_typedef },
 	{ "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
@@ -841,6 +842,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_nullptr: return "nullptr";
 	case token_void: return "void";
 	case token_const: return "const";
+	case token_atomic: return "_Atomic";
 	case token_typedef: return "typedef";
 	case token_register: return "register";
 	case token_extern: return "extern";

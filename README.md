@@ -4,6 +4,14 @@ An educational compiler written in C, growing from a deliberately small subset
 toward C23. Code generation uses QBE. Readability and explicit invariants take
 priority over compile-time performance.
 
+## M24c atomic subset
+
+On x86-64 SysV, `_Atomic int` and `_Atomic unsigned int` support ordinary
+sequentially consistent loads and simple stores via libatomic. Link generated
+assembly with `-latomic`. Atomic read-modify-write and atomic record members
+are rejected. See `docs/m24c-atomic-subset.md` for the complete safety boundary
+and pending validation.
+
 ## Current checkpoint
 
 M21 scalar variadic declarations, definitions and calls are available for

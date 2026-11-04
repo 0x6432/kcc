@@ -880,6 +880,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t address = codegen_address(codegen, node->operand);
 
 		temporary = codegen->next_temporary++;
+		if (node->operand->type->qualifiers & type_qualifier_atomic) {
+			/* libatomic's ABI memory order 5 is __ATOMIC_SEQ_CST. */
+			emit(codegen, "\t%%t%zu =w call $__atomic_load_4(l %%t%zu, w 5)\n", temporary, address);
+			return temporary;
+		}
 		if (type_is_record(expression->type)) {
 			/* Captures live in entry-allocated slots, never loop allocations.
 			 * Later writes to the original cannot rewrite this value. */
@@ -914,7 +919,9 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t value = codegen_expression(codegen, node->right);
 		size_t address = codegen_address(codegen, node->left);
 
-		if (type_is_record(node->left->type))
+		if (node->left->type->qualifiers & type_qualifier_atomic)
+			emit(codegen, "\tcall $__atomic_store_4(l %%t%zu, w %%t%zu, w 5)\n", address, value);
+		else if (type_is_record(node->left->type))
 			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
 		else
 			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);

@@ -146,6 +146,11 @@ static void test_errors(void)
 			sizeof(floats) / sizeof(floats[0]), 0);
 	}
 	{
+		const enum token_kind atomic[] = { token_atomic, token_identifier };
+		check_tokens("_Atomic _Atomicity", atomic, 2, 0);
+		assert(strcmp(token_kind_name(token_atomic), "_Atomic") == 0);
+	}
+	{
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };
 

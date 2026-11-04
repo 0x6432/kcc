@@ -30,6 +30,7 @@ enum token_kind {
 	token_nullptr,
 	token_void,
 	token_const,
+	token_atomic,
 	token_typedef,
 	token_register,
 	token_extern,

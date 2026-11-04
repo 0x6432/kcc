@@ -118,6 +118,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	QBE="$(QBE)" python3 tests/test_explicit_pointer_casts.py
 	QBE="$(QBE)" python3 tests/test_comma_expressions.py
 	QBE="$(QBE)" python3 tests/test_const_qualification.py
+	QBE="$(QBE)" python3 tests/test_atomic_subset.py
 	QBE="$(QBE)" python3 tests/test_boolean_keywords.py
 	QBE="$(QBE)" python3 tests/test_conditional_expressions.py
 	QBE="$(QBE)" python3 tests/test_sizeof_alignment.py
@@ -289,6 +290,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_
 	python3 tests/test_explicit_pointer_casts.py
 	python3 tests/test_comma_expressions.py
 	python3 tests/test_const_qualification.py
+	python3 tests/test_atomic_subset.py
 	python3 tests/test_boolean_keywords.py
 	python3 tests/test_conditional_expressions.py
 	python3 tests/test_sizeof_alignment.py

@@ -161,7 +161,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 	return kind == token_alignas || kind == token_legacy_alignas ||
 		kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
-		kind == token_void || kind == token_float || kind == token_double || kind == token_const ||
+		kind == token_void || kind == token_float || kind == token_double || kind == token_const || kind == token_atomic ||
 		kind == token_struct || kind == token_union || kind == token_enum ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
@@ -420,10 +420,34 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 				return NULL;
 			continue;
 		}
-		if (token.kind == token_const) {
+		if (token.kind == token_atomic && preprocess_peek(parser->preprocessor).kind == token_left_paren) {
+			struct token beginning_type;
+			struct ast_type_syntax *operand;
+
+			if (query || seen_int || seen_void || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+				diagnostic_error(parser->diagnostics, token.location, "_Atomic type specifier cannot combine with another type specifier");
+				return NULL;
+			}
+			if (parser->type_query_nesting == ast_max_type_queries) {
+				diagnostic_error(parser->diagnostics, token.location, "type query nesting exceeds limit (64)");
+				return NULL;
+			}
+			preprocess_next(parser->preprocessor);
+			parser->type_query_nesting++;
+			operand = parse_type_name(parser, &beginning_type, NULL, NULL, declarator_cast);
+			parser->type_query_nesting--;
+			if (!operand || !expect_token(parser, token_right_paren, "expected ')' after _Atomic type name", NULL))
+				return NULL;
+			query = qualify_type_syntax(parser, operand,
+				type_qualifier_atomic | type_qualifier_atomic_specifier, token.location);
+			if (!query)
+				return NULL;
+			continue;
+		}
+		if (token.kind == token_const || token.kind == token_atomic) {
 			if (!qualifiers)
 				qualifier = token;
-			qualifiers |= type_qualifier_const;
+			qualifiers |= token.kind == token_const ? type_qualifier_const : type_qualifier_atomic;
 			continue;
 		}
 		if (token.kind == token_float || token.kind == token_double) {
@@ -727,12 +751,13 @@ static bool parse_declarator_contents(struct parser *parser,
 		}
 		if (!prefix)
 			prefix_base = &pointer->referent;
-		while (preprocess_peek(parser->preprocessor).kind == token_const) {
+		while (preprocess_peek(parser->preprocessor).kind == token_const ||
+			preprocess_peek(parser->preprocessor).kind == token_atomic) {
 			struct token qualifier = preprocess_next(parser->preprocessor);
 
 			if (!qualifiers)
 				qualifier_location = qualifier.location;
-			qualifiers |= type_qualifier_const;
+			qualifiers |= qualifier.kind == token_const ? type_qualifier_const : type_qualifier_atomic;
 		}
 		prefix = qualify_type_syntax(parser, &pointer->syntax, qualifiers, qualifier_location);
 		if (!prefix)
