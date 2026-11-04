@@ -571,6 +571,24 @@ static bool checked_align(uint64_t value, unsigned alignment, uint64_t *result)
 	return true;
 }
 
+/* A flexible final member contributes alignment and offset, but no storage. */
+static bool checked_record_member_layout(const struct record_member *member,
+	uint64_t *size, unsigned *alignment)
+{
+	if (member->is_flexible) {
+		if (member->type->kind != type_kind_array)
+			return false;
+		const struct array_type *array = (const struct array_type *)member->type;
+		uint64_t element_size;
+		if (array->count || array->runtime_bound ||
+			!checked_member_layout(array->element, 1, &element_size, alignment))
+			return false;
+		*size = 0;
+		return true;
+	}
+	return checked_member_layout(member->type, 0, size, alignment);
+}
+
 bool type_record_layout(struct record_definition *definition)
 {
 	uint64_t size = 0;
@@ -582,7 +600,9 @@ bool type_record_layout(struct record_definition *definition)
 		uint64_t member_size;
 		unsigned member_alignment;
 
-		if (++count > 1024 || !checked_member_layout(member->type, 0,
+		if (++count > 1024 ||
+			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
+			!checked_record_member_layout(member,
 			&member_size, &member_alignment))
 			return false;
 		if (member->alignment) {
@@ -609,7 +629,7 @@ bool type_record_layout(struct record_definition *definition)
 	for (struct record_member *member = definition->members; member; member = member->next) {
 		uint64_t member_size;
 		unsigned member_alignment;
-		bool valid = checked_member_layout(member->type, 0, &member_size, &member_alignment);
+		bool valid = checked_record_member_layout(member, &member_size, &member_alignment);
 
 		assert(valid);
 		(void)valid;

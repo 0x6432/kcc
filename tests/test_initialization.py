@@ -464,7 +464,6 @@ SUBSET={
     'M21 aggregate argument': 'struct S { int x; }; int f(struct S s) { return s.x; }',
     'M21 aggregate return': 'struct S { int x; }; struct S f(struct S *p) { return *p; }',
     'M22 bitfield': 'struct S { unsigned int x:3; }; struct S s;',
-    'M22 flexible array': 'struct S { int n; int a[]; }; struct S *p;',
 }
 # No native compilation or execution for UB/proof-boundary/resource refusals.
 # Acceptance by a native is deliberately not an oracle for these cases.
@@ -561,7 +560,6 @@ KCC_REFUSALS={'excess array': (1, 16, 'excess elements in initializer'),
  'M21 aggregate argument': (1, 26, 'aggregate function arguments are not supported yet (M21)'),
  'M21 aggregate return': (1, 31, 'aggregate function returns are not supported yet (M21)'),
  'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
- 'M22 flexible array': (1, 24, 'flexible array members are not supported yet (M22)'),
  'array beyond onepast': (1, 59, 'static pointer offset is outside its captured object bounds'),
  'null arithmetic': (1,45,'pointer arithmetic on null is not a static address constant'),
  'no fabricated short subobject': (1,

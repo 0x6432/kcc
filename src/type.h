@@ -64,12 +64,14 @@ struct record_member {
 	uint64_t offset;
 	unsigned alignment; /* Explicit member alignment; zero means natural. */
 	bool anonymous;
+	bool is_flexible;
 	struct record_member *next;
 };
 
 struct record_definition {
 	bool is_union;
 	bool complete;
+	bool has_flexible_array;
 	struct record_member *members;
 	size_t member_count;
 	uint64_t size;

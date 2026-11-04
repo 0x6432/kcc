@@ -570,6 +570,8 @@ static bool find_actual_domain_step(const struct type *root, uint64_t start, uin
 		bool found = false;
 		struct address_proof selected = *proof;
 		for (const struct record_member *member = type_record_definition(root)->members; member; member = member->next) {
+			if (member->is_flexible)
+				continue;
 			if (++search->work > subobject_search_work_limit) {
 				search->exhausted = true;
 				return false;
@@ -757,6 +759,9 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	}
 	if (proof.result.status != constant_value)
 		return proof;
+	if (member->member->is_flexible)
+		return address_failure(expression, constant_not_constant,
+			"static flexible-array addresses are not supported");
 	if (!type_is_record(record) || !type_is_complete_object(record) || !proof.element ||
 		!type_unqualified_compatible(proof.element, record))
 		return address_failure(expression, constant_not_constant,

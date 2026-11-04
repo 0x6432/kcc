@@ -1066,12 +1066,6 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				diagnostic_error(parser->diagnostics, beginning.location, "expected member name");
 				return false;
 			}
-			if (syntax->kind == type_syntax_array &&
-				!((struct ast_array_type_syntax *)syntax)->bound) {
-				diagnostic_error(parser->diagnostics, syntax->location,
-					"flexible array members are not supported yet (M22)");
-				return false;
-			}
 			if (!append_record_member(parser, record, &tail, syntax, name, false, head.alignments))
 				return false;
 			if (preprocess_peek(parser->preprocessor).kind != token_comma)

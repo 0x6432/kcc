@@ -358,7 +358,6 @@ SUBSET = [
     ('M21 aggregate argument', 'struct S { int x; }; int f(struct S s) { return s.x; }'),
     ('M21 aggregate return', 'struct S { int x; }; struct S f(struct S *p) { return *p; }'),
     ('M22 bitfield', 'struct S { unsigned int x:3; }; struct S s;'),
-    ('M22 flexible array', 'struct S { int n; int a[]; }; struct S *p;'),
 ]
 
 
@@ -396,7 +395,6 @@ KCC_REFUSALS = {
     'M21 aggregate argument': (1, 26, 'aggregate function arguments are not supported yet (M21)'),
     'M21 aggregate return': (1, 31, 'aggregate function returns are not supported yet (M21)'),
     'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
-    'M22 flexible array': (1, 24, 'flexible array members are not supported yet (M22)'),
     'member scalar beyond onepast': (1, 65, 'static pointer offset is outside its captured object bounds'),
     'member array beyond onepast': (1, 67, 'static pointer offset is outside its captured object bounds'),
     'member subscript beyond onepast': (1, 61, 'static pointer offset is outside its captured object bounds'),

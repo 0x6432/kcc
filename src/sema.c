@@ -514,12 +514,25 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				"anonymous member requires an untagged struct or union definition");
 			goto done;
 		}
-		if (!type_is_complete_object(type)) {
+		bool flexible = type->kind == type_kind_array &&
+			!((const struct array_type *)type)->count &&
+			!((const struct array_type *)type)->runtime_bound;
+		if (flexible) {
+			bool previous_named = false;
+			for (const struct record_member *prior = definition->members; prior; prior = prior->next)
+				previous_named |= !prior->anonymous && prior->name.length;
+			if (definition->is_union || member->anonymous || member->next || !previous_named) {
+				diagnostic_error(sema->diagnostics, member->type_syntax->location,
+					"flexible array requires a final named member of a nonempty struct");
+				goto done;
+			}
+			definition->has_flexible_array = true;
+		} else if (!type_is_complete_object(type)) {
 			diagnostic_error(sema->diagnostics, member->type_syntax->location,
 				"record member must have complete object type (no void, function or incomplete member)");
 			goto done;
 		}
-		if (!check_object_alignment(sema, type,
+		if (!check_object_alignment(sema, flexible ? ((const struct array_type *)type)->element : type,
 			member->alignments ? member->alignments->alignment : 0, member->type_syntax->location))
 			goto done;
 		if (definition->member_count == sema_max_record_members ||
@@ -538,6 +551,11 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		}
 		if (type_is_record(element)) {
 			struct record_state *child = record_state(sema, element);
+			if (type_record_definition(element)->has_flexible_array) {
+				diagnostic_error(sema->diagnostics, member->type_syntax->location,
+					"record containing a flexible array cannot be a member in this subset");
+				goto done;
+			}
 			assert(child && child->depth);
 			if (child->depth >= sema_max_record_nesting) {
 				diagnostic_error(sema->diagnostics, member->type_syntax->location,
@@ -554,7 +572,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			goto done;
 		}
 		*resolved = (struct record_member) { .name = member->name, .type = type,
-			.anonymous = member->anonymous,
+			.anonymous = member->anonymous, .is_flexible = flexible,
 			.alignment = member->alignments ? member->alignments->alignment : 0 };
 		*tail = resolved;
 		tail = &resolved->next;
@@ -924,6 +942,11 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		if (!type_is_complete_object(element)) {
 			diagnostic_error(sema->diagnostics, syntax->location, "array element type must be complete");
+			return NULL;
+		}
+		if (type_is_record(element) && type_record_definition(element)->has_flexible_array) {
+			diagnostic_error(sema->diagnostics, syntax->location,
+				"array element cannot be a record containing a flexible array");
 			return NULL;
 		}
 		if (!array->bound) {
@@ -2799,6 +2822,8 @@ static enum initializer_ancestry_result initializer_contains_union(
 	} else {
 		for (const struct record_member *member = type_record_definition(type)->members;
 			member; member = member->next) {
+			if (member->is_flexible)
+				continue;
 			if (!initializer_ancestry_step(query))
 				return initializer_ancestry_failed;
 			if (selection->offset >= offset + member->offset &&
@@ -2916,6 +2941,8 @@ static bool initializer_child(struct initializer_builder *builder, struct initia
 	} else {
 		if (!member)
 			return initializer_error(builder, location, "initializer requires an available record member");
+		if (member->is_flexible)
+			return initializer_error(builder, location, "flexible array members cannot be initialized");
 		child.type = member->type;
 		child.offset = parent->offset + member->offset;
 	}
@@ -2954,7 +2981,8 @@ static bool initializer_next(struct initializer_builder *builder, struct initial
 				builder->inferred_count = inferred;
 				return success;
 			}
-		} else if (parent->kind == type_kind_struct && old.member->next) {
+		} else if (parent->kind == type_kind_struct && old.member->next &&
+			!old.member->next->is_flexible) {
 			return initializer_child(builder, path, 0, old.member->next, location);
 		}
 	}

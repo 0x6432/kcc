@@ -98,7 +98,6 @@ UNSUPPORTED = {
     'M21 by-value argument': 'struct R { int x; }; int f(struct R r) { return r.x; }',
     'M21 by-value return': 'struct R { int x; }; struct R f(struct R *p) { return *p; }',
     'M22 bitfield': 'struct R { unsigned x:3; }; struct R cell;',
-    'M22 flexible array': 'struct R { int n; char bytes[]; }; struct R cell;',
 }
 # Exact diagnostics supplied by the frozen implementation are intentionally not
 # inferred from baseline failures. Native signatures below are case-specific.
@@ -197,7 +196,6 @@ KCC_FUTURE_ERRORS = {
     'M21 by-value argument': 'aggregate function arguments are not supported yet (M21)',
     'M21 by-value return': 'aggregate function returns are not supported yet (M21)',
     'M22 bitfield': 'bit-fields are not supported yet (M22)',
-    'M22 flexible array': 'flexible array members are not supported yet (M22)',
 }
 
 
