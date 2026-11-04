@@ -334,7 +334,7 @@ struct ast_va_expression {
 enum ast_atomic_operation {
 	ast_atomic_fetch_add, ast_atomic_fetch_sub, ast_atomic_fetch_and,
 	ast_atomic_fetch_or, ast_atomic_fetch_xor, ast_atomic_exchange,
-	ast_atomic_load, ast_atomic_store, ast_atomic_compare_exchange,
+	ast_atomic_load, ast_atomic_store, ast_atomic_compare_exchange, ast_atomic_is_lock_free,
 };
 
 struct ast_atomic_expression {

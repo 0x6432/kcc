@@ -1678,6 +1678,7 @@ static struct ast_expression *parse_atomic_expression(struct parser *parser)
 			token.kind == token_kcc_atomic_fetch_xor ? ast_atomic_fetch_xor :
 			token.kind == token_kcc_atomic_load ? ast_atomic_load :
 			token.kind == token_kcc_atomic_compare_exchange ? ast_atomic_compare_exchange :
+			token.kind == token_kcc_atomic_is_lock_free ? ast_atomic_is_lock_free :
 			token.kind == token_kcc_atomic_store ? ast_atomic_store : ast_atomic_exchange,
 	};
 	if (!expect_token(parser, token_left_paren, "expected '(' after atomic intrinsic", NULL))
@@ -1692,14 +1693,15 @@ static struct ast_expression *parse_atomic_expression(struct parser *parser)
 		if (!node->expected)
 			return NULL;
 	}
-	if (node->operation != ast_atomic_load) {
+	if (node->operation != ast_atomic_load && node->operation != ast_atomic_is_lock_free) {
 		if (!expect_token(parser, token_comma, "expected ',' in atomic intrinsic", NULL))
 			return NULL;
 		node->argument = parse_expression(parser, 1);
 		if (!node->argument)
 			return NULL;
 	}
-	if (preprocess_peek(parser->preprocessor).kind == token_comma) {
+	if (node->operation != ast_atomic_is_lock_free &&
+		preprocess_peek(parser->preprocessor).kind == token_comma) {
 		preprocess_next(parser->preprocessor);
 		node->order = parse_expression(parser, 1);
 		if (!node->order)
@@ -1760,7 +1762,7 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 		token.kind == token_kcc_atomic_fetch_and || token.kind == token_kcc_atomic_fetch_or ||
 		token.kind == token_kcc_atomic_fetch_xor || token.kind == token_kcc_atomic_exchange ||
 		token.kind == token_kcc_atomic_load || token.kind == token_kcc_atomic_store ||
-		token.kind == token_kcc_atomic_compare_exchange)
+		token.kind == token_kcc_atomic_compare_exchange || token.kind == token_kcc_atomic_is_lock_free)
 		return parse_atomic_expression(parser);
 	if (token.kind == token_nullptr)
 		return parse_nullptr_expression(parser);

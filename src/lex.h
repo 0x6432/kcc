@@ -121,6 +121,7 @@ enum token_kind {
 	token_kcc_atomic_load,
 	token_kcc_atomic_store,
 	token_kcc_atomic_compare_exchange,
+	token_kcc_atomic_is_lock_free,
 	token_arrow,
 };
 

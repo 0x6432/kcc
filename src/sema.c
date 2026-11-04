@@ -1570,7 +1570,8 @@ static bool sema_expression(struct sema *sema,
 		}
 		referent = ((const struct pointer_type *)node->object->type)->referent;
 		if (!(referent->qualifiers & type_qualifier_atomic) ||
-			(node->operation != ast_atomic_load && (referent->qualifiers & type_qualifier_const)) ||
+			(node->operation != ast_atomic_load && node->operation != ast_atomic_is_lock_free &&
+				(referent->qualifiers & type_qualifier_const)) ||
 			(referent->kind != type_kind_int && referent->kind != type_kind_uint) ||
 			(node->argument && !type_is_integer(node->argument->type))) {
 			diagnostic_error(sema->diagnostics, expression->location,
@@ -1580,6 +1581,8 @@ static bool sema_expression(struct sema *sema,
 		result_type = unqualified_type(sema, referent, expression->location);
 		if (!result_type || (node->argument && !convert_expression(sema, &node->argument, result_type)))
 			return false;
+		if (node->operation == ast_atomic_is_lock_free)
+			result_type = &type_bool;
 		if (node->expected) {
 			const struct type *expected_type;
 			if (node->expected->type->kind != type_kind_pointer) {

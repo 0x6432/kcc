@@ -113,6 +113,7 @@ atomic_flag flag=ATOMIC_FLAG_INIT;
 int main(void) {
   atomic_init(&x,40);
   memory_order order=memory_order_relaxed;
+  int lock_free=atomic_is_lock_free(&x);
   int prior=atomic_fetch_add_explicit(&x,2,order);
   int old=atomic_exchange(&x,42);
   int expected=42, missing=40;
@@ -126,7 +127,7 @@ int main(void) {
   _Bool third=atomic_flag_test_and_set(&flag);
   atomic_flag_clear(&flag);
   atomic_store_explicit(&x,42,memory_order_release);
-  return prior==40 && old==42 && success && !failure && missing==41 && !first && second && !third
+  return lock_free && prior==40 && old==42 && success && !failure && missing==41 && !first && second && !third
     ? atomic_load_explicit(&x,memory_order_acquire) : 1;
 }
 ''')

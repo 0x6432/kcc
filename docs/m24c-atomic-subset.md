@@ -49,14 +49,18 @@ not been tested.
 The fallback `atomic_flag` uses the naturally aligned four-byte atomic unsigned
 representation and implements test-and-set and clear using exchange and store.
 This relies on the target libatomic providing lock-free 4-byte operations on
-x86-64. Explicit variants accept runtime orders; a clear order must be valid for
-an atomic store. Flag interoperability and concurrency remain untested.
+x86-64. Its representation must not be assumed compatible with native compilers'
+`atomic_flag` types, which may use a different size or layout. Explicit variants
+accept runtime orders; a clear order must be valid for an atomic store. Flag
+interoperability and concurrency remain untested.
+`atomic_is_lock_free` queries libatomic for a supported four-byte atomic object,
+evaluating its pointer once; it does not support other atomic object types.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
 Atomic pointer, other integer widths, bool, enum, floating, aggregate and array
-atomic types, volatile/restrict, other atomic
-library operations and lock-free queries are not implemented. `_Atomic(type-name)` rejects
+atomic types, volatile/restrict and other atomic
+library operations are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
 query limit. The libatomic ABI's reserved function names must not be redefined by

@@ -772,6 +772,14 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t failure_order = node->failure_order ? codegen_expression(codegen, node->failure_order) : 0;
 		const char *operation;
 
+		if (node->operation == ast_atomic_is_lock_free) {
+			size_t result = codegen->next_temporary++;
+			temporary = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =w call $__atomic_is_lock_free(l 4, l %%t%zu)\n",
+				result, object);
+			emit(codegen, "\t%%t%zu =w and %%t%zu, 1\n", temporary, result);
+			return temporary;
+		}
 		if (node->operation == ast_atomic_compare_exchange) {
 			size_t result = codegen->next_temporary++;
 			temporary = codegen->next_temporary++;
