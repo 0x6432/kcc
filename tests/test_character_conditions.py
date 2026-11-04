@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-char-') as directory:
         (r"'\1234'", 'multicharacter'), (r"'\x'", 'expected digits'),
         (r"'\x100'", 'exceeds one byte'), (r"'\400'", 'exceeds one byte'),
         (r"'\777'", 'exceeds one byte'), (r"'\q'", 'unsupported character escape'),
-        (r"'\u00ff'", 'unsupported character escape'),
+        (r"'\u00ff'", 'more than one UTF-8 code unit'),
         ("L'ab'", 'multicharacter'), ("u'ab'", 'multicharacter'), ("U'ab'", 'multicharacter'), ("u8'ab'", 'multicharacter'),
         ("'é'", 'non-ASCII'), ("0 && 'ab'", 'multicharacter'),
     ]:

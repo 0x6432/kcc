@@ -8,14 +8,14 @@ limits apply. Character arrays can use the resulting byte sequences as
 initializers, and pointer conversion uses the unsigned-character element type.
 
 Fixed-width `\u` and `\U` universal names from U+00A0 through U+10FFFF,
-excluding surrogates, encode to UTF-8 in ordinary and `u8` strings. Basic-set
-UCNs are conservatively rejected, including the historically allowed special
-characters; delimited and named UCNs are unsupported.
+excluding surrogates, encode to UTF-8 in ordinary and `u8` strings. The
+permitted special basic-set UCNs for `$`, `@`, and backtick are also accepted; other basic-set UCNs and delimited or named UCNs are rejected.
 
 UTF-16/UTF-32/wide string literals remain unsupported. Bounded `u`, `U`, and `L`
 character constants have unsigned-short, unsigned-int, and int types
 respectively. They accept one UTF-8 source character or fixed-width UCN in the
-range U+00A0–U+10FFFF (excluding surrogates), plus ASCII and byte escapes.
+range U+00A0–U+10FFFF (excluding surrogates), the three permitted special
+UCNs, and ASCII characters.
 `u` rejects characters requiring a UTF-16 surrogate pair. Octal and
 hexadecimal escapes are accepted up to the target character type maximum:
 65535 for `u`, 4294967295 for `U`, and 2147483647 for `L`.

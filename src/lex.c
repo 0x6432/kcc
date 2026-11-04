@@ -595,7 +595,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 		return "expected one character in character constant";
 	end = length - 1;
 	value = text[offset++];
-	if (value == '\\' && wide_unicode && offset < end && (text[offset] == 'u' || text[offset] == 'U')) {
+	if (value == '\\' && offset < end && (text[offset] == 'u' || text[offset] == 'U')) {
 		unsigned digits = text[offset++] == 'u' ? 4 : 8;
 		value = 0;
 		if (digits > end - offset)
@@ -606,8 +606,11 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 				return "invalid universal character name";
 			value = (value << 4) | (unsigned)digit;
 		}
-		if (value < 0xa0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
+		if ((value < 0xa0 && value != 0x24 && value != 0x40 && value != 0x60) ||
+			value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
 			return "unsupported or invalid universal character name";
+		if (!wide_unicode && value >= 128)
+			return "character requires more than one UTF-8 code unit";
 	} else if (value == '\\') {
 		const char *error = parse_character_escape(text, end, &offset, &value, maximum);
 		if (error)
@@ -677,11 +680,13 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 					return "invalid universal character name";
 				codepoint = (codepoint << 4) | (unsigned)digit;
 			}
-			/* Conservative subset: reject basic-set UCNs and surrogates. */
-			if (codepoint < 0xa0 || codepoint > 0x10ffff ||
-				(codepoint >= 0xd800 && codepoint <= 0xdfff))
+			if ((codepoint < 0xa0 && codepoint != 0x24 && codepoint != 0x40 && codepoint != 0x60) ||
+				codepoint > 0x10ffff || (codepoint >= 0xd800 && codepoint <= 0xdfff))
 				return "unsupported or invalid universal character name";
-			if (codepoint < 0x800) {
+			if (codepoint < 0x80) {
+				units = 1;
+				encoded[0] = (unsigned char)codepoint;
+			} else if (codepoint < 0x800) {
 				units = 2;
 				encoded[0] = (unsigned char)(0xc0 | (codepoint >> 6));
 				encoded[1] = (unsigned char)(0x80 | (codepoint & 0x3f));

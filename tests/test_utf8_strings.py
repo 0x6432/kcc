@@ -26,6 +26,8 @@ static_assert(_Generic(U'A', unsigned int: 1, default: 0));
 static_assert(_Generic(L'A', int: 1, default: 0));
 static_assert(sizeof(u'A')==2 && sizeof(U'A')==4 && sizeof(L'A')==4);
 static_assert(u'é'==0xe9 && U'🙂'==0x1f642 && L'é'==0xe9);
+static_assert('\\u0024'==36 && u8'\\u0040'==64 && u'\\u0060'==96);
+char special[]="\\u0024\\u0040\\u0060";
 static_assert(u'\\u00E9'==0xe9 && U'\\U0001F642'==0x1f642 && L'\\u00E9'==0xe9);
 #if u'\\u00E9' != 0xe9 || U'🙂' != 0x1f642
 #error Unicode character value is incorrect
@@ -47,6 +49,7 @@ int main(void) {
     if (u8"\\377"[0]!=255 || u8'\\377'!=255) return 3;
     if (sizeof escapes!=7 || escapes[0]!=195 || escapes[1]!=169 || escapes[2]!=240 || escapes[3]!=159 || escapes[4]!=153 || escapes[5]!=130 || escapes[6]!=0) return 4;
     if (sizeof ordinary!=3 || (unsigned char)ordinary[0]!=195 || (unsigned char)ordinary[1]!=169) return 5;
+    if (sizeof special!=4 || special[0]!=36 || special[1]!=64 || special[2]!=96) return 8;
     if (sizeof raw!=3 || (unsigned char)raw[0]!=195 || (unsigned char)raw[1]!=169) return 6;
     { mbstate_t state={0}; char32_t c=0; char out[4];
       if (mbrtoc32(&c,"A",1,&state)!=1 || c!=65 || c32rtomb(out,c,&state)!=1 || out[0]!=65) return 7; }

@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='kcc runtime character ') as directory:
     rejected = [("''", 'expected one character'), ("'ab'", 'multicharacter'),
                 (r"'\x'", 'expected digits'), (r"'\x100'", 'exceeds one byte'),
                 (r"'\400'", 'exceeds one byte'), (r"'\1234'", 'multicharacter'),
-                (r"'\q'", 'unsupported character escape'), (r"'\u0041'", 'unsupported character escape'),
+                (r"'\q'", 'unsupported character escape'), (r"'\u0041'", 'unsupported or invalid universal'),
                 ("'é'", 'non-ASCII'), ("L'ab'", 'multicharacter'), ("u'ab'", 'multicharacter'),
                 ("U'ab'", 'multicharacter'), ("u8'ab'", 'multicharacter')]
     for spelling, message in rejected:
