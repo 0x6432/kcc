@@ -1928,7 +1928,8 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_string: {
 		struct ast_string_expression *node = (struct ast_string_expression *)expression;
-		struct array_type *array = type_new_array(sema->arena, &type_char, node->length + 1);
+		struct array_type *array = type_new_array(sema->arena,
+			node->is_utf8 ? &type_uchar : &type_char, node->length + 1);
 
 		if (!array) {
 			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating string type");

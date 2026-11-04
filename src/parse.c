@@ -1309,6 +1309,7 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 	size_t length = 0;
 	size_t offset = 0;
 	size_t count = 0;
+	bool utf8 = false;
 
 	if (parser->string_count == ast_max_string_literals) {
 		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -1329,6 +1330,7 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 			return NULL;
 		}
 		length += token.string_length;
+		utf8 |= token.string_utf8;
 		if (length >= ast_max_string_storage - parser->string_bytes) {
 			diagnostic_error(parser->diagnostics, token.location, "string literal storage/count limit exceeded");
 			return NULL;
@@ -1372,6 +1374,7 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 		allocation_error(parser, fragments->token.location);
 		return NULL;
 	}
+	node->is_utf8 = utf8;
 	parser->string_bytes += length + 1;
 	parser->string_count++;
 	return &node->expression;

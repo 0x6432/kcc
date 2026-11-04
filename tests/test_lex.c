@@ -67,7 +67,7 @@ static void test_bracket_tokens(void)
 static void test_string_spelling(void)
 {
 	const char *bad[] = { "", "\"", "\"a", "a\"", "\"\\x\"", "\"\\x100\"",
-		"\"\\400\"", "\"\\q\"", "L\"x\"", "u8\"x\"", "\"a\"b\"" };
+		"\"\\400\"", "\"\\q\"", "L\"x\"", "u\"x\"", "\"a\"b\"" };
 	const unsigned char nul[] = { '"', 0, '"' };
 	const unsigned char high[] = { '"', 128, '"' };
 	const unsigned char slice[] = { '"', 'a', '"', 'z' };
@@ -75,6 +75,8 @@ static void test_string_spelling(void)
 	size_t length;
 	char text[8];
 
+	assert(!parse_string_spelling((const unsigned char *)"u8\"ok\"", 6, output, sizeof(output), &length));
+	assert(length == 2 && output[0] == 'o' && output[1] == 'k');
 	for (unsigned i = 0; i < 256; i++) {
 		assert(snprintf(text, sizeof(text), "\"\\%03o\"", i) == 6);
 		assert(!parse_string_spelling((const unsigned char *)text, 6, NULL, 0, &length) && length == 1);

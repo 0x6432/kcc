@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory(prefix='kcc string literals ') as directory:
 
     rejected = [
         ('int main(void) { char *p=L"x"; return 0; }', 'prefixed string'),
-        ('int main(void) { char *p=u8"x"; return 0; }', 'prefixed string'),
+        ('int main(void) { char *p=u"x"; return 0; }', 'prefixed string'),
         ('int main(void) { char *p="\\q"; return 0; }', 'unsupported character escape'),
         ('int main(void) { char *p="\\x100"; return 0; }', 'exceeds one byte'),
         ('int main(void) { char *p="\\400"; return 0; }', 'exceeds one byte'),

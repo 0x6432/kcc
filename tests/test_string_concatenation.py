@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='kcc string concatenation ') as director
             assert 'storage/count limit' in result.stderr, result.stderr[:500]
 
     for text in ['int main(void) { char *p="a" L"b"; return 0; }',
-                 'int main(void) { char *p="a" u8"b"; return 0; }']:
+                 'int main(void) { char *p="a" U"b"; return 0; }']:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and 'prefixed string' in result.stderr, result.stderr

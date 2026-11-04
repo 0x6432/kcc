@@ -604,13 +604,16 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 	size_t offset = 1;
 	size_t count = 0;
 	size_t end;
+	bool utf8 = length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '"';
 
 	*decoded_length = 0;
 	if (!length)
 		return "expected ordinary string literal";
-	if (text[0] != '"')
+	if (utf8)
+		offset = 3;
+	else if (text[0] != '"')
 		return "prefixed string literals are not supported yet";
-	if (length < 2 || text[length - 1] != '"')
+	if (length < (utf8 ? 4u : 2u) || text[length - 1] != '"')
 		return "unterminated string literal";
 	end = length - 1;
 	while (offset < end) {
@@ -622,7 +625,33 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 			if (error)
 				return error;
 		} else if (value >= 128) {
-			return "non-ASCII string bytes are not supported yet";
+			unsigned continuation;
+			unsigned char first = (unsigned char)value;
+			if (!utf8)
+				return "non-ASCII string bytes are not supported yet";
+			if (first >= 0xc2 && first <= 0xdf) continuation = 1;
+			else if (first >= 0xe0 && first <= 0xef) continuation = 2;
+			else if (first >= 0xf0 && first <= 0xf4) continuation = 3;
+			else return "invalid UTF-8 string sequence";
+			if (continuation > end - offset)
+				return "truncated UTF-8 string sequence";
+			for (unsigned i = 0; i < continuation; i++) {
+				unsigned char next = text[offset + i];
+				if (next < 0x80 || next > 0xbf ||
+					(i == 0 && ((first == 0xe0 && next < 0xa0) ||
+					(first == 0xed && next > 0x9f) || (first == 0xf0 && next < 0x90) ||
+					(first == 0xf4 && next > 0x8f))))
+					return "invalid UTF-8 string sequence";
+			}
+			if (output && continuation + 1 > capacity - count)
+				return "string output buffer is too small";
+			if (output) {
+				output[count] = first;
+				memcpy(output + count + 1, text + offset, continuation);
+			}
+			count += continuation + 1;
+			offset += continuation;
+			continue;
 		} else if (!value || value == '\n' || value == '\r' || value == '"') {
 			return "invalid source byte in string literal";
 		}
@@ -645,6 +674,7 @@ static struct token convert_string(struct token token, struct diagnostics *diagn
 	if (error)
 		return invalid_language_token(token, diagnostics, error);
 	token.kind = token_string;
+	token.string_utf8 = token.length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '"';
 	return token;
 }
 

@@ -285,6 +285,7 @@ struct ast_string_expression {
 	struct ast_expression expression;
 	const unsigned char *bytes;
 	size_t length;
+	bool is_utf8;
 	size_t object_id;
 	struct ast_string_expression *next_string;
 };

@@ -167,6 +167,7 @@ struct token {
 	bool floating_single;
 	int64_t character;
 	size_t string_length;
+	bool string_utf8;
 	unsigned integer_base;
 	unsigned integer_long_suffix;
 	bool integer_unsigned_suffix;
