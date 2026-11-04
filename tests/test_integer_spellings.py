@@ -46,6 +46,46 @@ with tempfile.TemporaryDirectory(prefix='kcc integer spelling ') as directory:
         else:
             agreements += 1
         assert subprocess.run([str(executable)], timeout=5).returncode == 42, spelling
+    # Boundary typing matters as well as value: unsuffixed non-decimal
+    # constants choose the first representable int/unsigned/long type.  These
+    # comparisons distinguish signed from unsigned without _Generic support.
+    predicates = [
+        "0b0 == 0 && 0B1 == 1 && 0b000'101010 == 42",
+        "0B1'0'1'0uLL == 10ULL && 0b10'1010LLu == 42",
+        "0b1111111111111111111111111111111 == 2147483647",
+        "sizeof(0b1111111111111111111111111111111) == sizeof(int)",
+        "sizeof(0B10000000000000000000000000000000) == sizeof(unsigned)",
+        "(-1 < 0b10000000000000000000000000000000) == 0",
+        "(-1 < 0b100000000000000000000000000000000) == 1",
+        "sizeof(0b100000000000000000000000000000000) == sizeof(long)",
+        "0b11111111'11111111'11111111'11111111 == 0xffffffffU",
+        "0b11111111'11111111'11111111'11111111'11111111'11111111'11111111'11111111ULL == 18446744073709551615ULL",
+        "(-1 < 0b1000000000000000000000000000000000000000000000000000000000000000) == 0",
+        "0'7'7 == 63 && 1'2'3 == 123 && 0xA'B == 171",
+        "(-1 < 2147483648) == 1 && (-1 < 0x80000000) == 0",
+    ]
+    for predicate in predicates:
+        text = f'int main(void) {{ if ({predicate}) return 42; return 1; }}\n'
+        source.write_text(text)
+        result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and not result.stderr, (predicate, result.stderr)
+        if qbe:
+            il.write_text(result.stdout)
+            subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(assembly), str(il)], check=True, timeout=10)
+            subprocess.run([host, str(assembly), '-o', str(executable)], check=True, timeout=10)
+            assert subprocess.run([str(executable)], timeout=5).returncode == 42, predicate
+        # The normalized reference is a value/type model for older C2x hosts;
+        # unlike a native comparison, it does not claim host separator support.
+        reference.write_text(text.replace("'", ""))
+        subprocess.run([host, '-std=c2x', str(reference), '-o', str(executable)],
+                       capture_output=True, check=True, timeout=10)
+        assert subprocess.run([str(executable)], timeout=5).returncode == 42, predicate
+    for literal in ('0b', '0B2', '0b102', "0b'1", "0b1'2", "0b1'u",
+                    "0x'F", "0xF'g", "0'8", '0b101uul', '0b101lL',
+                    '0b1' + '0'*64, "1844'6744'0737'0955'1616"):
+        source.write_text(f'int main(void) {{ return {literal}; }}\n')
+        result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
+        assert result.returncode == 1 and not result.stdout and 'unsupported numeric' in result.stderr, (literal, result.stderr)
     # Macro-pasted and phase-normalized spellings retain original pp spelling.
     for ending in ('\n', '\r\n', '\r'):
         text = '#define C(a,b) a##b\nint main(void) { return C(0x,2a); }\n'

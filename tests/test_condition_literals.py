@@ -69,6 +69,21 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-int-') as directory:
         source.write_text(f'#if {literal}\n#endif\nint main(void) {{ return 0; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, (literal, result.stderr)
+    # Macro expansion and phase-two line splicing must preserve C23 spellings
+    # in #if as well as in ordinary language tokens.
+    for ending in ('\n', '\r\n', '\r'):
+        text = ("#define JOIN(a,b) a##b\n"
+                "#if JOIN(0b,101010) == 42 && 0B10'10 == 10 && 1'000 == 1000\n"
+                "int main(void) { return 0b10\\\n'1010; }\n"
+                "#else\n#error literal expansion\n#endif\n")
+        source.write_bytes(text.replace('\n', ending).encode())
+        result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and not result.stderr and 'copy 42' in result.stdout, result.stderr
+    for literal in ("0B'1", "0b1'2", "0b1'u", "0xF'g", '0b102'):
+        for expression in (literal, '0 && '+literal):
+            source.write_text(f'#if {expression}\n#endif\nint main(void) {{ return 0; }}\n')
+            result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
+            assert result.returncode == 1 and not result.stdout and result.stderr, (expression, result.stderr)
     # Common spellings work in executable selection with each newline policy.
     for literal in literals:
         for ending in ('\n', '\r\n', '\r'):

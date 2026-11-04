@@ -120,6 +120,11 @@ ordinary copied types and compatible signatures carry no register flag. Read
 docs/m15-register-parameters.md for source/AST/ABI/budget evidence and the explicit
 register-void subset refusal. Other storage/globals/linkage remain incomplete.
 
+M23b: Binary integer constants and digit separators use the shared integer
+spelling decoder in runtime expressions and preprocessing conditions. Existing
+integer typing applies; bit-precise `wb` suffixes and floating constants remain
+unsupported. See `docs/m23b-integer-literals.md`.
+
 M23E3: Inferred `auto T = ...` and `auto (T) = ...` may now hide an outer typedef
 T at block/for scope, including register inference. One demand peek disambiguates
 bare names; a dedicated balanced-identifier grammar preserves nesting limits.

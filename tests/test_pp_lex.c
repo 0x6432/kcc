@@ -121,6 +121,8 @@ static void test_numbers(void)
 		"42", "0", "00", "09", "0x10", "12u", "12foo", "1e+2", "1E-foo",
 		"0x1p-1", ".5", ".5e+foo", "1...2", "1'000", "1'a", "1._",
 		"18446744073709551616", "1'p-2", "2'_x",
+		"0b1010", "0B10'10UL", "0b2", "0b1'2", "0x'1", "1'u",
+		"0x1.fp2", "08",
 	};
 	const struct expected_pp_token boundaries[] = {
 		{ pp_number, "1e+", false, true },

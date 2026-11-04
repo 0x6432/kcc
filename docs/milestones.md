@@ -30,7 +30,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
 | M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false and M23a2 nullptr constant implemented; other changes planned) |
-| M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | planned |
+| M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | in progress (existing binary constants and integer digit separators covered by M23b checkpoint; bit-precise suffixes and floating constants remain unsupported) |
 | M23c | nullptr/nullptr_t | Conversions, comparisons, calls, header exposure | in progress (M23a2 constant/distinct type; source type naming/header exposure remain) |
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
 | M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases, M23e1 single-identifier block/for scalar inference, M23e2 register combinations and M23e3 outer-typedef hiding); derived/other storage/constexpr/VM work remains |

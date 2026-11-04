@@ -224,7 +224,9 @@ static void test_integer_spellings(void)
 		"ULL", "lu", "LU", "llU", "LLu" };
 	const char *bad[] = { "", "0x", "0b", "08", "0b2", "0x'1", "1''2", "1'",
 		"1'u", "1uu", "1lL", "1Ll", "1LLL", "1wb", "1.0", "1e2",
-		"18446744073709551616", "0x10000000000000000" };
+		"18446744073709551616", "0x10000000000000000", "0B", "0b102", "0B10a", "0b'1",
+		"0B1'2", "0b1'u", "0b1'", "0b1''0", "0'8", "0x1'g",
+		"123'L", "0b10000000000000000000000000000000000000000000000000000000000000000" };
 	const unsigned char slice[] = { '4', '2', 'u' };
 	struct integer_spelling spelling;
 	char text[64];
@@ -254,6 +256,38 @@ static void test_integer_spellings(void)
 	assert(spelling.value == UINT64_MAX);
 	assert(!parse_integer_spelling((const unsigned char *)"0xffffffffffffffffULL", 21, &spelling));
 	assert(spelling.value == UINT64_MAX && spelling.unsigned_suffix && spelling.long_suffix == 2);
+	/* Binary/separator spellings, suffix metadata, limits and bounded slices. */
+	{
+		const struct {
+			const char *text;
+			uint64_t value;
+			unsigned base, longs;
+			bool unsign;
+		} cases[] = {
+			{ "0b0", 0, 2, 0, false }, { "0B1", 1, 2, 0, false },
+			{ "0b1'0'1'0", 10, 2, 0, false }, { "0B000'0101010u", 42, 2, 0, true },
+			{ "0b101'010LLU", 42, 2, 2, true }, { "0B101010uLL", 42, 2, 2, true },
+			{ "1'234'567", 1234567, 10, 0, false }, { "0'7'7", 63, 8, 0, false },
+			{ "0Xf'F", 255, 16, 0, false }, { "0xFF'ffuL", 65535, 16, 1, true },
+			{ "0b11111111'11111111'11111111'11111111'11111111'11111111'11111111'11111111ULL",
+				UINT64_MAX, 2, 2, true },
+		};
+		const unsigned char bounded[] = { '0', 'b', '1', '\'', '0', 'U', 'x' };
+		const unsigned char embedded_nul[] = { '0', 'b', '1', 0, '0' };
+
+		for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+			assert(!parse_integer_spelling((const unsigned char *)cases[i].text,
+				strlen(cases[i].text), &spelling));
+			assert(spelling.value == cases[i].value && spelling.base == cases[i].base);
+			assert(spelling.long_suffix == cases[i].longs && spelling.unsigned_suffix == cases[i].unsign);
+		}
+		assert(!parse_integer_spelling(bounded, 5, &spelling));
+		assert(spelling.value == 2 && spelling.base == 2 && !spelling.unsigned_suffix);
+		assert(!parse_integer_spelling(bounded, 6, &spelling));
+		assert(spelling.value == 2 && spelling.unsigned_suffix);
+		assert(parse_integer_spelling(bounded, sizeof(bounded), &spelling));
+		assert(parse_integer_spelling(embedded_nul, sizeof(embedded_nul), &spelling));
+	}
 	{
 		const enum token_kind kinds[] = {
 			token_integer, token_integer, token_integer, token_integer, token_integer,
