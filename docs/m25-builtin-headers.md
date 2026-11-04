@@ -1,7 +1,7 @@
 # Bounded compiler-provided headers
 
 After explicit include paths have been searched, the x86-64 SysV compiler
-provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
+provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
 `math.h`, `tgmath.h`, `ctype.h`, `inttypes.h` and `time.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
@@ -9,6 +9,7 @@ include directories take precedence.
 
 - `stdbool.h` defines `__bool_true_false_are_defined`; `bool`, `true` and
   `false` are C23 keywords.
+- `stdnoreturn.h` provides the deprecated `noreturn` macro as `_Noreturn`.
 - `stddef.h` supplies `size_t`, `ptrdiff_t`, `wchar_t`, `nullptr_t`, `NULL`,
   a 16-byte-aligned `max_align_t`, and bounded `offsetof` for named members,
   nested members and constant in-bounds fixed-array indices. The `max_align_t`

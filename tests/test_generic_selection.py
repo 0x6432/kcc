@@ -23,6 +23,9 @@ invalid = [
     ('int main(void) { return _Generic(0, long: 1); }', 'no matching association'),
     ('int main(void) { return _Generic(0, void: 1, default: 2); }', 'complete object type'),
     ('int main(void) { return _Generic(0, int: 42, default: undeclared); }', 'undeclared identifier'),
+    ('_Noreturn int object;', '_Noreturn requires a function declaration'),
+    ('int main(void) { _Noreturn int object; return 42; }', '_Noreturn requires a function declaration'),
+    ('_Noreturn typedef int T;', '_Noreturn is not permitted'),
 ]
 with tempfile.TemporaryDirectory(prefix="kcc-generic-") as directory:
     path = Path(directory)

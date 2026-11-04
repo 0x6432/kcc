@@ -907,6 +907,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
+		static const char stdnoreturn_header[] =
+			"#ifndef __KCC_STDNORETURN_H\n#define __KCC_STDNORETURN_H 1\n"
+			"#define noreturn _Noreturn\n#endif\n";
 		static const char time_header[] =
 			"#ifndef __KCC_TIME_H\n#define __KCC_TIME_H 1\n"
 			"#include <stddef.h>\n"
@@ -1164,6 +1167,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		if (strcmp(name->path, "stdbool.h") == 0) {
 			header = stdbool_header;
 			source_name = "<kcc/stdbool.h>";
+		} else if (strcmp(name->path, "stdnoreturn.h") == 0) {
+			header = stdnoreturn_header;
+			source_name = "<kcc/stdnoreturn.h>";
 		} else if (strcmp(name->path, "time.h") == 0) {
 			header = time_header;
 			source_name = "<kcc/time.h>";

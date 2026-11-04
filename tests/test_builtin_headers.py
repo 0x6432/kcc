@@ -15,6 +15,8 @@ source_text = r"""
 #include <stdint.h>
 #include <limits.h>
 #include <float.h>
+#include <stdnoreturn.h>
+noreturn void fatal(void) { for(;;) {} }
 #if !defined(__DATE__) || !defined(__TIME__)
 #error missing translation clock macros
 #endif

@@ -38,6 +38,7 @@ enum token_kind {
 	token_static,
 	token_thread_local,
 	token_inline,
+	token_noreturn,
 	token_auto,
 	token_typeof,
 	token_typeof_unqual,

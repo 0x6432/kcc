@@ -375,6 +375,7 @@ static const struct keyword keywords[] = {
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
 	{ "_Atomic", token_atomic },
+	{ "_Noreturn", token_noreturn },
 	{ "thread_local", token_thread_local }, { "_Thread_local", token_thread_local },
 	{ "inline", token_inline }, { "extern", token_extern }, { "static", token_static }, { "auto", token_auto }, { "register", token_register }, { "typedef", token_typedef },
 	{ "typeof", token_typeof }, { "typeof_unqual", token_typeof_unqual },
@@ -968,6 +969,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_kcc_atomic_compare_exchange: return "__kcc_atomic_compare_exchange";
 	case token_kcc_atomic_is_lock_free: return "__kcc_atomic_is_lock_free";
 	case token_generic: return "_Generic";
+	case token_noreturn: return "_Noreturn";
 	case token_arrow: return "->";
 	}
 	return "unknown";
