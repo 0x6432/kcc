@@ -898,6 +898,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
+		static const char errno_header[] =
+			"#ifndef __KCC_ERRNO_H\n#define __KCC_ERRNO_H 1\n"
+			"int *__errno_location(void);\n#define errno (*__errno_location())\n"
+			"#define EDOM 33\n#define ERANGE 34\n#define EILSEQ 84\n"
+			"#define ENOENT 2\n#define EIO 5\n#define ENOMEM 12\n#define EINVAL 22\n#define EFBIG 27\n"
+			"#endif\n";
 		/* assert.h is intentionally re-evaluated on each inclusion for NDEBUG. */
 		static const char assert_header[] =
 			"#undef assert\n"
@@ -922,6 +928,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"void free(void *); void abort(void); void exit(int); void _Exit(int);\n"
 			"int atoi(const char *); long atol(const char *); long long atoll(const char *);\n"
 			"long strtol(const char *,char **,int); unsigned long strtoul(const char *,char **,int);\n"
+			"long long strtoll(const char *,char **,int); unsigned long long strtoull(const char *,char **,int);\n"
+			"float strtof(const char *,char **); double strtod(const char *,char **);\n"
 			"int rand(void); void srand(unsigned int);\n"
 			"int abs(int); long labs(long); long long llabs(long long);\n"
 			"void qsort(void *,size_t,size_t,int (*)(const void *,const void *));\n"
@@ -942,7 +950,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		static const char stdio_header[] =
 			"#ifndef __KCC_STDIO_H\n#define __KCC_STDIO_H 1\n"
-			"#include <stddef.h>\n"
+			"#include <stddef.h>\n#include <stdarg.h>\n"
 			"typedef struct _IO_FILE FILE;\n"
 			"extern FILE *stdin; extern FILE *stdout; extern FILE *stderr;\n"
 			"#define EOF (-1)\n#define SEEK_SET 0\n#define SEEK_CUR 1\n#define SEEK_END 2\n"
@@ -955,10 +963,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"char *fgets(char *,int,FILE *); int fputs(const char *,FILE *); int puts(const char *);\n"
 			"int printf(const char *,...); int fprintf(FILE *,const char *,...);\n"
 			"int sprintf(char *,const char *,...); int snprintf(char *,size_t,const char *,...);\n"
+			"int vprintf(const char *,va_list); int vfprintf(FILE *,const char *,va_list);\n"
+			"int vsprintf(char *,const char *,va_list); int vsnprintf(char *,size_t,const char *,va_list);\n"
 			"int scanf(const char *,...); int fscanf(FILE *,const char *,...); int sscanf(const char *,const char *,...);\n"
 			"int fseek(FILE *,long,int); long ftell(FILE *); void rewind(FILE *);\n"
 			"int feof(FILE *); int ferror(FILE *); void clearerr(FILE *);\n"
-			"int remove(const char *); int rename(const char *,const char *);\n"
+			"int remove(const char *); int rename(const char *,const char *); void perror(const char *);\n"
 			"#endif\n";
 		static const char stddef_header[] =
 			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
@@ -1038,6 +1048,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		if (strcmp(name->path, "stdbool.h") == 0) {
 			header = stdbool_header;
 			source_name = "<kcc/stdbool.h>";
+		} else if (strcmp(name->path, "errno.h") == 0) {
+			header = errno_header;
+			source_name = "<kcc/errno.h>";
 		} else if (strcmp(name->path, "assert.h") == 0) {
 			header = assert_header;
 			source_name = "<kcc/assert.h>";

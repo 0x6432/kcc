@@ -70,10 +70,12 @@ int main(void) {
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
 #include <stdio.h>
+#include <errno.h>
 int main(void) {
   char buf[8];
+  errno=0;
   int n=snprintf(buf,sizeof buf,"%d",42);
-  return n==2 && buf[0]=='4' && buf[1]=='2' ? 42 : 1;
+  return n==2 && buf[0]=='4' && buf[1]=='2' && errno==0 ? 42 : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)

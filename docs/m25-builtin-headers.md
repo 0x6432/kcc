@@ -2,7 +2,7 @@
 
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
-`assert.h`, `stdatomic.h`, `stdlib.h`, `string.h` and `stdio.h`, in addition
+`assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h` and `errno.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -39,8 +39,11 @@ include directories take precedence.
   signatures. They omit many standard interfaces and require a compatible
   linked libc; they do not provide implementations.
 - `stdio.h` exposes an opaque glibc `FILE` and common stream, file, formatted
-  input/output and positioning declarations. It omits other standard stdio
-  interfaces and relies on glibc and the compiler's limited variadic ABI.
+  input/output and positioning declarations, including `va_list` variants.
+  It omits other standard stdio interfaces and relies on glibc and the
+  compiler's limited variadic ABI.
+- `errno.h` exposes glibc thread-local `errno` through `__errno_location` and
+  a small selection of Linux error constants; other error codes are not provided.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.
