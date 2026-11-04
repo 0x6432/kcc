@@ -31,10 +31,11 @@ include directories take precedence.
   and function information. It requires a compatible libc.
 - `stdatomic.h` exposes `atomic_int`, `atomic_uint`, `ATOMIC_VAR_INIT`,
   `atomic_init`, `atomic_load`, `atomic_store`, `atomic_exchange` and
-  `atomic_fetch_add/sub/and/or/xor` for the compiler's bounded
+  `atomic_fetch_add/sub/and/or/xor`, with explicit-order variants of exchange
+  and fetch operations, for the compiler's bounded
   atomic int/unsigned-int subset. Initialization uses a sequentially consistent
   store; load and store use sequential consistency and require `-latomic`.
-  Volatile atomic objects, other atomic types, explicit orders, fences,
+  Volatile atomic objects, other atomic types, explicit load/store orders, fences,
   other fetch operations and lock-free queries are not provided.
 - `stdlib.h` and `string.h` declare a bounded set of common allocation,
   conversion, sorting, memory and string functions with x86-64 libc-compatible

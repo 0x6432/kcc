@@ -953,6 +953,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		static const char stdatomic_header[] =
 			"#ifndef __KCC_STDATOMIC_H\n#define __KCC_STDATOMIC_H 1\n"
 			"typedef _Atomic int atomic_int;\ntypedef _Atomic unsigned int atomic_uint;\n"
+			"typedef enum { memory_order_relaxed=0, memory_order_consume=1, memory_order_acquire=2,"
+			" memory_order_release=3, memory_order_acq_rel=4, memory_order_seq_cst=5 } memory_order;\n"
 			"#define ATOMIC_VAR_INIT(value) (value)\n"
 			"#define atomic_init(object,value) ((void)(*(object)=(value)))\n"
 			"#define atomic_load(object) (*(object))\n"
@@ -963,6 +965,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define atomic_fetch_or(object,value) __kcc_atomic_fetch_or(object,value)\n"
 			"#define atomic_fetch_xor(object,value) __kcc_atomic_fetch_xor(object,value)\n"
 			"#define atomic_exchange(object,value) __kcc_atomic_exchange(object,value)\n"
+			"#define atomic_fetch_add_explicit(object,value,order) __kcc_atomic_fetch_add(object,value,order)\n"
+			"#define atomic_fetch_sub_explicit(object,value,order) __kcc_atomic_fetch_sub(object,value,order)\n"
+			"#define atomic_fetch_and_explicit(object,value,order) __kcc_atomic_fetch_and(object,value,order)\n"
+			"#define atomic_fetch_or_explicit(object,value,order) __kcc_atomic_fetch_or(object,value,order)\n"
+			"#define atomic_fetch_xor_explicit(object,value,order) __kcc_atomic_fetch_xor(object,value,order)\n"
+			"#define atomic_exchange_explicit(object,value,order) __kcc_atomic_exchange(object,value,order)\n"
 			"#endif\n";
 		static const char stdlib_header[] =
 			"#ifndef __KCC_STDLIB_H\n#define __KCC_STDLIB_H 1\n"

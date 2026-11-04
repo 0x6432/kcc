@@ -341,6 +341,7 @@ struct ast_atomic_expression {
 	enum ast_atomic_operation operation;
 	struct ast_expression *object;
 	struct ast_expression *argument;
+	struct ast_expression *order;
 };
 
 struct ast_call_expression {

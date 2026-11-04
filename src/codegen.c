@@ -765,6 +765,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
 		size_t object = codegen_expression(codegen, node->object);
 		size_t argument = codegen_expression(codegen, node->argument);
+		size_t order = node->order ? codegen_expression(codegen, node->order) : 0;
 		const char *operation;
 
 		switch (node->operation) {
@@ -777,8 +778,12 @@ static size_t codegen_expression(struct codegen *codegen,
 		default: abort();
 		}
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w call $__atomic_%s_4(l %%t%zu, w %%t%zu, w 5)\n",
-			temporary, operation, object, argument);
+		if (node->order)
+			emit(codegen, "\t%%t%zu =w call $__atomic_%s_4(l %%t%zu, w %%t%zu, w %%t%zu)\n",
+				temporary, operation, object, argument, order);
+		else
+			emit(codegen, "\t%%t%zu =w call $__atomic_%s_4(l %%t%zu, w %%t%zu, w 5)\n",
+				temporary, operation, object, argument);
 		return temporary;
 	}
 	case expression_va: {

@@ -1578,8 +1578,21 @@ static bool sema_expression(struct sema *sema,
 		result_type = unqualified_type(sema, referent, expression->location);
 		if (!result_type || !convert_expression(sema, &node->argument, result_type))
 			return false;
+		if (node->order) {
+			if (!sema_expression(sema, &node->order, true))
+				return false;
+			if (!type_is_integer(node->order->type)) {
+				diagnostic_error(sema->diagnostics, node->order->location,
+					"atomic memory order must be an integer");
+				return false;
+			}
+			if (!convert_expression(sema, &node->order, &type_int))
+				return false;
+		}
 		expression->depth = 1 + (node->object->depth > node->argument->depth ?
 			node->object->depth : node->argument->depth);
+		if (node->order && node->order->depth + 1 > expression->depth)
+			expression->depth = node->order->depth + 1;
 		break;
 	}
 	case expression_va: {

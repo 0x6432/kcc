@@ -1683,14 +1683,25 @@ static struct ast_expression *parse_atomic_expression(struct parser *parser)
 	if (!node->object || !expect_token(parser, token_comma, "expected ',' in atomic intrinsic", NULL))
 		return NULL;
 	node->argument = parse_expression(parser, 1);
-	if (!node->argument || !expect_token(parser, token_right_paren, "expected ')' after atomic intrinsic", NULL))
+	if (!node->argument)
 		return NULL;
-	if (node->object->depth >= ast_max_expression_depth || node->argument->depth >= ast_max_expression_depth) {
+	if (preprocess_peek(parser->preprocessor).kind == token_comma) {
+		preprocess_next(parser->preprocessor);
+		node->order = parse_expression(parser, 1);
+		if (!node->order)
+			return NULL;
+	}
+	if (!expect_token(parser, token_right_paren, "expected ')' after atomic intrinsic", NULL))
+		return NULL;
+	if (node->object->depth >= ast_max_expression_depth || node->argument->depth >= ast_max_expression_depth ||
+		(node->order && node->order->depth >= ast_max_expression_depth)) {
 		diagnostic_error(parser->diagnostics, token.location, "expression tree exceeds depth limit (128)");
 		return NULL;
 	}
 	node->expression.depth = 1 + (node->object->depth > node->argument->depth ?
 		node->object->depth : node->argument->depth);
+	if (node->order && node->order->depth + 1 > node->expression.depth)
+		node->expression.depth = node->order->depth + 1;
 	return &node->expression;
 }
 

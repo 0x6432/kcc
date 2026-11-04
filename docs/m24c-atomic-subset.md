@@ -30,11 +30,14 @@ are rejected rather than expanded as a non-atomic load and store.
 
 The partial `stdatomic.h` also offers sequentially consistent exchange and
 fetch-add/subtract/and/or/xor via libatomic; each evaluates its pointer and
-integer operand once and returns the previous value. These additions are not
-yet tested. Atomic record or union members, including arrays of atomic members, are rejected because existing
+integer operand once and returns the previous value. Their `_explicit` forms
+also accept a runtime `memory_order`, evaluated once and passed to libatomic.
+The six order values follow GCC/libatomic's 0–5 ABI; invalid values are outside
+the supported contract. These additions are not yet tested. Atomic record or
+union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
 Atomic pointer, other integer widths, bool, enum, floating, aggregate and array
-atomic types, volatile/restrict, fences, explicit memory orders, other atomic
+atomic types, volatile/restrict, fences, explicit load/store orders, other atomic
 library operations and lock-free queries are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type

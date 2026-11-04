@@ -111,7 +111,8 @@ int main(void) {
 atomic_int x=ATOMIC_VAR_INIT(0);
 int main(void) {
   atomic_init(&x,40);
-  int prior=atomic_fetch_add(&x,2);
+  memory_order order=memory_order_relaxed;
+  int prior=atomic_fetch_add_explicit(&x,2,order);
   int old=atomic_exchange(&x,42);
   return prior==40 && old==42 ? atomic_load(&x) : 1;
 }
