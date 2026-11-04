@@ -6,6 +6,10 @@ priority over compile-time performance.
 
 ## Current checkpoint
 
+M21 scalar variadic declarations, definitions and calls are available for
+x86-64 SysV, with integer promotions and pointers. No va_list access, floating
+or aggregate variadic ABI is implemented; see `docs/m21-variadic-scalars.md`.
+
 M16 adds struct/union definitions, natural layout, member access, zero record
 storage, checked subobject addresses and address-backed aggregate copies. Existing
 storage/linkage features compose with records. See `docs/m16-records.md` for the

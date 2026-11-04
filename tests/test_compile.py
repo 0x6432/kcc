@@ -641,7 +641,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int f(int); int main(void) { return f(,1); }",
         "int f(int); int main(void) { return f(1 2); }",
         "int f(void,int x);", "int f(int x,void);", "int f(int x,);",
-        "int f(int x int y);", "int f(int x=1);", "int f(int,...) ;",
+        "int f(int x int y);", "int f(int x=1);",
         "int f(int [2][]) { return 0; }",
         "int main(int x) { return x; }",
         "int f(int f) { return f(0); }",

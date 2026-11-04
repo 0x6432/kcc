@@ -646,9 +646,15 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 	}
 	count = 0;
 	for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
-		emit(codegen, "%s%s %%t%zu", count ? ", " : "", qbe_abi_type(argument->value->type), arguments[count]);
+		if (node->signature->variadic && count == node->signature->parameter_count)
+			emit(codegen, "%s...", count ? ", " : "");
+		emit(codegen, "%s%s %%t%zu",
+			(count || (node->signature->variadic && !node->signature->parameter_count)) ? ", " : "",
+			qbe_abi_type(argument->value->type), arguments[count]);
 		count++;
 	}
+	if (node->signature->variadic && count == node->signature->parameter_count)
+		emit(codegen, "%s...", count ? ", " : "");
 	emit(codegen, ")\n");
 	if (value)
 		*value = codegen_canonicalize(codegen, *value, node->expression.type);
@@ -1328,6 +1334,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 			qbe_abi_type(parameter->type), parameter_index);
 		parameter_index++;
 	}
+	if (function->declaration->type_syntax->variadic)
+		emit(&codegen, "%s...", parameter_index ? ", " : "");
 	emit(&codegen, ") {\n");
 	emit_label(&codegen, 0);
 	while (local) {

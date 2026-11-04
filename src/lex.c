@@ -657,7 +657,7 @@ struct language_punctuator {
 };
 
 static const struct language_punctuator language_punctuators[] = {
-	{ ".", token_dot }, { "->", token_arrow },
+	{ ".", token_dot }, { "...", token_ellipsis }, { "->", token_arrow },
 	{ "(", token_left_paren }, { ")", token_right_paren },
 	{ "[", token_left_bracket }, { "]", token_right_bracket },
 	{ "<:", token_left_bracket }, { ":>", token_right_bracket },
@@ -831,6 +831,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_enum: return "enum";
 	case token_union: return "union";
 	case token_dot: return ".";
+	case token_ellipsis: return "...";
 	case token_arrow: return "->";
 	}
 	return "unknown";

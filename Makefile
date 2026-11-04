@@ -70,6 +70,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	./build/test_compound_literal_ast
 	QBE="$(QBE)" python3 tests/test_compile.py
 	QBE="$(QBE)" python3 tests/test_abi.py
+	QBE="$(QBE)" python3 tests/test_variadic.py
 	QBE="$(QBE)" python3 tests/test_diagnostics.py
 	QBE="$(QBE)" python3 tests/test_conditions.py
 	QBE="$(QBE)" python3 tests/test_condition_expressions.py
@@ -234,6 +235,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	./build/test_compound_literal_ast
 	python3 tests/test_compile.py
 	python3 tests/test_diagnostics.py
+	python3 tests/test_variadic.py
 	python3 tests/test_conditions.py
 	python3 tests/test_condition_expressions.py
 	python3 tests/test_condition_literals.py

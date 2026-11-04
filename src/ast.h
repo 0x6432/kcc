@@ -584,6 +584,7 @@ struct ast_function_type_syntax {
 	struct ast_type_syntax *return_syntax;
 	struct ast_parameter *parameters;
 	size_t parameter_count; /* Written nodes, not the resolved ABI count. */
+	bool variadic;
 };
 
 struct ast_cast_expression {

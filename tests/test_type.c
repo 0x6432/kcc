@@ -171,6 +171,17 @@ static void test_function_referents(struct arena *arena)
 	assert(((const struct pointer_type *)qualified_pointer)->referent == &a->type);
 	assert(type_unqualified_compatible(qualified_pointer, &pointer->type));
 	assert(!a->type.qualifiers && a->parameters->type == &plain->type);
+	{
+		struct function_type *v = type_new_function(arena, &type_int, a_parameters, 1);
+		const struct type *composite;
+
+		assert(v);
+		v->variadic = true;
+		assert(!type_compatible(&a->type, &v->type));
+		composite = type_composite(arena, &v->type, &v->type);
+		assert(composite && ((const struct function_type *)composite)->variadic);
+	}
+
 }
 
 static void test_bounded_layers(struct arena *arena)

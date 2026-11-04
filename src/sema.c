@@ -927,7 +927,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 			goto done;
 		if (declared->kind == type_kind_void) {
 			/* Resolve query-derived void without removing its written syntax. */
-			if (function->parameter_count == 1 && !parameter->has_name && !declared->qualifiers) {
+			if (function->parameter_count == 1 && !function->variadic && !parameter->has_name && !declared->qualifiers) {
 				parameter->type = declared;
 				parameter->is_void_marker = true;
 				void_marker = true;
@@ -951,6 +951,8 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	if (!return_type)
 		goto done;
 	type = type_new_function(sema->arena, return_type, parameters, count);
+	if (type)
+		type->variadic = function->variadic;
 	if (!type)
 		diagnostic_error(sema->diagnostics, function->syntax.location, "out of memory creating function type");
 done:
@@ -1452,7 +1454,8 @@ static bool sema_expression(struct sema *sema,
 			if (decay->operand->kind == expression_function_designator)
 				node->function = ((struct ast_function_designator_expression *)decay->operand)->function;
 		}
-		if (node->argument_count != node->signature->parameter_count) {
+		if (node->argument_count < node->signature->parameter_count ||
+			(!node->signature->variadic && node->argument_count != node->signature->parameter_count)) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"argument count does not match function signature");
 			return false;
@@ -1488,9 +1491,20 @@ static bool sema_expression(struct sema *sema,
 					"aggregate function arguments are not supported yet (M21)");
 				return false;
 			}
-			if (!convert_expression(sema, &argument->value, parameter->type))
+			if (parameter) {
+				if (!convert_expression(sema, &argument->value, parameter->type))
+					return false;
+				parameter = parameter->next;
+			} else if (type_is_integer(argument->value->type)) {
+				if (!convert_expression(sema, &argument->value,
+					type_integer_promotion(argument->value->type)))
+					return false;
+			} else if (argument->value->type->kind != type_kind_pointer &&
+				!(sema->unevaluated && type_is_record(argument->value->type))) {
+				diagnostic_error(sema->diagnostics, argument->value->location,
+					"unsupported variadic argument type (only integers and pointers)");
 				return false;
-			parameter = parameter->next;
+			}
 			if (argument->value->depth + 1 > expression->depth)
 				expression->depth = argument->value->depth + 1;
 		}

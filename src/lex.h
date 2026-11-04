@@ -102,6 +102,7 @@ enum token_kind {
 	token_union,
 	token_enum,
 	token_dot,
+	token_ellipsis,
 	token_arrow,
 };
 

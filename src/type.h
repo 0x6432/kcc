@@ -102,6 +102,7 @@ struct function_type {
 	const struct type *return_type;
 	struct function_parameter_type *parameters;
 	size_t parameter_count;
+	bool variadic;
 };
 
 extern const struct type type_nullptr;

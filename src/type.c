@@ -381,7 +381,8 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;
 	if (!compatible_types(left_function->return_type, right_function->return_type, false, require_same_type) ||
-		left_function->parameter_count != right_function->parameter_count)
+		left_function->parameter_count != right_function->parameter_count ||
+		left_function->variadic != right_function->variadic)
 		return false;
 	left_parameter = left_function->parameters;
 	right_parameter = right_function->parameters;
@@ -465,6 +466,7 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 		if (!function)
 			return NULL;
 		function->parameter_count = a->parameter_count;
+		function->variadic = a->variadic;
 		tail = &function->parameters;
 		while (a_parameter && b_parameter) {
 			const struct type *type = type_composite(arena, a_parameter->type, b_parameter->type);

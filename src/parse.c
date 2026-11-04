@@ -3224,7 +3224,7 @@ static struct ast_compound_statement *parse_compound_statement(struct parser *pa
 	return node;
 }
 
-/* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } ]
+/* parameter-list ::= "void" | [ parameter-declaration { "," parameter-declaration } [ "," "..." ] | "..." ]
  * parameter-declaration ::= declaration-specifiers [ declarator ]
  * Publish each name after its complete declarator, before the next parameter.
  * C23's empty list specifies zero parameters, just like (void).
@@ -3244,6 +3244,11 @@ static bool parse_parameters(struct parser *parser,
 		struct declaration_head head = { 0 };
 		bool has_name = false;
 
+		if (preprocess_peek(parser->preprocessor).kind == token_ellipsis) {
+			preprocess_next(parser->preprocessor);
+			function->variadic = true;
+			return true;
+		}
 		if (function->parameter_count == ast_max_parameters) {
 			diagnostic_error(parser->diagnostics,
 				preprocess_peek(parser->preprocessor).location,
