@@ -47,11 +47,15 @@ static void emit_label(struct codegen *codegen, size_t label)
 static char qbe_type(const struct type *type)
 {
 	/* Aggregate expression values are addresses of captured object bytes. */
+	if (type->kind == type_kind_float) return 's';
+	if (type->kind == type_kind_double) return 'd';
 	return type_is_record(type) || type_value_width(type) == 64 ? 'l' : 'w';
 }
 
 static const char *qbe_abi_type(const struct type *type)
 {
+	if (type->kind == type_kind_float) return "s";
+	if (type->kind == type_kind_double) return "d";
 	if (type_value_width(type) == 8)
 		return type_is_unsigned(type) ? "ub" : "sb";
 	if (type_value_width(type) == 16)
@@ -61,6 +65,8 @@ static const char *qbe_abi_type(const struct type *type)
 
 static const char *qbe_load_instruction(const struct type *type)
 {
+	if (type->kind == type_kind_float) return "loads";
+	if (type->kind == type_kind_double) return "loadd";
 	if (type_value_width(type) == 8)
 		return type_is_unsigned(type) ? "loadub" : "loadsb";
 	if (type_value_width(type) == 16)
@@ -100,6 +106,22 @@ static const char *binary_instruction(enum binary_operator operation, const stru
 	bool unsigned_operands;
 	bool wide = type_value_width(operand_type) == 64;
 
+	if (type_is_floating(operand_type)) {
+		bool single = operand_type->kind == type_kind_float;
+		switch (operation) {
+		case binary_add: return "add";
+		case binary_subtract: return "sub";
+		case binary_multiply: return "mul";
+		case binary_divide: return "div";
+		case binary_equal: return single ? "ceqs" : "ceqd";
+		case binary_not_equal: return single ? "cnes" : "cned";
+		case binary_less: return single ? "clts" : "cltd";
+		case binary_less_equal: return single ? "cles" : "cled";
+		case binary_greater: return single ? "cgts" : "cgtd";
+		case binary_greater_equal: return single ? "cges" : "cged";
+		default: assert(0 && "invalid float operation"); return NULL;
+		}
+	}
 	if (operand_type->kind == type_kind_pointer) {
 		switch (operation) {
 		case binary_equal: return "ceql";
@@ -426,7 +448,8 @@ static size_t codegen_truth_value(struct codegen *codegen, size_t value,
 {
 	size_t result = codegen->next_temporary++;
 
-	emit(codegen, "\t%%t%zu =w cne%c %%t%zu, 0\n", result, qbe_type(type), value);
+	emit(codegen, "\t%%t%zu =w cne%c %%t%zu, %s\n", result, qbe_type(type), value,
+		type->kind == type_kind_float ? "s_0.0" : type->kind == type_kind_double ? "d_0.0" : "0");
 	return result;
 }
 
@@ -724,6 +747,15 @@ static size_t codegen_expression(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =w copy %u\n", temporary, node->value ? 1u : 0u);
 		return temporary;
 	}
+	case expression_floating: {
+		const struct ast_integer_expression *node = (const struct ast_integer_expression *)expression;
+		size_t bits = codegen->next_temporary++;
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c copy %ju\n", bits,
+			expression->type->kind == type_kind_float ? 'w' : 'l', (uintmax_t)node->value);
+		emit(codegen, "\t%%t%zu =%c cast %%t%zu\n", temporary, qbe_type(expression->type), bits);
+		return temporary;
+	}
 	case expression_integer: {
 		const struct ast_integer_expression *node =
 			(const struct ast_integer_expression *)expression;
@@ -744,13 +776,23 @@ static size_t codegen_expression(struct codegen *codegen,
 			emit(codegen, "\t%%t%zu =%c copy %%t%zu\n", temporary, qbe_type(expression->type), operand);
 			break;
 		case unary_minus:
-			emit(codegen, "\t%%t%zu =%c sub 0, %%t%zu\n", temporary, qbe_type(expression->type), operand);
+			if (type_is_floating(expression->type)) {
+				size_t bits = codegen->next_temporary++;
+				size_t flipped = codegen->next_temporary++;
+				bool single = expression->type->kind == type_kind_float;
+				emit(codegen, "\t%%t%zu =%c cast %%t%zu\n", bits, single ? 'w' : 'l', operand);
+				emit(codegen, "\t%%t%zu =%c xor %%t%zu, %s\n", flipped, single ? 'w' : 'l', bits,
+					single ? "2147483648" : "9223372036854775808");
+				emit(codegen, "\t%%t%zu =%c cast %%t%zu\n", temporary, qbe_type(expression->type), flipped);
+			} else
+				emit(codegen, "\t%%t%zu =%c sub 0, %%t%zu\n", temporary, qbe_type(expression->type), operand);
 			break;
 		case unary_complement:
 			emit(codegen, "\t%%t%zu =%c xor %%t%zu, -1\n", temporary, qbe_type(expression->type), operand);
 			break;
 		case unary_not:
-			emit(codegen, "\t%%t%zu =w ceq%c %%t%zu, 0\n", temporary, qbe_type(node->operand->type), operand);
+			emit(codegen, "\t%%t%zu =w ceq%c %%t%zu, %s\n", temporary, qbe_type(node->operand->type), operand,
+				node->operand->type->kind == type_kind_float ? "s_0.0" : node->operand->type->kind == type_kind_double ? "d_0.0" : "0");
 			break;
 		}
 		return temporary;
@@ -1373,7 +1415,7 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 		if (function->return_type->kind == type_kind_void)
 			emit(&codegen, "\tret\n");
 		else
-			emit(&codegen, "\tret 0\n");
+			emit(&codegen, "\tret %s\n", function->return_type->kind == type_kind_float ? "s_0.0" : function->return_type->kind == type_kind_double ? "d_0.0" : "0");
 	}
 	emit(&codegen, "}\n");
 	if (fflush(stream) != 0)

@@ -12,8 +12,11 @@ enum token_kind {
 	token_identifier,
 	token_unsupported_keyword,
 	token_integer,
+	token_floating,
 	token_character,
 	token_string,
+	token_float,
+	token_double,
 	token_int,
 	token_signed,
 	token_unsigned,
@@ -142,6 +145,8 @@ struct token {
 	struct source_location spelling_location;
 	size_t length;
 	uint64_t integer;
+	uint64_t floating_bits;
+	bool floating_single;
 	int64_t character;
 	size_t string_length;
 	unsigned integer_base;

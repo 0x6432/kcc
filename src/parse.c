@@ -161,7 +161,8 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 	return kind == token_alignas || kind == token_legacy_alignas ||
 		kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
-		kind == token_void || kind == token_const || kind == token_struct || kind == token_union || kind == token_enum ||
+		kind == token_void || kind == token_float || kind == token_double || kind == token_const ||
+		kind == token_struct || kind == token_union || kind == token_enum ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
@@ -224,6 +225,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	struct token *beginning, struct ast_type_syntax *named_type, struct declaration_head *head,
 	enum declarator_context context)
 {
+	bool seen_float = false;
+	bool seen_double = false;
 	bool seen_int = false;
 	bool seen_void = false;
 	bool seen_char = false;
@@ -371,7 +374,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		if (is_typedef_name(parser, token)) {
 			struct ast_typedef_name_type_syntax *alias;
 
-			if (query || seen_int || seen_void || seen_char || seen_short || seen_bool || seen_sign || long_count)
+			if (query || seen_float || seen_double || seen_int || seen_void || seen_char || seen_short || seen_bool || seen_sign || long_count)
 				break;
 			preprocess_next(parser->preprocessor);
 			/* '=' forces an initialized identifier, not an unnamed explicit type. */
@@ -397,7 +400,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		}
 		preprocess_next(parser->preprocessor);
 		if (token.kind == token_struct || token.kind == token_union || token.kind == token_enum) {
-			if (query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+			if (query || seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 				diagnostic_error(parser->diagnostics, token.location, "record cannot combine with other type specifiers");
 				return NULL;
 			}
@@ -421,6 +424,15 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			if (!qualifiers)
 				qualifier = token;
 			qualifiers |= type_qualifier_const;
+			continue;
+		}
+		if (token.kind == token_float || token.kind == token_double) {
+			if (seen_float || seen_double) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate or conflicting floating type specifier");
+				return NULL;
+			}
+			seen_float = token.kind == token_float;
+			seen_double = token.kind == token_double;
 			continue;
 		}
 		if (token.kind == token_void) {
@@ -491,13 +503,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	if (head && (head->keyword.kind == token_register ||
 		head->keyword.kind == token_extern || head->keyword.kind == token_static) &&
 		head->auto_keyword.kind == token_auto &&
-		(query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count)) {
+		(query || seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count)) {
 		diagnostic_error(parser->diagnostics, beginning->location,
 			"combined auto storage requires an inferred type");
 		return NULL;
 	}
 	if (query) {
-		if (seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+		if (seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 			diagnostic_error(parser->diagnostics, beginning->location, query->kind == type_syntax_typedef_name ?
 				"typedef name cannot combine with other type specifiers" :
 				"typeof cannot combine with other type specifiers");
@@ -508,7 +520,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	if (seen_void) {
 		struct ast_void_type_syntax *node;
 
-		if (seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+		if (seen_float || seen_double || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 			diagnostic_error(parser->diagnostics, beginning->location, "void cannot combine with other type specifiers");
 			return NULL;
 		}
@@ -519,6 +531,16 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		}
 		base = &node->syntax;
 		return qualify_type_syntax(parser, base, qualifiers, qualifier.location);
+	}
+	if (seen_float || seen_double) {
+		if (seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
+			diagnostic_error(parser->diagnostics, beginning->location, "unsupported floating type combination (including long double)");
+			return NULL;
+		}
+		integer = ast_new_integer_type_syntax(parser->arena, beginning->location,
+			seen_float ? integer_specifier_float : integer_specifier_double);
+		if (!integer) { allocation_error(parser, beginning->location); return NULL; }
+		return qualify_type_syntax(parser, &integer->syntax, qualifiers, qualifier.location);
 	}
 	if (!seen_int && !seen_char && !seen_short && !seen_bool && !seen_sign && !long_count) {
 		if (head && head->auto_keyword.kind == token_auto) {
@@ -1445,6 +1467,16 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
 
+	if (token.kind == token_floating) {
+		struct ast_integer_expression *node;
+		preprocess_next(parser->preprocessor);
+		token.integer = token.floating_bits;
+		node = ast_new_integer(parser->arena, token);
+		if (!node) { allocation_error(parser, token.location); return NULL; }
+		node->expression.kind = expression_floating;
+		node->expression.type = token.floating_single ? &type_float : &type_double;
+		return &node->expression;
+	}
 	if (token.kind == token_nullptr)
 		return parse_nullptr_expression(parser);
 	if (token.kind == token_true || token.kind == token_false)

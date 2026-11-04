@@ -56,7 +56,8 @@ with tempfile.TemporaryDirectory(prefix="kcc-raw-cli-") as temporary:
     assert result.stdout == expected, result.stdout
     # Raw scanning neither dispatches a directive nor converts its number.
     result = run(["--tokens", str(source)])
-    assert result.returncode == 1 and "unsupported numeric literal" in result.stderr
+    assert result.returncode == 0 and not result.stderr
+    assert result.stdout == "15:int\n19:floating\n20:eof\n"
     source.write_bytes(b"in\\\nt ma\\\nin")
     result = run(["--pp-tokens", str(source)])
     assert result.returncode == 0 and not result.stderr

@@ -1174,8 +1174,8 @@ static void test_token_pasting(void)
 		{ token_invalid, "##" }, { token_eof, "" },
 	}, 2, 1, "exactly one preprocessing token");
 	check_stream("#define C(a,b) a##b\nC(1,.5)", (const struct expected_token[]) {
-		{ token_invalid, "1.5" }, { token_eof, "" },
-	}, 2, 1, "unsupported numeric");
+		{ token_floating, "1.5" }, { token_eof, "" },
+	}, 2, 0, NULL);
 	check_stream("#define C(a,b) a##b\n#define C(a,b) ##a\nC(4,2)",
 		(const struct expected_token[]) {
 			{ token_invalid, "#" }, { token_integer, "42" }, { token_eof, "" },

@@ -489,7 +489,6 @@ def validate_native_constraint(cc,source,output,name,result,version=None):
 
 # These native-valid types/features are later milestones, NOT native constraints.
 LATER = [
-    ('M20 floating literal', 'double f(void) { return (double){1.5}; }'),
     ('M22 bitfield literal', 'struct S { unsigned x:3; }; int f(void) { return (struct S){.x=2}.x; }'),
     ('M21 aggregate by value', 'struct S { int x; }; int f(struct S); int g(void) { return f((struct S){42}); }'),
 ]

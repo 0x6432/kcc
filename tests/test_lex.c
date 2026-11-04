@@ -131,7 +131,7 @@ static void test_errors(void)
 	const enum token_kind invalid[] = { token_invalid };
 	const enum token_kind separate[] = { token_identifier };
 	const char *cases[] = {
-		"/*", "/* *", "09", "0xg", "0b2", "12.5", "3.5", "@",
+		"/*", "/* *", "09", "0xg", "0b2", "@",
 		"18446744073709551616",
 	};
 
@@ -139,6 +139,12 @@ static void test_errors(void)
 		check_tokens(cases[i], invalid, 1, 1);
 	check_tokens("integer", separate, 1, 0);
 	check_tokens("_BitInt", invalid, 1, 1);
+	{
+		const enum token_kind floats[] = { token_float, token_double, token_floating,
+			token_floating, token_floating, token_floating };
+		check_tokens("float double 12.5 3.5 1.0 1e2", floats,
+			sizeof(floats) / sizeof(floats[0]), 0);
+	}
 	{
 		const enum token_kind keyword[] = { token_unsupported_keyword };
 		const enum token_kind equal[] = { token_equal };

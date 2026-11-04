@@ -68,6 +68,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	./build/test_record_runtime_ast
 	./build/test_initialization_ast
 	./build/test_compound_literal_ast
+	QBE="$(QBE)" python3 tests/test_float_foundation.py
 	QBE="$(QBE)" python3 tests/test_compile.py
 	QBE="$(QBE)" python3 tests/test_abi.py
 	QBE="$(QBE)" python3 tests/test_variadic.py
@@ -238,6 +239,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_
 	./build/test_record_runtime_ast
 	./build/test_initialization_ast
 	./build/test_compound_literal_ast
+	python3 tests/test_float_foundation.py
 	python3 tests/test_compile.py
 	python3 tests/test_diagnostics.py
 	python3 tests/test_variadic.py

@@ -219,6 +219,8 @@ static bool check_expression_depth(struct sema *sema,
 static const struct type *specifier_type(enum integer_specifier specifier)
 {
 	switch (specifier) {
+	case integer_specifier_float: return &type_float;
+	case integer_specifier_double: return &type_double;
 	case integer_specifier_bool: return &type_bool;
 	case integer_specifier_char: return &type_char;
 	case integer_specifier_signed_char: return &type_schar;
@@ -1029,6 +1031,11 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 		(type_is_integer(source) && type_is_integer(target)) ||
 		((source->kind == type_kind_pointer || source->kind == type_kind_nullptr) && target->kind == type_kind_bool))
 		return true;
+	if (type_is_floating(source) || type_is_floating(target)) {
+		diagnostic_error(sema->diagnostics, location,
+			"floating conversions between different types are not supported yet");
+		return false;
+	}
 	diagnostic_error(sema->diagnostics, location,
 		"unsupported pointer conversion (incompatible pointers or integer/pointer conversion)");
 	return false;
@@ -1604,6 +1611,9 @@ static bool sema_expression(struct sema *sema,
 		break;
 	case expression_character:
 		break;
+	case expression_floating:
+		result_type = expression->type;
+		break;
 	case expression_integer: {
 		struct ast_integer_expression *node =
 			(struct ast_integer_expression *)expression;
@@ -1791,11 +1801,14 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if (node->operation != unary_not) {
-			if (!type_is_integer(node->operand->type)) {
+			if (type_is_floating(node->operand->type) && node->operation != unary_complement) {
+				result_type = node->operand->type;
+			} else if (!type_is_integer(node->operand->type)) {
 				diagnostic_error(sema->diagnostics, expression->location, "unary arithmetic requires an integer operand");
 				return false;
 			}
-			result_type = type_integer_promotion(node->operand->type);
+			if (!type_is_floating(node->operand->type))
+				result_type = type_integer_promotion(node->operand->type);
 			if (!convert_expression(sema, &node->operand, result_type))
 				return false;
 		}
@@ -1818,7 +1831,15 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "binary operator requires scalar operands");
 			return false;
 		}
-		if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
+		if (type_is_floating(node->left->type) || type_is_floating(node->right->type)) {
+			if (!type_is_floating(node->left->type) || !type_compatible(node->left->type, node->right->type) ||
+				!(node->operation == binary_add || node->operation == binary_subtract ||
+				  node->operation == binary_multiply || node->operation == binary_divide || comparison_operator(node->operation))) {
+				diagnostic_error(sema->diagnostics, expression->location, "floating operator requires same-type operands and supports only arithmetic or comparison");
+				return false;
+			}
+			result_type = comparison_operator(node->operation) ? &type_int : node->left->type;
+		} else if (!type_is_integer(node->left->type) || !type_is_integer(node->right->type)) {
 			if (node->operation == binary_add || node->operation == binary_subtract)
 				return lower_pointer_arithmetic(sema, expression_slot, node);
 			if (!comparison_operator(node->operation)) {
@@ -1877,7 +1898,9 @@ static bool sema_expression(struct sema *sema,
 		}
 		a = node->then_value->type;
 		b = node->else_value->type;
-		if (type_is_integer(a) && type_is_integer(b)) {
+		if (type_is_floating(a) && type_compatible(a, b)) {
+			result_type = a;
+		} else if (type_is_integer(a) && type_is_integer(b)) {
 			result_type = type_usual_arithmetic(a, b);
 		} else if (type_is_record(a) && type_is_record(b) && type_unqualified_compatible(a, b)) {
 			result_type = unqualified_type(sema, a, expression->location);

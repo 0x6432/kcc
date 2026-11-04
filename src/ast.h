@@ -11,6 +11,7 @@ struct external_object_symbol;
 
 enum expression_kind {
 	expression_integer,
+	expression_floating,
 	expression_boolean,
 	expression_nullptr,
 	expression_character,
@@ -447,6 +448,8 @@ struct ast_conversion_expression {
 };
 
 enum integer_specifier {
+	integer_specifier_float,
+	integer_specifier_double,
 	integer_specifier_char,
 	integer_specifier_signed_char,
 	integer_specifier_unsigned_char,

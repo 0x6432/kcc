@@ -21,6 +21,8 @@ enum type_kind {
 	type_kind_long_long,
 	type_kind_ulong_long,
 	type_kind_bool,
+	type_kind_float,
+	type_kind_double,
 	type_kind_nullptr,
 	type_kind_pointer,
 	type_kind_array,
@@ -108,6 +110,8 @@ struct function_type {
 extern const struct type type_nullptr;
 extern const struct type type_void;
 extern const struct type type_bool;
+extern const struct type type_float;
+extern const struct type type_double;
 extern const struct type type_char;
 extern const struct type type_schar;
 extern const struct type type_uchar;
@@ -120,6 +124,7 @@ extern const struct type type_ulong;
 extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
+bool type_is_floating(const struct type *type);
 bool type_is_scalar(const struct type *type);
 bool type_is_object(const struct type *type);
 bool type_is_complete_object(const struct type *type);

@@ -1,5 +1,10 @@
 #include "lex.h"
 
+#include <errno.h>
+#include <float.h>
+#include <math.h>
+#include <stdlib.h>
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -351,6 +356,7 @@ static const struct keyword keywords[] = {
 	{ "struct", token_struct }, { "union", token_union }, { "enum", token_enum },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
+	{ "float", token_float }, { "double", token_double },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
@@ -638,15 +644,75 @@ static struct token convert_character(struct token token, struct diagnostics *di
 	return token;
 }
 
+/* Parse only C decimal/hex floating forms, avoiding strtod extensions and
+ * locale-sensitive spellings. Conversion assumes the host's IEEE formats and
+ * C locale; out-of-range results are rejected rather than silently changed. */
+static struct token convert_floating(struct token token, struct diagnostics *diagnostics)
+{
+	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
+	char buf[4097], *end;
+	size_t n = token.length, i = 0, digits = 0;
+	bool hex = n >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X');
+	bool dot = false, exponent = false, single = false;
+	if (n > 4096 || !n)
+		return invalid_language_token(token, diagnostics, "floating literal exceeds spelling limit");
+	if (hex) i = 2;
+	while (i < n) {
+		int d = integer_digit(text[i]);
+		if (d >= 0 && d < (hex ? 16 : 10)) { digits++; i++; continue; }
+		if (text[i] == '.' && !dot) { dot = true; i++; continue; }
+		break;
+	}
+	if (!digits) goto invalid;
+	if (i < n && (hex ? (text[i] == 'p' || text[i] == 'P') : (text[i] == 'e' || text[i] == 'E'))) {
+		size_t first;
+		exponent = true; i++;
+		if (i < n && (text[i] == '+' || text[i] == '-')) i++;
+		first = i;
+		while (i < n && text[i] >= '0' && text[i] <= '9') i++;
+		if (first == i) goto invalid;
+	}
+	if ((hex && !exponent) || (!hex && !dot && !exponent)) goto invalid;
+	if (i < n && (text[i] == 'f' || text[i] == 'F')) { single = true; i++; }
+	if (i != n) goto invalid;
+	memcpy(buf, text, n); buf[n] = 0;
+	if (single) buf[n-1] = 0;
+	errno = 0;
+	if (single) {
+		float v = strtof(buf, &end);
+		uint32_t bits;
+		if (errno || *end || !isfinite(v)) goto range;
+		memcpy(&bits, &v, sizeof(bits));
+		token.floating_bits = bits;
+	} else {
+		double v = strtod(buf, &end);
+		if (errno || *end || !isfinite(v)) goto range;
+		memcpy(&token.floating_bits, &v, sizeof(v));
+	}
+	token.kind = token_floating;
+	token.floating_single = single;
+	return token;
+invalid:
+	return invalid_language_token(token, diagnostics, "invalid or unsupported floating literal");
+range:
+	return invalid_language_token(token, diagnostics, "floating literal outside supported range");
+}
+
+_Static_assert(FLT_RADIX == 2 && FLT_MANT_DIG == 24 && DBL_MANT_DIG == 53 &&
+	sizeof(float) == 4 && sizeof(double) == 8, "IEEE binary32/binary64 host required");
+
 static struct token convert_number(struct token token, struct diagnostics *diagnostics)
 {
 	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
+	bool hex = token.length >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X');
 	struct integer_spelling spelling;
-	const char *error = parse_integer_spelling(text, token.length, &spelling);
-
+	const char *error;
+	for (size_t i = 0; i < token.length; i++)
+		if (text[i] == '.' || (hex ? (text[i] == 'p' || text[i] == 'P') : (text[i] == 'e' || text[i] == 'E')))
+			return convert_floating(token, diagnostics);
+	error = parse_integer_spelling(text, token.length, &spelling);
 	if (error) {
 		char message[128];
-
 		snprintf(message, sizeof(message), "unsupported numeric literal: %s", error);
 		return invalid_language_token(token, diagnostics, message);
 	}
@@ -757,6 +823,9 @@ const char *token_kind_name(enum token_kind kind)
 	case token_identifier: return "identifier";
 	case token_unsupported_keyword: return "unsupported-keyword";
 	case token_integer: return "integer";
+	case token_floating: return "floating";
+	case token_float: return "float";
+	case token_double: return "double";
 	case token_string: return "string";
 	case token_character: return "character";
 	case token_int: return "int";
