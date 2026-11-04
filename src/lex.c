@@ -355,6 +355,7 @@ struct keyword {
 static const struct keyword keywords[] = {
 	{ "__kcc_va_start", token_kcc_va_start }, { "__kcc_va_arg", token_kcc_va_arg },
 	{ "__kcc_va_copy", token_kcc_va_copy }, { "__kcc_va_end", token_kcc_va_end },
+	{ "__kcc_offsetof", token_kcc_offsetof },
 	{ "struct", token_struct }, { "union", token_union }, { "enum", token_enum },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
@@ -945,6 +946,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_kcc_va_arg: return "__kcc_va_arg";
 	case token_kcc_va_copy: return "__kcc_va_copy";
 	case token_kcc_va_end: return "__kcc_va_end";
+	case token_kcc_offsetof: return "__kcc_offsetof";
 	case token_arrow: return "->";
 	}
 	return "unknown";

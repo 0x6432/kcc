@@ -218,10 +218,18 @@ struct ast_sizeof_expression {
 	struct ast_local_declaration *vla_local;
 };
 
+struct ast_offset_step {
+	struct token member;
+	struct ast_expression *index;
+	struct ast_offset_step *next;
+};
+
 struct ast_sizeof_type_expression {
 	struct ast_expression expression;
 	struct ast_type_syntax *type_syntax;
 	uint64_t size;
+	bool is_offsetof;
+	struct ast_offset_step *offset_steps;
 };
 
 struct ast_alignof_expression {

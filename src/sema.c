@@ -2000,6 +2000,66 @@ static bool sema_expression(struct sema *sema,
 
 		if (!type)
 			return false;
+		if (node->is_offsetof) {
+			uint64_t offset = 0;
+			for (struct ast_offset_step *step = node->offset_steps; step; step = step->next) {
+				if (!step->index) {
+					const struct record_member *member;
+					uint64_t member_offset;
+					unsigned qualifiers;
+
+					if (!type_is_record(type) || !type_is_complete_object(type)) {
+						diagnostic_error(sema->diagnostics, expression->location,
+							"offsetof member requires a complete struct or union");
+						return false;
+					}
+					member = find_record_member(type, step->member, &member_offset, &qualifiers);
+					if (!member) {
+						diagnostic_error(sema->diagnostics, step->member.location,
+							"no member with this name in offsetof");
+						return false;
+					}
+					offset += member_offset;
+					type = member->type;
+				} else {
+					const struct array_type *array;
+					struct constant_result value;
+					bool negative;
+
+					if (type->kind != type_kind_array ||
+						!((const struct array_type *)type)->count) {
+						diagnostic_error(sema->diagnostics, step->index->location,
+							"offsetof index requires a fixed-size array");
+						return false;
+					}
+					array = (const struct array_type *)type;
+					if (!sema_expression(sema, &step->index, true) ||
+						!type_is_integer(step->index->type)) {
+						diagnostic_error(sema->diagnostics, expression->location,
+							"offsetof index must be an integer constant expression");
+						return false;
+					}
+					value = evaluate_integer_constant(step->index);
+					if (value.status != constant_value) {
+						diagnostic_error(sema->diagnostics, step->index->location,
+							"offsetof index must be an integer constant expression");
+						return false;
+					}
+					negative = !type_is_unsigned(value.type) &&
+						(value.bits & (UINT64_C(1) << (type_integer_width(value.type) - 1)));
+					if (negative || value.bits >= array->count) {
+						diagnostic_error(sema->diagnostics, step->index->location,
+							"offsetof index is outside the array");
+						return false;
+					}
+					offset += value.bits * type_object_size(array->element);
+					type = array->element;
+				}
+			}
+			node->size = offset;
+			result_type = &type_ulong;
+			break;
+		}
 		if (!type_is_complete_object(type)) {
 			diagnostic_error(sema->diagnostics, expression->location, "sizeof requires a complete object type");
 			return false;

@@ -9,8 +9,9 @@ include directories take precedence.
 
 - `stdbool.h` defines `__bool_true_false_are_defined`; `bool`, `true` and
   `false` are C23 keywords.
-- `stddef.h` supplies `size_t`, `ptrdiff_t`, `wchar_t`, `nullptr_t` and `NULL`.
-  It does not yet supply `offsetof` or `max_align_t`.
+- `stddef.h` supplies `size_t`, `ptrdiff_t`, `wchar_t`, `nullptr_t`, `NULL`
+  and bounded `offsetof` for named members, nested members and constant
+  in-bounds fixed-array indices. It does not yet supply `max_align_t`.
 - `stdint.h` supplies exact-width 8-, 16-, 32- and 64-bit integer types,
   least- and fast-width types, pointer-sized and maximum-width integer types,
   their corresponding limits, size and pointer-difference limits, and

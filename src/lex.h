@@ -111,6 +111,7 @@ enum token_kind {
 	token_kcc_va_arg,
 	token_kcc_va_copy,
 	token_kcc_va_end,
+	token_kcc_offsetof,
 	token_arrow,
 };
 

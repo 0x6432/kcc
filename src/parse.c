@@ -1558,6 +1558,65 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 
 /* Intrinsics use the reserved names emitted by our stdarg.h.  va_arg's
  * second operand is a type-name, not an ordinary expression argument. */
+static struct ast_expression *parse_offsetof_expression(struct parser *parser)
+{
+	struct token intrinsic = preprocess_next(parser->preprocessor), beginning, member;
+	struct ast_type_syntax *type;
+	struct ast_sizeof_type_expression *node;
+	struct ast_offset_step **tail;
+	size_t count = 0;
+	bool need_member = true;
+
+	if (!expect_token(parser, token_left_paren, "expected '(' after offsetof intrinsic", NULL))
+		return NULL;
+	type = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+	if (!type || !expect_token(parser, token_comma, "expected ',' in offsetof", NULL))
+		return NULL;
+	node = ast_new_sizeof_type(parser->arena, intrinsic.location, type);
+	if (!node) {
+		allocation_error(parser, intrinsic.location);
+		return NULL;
+	}
+	node->is_offsetof = true;
+	tail = &node->offset_steps;
+	for (;;) {
+		struct ast_offset_step *step;
+		struct token token = preprocess_peek(parser->preprocessor);
+
+		if (!need_member && token.kind != token_dot && token.kind != token_left_bracket)
+			break;
+		if (++count > ast_max_designator_depth) {
+			diagnostic_error(parser->diagnostics, token.location, "offsetof designator exceeds depth limit (64)");
+			return NULL;
+		}
+		step = arena_alloc(parser->arena, sizeof(*step));
+		if (!step) {
+			allocation_error(parser, token.location);
+			return NULL;
+		}
+		*step = (struct ast_offset_step) { 0 };
+		if (need_member || token.kind == token_dot) {
+			if (!need_member)
+				preprocess_next(parser->preprocessor);
+			if (!expect_token(parser, token_identifier, "expected member name in offsetof", &member))
+				return NULL;
+			step->member = member;
+			need_member = false;
+		} else {
+			preprocess_next(parser->preprocessor);
+			step->index = parse_expression(parser, 1);
+			if (!step->index ||
+				!expect_token(parser, token_right_bracket, "expected ']' in offsetof", NULL))
+				return NULL;
+		}
+		*tail = step;
+		tail = &step->next;
+	}
+	if (!expect_token(parser, token_right_paren, "expected ')' after offsetof", NULL))
+		return NULL;
+	return &node->expression;
+}
+
 static struct ast_expression *parse_va_expression(struct parser *parser)
 {
 	struct token token = preprocess_next(parser->preprocessor);
@@ -1625,6 +1684,8 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 	if (token.kind == token_kcc_va_start || token.kind == token_kcc_va_arg ||
 		token.kind == token_kcc_va_copy || token.kind == token_kcc_va_end)
 		return parse_va_expression(parser);
+	if (token.kind == token_kcc_offsetof)
+		return parse_offsetof_expression(parser);
 	if (token.kind == token_nullptr)
 		return parse_nullptr_expression(parser);
 	if (token.kind == token_true || token.kind == token_false)
