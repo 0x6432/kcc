@@ -903,6 +903,21 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
 			"typedef int wchar_t;\ntypedef typeof(nullptr) nullptr_t;\n"
 			"#define NULL ((void *)0)\n#endif\n";
+		static const char limits_header[] =
+			"#ifndef __KCC_LIMITS_H\n#define __KCC_LIMITS_H 1\n"
+			"#define CHAR_BIT 8\n#define MB_LEN_MAX 16\n"
+			"#define SCHAR_MIN (-127-1)\n#define SCHAR_MAX 127\n#define UCHAR_MAX 255\n"
+			"#define CHAR_MIN SCHAR_MIN\n#define CHAR_MAX SCHAR_MAX\n"
+			"#define SHRT_MIN (-32767-1)\n#define SHRT_MAX 32767\n#define USHRT_MAX 65535\n"
+			"#define INT_MIN (-2147483647-1)\n#define INT_MAX 2147483647\n#define UINT_MAX 4294967295U\n"
+			"#define LONG_MIN (-9223372036854775807L-1L)\n#define LONG_MAX 9223372036854775807L\n"
+			"#define ULONG_MAX 18446744073709551615UL\n"
+			"#define LLONG_MIN (-9223372036854775807LL-1LL)\n#define LLONG_MAX 9223372036854775807LL\n"
+			"#define ULLONG_MAX 18446744073709551615ULL\n"
+			"#define BOOL_WIDTH 1\n#define CHAR_WIDTH 8\n#define SCHAR_WIDTH 8\n#define UCHAR_WIDTH 8\n"
+			"#define SHRT_WIDTH 16\n#define USHRT_WIDTH 16\n#define INT_WIDTH 32\n#define UINT_WIDTH 32\n"
+			"#define LONG_WIDTH 64\n#define ULONG_WIDTH 64\n#define LLONG_WIDTH 64\n#define ULLONG_WIDTH 64\n"
+			"#endif\n";
 		static const char stdint_header[] =
 			"#ifndef __KCC_STDINT_H\n#define __KCC_STDINT_H 1\n"
 			"typedef signed char int8_t;\ntypedef unsigned char uint8_t;\n"
@@ -911,6 +926,14 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef long int64_t;\ntypedef unsigned long uint64_t;\n"
 			"typedef long intptr_t;\ntypedef unsigned long uintptr_t;\n"
 			"typedef long intmax_t;\ntypedef unsigned long uintmax_t;\n"
+			"typedef int8_t int_least8_t;\ntypedef uint8_t uint_least8_t;\n"
+			"typedef int16_t int_least16_t;\ntypedef uint16_t uint_least16_t;\n"
+			"typedef int32_t int_least32_t;\ntypedef uint32_t uint_least32_t;\n"
+			"typedef int64_t int_least64_t;\ntypedef uint64_t uint_least64_t;\n"
+			"typedef signed char int_fast8_t;\ntypedef unsigned char uint_fast8_t;\n"
+			"typedef long int_fast16_t;\ntypedef unsigned long uint_fast16_t;\n"
+			"typedef long int_fast32_t;\ntypedef unsigned long uint_fast32_t;\n"
+			"typedef long int_fast64_t;\ntypedef unsigned long uint_fast64_t;\n"
 			"#define INT8_MAX 127\n#define INT8_MIN (-127-1)\n#define UINT8_MAX 255\n"
 			"#define INT16_MAX 32767\n#define INT16_MIN (-32767-1)\n#define UINT16_MAX 65535\n"
 			"#define INT32_MAX 2147483647\n#define INT32_MIN (-2147483647-1)\n#define UINT32_MAX 4294967295U\n"
@@ -919,6 +942,18 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define INTPTR_MAX INT64_MAX\n#define INTPTR_MIN INT64_MIN\n#define UINTPTR_MAX UINT64_MAX\n"
 			"#define INTMAX_MAX INT64_MAX\n#define INTMAX_MIN INT64_MIN\n#define UINTMAX_MAX UINT64_MAX\n"
 			"#define SIZE_MAX UINT64_MAX\n#define PTRDIFF_MAX INT64_MAX\n#define PTRDIFF_MIN INT64_MIN\n"
+			"#define INT_LEAST8_MIN INT8_MIN\n#define INT_LEAST8_MAX INT8_MAX\n#define UINT_LEAST8_MAX UINT8_MAX\n"
+			"#define INT_LEAST16_MIN INT16_MIN\n#define INT_LEAST16_MAX INT16_MAX\n#define UINT_LEAST16_MAX UINT16_MAX\n"
+			"#define INT_LEAST32_MIN INT32_MIN\n#define INT_LEAST32_MAX INT32_MAX\n#define UINT_LEAST32_MAX UINT32_MAX\n"
+			"#define INT_LEAST64_MIN INT64_MIN\n#define INT_LEAST64_MAX INT64_MAX\n#define UINT_LEAST64_MAX UINT64_MAX\n"
+			"#define INT_FAST8_MIN INT8_MIN\n#define INT_FAST8_MAX INT8_MAX\n#define UINT_FAST8_MAX UINT8_MAX\n"
+			"#define INT_FAST16_MIN INT64_MIN\n#define INT_FAST16_MAX INT64_MAX\n#define UINT_FAST16_MAX UINT64_MAX\n"
+			"#define INT_FAST32_MIN INT64_MIN\n#define INT_FAST32_MAX INT64_MAX\n#define UINT_FAST32_MAX UINT64_MAX\n"
+			"#define INT_FAST64_MIN INT64_MIN\n#define INT_FAST64_MAX INT64_MAX\n#define UINT_FAST64_MAX UINT64_MAX\n"
+			"#define INT8_C(c) c\n#define UINT8_C(c) c\n#define INT16_C(c) c\n#define UINT16_C(c) c\n"
+			"#define INT32_C(c) c\n#define UINT32_C(c) c ## U\n"
+			"#define INT64_C(c) c ## L\n#define UINT64_C(c) c ## UL\n"
+			"#define INTMAX_C(c) c ## L\n#define UINTMAX_C(c) c ## UL\n"
 			"#endif\n";
 		const char *header = NULL, *source_name = NULL;
 
@@ -931,6 +966,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "stdint.h") == 0) {
 			header = stdint_header;
 			source_name = "<kcc/stdint.h>";
+		} else if (strcmp(name->path, "limits.h") == 0) {
+			header = limits_header;
+			source_name = "<kcc/limits.h>";
 		}
 		if (header) {
 			if (source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header)))
