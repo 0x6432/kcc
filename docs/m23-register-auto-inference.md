@@ -127,3 +127,8 @@ allocates one slot regardless of two specifiers; aliases/prototypes still none.
 M23e0 CI run 38979609085 completed/success, all three jobs green.
 M23e1 CI run 38982126026 is pending; no remote pass is claimed.
 New M23e2 exact-commit CI is pending until checked after push.
+
+Alignment specifiers on inferred automatic objects are accepted subject to the
+existing target maximum and natural-alignment checks. Alignment expressions are
+resolved before the inferred name is reserved; register restrictions still apply.
+This extension was built but has not been tested.

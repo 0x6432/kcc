@@ -3884,15 +3884,18 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	}
 	if (local->type_syntax->kind == type_syntax_inferred) {
 		if (local->alignments) {
-			diagnostic_error(sema->diagnostics, local->name.location, "alignment with inferred auto is not supported yet");
-			return false;
+			if (!sema_alignment_group(sema, local->alignments))
+				return false;
+			local->alignment = local->alignments->alignment;
 		}
 		if (local->is_static || local->is_extern) {
 			diagnostic_error(sema->diagnostics, local->name.location,
 				"static or extern auto inference is not supported yet");
 			return false;
 		}
-		return sema_inferred_local(sema, local);
+		if (!sema_inferred_local(sema, local))
+			return false;
+		return check_object_alignment(sema, local->type, local->alignment, local->name.location);
 	}
 	if (local->alignments) {
 		if (!sema_alignment_group(sema, local->alignments))

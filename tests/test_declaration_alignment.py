@@ -11,6 +11,8 @@ qbe = os.environ.get('QBE')
 
 accepted = [
     ('int f(void) { alignas(16) int x=1; return x; }', 'alloc16 4'),
+    ('int f(void) { alignas(16) auto x=1; return x; }', 'alloc16 4'),
+    ('int f(void) { for (alignas(16) auto x=0; x<1; x=x+1) {} return 0; }', 'alloc16 4'),
     ('int f(void) { _Alignas(8) char x; return sizeof x; }', 'alloc8 1'),
     ('int f(void) { alignas(1) _Alignas(16) int x; return sizeof x; }', 'alloc16 4'),
     ('int f(void) { alignas(0) long x; return sizeof x; }', 'alloc8 8'),
@@ -39,17 +41,19 @@ rejected = [
     ('int f(void) { alignas(16) typedef int T; return 0; }', 'typedef or register'),
     ('int f(alignas(16) int x);', 'not permitted in this context'),
     ('int f(void) { alignas(16) int g(void); return 0; }', 'object type'),
-    ('int f(void) { alignas(16) auto x=1; return 0; }', 'inferred auto'),
+    ('int f(void) { alignas(2) auto x=1; return 0; }', 'weaken'),
+    ('int f(void) { alignas(32) auto x=1; return 0; }', 'supported alignments'),
     ('int f(void) { ' + 'alignas(0) '*33 + 'int x; return 0; }', 'limit 32'),
 ]
 
 runtime = '''int aligned(void *p, int n);
 int main(void) {
     alignas(16) int x=3;
+    alignas(16) auto inferred=5;
     _Alignas(16) char a[3]={1,2,3};
     alignas(long) char b=4;
-    if (!aligned(&x,16) || !aligned(a,16) || !aligned(&b,8)) return 1;
-    if (sizeof x!=4 || sizeof a!=3 || x!=3 || a[2]!=3 || b!=4) return 2;
+    if (!aligned(&x,16) || !aligned(a,16) || !aligned(&b,8) || !aligned(&inferred,16)) return 1;
+    if (sizeof x!=4 || sizeof a!=3 || x!=3 || a[2]!=3 || b!=4 || inferred!=5) return 2;
     return 42;
 }'''
 with tempfile.TemporaryDirectory(prefix='kcc-align-') as directory:
