@@ -21,6 +21,14 @@ unsigned char escapes[]=u8"\\u00E9\\U0001F642";
 char ordinary[]="\\u00E9";
 static_assert(_Generic(u8"x", unsigned char *: 1, default: 0));
 static_assert(_Generic(u8'A', unsigned char: 1, default: 0));
+static_assert(_Generic(u'A', unsigned short: 1, default: 0));
+static_assert(_Generic(U'A', unsigned int: 1, default: 0));
+static_assert(_Generic(L'A', int: 1, default: 0));
+static_assert(sizeof(u'A')==2 && sizeof(U'A')==4 && sizeof(L'A')==4);
+static_assert(u'\\377'==255 && U'\\377'==255 && L'\\377'==255);
+#if u'\\377' != 255 || U'A' != 65 || L'A' != 65
+#error prefixed character value is incorrect
+#endif
 static_assert(sizeof(u8'A')==1 && u8'\\377'==255);
 #if u8'\\377' != 255
 #error UTF-8 character value is not unsigned

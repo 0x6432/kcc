@@ -12,7 +12,11 @@ excluding surrogates, encode to UTF-8 in ordinary and `u8` strings. Basic-set
 UCNs are conservatively rejected, including the historically allowed special
 characters; delimited and named UCNs are unsupported.
 
-UTF-16/UTF-32/wide literals remain unsupported. `u8` character constants
+UTF-16/UTF-32/wide string literals remain unsupported. Bounded `u`, `U`, and `L`
+character constants support ASCII source characters and byte escapes, with
+unsigned-short, unsigned-int, and int types respectively. Non-ASCII source
+characters, UCNs, and escapes above 255 remain unsupported in these constants.
+`u8` character constants
 are supported for a single ASCII source character or one byte escape; they
 have unsigned-char type, so `u8'\\377'` has value 255. Multibyte source
 characters cannot fit a UTF-8 character constant.

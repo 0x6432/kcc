@@ -562,25 +562,27 @@ static const char *parse_byte_escape(const unsigned char *text, size_t end,
 	return NULL;
 }
 
-/* ordinary-character = "'" (ascii-character | simple-escape | octal-escape
- *                              | hexadecimal-escape) "'"
- * Exactly one target byte, interpreted using target signed plain char.
- */
+/* Bounded one-byte spelling for ordinary and prefixed character constants. */
 const char *parse_character_spelling(const unsigned char *text, size_t length,
 	int64_t *result)
 {
 	size_t offset = 1;
 	size_t end;
 	unsigned value;
-	bool utf8 = length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '\'';
+	bool prefixed = false;
 
 	if (!length)
 		return "expected one character in character constant";
-	if (utf8)
+	if (length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '\'') {
 		offset = 3;
-	else if (text[0] != '\'')
-		return "prefixed character constants are not supported yet";
-	if (length < (utf8 ? 5u : 3u) || text[length - 1] != '\'')
+		prefixed = true;
+	} else if (length >= 2 && (text[0] == 'u' || text[0] == 'U' || text[0] == 'L') && text[1] == '\'') {
+		offset = 2;
+		prefixed = true;
+	} else if (text[0] != '\'') {
+		return "unsupported character constant prefix";
+	}
+	if (length < offset + 2 || text[length - 1] != '\'')
 		return "expected one character in character constant";
 	end = length - 1;
 	value = text[offset++];
@@ -596,7 +598,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 	}
 	if (offset != end)
 		return "multicharacter constants are not supported yet";
-	*result = utf8 || value < 128 ? (int64_t)value : (int64_t)value - 256;
+	*result = prefixed || value < 128 ? (int64_t)value : (int64_t)value - 256;
 	return NULL;
 }
 
@@ -726,7 +728,16 @@ static struct token convert_character(struct token token, struct diagnostics *di
 	if (error)
 		return invalid_language_token(token, diagnostics, error);
 	token.kind = token_character;
-	token.character_utf8 = token.length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '\'';
+	if (text[0] == 'u' && text[1] == '8')
+		token.character_encoding = character_utf8;
+	else if (text[0] == 'u')
+		token.character_encoding = character_utf16;
+	else if (text[0] == 'U')
+		token.character_encoding = character_utf32;
+	else if (text[0] == 'L')
+		token.character_encoding = character_wide;
+	else
+		token.character_encoding = character_ordinary;
 	return token;
 }
 

@@ -140,7 +140,7 @@ struct integer_spelling {
 const char *parse_integer_spelling(const unsigned char *text, size_t length,
 	struct integer_spelling *result);
 
-/* Ordinary or u8 single-byte target character; ordinary uses signed plain char.
+/* Single-byte character spellings; ordinary uses signed plain char.
  * Explicit byte slice; NULL means success. No allocation or diagnostics.
  */
 const char *parse_character_spelling(const unsigned char *text, size_t length,
@@ -157,6 +157,9 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
  * Spelling may use an arena-owned generated source view, not the input source.
  * Use source_physical_offset() only for physical positions, not spelling reads.
  */
+enum character_encoding { character_ordinary, character_utf8, character_utf16,
+	character_utf32, character_wide };
+
 struct token {
 	enum token_kind kind;
 	struct source_location location;
@@ -166,7 +169,7 @@ struct token {
 	uint64_t floating_bits;
 	bool floating_single;
 	int64_t character;
-	bool character_utf8;
+	enum character_encoding character_encoding;
 	size_t string_length;
 	bool string_utf8;
 	unsigned integer_base;

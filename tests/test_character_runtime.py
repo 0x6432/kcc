@@ -52,14 +52,14 @@ with tempfile.TemporaryDirectory(prefix='kcc runtime character ') as directory:
                 (r"'\x'", 'expected digits'), (r"'\x100'", 'exceeds one byte'),
                 (r"'\400'", 'exceeds one byte'), (r"'\1234'", 'multicharacter'),
                 (r"'\q'", 'unsupported character escape'), (r"'\u0041'", 'unsupported character escape'),
-                ("'é'", 'non-ASCII'), ("L'a'", 'prefixed'), ("u'a'", 'prefixed'),
-                ("U'a'", 'prefixed'), ("u8'ab'", 'multicharacter')]
+                ("'é'", 'non-ASCII'), ("L'ab'", 'multicharacter'), ("u'ab'", 'multicharacter'),
+                ("U'ab'", 'multicharacter'), ("u8'ab'", 'multicharacter')]
     for spelling, message in rejected:
         source.write_text(f'int main(void) {{ return {spelling}; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
     for definition, invocation, message in [(r"#define BAD '\x100'", 'BAD', 'exceeds one byte'),
-                                             ('#define C(a,b) a##b', "C(u8,'A')", 'prefixed')]:
+                                             ('#define C(a,b) a##b', "C(u8,'AB')", 'multicharacter')]:
         source.write_text(definition+f'\nint main(void) {{ return {invocation}; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr

@@ -279,7 +279,7 @@ struct ast_integer_expression {
 struct ast_character_expression {
 	struct ast_expression expression;
 	int64_t value;
-	bool is_utf8;
+	enum character_encoding encoding;
 };
 
 struct ast_string_expression {
