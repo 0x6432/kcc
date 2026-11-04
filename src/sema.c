@@ -960,7 +960,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
 			if (result.status == constant_not_constant && syntax == sema->vla_candidate &&
-				type_is_integer(array->bound->type) && element->kind != type_kind_array) {
+				type_is_integer(array->bound->type)) {
 				type = type_new_incomplete_array(sema->arena, element);
 				if (!type) {
 					diagnostic_error(sema->diagnostics, syntax->location, "out of memory creating variable-length array type");

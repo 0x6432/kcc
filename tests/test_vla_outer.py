@@ -22,6 +22,9 @@ valid = [
     'int main(void) { int n=2; int x=42; int *a[n]; a[1]=&x; return sizeof a==16 ? *a[1] : 1; }',
     'int main(void) { int n=2; double a[n]; a[1]=42.0; return sizeof a==16 ? (int)a[1] : 1; }',
     'struct S { int x; int y; }; int main(void) { int n=2; struct S a[n]; a[1].x=20; a[1].y=22; return sizeof a==16 ? a[1].x+a[1].y : 1; }',
+    'int main(void) { int n=2; int a[n++][3]; a[1][2]=42; return n==3 && sizeof a==24 && sizeof a[0]==12 ? a[1][2] : 1; }',
+    'int main(void) { int n=2; char a[n][2][3]; a[1][1][2]=42; return sizeof a==12 && sizeof a[0]==6 ? a[1][1][2] : 1; }',
+    'struct S { int x; }; int main(void) { int n=2; struct S a[n][3]; a[1][2].x=42; return sizeof a==24 ? a[1][2].x : 1; }',
 ]
 rejected = [
     ('int f(int n) { { int a[n]; } return 0; }', 'variable-length arrays'),
