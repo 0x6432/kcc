@@ -934,6 +934,22 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define SHRT_WIDTH 16\n#define USHRT_WIDTH 16\n#define INT_WIDTH 32\n#define UINT_WIDTH 32\n"
 			"#define LONG_WIDTH 64\n#define ULONG_WIDTH 64\n#define LLONG_WIDTH 64\n#define ULLONG_WIDTH 64\n"
 			"#endif\n";
+		static const char float_header[] =
+			"#ifndef __KCC_FLOAT_H\n#define __KCC_FLOAT_H 1\n"
+			"#define FLT_RADIX 2\n#define FLT_ROUNDS 1\n#define FLT_EVAL_METHOD 0\n"
+			"#define FLT_MANT_DIG 24\n#define FLT_DIG 6\n#define FLT_DECIMAL_DIG 9\n"
+			"#define FLT_MIN_EXP (-125)\n#define FLT_MIN_10_EXP (-37)\n"
+			"#define FLT_MAX_EXP 128\n#define FLT_MAX_10_EXP 38\n"
+			"#define FLT_MIN 1.17549435082228750796873653722224568e-38F\n"
+			"#define FLT_MAX 3.40282346638528859811704183484516925e+38F\n"
+			"#define FLT_EPSILON 1.1920928955078125e-7F\n"
+			"#define DBL_MANT_DIG 53\n#define DBL_DIG 15\n#define DBL_DECIMAL_DIG 17\n"
+			"#define DBL_MIN_EXP (-1021)\n#define DBL_MIN_10_EXP (-307)\n"
+			"#define DBL_MAX_EXP 1024\n#define DBL_MAX_10_EXP 308\n"
+			"#define DBL_MIN 2.22507385850720138309023271733240406e-308\n"
+			"#define DBL_MAX 1.79769313486231570814527423731704357e+308\n"
+			"#define DBL_EPSILON 2.220446049250313080847263336181640625e-16\n"
+			"#endif\n";
 		static const char stdint_header[] =
 			"#ifndef __KCC_STDINT_H\n#define __KCC_STDINT_H 1\n"
 			"typedef signed char int8_t;\ntypedef unsigned char uint8_t;\n"
@@ -991,6 +1007,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "limits.h") == 0) {
 			header = limits_header;
 			source_name = "<kcc/limits.h>";
+		} else if (strcmp(name->path, "float.h") == 0) {
+			header = float_header;
+			source_name = "<kcc/float.h>";
 		}
 		if (header) {
 			if (source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header)))

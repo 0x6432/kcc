@@ -14,6 +14,7 @@ source_text = r"""
 #include <stdint.h>
 #include <stdint.h>
 #include <limits.h>
+#include <float.h>
 static_assert(sizeof(size_t)==8 && sizeof(ptrdiff_t)==8);
 static_assert(sizeof(int8_t)==1 && sizeof(uint16_t)==2);
 static_assert(sizeof(int32_t)==4 && sizeof(uint64_t)==8);
@@ -21,6 +22,7 @@ static_assert(INT8_MIN == -128 && UINT32_MAX == 4294967295U);
 static_assert(CHAR_BIT==8 && CHAR_MIN == -128 && INT_WIDTH==32 && LONG_WIDTH==64);
 static_assert(sizeof(int_least16_t)==2 && sizeof(int_fast32_t)==8);
 static_assert(INT64_C(42)==42L && UINT32_C(42)==42U && UINT_FAST32_MAX==UINT64_MAX);
+static_assert(FLT_RADIX==2 && FLT_MANT_DIG==24 && DBL_MANT_DIG==53);
 int main(void) {
     nullptr_t n=nullptr;
     bool b=true;

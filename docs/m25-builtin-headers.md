@@ -1,7 +1,7 @@
 # Bounded compiler-provided headers
 
 After explicit include paths have been searched, the x86-64 SysV compiler
-provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`,
+provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h` and `stdatomic.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
@@ -19,6 +19,10 @@ include directories take precedence.
   the target's 8-bit signed `char`, 16-bit short, 32-bit int and 64-bit long
   and long long. `MB_LEN_MAX` is 16, matching glibc. Bit-precise limits are
   not provided.
+- `float.h` supplies radix, evaluation, rounding and common binary32/binary64
+  precision, exponent and normalized-range macros for the default
+  round-to-nearest environment. It omits long-double and subnormal limit
+  macros; runtime floating-environment changes are not modeled.
 - `assert.h` responds to `NDEBUG` at each inclusion, evaluates its condition
   once when enabled, and calls glibc's `__assert_fail` on failure. Because
   `__func__` is not yet available, the failure message uses `(unknown)` for the
