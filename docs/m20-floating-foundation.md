@@ -6,8 +6,10 @@ Supported: `float` and `double` types, qualifiers, typedefs, pointers, arrays, r
 
 Static floating objects and aggregate subobjects can be initialized by a
 literal with optional unary plus or minus, including float/double precision
-conversions, or by an integer constant expression converted to float/double.
-Folding uses the host's target-matching IEEE formats and rounding environment.
-This expanded subset has not yet been tested.
+conversions, an integer constant expression converted to float/double, or
+finite `+`, `-`, `*`, `/` expressions built from those forms. Division by zero
+and non-finite arithmetic results are rejected. Folding uses the host's
+target-matching IEEE formats and rounding environment. This expanded subset
+has not yet been tested.
 
-Not supported: `long double`, `_Complex`, decimal floats, floating suffixes beyond `f`, general floating constant-expression evaluation, and static floating initializers requiring floating arithmetic. Floating expressions are not integer constant expressions. File-scope tentative objects and zero-filled aggregates use zero bytes. The preprocessor continues to require integer `#if` expressions. Aggregate ABI is outside this scope. The recently restored conversions and updates have not been integration-tested. Unsupported operations must be diagnosed rather than approximated. Host/target rounding modes and subnormal/exception behavior beyond what the host converter and QBE supply are not modeled; literal underflow is conservatively rejected.
+Not supported: `long double`, `_Complex`, decimal floats, floating suffixes beyond `f`, and general floating constant-expression evaluation beyond the subset above. Floating expressions are not integer constant expressions. File-scope tentative objects and zero-filled aggregates use zero bytes. The preprocessor continues to require integer `#if` expressions. Aggregate ABI is outside this scope. The recently restored conversions and updates have not been integration-tested. Unsupported operations must be diagnosed rather than approximated. Host/target rounding modes and subnormal/exception behavior beyond what the host converter and QBE supply are not modeled; literal underflow is conservatively rejected.

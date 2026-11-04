@@ -3,6 +3,7 @@
 #include "type.h"
 
 #include <assert.h>
+#include <math.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -2594,7 +2595,7 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 }
 
 /* Static constants use the host's target-matching binary32/binary64 format,
- * as does literal parsing. Floating arithmetic is not folded here. */
+ * as does literal parsing. Non-finite arithmetic results are refused. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)
 {
 	if (!type_is_floating(expression->type))
@@ -2611,6 +2612,52 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 		if (unary->operation == unary_minus)
 			*bits ^= expression->type->kind == type_kind_float ?
 				UINT64_C(0x80000000) : UINT64_C(0x8000000000000000);
+		return true;
+	}
+	if (expression->kind == expression_binary) {
+		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
+		uint64_t left_bits, right_bits;
+
+		if ((binary->operation != binary_add && binary->operation != binary_subtract &&
+			binary->operation != binary_multiply && binary->operation != binary_divide) ||
+			!static_floating_literal_bits(binary->left, &left_bits) ||
+			!static_floating_literal_bits(binary->right, &right_bits))
+			return false;
+		if (expression->type->kind == type_kind_float) {
+			uint32_t left_raw = (uint32_t)left_bits, right_raw = (uint32_t)right_bits, result_raw;
+			float left, right, result;
+			memcpy(&left, &left_raw, sizeof(left));
+			memcpy(&right, &right_raw, sizeof(right));
+			if (!isfinite(left) || !isfinite(right) ||
+				(binary->operation == binary_divide && right == 0.0f))
+				return false;
+			switch (binary->operation) {
+			case binary_add: result = left + right; break;
+			case binary_subtract: result = left - right; break;
+			case binary_multiply: result = left * right; break;
+			default: result = left / right; break;
+			}
+			if (!isfinite(result))
+				return false;
+			memcpy(&result_raw, &result, sizeof(result_raw));
+			*bits = result_raw;
+		} else {
+			double left, right, result;
+			memcpy(&left, &left_bits, sizeof(left));
+			memcpy(&right, &right_bits, sizeof(right));
+			if (!isfinite(left) || !isfinite(right) ||
+				(binary->operation == binary_divide && right == 0.0))
+				return false;
+			switch (binary->operation) {
+			case binary_add: result = left + right; break;
+			case binary_subtract: result = left - right; break;
+			case binary_multiply: result = left * right; break;
+			default: result = left / right; break;
+			}
+			if (!isfinite(result))
+				return false;
+			memcpy(bits, &result, sizeof(result));
+		}
 		return true;
 	}
 	if (expression->kind == expression_cast || expression->kind == expression_conversion) {
@@ -2681,7 +2728,7 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		uint64_t bits;
 		if (!static_floating_literal_bits(converted, &bits)) {
 			diagnostic_error(diagnostics, source->location,
-				"static floating initializer requires a supported literal or integer constant conversion");
+				"static floating initializer requires a supported finite constant expression");
 			return false;
 		}
 		*value = (struct static_data_value) { .kind = static_data_floating, .integer_bits = bits };
