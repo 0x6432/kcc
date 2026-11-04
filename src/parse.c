@@ -107,7 +107,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 	return kind == token_alignas || kind == token_legacy_alignas ||
 		kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
-		kind == token_void || kind == token_const || kind == token_struct || kind == token_union ||
+		kind == token_void || kind == token_const || kind == token_struct || kind == token_union || kind == token_enum ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
@@ -129,6 +129,7 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
 static struct ast_type_syntax *parse_record_specifier(struct parser *parser, struct token keyword);
+static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword);
 static struct ast_static_assertion *parse_static_assertion(struct parser *parser);
 
 enum declarator_context {
@@ -332,12 +333,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		preprocess_next(parser->preprocessor);
-		if (token.kind == token_struct || token.kind == token_union) {
+		if (token.kind == token_struct || token.kind == token_union || token.kind == token_enum) {
 			if (query || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 				diagnostic_error(parser->diagnostics, token.location, "record cannot combine with other type specifiers");
 				return NULL;
 			}
-			query = parse_record_specifier(parser, token);
+			query = token.kind == token_enum ? parse_enum_specifier(parser, token) :
+				parse_record_specifier(parser, token);
 			if (!query)
 				return NULL;
 			continue;
@@ -751,6 +753,82 @@ static struct ast_record_type_syntax *record_specifier_base(struct ast_type_synt
 		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
 	return syntax && syntax->kind == type_syntax_record ?
 		(struct ast_record_type_syntax *)syntax : NULL;
+}
+
+static struct ast_enum_type_syntax *enum_specifier_base(struct ast_type_syntax *syntax)
+{
+	while (syntax && syntax->kind == type_syntax_qualified)
+		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	return syntax && syntax->kind == type_syntax_enum ? (struct ast_enum_type_syntax *)syntax : NULL;
+}
+
+static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword)
+{
+	struct ast_enum_type_syntax *node = arena_alloc(parser->arena, sizeof(*node));
+	struct ast_enumerator **tail;
+	size_t count = 0;
+	if (!node) {
+		allocation_error(parser, keyword.location);
+		return NULL;
+	}
+	*node = (struct ast_enum_type_syntax) { .syntax = { .kind = type_syntax_enum, .location = keyword.location } };
+	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
+		node->tag = preprocess_next(parser->preprocessor);
+	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
+		if (!node->tag.length) {
+			diagnostic_error(parser->diagnostics, keyword.location, "expected enum tag or definition");
+			return NULL;
+		}
+		return &node->syntax;
+	}
+	if (parser->parameter_nesting) {
+		diagnostic_error(parser->diagnostics, keyword.location, "enum definitions in parameter lists are not supported yet");
+		return NULL;
+	}
+	if (parser->record_nesting == ast_max_record_nesting) {
+		diagnostic_error(parser->diagnostics, keyword.location, "enum definition nesting exceeds limit (64)");
+		return NULL;
+	}
+	parser->record_nesting++;
+	preprocess_next(parser->preprocessor);
+	node->has_definition = true;
+	tail = &node->enumerators;
+	for (;;) {
+		struct token name;
+		struct ast_enumerator *item;
+		if (count++ == 1024 || parser->record_declarations == ast_max_record_declarations) {
+			diagnostic_error(parser->diagnostics, keyword.location, "enumerator resource limit exceeded");
+			return NULL;
+		}
+		if (!expect_token(parser, token_identifier, "expected enumerator name", &name))
+			return NULL;
+		item = arena_alloc(parser->arena, sizeof(*item));
+		if (!item) {
+			allocation_error(parser, name.location);
+			return NULL;
+		}
+		*item = (struct ast_enumerator) { .name = name };
+		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
+			preprocess_next(parser->preprocessor);
+			item->value = parse_expression(parser, 2);
+			if (!item->value)
+				return NULL;
+		}
+		if (!publish_parser_name(parser, name, parser_name_object))
+			return NULL;
+		*tail = item;
+		tail = &item->next;
+		parser->record_declarations++;
+		if (preprocess_peek(parser->preprocessor).kind != token_comma)
+			break;
+		preprocess_next(parser->preprocessor);
+		if (preprocess_peek(parser->preprocessor).kind == token_right_brace)
+			break;
+	}
+	if (!expect_token(parser, token_right_brace, "expected '}' after enum definition", NULL))
+		return NULL;
+	parser->record_nesting--;
+	return &node->syntax;
 }
 
 static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
@@ -2658,6 +2736,31 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
 		return NULL;
 	}
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
+		struct ast_enum_type_syntax *enumeration = enum_specifier_base(base);
+		struct ast_tag_declaration *declaration;
+		if (!enumeration->has_definition) {
+			diagnostic_error(parser->diagnostics, beginning.location, "enum forward declarations are not supported");
+			return NULL;
+		}
+		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind) {
+			diagnostic_error(parser->diagnostics, beginning.location, "storage class requires a declarator");
+			return NULL;
+		}
+		preprocess_next(parser->preprocessor);
+		declaration = ast_new_tag_declaration(parser->arena, &enumeration->syntax, beginning.location);
+		if (!declaration) {
+			allocation_error(parser, beginning.location);
+			return NULL;
+		}
+		struct ast_block_tag_declaration *item;
+		if (!count_block_item(parser, beginning.location))
+			return NULL;
+		item = ast_new_block_tag_declaration(parser->arena, declaration);
+		if (!item)
+			allocation_error(parser, beginning.location);
+		return item ? &item->item : NULL;
+	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
 		struct ast_tag_declaration *declaration;
 		struct ast_block_tag_declaration *node;
@@ -2782,7 +2885,7 @@ static struct ast_block_item *parse_local_declaration(struct parser *parser)
 	if (!base)
 		return NULL;
 	if (head.keyword.kind == token_typedef &&
-		!(preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)))
+		!(preprocess_peek(parser->preprocessor).kind == token_semicolon && (record_specifier_base(base) || enum_specifier_base(base))))
 		return parse_block_typedef_declaration_tail(parser, head.keyword, base);
 	return parse_local_declaration_tail(parser, beginning, base, head);
 }
@@ -3368,6 +3471,28 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		diagnostic_error(parser->diagnostics, head.auto_keyword.location,
 			"file-scope auto declarations are not supported yet");
 		return NULL;
+	}
+	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
+		struct ast_enum_type_syntax *enumeration = enum_specifier_base(base);
+		struct ast_tag_declaration *declaration;
+		if (!enumeration->has_definition) {
+			diagnostic_error(parser->diagnostics, beginning.location, "enum forward declarations are not supported");
+			return NULL;
+		}
+		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind) {
+			diagnostic_error(parser->diagnostics, beginning.location, "storage class requires a declarator");
+			return NULL;
+		}
+		preprocess_next(parser->preprocessor);
+		declaration = ast_new_tag_declaration(parser->arena, &enumeration->syntax, beginning.location);
+		if (!declaration) {
+			allocation_error(parser, beginning.location);
+			return NULL;
+		}
+		struct ast_external_tag_declaration *item = ast_new_external_tag_declaration(parser->arena, declaration);
+		if (!item)
+			allocation_error(parser, beginning.location);
+		return item ? &item->external : NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
 		struct ast_tag_declaration *declaration;

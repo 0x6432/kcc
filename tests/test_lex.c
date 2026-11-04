@@ -532,6 +532,11 @@ static void test_static_keyword(void)
 
 int main(void)
 {
+	{
+		const enum token_kind kinds[] = { token_enum, token_identifier, token_int };
+		check_tokens("#define E enum\nE value\n#define enum int\nenum", kinds, 3, 0);
+		assert(strcmp(token_kind_name(token_enum), "enum") == 0);
+	}
 	test_extern_keyword();
 	test_static_keyword();
 	test_auto_keyword();

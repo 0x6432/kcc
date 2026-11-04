@@ -6501,8 +6501,69 @@ static void test_static_scalar_object_tree(void)
 	assert(fclose(stream) == 0);
 }
 
+/* M18 ordinary int-range enums: both success and rejection are checked at
+ * the parse/sema boundary, without evaluating an emitted program. */
+static void test_ordinary_enums(void)
+{
+	static const char *const accepted[] = {
+		"enum E { MIN=-2147483647-1, NEG=-2, ZERO, ONE=ZERO+2, NEXT, }; "
+		"_Static_assert(MIN == -2147483647-1, \"min\"); "
+		"_Static_assert(NEG == -2 && ZERO == -1 && ONE == 1 && NEXT == 2, \"values\"); "
+		"enum E e=ONE; const enum E *p=&e; int a[NEXT]; "
+		"int main(void) { enum E x=NEG; switch(x) { case NEG: return sizeof(a)+*p; default: return 0; } }",
+		"typedef int T; enum { FILE_VALUE=4 }; int main(void) { "
+		"enum T { T=FILE_VALUE+1 }; _Static_assert(T==5, \"shadow\"); "
+		"{ int T=1; T++; } return T; }",
+		"enum E { A=-1, B=1U, C=(1 ? B+1 : 1/0) }; "
+		"int f(void) { enum E { D=9 } x=D; { enum E y=x; return y; } }",
+		"enum E { A=0 }; enum E f(enum E x) { return x; } "
+		"int main(void) { enum E e=A; e++; return f(e); }",
+	};
+	static const char *const rejected[] = {
+		"enum { };", "enum E;", "enum E *p;", "enum E : int { A };",
+		"enum E { A=2147483648LL };", "enum E { A=2147483647, B };",
+		"enum E { A=-2147483647-2 };", "enum E { A=1/0 };",
+		"int x; enum E { A=x };", "enum E { A=B, B=1 };",
+		"enum E { A=1, A=2 };", "enum E { A=1 }; int A;",
+		"int A; enum E { A=1 };", "typedef int A; enum E { A=1 };",
+		"enum E { A }; typedef int A;", "enum E { A }; struct E { int x; };",
+		"struct E { int x; }; enum E { A };", "enum E { A }; enum E { B };",
+		"enum E { A }; int main(void) { int A; enum { A=2 }; return 0; }",
+		"enum A { X }; enum B { Y }; enum A *p; enum B *q; int f(void) { p=q; return 0; }",
+		"enum A { X }; enum B { Y }; extern int value; extern enum A value; extern enum B value;",
+		"enum E { A }; int f(void) { return &A != 0; }",
+		"int f(enum E { A } x);",
+	};
+	for (size_t group = 0; group < 2; group++) {
+		const char *const *cases = group ? rejected : accepted;
+		size_t count = group ? sizeof(rejected) / sizeof(*rejected) : sizeof(accepted) / sizeof(*accepted);
+		for (size_t i = 0; i < count; i++) {
+			struct source source;
+			struct arena arena = { 0 };
+			FILE *stream = tmpfile();
+			struct diagnostics diagnostics = { .stream = stream };
+			struct preprocessor preprocessor;
+			struct ast_translation_unit *unit;
+			bool success;
+			assert(stream);
+			assert(source_from_bytes(&source, "enum.c", (const unsigned char *)cases[i], strlen(cases[i])));
+			assert(source_prepare(&source));
+			preprocess_init(&preprocessor, &source, &diagnostics);
+			unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+			success = unit && sema_translation_unit(unit, &arena, &diagnostics);
+			assert(success == (group == 0));
+			assert(success ? diagnostics.errors == 0 : diagnostics.errors > 0);
+			arena_destroy(&arena);
+			preprocess_destroy(&preprocessor);
+			source_destroy(&source);
+			assert(fclose(stream) == 0);
+		}
+	}
+}
+
 int main(void)
 {
+	test_ordinary_enums();
 	test_static_scalar_object_tree();
 	test_tentative_array_tree();
 	test_tentative_scalar_tree();

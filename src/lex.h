@@ -100,6 +100,7 @@ enum token_kind {
 	token_or_or,
 	token_struct,
 	token_union,
+	token_enum,
 	token_dot,
 	token_arrow,
 };

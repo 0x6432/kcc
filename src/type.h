@@ -27,6 +27,11 @@ enum type_kind {
 	type_kind_function,
 	type_kind_struct,
 	type_kind_union,
+	type_kind_enum,
+};
+
+struct enum_definition {
+	bool complete;
 };
 
 enum type_qualifier {
@@ -36,6 +41,11 @@ enum type_qualifier {
 struct type {
 	enum type_kind kind;
 	unsigned qualifiers;
+};
+
+struct enum_type {
+	struct type type;
+	struct enum_definition *definition;
 };
 
 /* Stable nominal identity shared by every qualified wrapper. */

@@ -43,6 +43,7 @@ struct record_state {
 struct tag_binding {
 	struct token name;
 	struct record_type *type;
+	struct enum_type *enum_type;
 	struct tag_binding *next;
 };
 
@@ -73,6 +74,7 @@ struct sema {
 	struct ast_function *function;
 	struct scope *scope;
 	struct tag_binding *file_tags;
+	struct binding *file_enumerators;
 	struct ast_function_type_syntax *definition_syntax;
 	struct tag_binding *definition_tags;
 	struct record_state *records;
@@ -140,6 +142,14 @@ static struct ast_local_declaration *find_local(struct sema *sema,
 			return local;
 		scope = scope->parent;
 	}
+	return NULL;
+}
+
+static struct ast_local_declaration *find_file_enumerator(struct sema *sema, struct token name)
+{
+	for (struct binding *binding = sema->file_enumerators; binding; binding = binding->next)
+		if (same_name(binding->declaration->name, name))
+			return binding->declaration;
 	return NULL;
 }
 
@@ -409,6 +419,10 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		tag = find_tag(sema, syntax->tag, standalone || syntax->has_definition);
 	if (tag) {
 		record = tag->type;
+		if (!record) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "tag declared with a different kind");
+			return NULL;
+		}
 		if (record->definition->is_union != syntax->is_union) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
 				"tag declared with a different record kind");
@@ -551,6 +565,110 @@ allocation_failure:
 	return NULL;
 }
 
+/* This ordinary-enum subset uses int as its compatible target type. Values
+ * must fit int; wider C23 enumeration rules are intentionally deferred. */
+static const struct type *resolve_enum_syntax(struct sema *sema, struct ast_enum_type_syntax *syntax)
+{
+	struct tag_binding *tag = syntax->tag.length ?
+		find_tag(sema, syntax->tag, syntax->has_definition) : NULL;
+	struct enum_type *type;
+	int64_t previous = -1;
+	if (syntax->syntax.type)
+		return syntax->syntax.type;
+	if (tag) {
+		if (!tag->enum_type) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "tag declared with a different kind");
+			return NULL;
+		}
+		if (syntax->has_definition) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of enum tag");
+			return NULL;
+		}
+		return syntax->syntax.type = &tag->enum_type->type;
+	}
+	if (!syntax->has_definition) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "unknown enum tag (forward enums are not supported)");
+		return NULL;
+	}
+	if (sema->record_count == sema_max_records) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "translation unit exceeds tagged type limit (512)");
+		return NULL;
+	}
+	type = arena_alloc(sema->arena, sizeof(*type));
+	struct enum_definition *definition = arena_alloc(sema->arena, sizeof(*definition));
+	if (!type || !definition) goto oom;
+	*definition = (struct enum_definition) { 0 };
+	*type = (struct enum_type) { .type = { .kind = type_kind_enum }, .definition = definition };
+	sema->record_count++;
+	if (syntax->tag.length) {
+		struct tag_binding **head = sema->scope ? &sema->scope->tags : &sema->file_tags;
+		tag = arena_alloc(sema->arena, sizeof(*tag));
+		if (!tag) goto oom;
+		*tag = (struct tag_binding) { .name = syntax->tag, .enum_type = type, .next = *head };
+		*head = tag;
+	}
+	syntax->syntax.type = &type->type;
+	for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next) {
+		struct ast_local_declaration *constant;
+		struct binding *binding;
+		struct typedef_binding *alias = find_typedef_binding(sema, item->name);
+		int64_t value;
+		if ((alias && alias->scope == sema->scope) ||
+			(sema->scope ? find_in_scope(sema->scope, item->name) != NULL :
+			 (find_file_enumerator(sema, item->name) || (find_external_object(sema, item->name) && find_external_object(sema, item->name)->file_type) || (find_function(sema, item->name) && find_function(sema, item->name)->file_type)))) {
+			diagnostic_error(sema->diagnostics, item->name.location, "enumerator conflicts with ordinary identifier");
+			return NULL;
+		}
+		if (item->value) {
+			struct constant_result result;
+			unsigned width;
+			uint64_t mask;
+			if (!sema_expression(sema, &item->value, true)) return NULL;
+			result = evaluate_integer_constant(item->value);
+			if (result.status != constant_value) {
+				diagnostic_error(sema->diagnostics, result.location, result.message);
+				return NULL;
+			}
+			width = type_integer_width(result.type);
+			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+			if (type_is_unsigned(result.type)) {
+				if (result.bits > INT32_MAX) goto range;
+				value = (int64_t)result.bits;
+			} else if (result.bits & (UINT64_C(1) << (width - 1)))
+				value = -1 - (int64_t)(mask - result.bits);
+			else
+				value = (int64_t)result.bits;
+			if (value < INT32_MIN || value > INT32_MAX) goto range;
+		} else {
+			if (previous == INT32_MAX) goto range;
+			value = previous + 1;
+		}
+		previous = value;
+		constant = ast_new_local(sema->arena, item->name.location, item->name, NULL);
+		binding = arena_alloc(sema->arena, sizeof(*binding));
+		if (!constant || !binding) goto oom;
+		constant->enum_constant = true;
+		constant->enum_value = value;
+		constant->type = &type_int;
+		if (sema->scope) {
+			*binding = (struct binding) { constant, sema->scope->bindings };
+			sema->scope->bindings = binding;
+		} else {
+			*binding = (struct binding) { constant, sema->file_enumerators };
+			sema->file_enumerators = binding;
+		}
+		continue;
+range:
+		diagnostic_error(sema->diagnostics, item->name.location, "enumerator value is outside the supported int range");
+		return NULL;
+	}
+	definition->complete = true;
+	return &type->type;
+oom:
+	diagnostic_error(sema->diagnostics, syntax->syntax.location, "out of memory creating enum type");
+	return NULL;
+}
+
 /* Only the bare `struct-or-union identifier ;` form has the special
  * current-scope forward/shadow rule. A prefixed reference to a visible
  * tag declares no entity; definitions and newly introduced tags do. */
@@ -558,6 +676,8 @@ static bool sema_tag_declaration(struct sema *sema, struct ast_tag_declaration *
 {
 	struct ast_record_type_syntax *record;
 
+	if (declaration->type_syntax->kind == type_syntax_enum)
+		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)declaration->type_syntax) != NULL;
 	if (declaration->type_syntax->kind != type_syntax_record) {
 		diagnostic_error(sema->diagnostics, declaration->location,
 			"tag-only declaration requires a struct or union specifier");
@@ -604,6 +724,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_enum:
+		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)syntax);
 	case type_syntax_record:
 		return resolve_record_syntax(sema, (struct ast_record_type_syntax *)syntax, false);
 	case type_syntax_inferred:
@@ -1482,6 +1604,22 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		node->declaration = find_local(sema, node->name);
+		if (!node->declaration)
+			node->declaration = find_file_enumerator(sema, node->name);
+		if (node->declaration && node->declaration->enum_constant) {
+			struct ast_character_expression *constant = arena_alloc(sema->arena, sizeof(*constant));
+			if (!constant) {
+				diagnostic_error(sema->diagnostics, expression->location, "out of memory creating enum constant");
+				return false;
+			}
+			*constant = (struct ast_character_expression) {
+				.expression = { .kind = expression_character, .location = expression->location, .depth = 1 },
+				.value = node->declaration->enum_value,
+			};
+			*expression_slot = expression = &constant->expression;
+			result_type = &type_int;
+			break;
+		}
 		object = node->declaration ? node->declaration->object_symbol :
 			visible_file_object(sema, node->name);
 		if (sema->function && object && object->is_internal && !object->is_block_static) {
@@ -3536,7 +3674,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 			"function name conflicts with external object");
 		return NULL;
 	}
-	if (!sema->scope && find_typedef(sema, name)) {
+	if (!sema->scope && (find_typedef(sema, name) || find_file_enumerator(sema, name))) {
 		diagnostic_error(sema->diagnostics, name.location, "function name conflicts with typedef name");
 		return NULL;
 	}
@@ -3650,7 +3788,7 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 			"object declaration conflicts with prior linkage");
 		return NULL;
 	}
-	if ((!sema->scope && find_typedef(sema, name)) || find_function(sema, name)) {
+	if ((!sema->scope && (find_typedef(sema, name) || find_file_enumerator(sema, name))) || find_function(sema, name)) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"external object conflicts with prior ordinary declaration");
 		return NULL;
@@ -4350,7 +4488,7 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 	if (!type)
 		return false;
 	if (!sema->scope && (visible_file_function(sema, declaration->name) ||
-		visible_file_object(sema, declaration->name))) {
+		visible_file_object(sema, declaration->name) || find_file_enumerator(sema, declaration->name))) {
 		diagnostic_error(sema->diagnostics, declaration->name.location,
 			"typedef name conflicts with prior ordinary declaration");
 		return false;

@@ -223,10 +223,34 @@ static void test_nullptr_type(struct arena *arena)
 }
 
 
+static void test_enum_types(struct arena *arena)
+{
+	struct enum_definition first = { .complete = true };
+	struct enum_definition second = { .complete = true };
+	struct enum_type a = { .type = { .kind = type_kind_enum }, .definition = &first };
+	struct enum_type b = { .type = { .kind = type_kind_enum }, .definition = &second };
+	const struct type *qualified = type_qualified(arena, &a.type, type_qualifier_const);
+	const struct type *unqualified = type_unqualified(arena, qualified);
+	assert(qualified && unqualified);
+	assert(type_is_integer(&a.type) && type_is_complete_object(&a.type));
+	assert(type_object_size(&a.type) == 4 && type_object_alignment(&a.type) == 4);
+	assert(type_integer_promotion(&a.type) == &type_int);
+	assert(type_compatible(&a.type, &type_int) && !type_same(&a.type, &type_int));
+	assert(type_composite(arena, &type_int, &a.type) == &a.type);
+	assert(type_composite(arena, &a.type, &type_int) == &a.type);
+	assert(!type_compatible(&a.type, &b.type));
+	assert(type_same(&a.type, unqualified));
+	assert(type_unqualified_compatible(qualified, &a.type));
+	assert(!type_compatible(qualified, &a.type));
+	first.complete = false;
+	assert(!type_is_complete_object(&a.type) && !type_is_complete_object(qualified));
+}
+
 int main(void)
 {
 	struct arena arena = {0};
 
+	test_enum_types(&arena);
 	test_nullptr_type(&arena);
 	test_leaf_qualification(&arena);
 	test_pointer_levels(&arena);

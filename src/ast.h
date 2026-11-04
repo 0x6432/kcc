@@ -473,12 +473,26 @@ enum type_syntax_kind {
 	type_syntax_array,
 	type_syntax_function,
 	type_syntax_record,
+	type_syntax_enum,
 };
 
 struct ast_type_syntax {
 	enum type_syntax_kind kind;
 	struct source_location location;
 	const struct type *type;
+};
+
+struct ast_enumerator {
+	struct token name;
+	struct ast_expression *value;
+	struct ast_enumerator *next;
+};
+
+struct ast_enum_type_syntax {
+	struct ast_type_syntax syntax;
+	struct token tag;
+	bool has_definition;
+	struct ast_enumerator *enumerators;
 };
 
 /* Syntax only: tags belong to sema's separate namespace, never parser aliases. */
@@ -777,6 +791,8 @@ struct ast_local_declaration {
 	struct ast_initializer_plan *initializer_plan;
 	struct ast_alignment_specifier *alignments;
 	unsigned alignment; /* Effective storage alignment; zero means natural. */
+	bool enum_constant;
+	int64_t enum_value;
 	bool is_register;
 	bool is_auto; /* Written auto; explicit auto still requires an object. */
 	bool is_extern;

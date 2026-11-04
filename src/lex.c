@@ -325,7 +325,7 @@ static bool is_unsupported_keyword(struct token token)
 {
 	static const char *const keywords[] = {
 		"break", "case", "const", "continue", "default",
-		"do", "double", "else", "enum", "float", "for", "goto",
+		"do", "double", "else", "float", "for", "goto",
 		"if", "inline", "restrict",
 		"sizeof", "struct", "switch", "union",
 		"volatile", "while", "_Alignas", "_Alignof", "_Atomic",
@@ -348,7 +348,7 @@ struct keyword {
 };
 
 static const struct keyword keywords[] = {
-	{ "struct", token_struct }, { "union", token_union },
+	{ "struct", token_struct }, { "union", token_union }, { "enum", token_enum },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
 	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
@@ -828,6 +828,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_and_and: return "&&";
 	case token_or_or: return "||";
 	case token_struct: return "struct";
+	case token_enum: return "enum";
 	case token_union: return "union";
 	case token_dot: return ".";
 	case token_arrow: return "->";

@@ -45,6 +45,8 @@ static const struct integer_properties integer_properties[] = {
 
 bool type_is_integer(const struct type *type)
 {
+	if (type->kind == type_kind_enum)
+		return true;
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
 			return true;
@@ -66,6 +68,8 @@ bool type_is_complete_object(const struct type *type)
 {
 	if (type_is_record(type))
 		return type_record_definition(type)->complete;
+	if (type->kind == type_kind_enum)
+		return ((const struct enum_type *)type)->definition->complete;
 	if (type->kind == type_kind_array)
 		return ((const struct array_type *)type)->count != 0;
 	return type_is_scalar(type);
@@ -148,6 +152,8 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 
 static const struct integer_properties *integer_properties_for(const struct type *type)
 {
+	if (type->kind == type_kind_enum)
+		return integer_properties_for(&type_int);
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
 			return &integer_properties[i];
@@ -168,7 +174,7 @@ unsigned type_integer_width(const struct type *type)
 /* All implemented types below int fit in int, including unsigned char/short. */
 const struct type *type_integer_promotion(const struct type *type)
 {
-	if (type_integer_width(type) < 32)
+	if (type->kind == type_kind_enum || type_integer_width(type) < 32)
 		return &type_int;
 	return type;
 }
@@ -296,6 +302,14 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 		copy->type.qualifiers = qualifiers;
 		return &copy->type;
 	}
+	if (type->kind == type_kind_enum) {
+		struct enum_type *copy = arena_alloc(arena, sizeof(*copy));
+		if (copy) {
+			*copy = *(const struct enum_type *)type;
+			copy->type.qualifiers = qualifiers;
+		}
+		return copy ? &copy->type : NULL;
+	}
 	if (type_is_record(type)) {
 		struct record_type *copy = arena_alloc(arena, sizeof(*copy));
 
@@ -335,9 +349,17 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	/* Shared immutable types denote the same type without another traversal. */
 	if (left == right)
 		return true;
-	if (left->kind != right->kind ||
-		(!ignore_root_qualifiers && left->qualifiers != right->qualifiers))
+	if (!ignore_root_qualifiers && left->qualifiers != right->qualifiers)
 		return false;
+	if (left->kind != right->kind) {
+		/* This subset chooses signed int as the compatible integer type. */
+		return !require_same_type &&
+			((left->kind == type_kind_enum && right->kind == type_kind_int) ||
+			 (right->kind == type_kind_enum && left->kind == type_kind_int));
+	}
+	if (left->kind == type_kind_enum)
+		return ((const struct enum_type *)left)->definition ==
+			((const struct enum_type *)right)->definition;
 	if (type_is_record(left))
 		return type_record_definition(left) == type_record_definition(right);
 	if (type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
@@ -392,6 +414,11 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right)
 {
 	assert(type_compatible(left, right));
+	/* Preserve enum identity when combining its compatible int type. Otherwise
+	 * an intervening int declaration could erase a prior enum and permit a
+	 * later incompatible enum declaration. */
+	if (left->kind == type_kind_int && right->kind == type_kind_enum)
+		return right;
 	if (left == right || type_is_record(left) || type_is_integer(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return left;
 	if (left->kind == type_kind_pointer) {
