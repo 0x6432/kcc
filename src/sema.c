@@ -1953,6 +1953,8 @@ static bool sema_expression(struct sema *sema,
 		result_type = &type_bool;
 		break;
 	case expression_character:
+		if (((struct ast_character_expression *)expression)->is_utf8)
+			result_type = &type_uchar;
 		break;
 	case expression_floating:
 		result_type = expression->type;

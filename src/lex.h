@@ -140,7 +140,7 @@ struct integer_spelling {
 const char *parse_integer_spelling(const unsigned char *text, size_t length,
 	struct integer_spelling *result);
 
-/* Ordinary single-byte target character, with signed plain-char interpretation.
+/* Ordinary or u8 single-byte target character; ordinary uses signed plain char.
  * Explicit byte slice; NULL means success. No allocation or diagnostics.
  */
 const char *parse_character_spelling(const unsigned char *text, size_t length,
@@ -166,6 +166,7 @@ struct token {
 	uint64_t floating_bits;
 	bool floating_single;
 	int64_t character;
+	bool character_utf8;
 	size_t string_length;
 	bool string_utf8;
 	unsigned integer_base;

@@ -8,6 +8,9 @@ limits apply. Character arrays can use the resulting byte sequences as
 initializers, and pointer conversion uses the unsigned-character element type.
 
 Universal character names, non-ASCII bytes in ordinary string fragments,
-`u8` character constants, and UTF-16/UTF-32/wide literals remain unsupported.
+and UTF-16/UTF-32/wide literals remain unsupported. `u8` character constants
+are supported for a single ASCII source character or one byte escape; they
+have unsigned-char type, so `u8'\\377'` has value 255. Multibyte source
+characters cannot fit a UTF-8 character constant.
 The compiler was built; new and updated unit, integration and optional runtime
 cases have not been run.

@@ -167,6 +167,7 @@ struct ast_character_expression *ast_new_character(struct arena *arena,
 				.depth = 1,
 			},
 			.value = token.character,
+			.is_utf8 = token.character_utf8,
 		};
 	return node;
 }

@@ -14,11 +14,16 @@ with tempfile.TemporaryDirectory(prefix='kcc-u8-') as directory:
     source.write_text('''
 unsigned char bytes[]=u8"é" "!";
 static_assert(_Generic(u8"x", unsigned char *: 1, default: 0));
+static_assert(_Generic(u8'A', unsigned char: 1, default: 0));
+static_assert(sizeof(u8'A')==1 && u8'\\377'==255);
+#if u8'\\377' != 255
+#error UTF-8 character value is not unsigned
+#endif
 int main(void) {
     unsigned char *p="a" u8"é";
     if (sizeof bytes!=4 || bytes[0]!=195 || bytes[1]!=169 || bytes[2]!=33 || bytes[3]!=0) return 1;
     if (p[0]!=97 || p[1]!=195 || p[2]!=169 || p[3]!=0) return 2;
-    if (u8"\\377"[0]!=255) return 3;
+    if (u8"\\377"[0]!=255 || u8'\\377'!=255) return 3;
     return 42;
 }
 ''', encoding='utf-8')

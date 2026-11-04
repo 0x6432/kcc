@@ -572,12 +572,15 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 	size_t offset = 1;
 	size_t end;
 	unsigned value;
+	bool utf8 = length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '\'';
 
 	if (!length)
 		return "expected one character in character constant";
-	if (text[0] != '\'')
+	if (utf8)
+		offset = 3;
+	else if (text[0] != '\'')
 		return "prefixed character constants are not supported yet";
-	if (length < 3 || text[length - 1] != '\'')
+	if (length < (utf8 ? 5u : 3u) || text[length - 1] != '\'')
 		return "expected one character in character constant";
 	end = length - 1;
 	value = text[offset++];
@@ -593,7 +596,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 	}
 	if (offset != end)
 		return "multicharacter constants are not supported yet";
-	*result = value < 128 ? (int64_t)value : (int64_t)value - 256;
+	*result = utf8 || value < 128 ? (int64_t)value : (int64_t)value - 256;
 	return NULL;
 }
 
@@ -686,6 +689,7 @@ static struct token convert_character(struct token token, struct diagnostics *di
 	if (error)
 		return invalid_language_token(token, diagnostics, error);
 	token.kind = token_character;
+	token.character_utf8 = token.length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '\'';
 	return token;
 }
 

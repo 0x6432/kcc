@@ -453,7 +453,7 @@ static void test_character_spellings(void)
 {
 	const char *bad[] = { "", "'", "''", "'''", "'ab'", "'a", "a'", "'\\'",
 		"'\\x'", "'\\x100'", "'\\400'", "'\\1234'", "'\\q'", "'\\u0041'",
-		"L'a'", "u'a'", "U'a'", "u8'a'", "'\n'", "'\r'", "'\200'" };
+		"L'a'", "u'a'", "U'a'", "u8'ab'", "'\n'", "'\r'", "'\200'" };
 	const unsigned char slice[] = { '\'', 'a', '\'', 'z' };
 	const unsigned char nul[] = { '\'', 0, '\'' };
 	int64_t value;

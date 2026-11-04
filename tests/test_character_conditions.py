@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-char-') as directory:
         (r"'\x100'", 'exceeds one byte'), (r"'\400'", 'exceeds one byte'),
         (r"'\777'", 'exceeds one byte'), (r"'\q'", 'unsupported character escape'),
         (r"'\u00ff'", 'unsupported character escape'),
-        ("L'a'", 'prefixed'), ("u'a'", 'prefixed'), ("U'a'", 'prefixed'), ("u8'a'", 'prefixed'),
+        ("L'a'", 'prefixed'), ("u'a'", 'prefixed'), ("U'a'", 'prefixed'), ("u8'ab'", 'multicharacter'),
         ("'é'", 'non-ASCII'), ("0 && 'ab'", 'multicharacter'),
     ]:
         source.write_text(f'#if {text}\n#endif\nint main(void) {{ return 0; }}\n')

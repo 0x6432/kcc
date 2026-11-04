@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='kcc runtime character ') as directory:
                 (r"'\400'", 'exceeds one byte'), (r"'\1234'", 'multicharacter'),
                 (r"'\q'", 'unsupported character escape'), (r"'\u0041'", 'unsupported character escape'),
                 ("'é'", 'non-ASCII'), ("L'a'", 'prefixed'), ("u'a'", 'prefixed'),
-                ("U'a'", 'prefixed'), ("u8'a'", 'prefixed')]
+                ("U'a'", 'prefixed'), ("u8'ab'", 'multicharacter')]
     for spelling, message in rejected:
         source.write_text(f'int main(void) {{ return {spelling}; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
