@@ -1846,6 +1846,46 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		node->declaration = find_local(sema, node->name);
+		if (!node->declaration && sema->function && node->name.length == 8 &&
+			memcmp(node->name.spelling_location.source->data + node->name.spelling_location.offset,
+				"__func__", 8) == 0) {
+			struct ast_string_expression *original = sema->function->function_name_string;
+			struct ast_string_expression *value;
+
+			if (!original) {
+				struct token name = sema->function->declaration->name;
+				unsigned char *bytes = arena_alloc(sema->arena, name.length + 1);
+				const struct type *element = type_qualified(sema->arena, &type_char, type_qualifier_const);
+				struct array_type *array = element ? type_new_array(sema->arena, element, name.length + 1) : NULL;
+
+				if (!bytes || !array ||
+					!(original = ast_new_string(sema->arena, expression->location, bytes, name.length))) {
+					diagnostic_error(sema->diagnostics, expression->location,
+						"out of memory creating function name");
+					return false;
+				}
+				memcpy(bytes, name.spelling_location.source->data + name.spelling_location.offset, name.length);
+				bytes[name.length] = 0;
+				original->expression.type = &array->type;
+				original->expression.is_lvalue = true;
+				original->object_id = sema->string_count++;
+				*sema->string_tail = original;
+				sema->string_tail = &original->next_string;
+				sema->function->function_name_string = original;
+			}
+			value = ast_new_string(sema->arena, expression->location, original->bytes, original->length);
+			if (!value) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"out of memory referencing function name");
+				return false;
+			}
+			value->object_id = original->object_id;
+			value->expression.is_lvalue = true;
+			expression = &value->expression;
+			*expression_slot = expression;
+			result_type = original->expression.type;
+			break;
+		}
 		if (!node->declaration)
 			node->declaration = find_file_enumerator(sema, node->name);
 		if (node->declaration && node->declaration->enum_constant &&

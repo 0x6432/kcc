@@ -927,7 +927,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#ifdef NDEBUG\n#define assert(...) ((void)0)\n#else\n"
 			"void __assert_fail(const char *, const char *, unsigned int, const char *);\n"
 			"#define assert(...) ((__VA_ARGS__) ? (void)0 : "
-			"__assert_fail(#__VA_ARGS__, __FILE__, __LINE__, \"(unknown)\"))\n"
+			"__assert_fail(#__VA_ARGS__, __FILE__, __LINE__, __func__))\n"
 			"#endif\n";
 		static const char stdatomic_header[] =
 			"#ifndef __KCC_STDATOMIC_H\n#define __KCC_STDATOMIC_H 1\n"

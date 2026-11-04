@@ -25,10 +25,8 @@ include directories take precedence.
   round-to-nearest environment. It omits long-double and subnormal limit
   macros; runtime floating-environment changes are not modeled.
 - `assert.h` responds to `NDEBUG` at each inclusion, evaluates its condition
-  once when enabled, and calls glibc's `__assert_fail` on failure. Because
-  `__func__` is not yet available, the failure message uses `(unknown)` for the
-  function name. This fallback therefore does not yet provide full standard
-  diagnostic behavior and requires a compatible libc.
+  once when enabled, and calls glibc's `__assert_fail` on failure with source
+  and function information. It requires a compatible libc.
 - `stdatomic.h` exposes `atomic_int`, `atomic_uint`, `ATOMIC_VAR_INIT`,
   `atomic_init`, `atomic_load` and `atomic_store` for the compiler's bounded
   atomic int/unsigned-int subset. Initialization uses a sequentially consistent

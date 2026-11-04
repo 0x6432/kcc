@@ -962,6 +962,7 @@ struct ast_function {
 	const struct type *return_type;
 	struct ast_compound_statement *body;
 	struct ast_local_declaration *locals;
+	struct ast_string_expression *function_name_string;
 	uint64_t vla_storage_budget;
 	size_t label_count;
 	size_t switch_label_count;
