@@ -622,7 +622,46 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 	while (offset < end) {
 		unsigned value = text[offset++];
 
-		if (value == '\\') {
+		if (value == '\\' && offset < end && (text[offset] == 'u' || text[offset] == 'U')) {
+			unsigned digits = text[offset++] == 'u' ? 4 : 8;
+			uint32_t codepoint = 0;
+			unsigned char encoded[4];
+			unsigned units;
+			if (digits > end - offset)
+				return "incomplete universal character name";
+			for (unsigned i = 0; i < digits; i++) {
+				int digit = integer_digit(text[offset++]);
+				if (digit < 0)
+					return "invalid universal character name";
+				codepoint = (codepoint << 4) | (unsigned)digit;
+			}
+			/* Conservative subset: reject basic-set UCNs and surrogates. */
+			if (codepoint < 0xa0 || codepoint > 0x10ffff ||
+				(codepoint >= 0xd800 && codepoint <= 0xdfff))
+				return "unsupported or invalid universal character name";
+			if (codepoint < 0x800) {
+				units = 2;
+				encoded[0] = (unsigned char)(0xc0 | (codepoint >> 6));
+				encoded[1] = (unsigned char)(0x80 | (codepoint & 0x3f));
+			} else if (codepoint < 0x10000) {
+				units = 3;
+				encoded[0] = (unsigned char)(0xe0 | (codepoint >> 12));
+				encoded[1] = (unsigned char)(0x80 | ((codepoint >> 6) & 0x3f));
+				encoded[2] = (unsigned char)(0x80 | (codepoint & 0x3f));
+			} else {
+				units = 4;
+				encoded[0] = (unsigned char)(0xf0 | (codepoint >> 18));
+				encoded[1] = (unsigned char)(0x80 | ((codepoint >> 12) & 0x3f));
+				encoded[2] = (unsigned char)(0x80 | ((codepoint >> 6) & 0x3f));
+				encoded[3] = (unsigned char)(0x80 | (codepoint & 0x3f));
+			}
+			if (output && units > capacity - count)
+				return "string output buffer is too small";
+			if (output)
+				memcpy(output + count, encoded, units);
+			count += units;
+			continue;
+		} else if (value == '\\') {
 			const char *error = parse_byte_escape(text, end, &offset, &value);
 
 			if (error)
