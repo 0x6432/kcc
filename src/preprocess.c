@@ -934,6 +934,30 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"size_t mbrtoc32(char32_t *,const char *,size_t,mbstate_t *);\n"
 			"size_t c32rtomb(char *,char32_t,mbstate_t *);\n"
 			"#endif\n";
+		static const char wchar_header[] =
+			"#ifndef __KCC_WCHAR_H\n#define __KCC_WCHAR_H 1\n"
+			"#include <stddef.h>\n"
+			"#ifndef __mbstate_t_defined\n#define __mbstate_t_defined 1\n"
+			"typedef struct { int __count; union { unsigned int __wch; char __wchb[4]; } __value; } mbstate_t;\n"
+			"#endif\n"
+			"typedef unsigned int wint_t;\n#define WEOF 4294967295U\n"
+			"#ifndef WCHAR_MIN\n#define WCHAR_MIN (-2147483647-1)\n#define WCHAR_MAX 2147483647\n#endif\n"
+			"size_t wcslen(const wchar_t *);\n"
+			"wchar_t *wcscpy(wchar_t *,const wchar_t *); wchar_t *wcsncpy(wchar_t *,const wchar_t *,size_t);\n"
+			"wchar_t *wcscat(wchar_t *,const wchar_t *); wchar_t *wcsncat(wchar_t *,const wchar_t *,size_t);\n"
+			"int wcscmp(const wchar_t *,const wchar_t *); int wcsncmp(const wchar_t *,const wchar_t *,size_t);\n"
+			"wchar_t *wcschr(const wchar_t *,wchar_t); wchar_t *wcsrchr(const wchar_t *,wchar_t);\n"
+			"wchar_t *wcsstr(const wchar_t *,const wchar_t *);\n"
+			"wchar_t *wmemcpy(wchar_t *,const wchar_t *,size_t); wchar_t *wmemmove(wchar_t *,const wchar_t *,size_t);\n"
+			"wchar_t *wmemset(wchar_t *,wchar_t,size_t); int wmemcmp(const wchar_t *,const wchar_t *,size_t);\n"
+			"wchar_t *wmemchr(const wchar_t *,wchar_t,size_t);\n"
+			"wint_t btowc(int); int wctob(wint_t); int mbsinit(const mbstate_t *);\n"
+			"size_t mbrlen(const char *,size_t,mbstate_t *);\n"
+			"size_t mbrtowc(wchar_t *,const char *,size_t,mbstate_t *);\n"
+			"size_t wcrtomb(char *,wchar_t,mbstate_t *);\n"
+			"size_t mbsrtowcs(wchar_t *,const char **,size_t,mbstate_t *);\n"
+			"size_t wcsrtombs(char *,const wchar_t **,size_t,mbstate_t *);\n"
+			"#endif\n";
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
@@ -1312,7 +1336,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "uchar.h") == 0) {
+		if (strcmp(name->path, "wchar.h") == 0) {
+			header = wchar_header;
+			source_name = "<kcc/wchar.h>";
+		} else if (strcmp(name->path, "uchar.h") == 0) {
 			header = uchar_header;
 			source_name = "<kcc/uchar.h>";
 		} else if (strcmp(name->path, "stdbool.h") == 0) {

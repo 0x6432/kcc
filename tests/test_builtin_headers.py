@@ -219,6 +219,25 @@ int main(void) {
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
+#include <wchar.h>
+#include <uchar.h>
+static_assert(sizeof(wchar_t)==4 && sizeof(wint_t)==4 && sizeof(mbstate_t)==8);
+int main(void) {
+  wchar_t a[3]={65,66,0}, b[3]={0}; char out[8]; mbstate_t state={0};
+  wchar_t ch=0;
+  if (wcslen(a)!=2 || wcscpy(b,a)!=b || wcscmp(a,b)!=0 || wcschr(b,66)!=b+1) return 1;
+  if (mbrtowc(&ch,"A",1,&state)!=1 || ch!=65 || wcrtomb(out,ch,&state)!=1 || out[0]!=65) return 2;
+  return 42;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
+    source.write_text(r'''
 #include <stdatomic.h>
 atomic_int x=ATOMIC_VAR_INIT(0);
 atomic_flag flag=ATOMIC_FLAG_INIT;
