@@ -9,6 +9,13 @@ struct include_source {
 	struct include_source *next;
 };
 
+/* File names are the successful loader's source.name, not realpath or inode.
+ * The retained source outlives this arena-owned record. */
+struct pragma_once_file {
+	const char *name;
+	struct pragma_once_file *next;
+};
+
 struct include_name {
 	char path[preprocess_include_path_limit];
 	struct pp_token invocation;
@@ -726,8 +733,16 @@ static bool read_diagnostic_directive(struct preprocessor *preprocessor,
 	return false;
 }
 
-/* Unknown pragmas have no effect. Recognized pragmas which require semantic,
- * layout or file-identity support are rejected instead of silently ignored.
+static bool once_file_seen(const struct preprocessor *preprocessor, const char *name)
+{
+	for (const struct pragma_once_file *file = preprocessor->once_files; file; file = file->next)
+		if (!strcmp(file->name, name))
+			return true;
+	return false;
+}
+
+/* Unknown pragmas have no effect. Recognized pragmas which require semantic
+ * or layout support are rejected instead of silently ignored.
  * The body is consumed as raw preprocessing tokens, without macro expansion.
  */
 static bool read_pragma_directive(struct preprocessor *preprocessor,
@@ -743,9 +758,33 @@ static bool read_pragma_directive(struct preprocessor *preprocessor,
 				"only space and tab are allowed in a preprocessing directive");
 			return false;
 		}
+		if (first && token.kind == pp_identifier && pp_spelling_is(token, "once")) {
+			struct pp_token end = pp_lexer_next(&preprocessor->input);
+			struct pragma_once_file *file;
+
+			if (end.kind == pp_invalid || end.has_non_directive_space || !is_directive_end(end)) {
+				*error = reject_directive(preprocessor, marker, end,
+					end.kind == pp_invalid ? NULL : "expected end of line after pragma once");
+				return false;
+			}
+			if (once_file_seen(preprocessor, marker.location.source->name))
+				return true;
+			if (preprocessor->once_file_count == preprocess_include_count_limit + 1) {
+				*error = stop_preprocessing(preprocessor, marker, "pragma once file limit exceeded");
+				return false;
+			}
+			file = allocate_auxiliary(preprocessor, 1, sizeof(*file), marker, error);
+			if (!file)
+				return false;
+			*file = (struct pragma_once_file) {
+				.name = marker.location.source->name, .next = preprocessor->once_files,
+			};
+			preprocessor->once_files = file;
+			preprocessor->once_file_count++;
+			return true;
+		}
 		if (first && token.kind == pp_identifier &&
-			(pp_spelling_is(token, "STDC") || pp_spelling_is(token, "once") ||
-			 pp_spelling_is(token, "pack"))) {
+			(pp_spelling_is(token, "STDC") || pp_spelling_is(token, "pack"))) {
 			*error = reject_directive(preprocessor, marker, token,
 				"this pragma is not supported yet");
 			return false;
@@ -858,6 +897,11 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 	preprocessor->include_count++;
 	if (!load_include_source(preprocessor, marker, &name, &child->source, error))
 		return false;
+	if (once_file_seen(preprocessor, child->source.name)) {
+		source_destroy(&child->source);
+		preprocessor->cursor.deferred_space = true;
+		return true;
+	}
 	if (child->source.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
 		source_destroy(&child->source);
 		*error = stop_preprocessing(preprocessor, name.invocation, "include input byte limit exceeded");

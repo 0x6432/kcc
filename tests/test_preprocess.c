@@ -148,7 +148,8 @@ static void test_pragma_directives(void)
 
 	check_stream("#pragma\n#pragma vendor opaque tokens ( 7 )\nint", result, 2, 0, NULL);
 	check_stream("#if 0\n#pragma once\n#endif\nint", result, 2, 0, NULL);
-	check_stream("#pragma once\nint", rejected, 3, 1, "this pragma is not supported yet");
+	check_stream("#pragma once\nint", result, 2, 0, NULL);
+	check_stream("#pragma once extra\nint", rejected, 3, 1, "expected end of line");
 	check_stream("#pragma pack(1)\nint", rejected, 3, 1, "this pragma is not supported yet");
 	check_stream("#pragma STDC FENV_ACCESS ON\nint", rejected, 3, 1, "this pragma is not supported yet");
 	check_stream("#pragma stuff\v x\nint", rejected, 3, 1, "only space and tab");
@@ -1529,6 +1530,10 @@ static void test_quoted_includes(void)
 	size_t used;
 
 	check_include_stream("#include \"h\"\nVALUE", &context, 1, 0, true);
+	context = (struct test_include_context) { .text = "#pragma once\n42\n" };
+	check_include_stream("#include \"h\"\n#include \"h\"\n", &context, 2, 0, true);
+	context = (struct test_include_context) { .text = "#pragma once\n#include \"h\"\n42\n" };
+	check_include_stream("#include \"h\"\n", &context, 2, 0, true);
 	context = (struct test_include_context) { .text = "42" };
 	check_include_stream("%:include \"h\"", &context, 1, 0, true);
 	context = (struct test_include_context) { .text = "" };

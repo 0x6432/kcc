@@ -31,6 +31,7 @@ struct macro_token;
 struct macro_argument;
 struct argument_token;
 struct include_source;
+struct pragma_once_file;
 
 /* A bit per stable macro identity; sets travel with tokens, not the C AST. */
 struct macro_hide_set {
@@ -87,6 +88,8 @@ struct preprocessor {
 	struct pp_lexer input;
 	struct include_frame include_frames[preprocess_include_depth_limit];
 	struct include_source *include_sources;
+	struct pragma_once_file *once_files;
+	size_t once_file_count;
 	bool (*include_loader)(void *context, struct source *source, const char *path);
 	void *include_context;
 	const char *const *include_directories;
