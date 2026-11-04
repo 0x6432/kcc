@@ -161,8 +161,10 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 
 static const struct integer_properties *integer_properties_for(const struct type *type)
 {
-	if (type->kind == type_kind_enum)
-		return integer_properties_for(&type_int);
+	if (type->kind == type_kind_enum) {
+		const struct type *underlying = ((const struct enum_type *)type)->definition->underlying;
+		return integer_properties_for(underlying ? underlying : &type_int);
+	}
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
 			return &integer_properties[i];
@@ -183,7 +185,11 @@ unsigned type_integer_width(const struct type *type)
 /* All implemented types below int fit in int, including unsigned char/short. */
 const struct type *type_integer_promotion(const struct type *type)
 {
-	if (type->kind == type_kind_enum || type_integer_width(type) < 32)
+	if (type->kind == type_kind_enum) {
+		const struct type *underlying = ((const struct enum_type *)type)->definition->underlying;
+		return type_integer_promotion(underlying ? underlying : &type_int);
+	}
+	if (type_integer_width(type) < 32)
 		return &type_int;
 	return type;
 }
@@ -361,10 +367,14 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	if (!ignore_root_qualifiers && left->qualifiers != right->qualifiers)
 		return false;
 	if (left->kind != right->kind) {
-		/* This subset chooses signed int as the compatible integer type. */
-		return !require_same_type &&
-			((left->kind == type_kind_enum && right->kind == type_kind_int) ||
-			 (right->kind == type_kind_enum && left->kind == type_kind_int));
+		const struct type *enumeration = left->kind == type_kind_enum ? left :
+			right->kind == type_kind_enum ? right : NULL;
+		const struct type *other = enumeration == left ? right : left;
+		const struct type *underlying = enumeration ?
+			((const struct enum_type *)enumeration)->definition->underlying : NULL;
+		if (!underlying)
+			underlying = &type_int;
+		return enumeration && !require_same_type && underlying->kind == other->kind;
 	}
 	if (left->kind == type_kind_enum)
 		return ((const struct enum_type *)left)->definition ==
@@ -424,10 +434,10 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 	const struct type *right)
 {
 	assert(type_compatible(left, right));
-	/* Preserve enum identity when combining its compatible int type. Otherwise
+	/* Preserve enum identity when combining its compatible integer type. Otherwise
 	 * an intervening int declaration could erase a prior enum and permit a
 	 * later incompatible enum declaration. */
-	if (left->kind == type_kind_int && right->kind == type_kind_enum)
+	if (left->kind != type_kind_enum && right->kind == type_kind_enum)
 		return right;
 	if (left == right || type_is_record(left) || type_is_integer(left) || type_is_floating(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return left;

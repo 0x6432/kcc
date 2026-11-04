@@ -6518,9 +6518,24 @@ static void test_ordinary_enums(void)
 		"int f(void) { enum E { D=9 } x=D; { enum E y=x; return y; } }",
 		"enum E { A=0 }; enum E f(enum E x) { return x; } "
 		"int main(void) { enum E e=A; e++; return f(e); }",
+		"enum F : unsigned short; enum F x; "
+		"_Static_assert(sizeof(enum F)==2, \"complete forward\"); "
+		"enum F : unsigned short { A=65534, B, C=(unsigned short)(B+1) }; "
+		"_Static_assert(sizeof(A)==2 && B==65535 && C==0, \"fixed constants\"); "
+		"int f(void) { enum F y=A; return y; }",
+		"enum C : signed char { MIN=-128, NEXT, LAST=127 }; "
+		"_Static_assert(sizeof(MIN)==1 && MIN==-128 && NEXT==-127, \"signed small\"); "
+		"int f(void) { return NEXT; }",
+		"enum W : unsigned long long { MAX=18446744073709551615ULL, WRAP=MAX+1, TWO=2 }; "
+		"_Static_assert(sizeof(MAX)==8 && WRAP==0 && TWO==2, \"wide\"); "
+		"enum W f(enum W x) { return x; }",
+		"enum F : int; enum F : int; enum F : int { A=sizeof(enum F), B=A+1 }; "
+		"enum F *p; int *q; int f(void) { p=q; return B; }",
+		"enum E : int { A=1 }; int f(void) { enum E : long; "
+		"enum E : long { B=42 }; _Static_assert(sizeof(enum E)==8, \"shadow\"); return B; }",
 	};
 	static const char *const rejected[] = {
-		"enum { };", "enum E;", "enum E *p;", "enum E : int { A };",
+		"enum { };", "enum E;", "enum E *p;",
 		"enum E { A=2147483648LL };", "enum E { A=2147483647, B };",
 		"enum E { A=-2147483647-2 };", "enum E { A=1/0 };",
 		"int x; enum E { A=x };", "enum E { A=B, B=1 };",
@@ -6533,6 +6548,16 @@ static void test_ordinary_enums(void)
 		"enum A { X }; enum B { Y }; extern int value; extern enum A value; extern enum B value;",
 		"enum E { A }; int f(void) { return &A != 0; }",
 		"int f(enum E { A } x);",
+		"enum E : int x;", "enum E : int; enum E : long;",
+		"enum E : int; enum E : long { A };", "enum E : int; enum E { A };",
+		"enum E : int { A }; enum E : int { B };",
+		"enum E : _Bool { A };", "enum E : const int { A };",
+		"typedef int T; enum E : T { A };",
+		"enum E : unsigned char { A=256 };", "enum E : unsigned char { A=-1 };",
+		"enum E : signed char { A=-129 };", "enum E : signed char { A=127, B };",
+		"enum E : unsigned int { A=4294967295U, B };",
+		"enum E : unsigned long long { A=18446744073709551615ULL, B };",
+		"enum E : int { A=sizeof(enum E : int { B }) };",
 	};
 	for (size_t group = 0; group < 2; group++) {
 		const char *const *cases = group ? rejected : accepted;
@@ -6561,8 +6586,54 @@ static void test_ordinary_enums(void)
 	}
 }
 
+/* A fixed enumerator is an enum-typed constant, not a rewritten builtin
+ * integer literal: this protects typeof/sizeof and nominal identity. */
+static void test_fixed_enum_constant_tree(void)
+{
+	const char *text = "enum E : unsigned long long; "
+		"enum E : unsigned long long { A=18446744073709551615ULL }; "
+		"int main(void) { enum E value=A; return 0; }";
+	struct source source;
+	struct arena arena = { 0 };
+	FILE *stream = tmpfile();
+	struct diagnostics diagnostics = { .stream = stream };
+	struct preprocessor preprocessor;
+	struct ast_translation_unit *unit;
+	struct ast_external_declaration *external;
+	struct ast_function *function;
+	struct ast_local_declaration *local;
+	struct ast_enum_constant_expression *constant;
+	struct constant_result result;
+	assert(stream);
+	assert(source_from_bytes(&source, "fixed-enum.c", (const unsigned char *)text, strlen(text)));
+	assert(source_prepare(&source));
+	preprocess_init(&preprocessor, &source, &diagnostics);
+	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
+	assert(unit && !diagnostics.errors && sema_translation_unit(unit, &arena, &diagnostics));
+	external = unit->declarations;
+	assert(external->kind == external_declaration_tag);
+	external = external->next;
+	assert(external->kind == external_declaration_tag);
+	external = external->next;
+	assert(external->kind == external_function_definition);
+	function = (struct ast_function *)external;
+	local = (struct ast_local_declaration *)function->body->items;
+	assert(local->type->kind == type_kind_enum);
+	assert(local->initializer && local->initializer->kind == expression_enum_constant);
+	constant = (struct ast_enum_constant_expression *)local->initializer;
+	assert(type_same(constant->expression.type, local->type));
+	assert(constant->bits == UINT64_MAX);
+	result = evaluate_integer_constant(&constant->expression);
+	assert(result.status == constant_value && result.type == local->type && result.bits == UINT64_MAX);
+	arena_destroy(&arena);
+	preprocess_destroy(&preprocessor);
+	source_destroy(&source);
+	assert(fclose(stream) == 0);
+}
+
 int main(void)
 {
+	test_fixed_enum_constant_tree();
 	test_ordinary_enums();
 	test_static_scalar_object_tree();
 	test_tentative_array_tree();

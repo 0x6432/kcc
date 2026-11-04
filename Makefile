@@ -171,6 +171,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	python3 tests/test_address_offsets.py
 	python3 tests/test_storage_promotions.py
 	python3 tests/test_enum_runtime.py
+	python3 tests/test_fixed_enum_runtime.py
 	python3 tests/test_record_promotions.py
 	python3 tests/test_record_layout.py
 	python3 tests/test_record_runtime.py --frozen-hash "$$(git rev-parse HEAD)"
@@ -341,6 +342,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_
 	python3 tests/test_address_offsets.py
 	python3 tests/test_storage_promotions.py
 	python3 tests/test_enum_runtime.py
+	python3 tests/test_fixed_enum_runtime.py
 	python3 tests/test_record_promotions.py
 	python3 tests/test_record_layout.py
 	python3 tests/test_record_runtime.py --frozen-hash "$$(git rev-parse HEAD)"

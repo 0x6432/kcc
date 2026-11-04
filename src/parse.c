@@ -858,7 +858,26 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	*node = (struct ast_enum_type_syntax) { .syntax = { .kind = type_syntax_enum, .location = keyword.location } };
 	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
 		node->tag = preprocess_next(parser->preprocessor);
+	if (preprocess_peek(parser->preprocessor).kind == token_colon) {
+		struct token beginning;
+		preprocess_next(parser->preprocessor);
+		/* Deliberately bound this first slice to builtin integer spellings.
+		 * Aliases, typeof and qualified underlying types remain future work. */
+		if (!begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+			diagnostic_error(parser->diagnostics, keyword.location,
+				"fixed enum underlying type must use a builtin integer spelling");
+			return NULL;
+		}
+		node->underlying = parse_declaration_specifiers(parser, &beginning, NULL, declarator_cast);
+		if (!node->underlying)
+			return NULL;
+	}
 	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
+		if (node->underlying && preprocess_peek(parser->preprocessor).kind != token_semicolon) {
+			diagnostic_error(parser->diagnostics, keyword.location,
+				"fixed enum without a definition must be a tag-only declaration");
+			return NULL;
+		}
 		if (!node->tag.length) {
 			diagnostic_error(parser->diagnostics, keyword.location, "expected enum tag or definition");
 			return NULL;
@@ -2839,8 +2858,8 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
 		struct ast_enum_type_syntax *enumeration = enum_specifier_base(base);
 		struct ast_tag_declaration *declaration;
-		if (!enumeration->has_definition) {
-			diagnostic_error(parser->diagnostics, beginning.location, "enum forward declarations are not supported");
+		if (!enumeration->has_definition && !enumeration->underlying) {
+			diagnostic_error(parser->diagnostics, beginning.location, "non-fixed enum forward declarations are not supported");
 			return NULL;
 		}
 		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind) {
@@ -3613,8 +3632,8 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
 		struct ast_enum_type_syntax *enumeration = enum_specifier_base(base);
 		struct ast_tag_declaration *declaration;
-		if (!enumeration->has_definition) {
-			diagnostic_error(parser->diagnostics, beginning.location, "enum forward declarations are not supported");
+		if (!enumeration->has_definition && !enumeration->underlying) {
+			diagnostic_error(parser->diagnostics, beginning.location, "non-fixed enum forward declarations are not supported");
 			return NULL;
 		}
 		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind) {

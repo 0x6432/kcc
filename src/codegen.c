@@ -728,6 +728,15 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		return codegen_address(codegen, node->operand);
 	}
+	case expression_enum_constant: {
+		const struct ast_enum_constant_expression *node =
+			(const struct ast_enum_constant_expression *)expression;
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c copy %ju\n", temporary, qbe_type(expression->type),
+			(uintmax_t)node->bits);
+		return type_value_width(expression->type) < 32 ?
+			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
+	}
 	case expression_character: {
 		const struct ast_character_expression *node =
 			(const struct ast_character_expression *)expression;

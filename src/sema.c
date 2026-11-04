@@ -577,54 +577,121 @@ allocation_failure:
 	return NULL;
 }
 
-/* This ordinary-enum subset uses int as its compatible target type. Values
- * must fit int; wider C23 enumeration rules are intentionally deferred. */
-static const struct type *resolve_enum_syntax(struct sema *sema, struct ast_enum_type_syntax *syntax)
+/* Convert an ICE to a representable fixed underlying value without host
+ * signed overflow or implementation-defined out-of-range signed casts. */
+static bool enum_value_bits(struct constant_result value, const struct type *target,
+	uint64_t *out)
+{
+	unsigned source_width = type_integer_width(value.type);
+	unsigned width = type_integer_width(target);
+	uint64_t source_mask = source_width == 64 ? UINT64_MAX : (UINT64_C(1) << source_width) - 1;
+	uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+	bool negative = !type_is_unsigned(value.type) &&
+		(value.bits & (UINT64_C(1) << (source_width - 1)));
+	uint64_t magnitude = negative ? (source_mask - value.bits) + 1 : value.bits;
+	uint64_t maximum = type_is_unsigned(target) ? mask : mask >> 1;
+
+	if (negative) {
+		if (type_is_unsigned(target) || magnitude > (UINT64_C(1) << (width - 1)))
+			return false;
+		*out = (UINT64_C(0) - magnitude) & mask;
+	} else {
+		if (magnitude > maximum)
+			return false;
+		*out = magnitude;
+	}
+	return true;
+}
+
+/* Fixed enum tags are complete as soon as their underlying type is parsed;
+ * a later matching definition shares that identity rather than replacing it. */
+static const struct type *resolve_enum_syntax(struct sema *sema,
+	struct ast_enum_type_syntax *syntax, bool standalone)
 {
 	struct tag_binding *tag = syntax->tag.length ?
-		find_tag(sema, syntax->tag, syntax->has_definition) : NULL;
+		find_tag(sema, syntax->tag, syntax->has_definition || standalone) : NULL;
+	const struct type *underlying = &type_int;
+	struct enum_definition *definition;
 	struct enum_type *type;
-	int64_t previous = -1;
+	uint64_t previous = 0;
+	bool have_previous = false;
+
 	if (syntax->syntax.type)
 		return syntax->syntax.type;
+	if (syntax->underlying) {
+		underlying = resolve_type_syntax(sema, syntax->underlying);
+		if (!underlying)
+			return NULL;
+		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum ||
+			underlying->kind == type_kind_bool || underlying->qualifiers) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location,
+				"fixed enum underlying type must be an unqualified non-bool builtin integer");
+			return NULL;
+		}
+	}
 	if (tag) {
 		if (!tag->enum_type) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location, "tag declared with a different kind");
 			return NULL;
 		}
-		if (syntax->has_definition) {
+		type = tag->enum_type;
+		definition = type->definition;
+		if (syntax->underlying && (!definition->fixed || !type_same(definition->underlying, underlying))) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "conflicting enum underlying type");
+			return NULL;
+		}
+		if (syntax->has_definition && (definition->defined || definition->defining)) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of enum tag");
 			return NULL;
 		}
-		return syntax->syntax.type = &tag->enum_type->type;
-	}
-	if (!syntax->has_definition) {
-		diagnostic_error(sema->diagnostics, syntax->syntax.location, "unknown enum tag (forward enums are not supported)");
-		return NULL;
-	}
-	if (sema->record_count == sema_max_records) {
-		diagnostic_error(sema->diagnostics, syntax->syntax.location, "translation unit exceeds tagged type limit (512)");
-		return NULL;
-	}
-	type = arena_alloc(sema->arena, sizeof(*type));
-	struct enum_definition *definition = arena_alloc(sema->arena, sizeof(*definition));
-	if (!type || !definition) goto oom;
-	*definition = (struct enum_definition) { 0 };
-	*type = (struct enum_type) { .type = { .kind = type_kind_enum }, .definition = definition };
-	sema->record_count++;
-	if (syntax->tag.length) {
-		struct tag_binding **head = sema->scope ? &sema->scope->tags : &sema->file_tags;
-		tag = arena_alloc(sema->arena, sizeof(*tag));
-		if (!tag) goto oom;
-		*tag = (struct tag_binding) { .name = syntax->tag, .enum_type = type, .next = *head };
-		*head = tag;
+		if (syntax->has_definition && definition->fixed && !syntax->underlying) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location,
+				"fixed enum definition must repeat its underlying type in this subset");
+			return NULL;
+		}
+		if (!syntax->has_definition)
+			return syntax->syntax.type = &type->type;
+		underlying = definition->underlying ? definition->underlying : &type_int;
+	} else {
+		if (!syntax->has_definition && !syntax->underlying) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location,
+				"unknown enum tag (non-fixed forward enums are not supported)");
+			return NULL;
+		}
+		if (sema->record_count == sema_max_records) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "translation unit exceeds tagged type limit (512)");
+			return NULL;
+		}
+		type = arena_alloc(sema->arena, sizeof(*type));
+		definition = arena_alloc(sema->arena, sizeof(*definition));
+		if (!type || !definition) goto oom;
+		*definition = (struct enum_definition) {
+			.complete = syntax->underlying != NULL,
+			.fixed = syntax->underlying != NULL,
+			.underlying = underlying,
+		};
+		*type = (struct enum_type) { .type = { .kind = type_kind_enum }, .definition = definition };
+		sema->record_count++;
+		if (syntax->tag.length) {
+			struct tag_binding **head = sema->scope ? &sema->scope->tags : &sema->file_tags;
+			tag = arena_alloc(sema->arena, sizeof(*tag));
+			if (!tag) goto oom;
+			*tag = (struct tag_binding) { .name = syntax->tag, .enum_type = type, .next = *head };
+			*head = tag;
+		}
 	}
 	syntax->syntax.type = &type->type;
+	if (!syntax->has_definition)
+		return &type->type;
+	definition->defining = true;
 	for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next) {
 		struct ast_local_declaration *constant;
 		struct binding *binding;
 		struct typedef_binding *alias = find_typedef_binding(sema, item->name);
-		int64_t value;
+		uint64_t bits;
+		unsigned width = type_integer_width(underlying);
+		uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+		uint64_t maximum = type_is_unsigned(underlying) ? mask : mask >> 1;
 		if ((alias && alias->scope == sema->scope) ||
 			(sema->scope ? find_in_scope(sema->scope, item->name) != NULL :
 			 (find_file_enumerator(sema, item->name) || (find_external_object(sema, item->name) && find_external_object(sema, item->name)->file_type) || (find_function(sema, item->name) && find_function(sema, item->name)->file_type)))) {
@@ -633,35 +700,30 @@ static const struct type *resolve_enum_syntax(struct sema *sema, struct ast_enum
 		}
 		if (item->value) {
 			struct constant_result result;
-			unsigned width;
-			uint64_t mask;
 			if (!sema_expression(sema, &item->value, true)) return NULL;
 			result = evaluate_integer_constant(item->value);
 			if (result.status != constant_value) {
 				diagnostic_error(sema->diagnostics, result.location, result.message);
 				return NULL;
 			}
-			width = type_integer_width(result.type);
-			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
-			if (type_is_unsigned(result.type)) {
-				if (result.bits > INT32_MAX) goto range;
-				value = (int64_t)result.bits;
-			} else if (result.bits & (UINT64_C(1) << (width - 1)))
-				value = -1 - (int64_t)(mask - result.bits);
-			else
-				value = (int64_t)result.bits;
-			if (value < INT32_MIN || value > INT32_MAX) goto range;
+			if (!enum_value_bits(result, underlying, &bits)) goto range;
+		} else if (!have_previous) {
+			bits = 0;
 		} else {
-			if (previous == INT32_MAX) goto range;
-			value = previous + 1;
+			if (previous == maximum) goto range;
+			bits = (previous + 1) & mask;
 		}
-		previous = value;
+		previous = bits;
+		have_previous = true;
 		constant = ast_new_local(sema->arena, item->name.location, item->name, NULL);
 		binding = arena_alloc(sema->arena, sizeof(*binding));
 		if (!constant || !binding) goto oom;
 		constant->enum_constant = true;
-		constant->enum_value = value;
-		constant->type = &type_int;
+		constant->enum_bits = bits;
+		constant->type = definition->fixed ? &type->type : &type_int;
+		if (!definition->fixed)
+			constant->enum_value = bits & (UINT64_C(1) << 31) ?
+				-1 - (int64_t)(UINT32_MAX - bits) : (int64_t)bits;
 		if (sema->scope) {
 			*binding = (struct binding) { constant, sema->scope->bindings };
 			sema->scope->bindings = binding;
@@ -671,10 +733,13 @@ static const struct type *resolve_enum_syntax(struct sema *sema, struct ast_enum
 		}
 		continue;
 range:
-		diagnostic_error(sema->diagnostics, item->name.location, "enumerator value is outside the supported int range");
+		diagnostic_error(sema->diagnostics, item->name.location,
+			"enumerator value is outside the supported underlying type range");
 		return NULL;
 	}
 	definition->complete = true;
+	definition->defined = true;
+	definition->defining = false;
 	return &type->type;
 oom:
 	diagnostic_error(sema->diagnostics, syntax->syntax.location, "out of memory creating enum type");
@@ -689,7 +754,7 @@ static bool sema_tag_declaration(struct sema *sema, struct ast_tag_declaration *
 	struct ast_record_type_syntax *record;
 
 	if (declaration->type_syntax->kind == type_syntax_enum)
-		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)declaration->type_syntax) != NULL;
+		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)declaration->type_syntax, true) != NULL;
 	if (declaration->type_syntax->kind != type_syntax_record) {
 		diagnostic_error(sema->diagnostics, declaration->location,
 			"tag-only declaration requires a struct or union specifier");
@@ -737,7 +802,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		return syntax->type;
 	switch (syntax->kind) {
 	case type_syntax_enum:
-		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)syntax);
+		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)syntax, false);
 	case type_syntax_record:
 		return resolve_record_syntax(sema, (struct ast_record_type_syntax *)syntax, false);
 	case type_syntax_inferred:
@@ -1640,6 +1705,21 @@ static bool sema_expression(struct sema *sema,
 		node->declaration = find_local(sema, node->name);
 		if (!node->declaration)
 			node->declaration = find_file_enumerator(sema, node->name);
+		if (node->declaration && node->declaration->enum_constant &&
+			node->declaration->type->kind == type_kind_enum) {
+			struct ast_enum_constant_expression *constant = arena_alloc(sema->arena, sizeof(*constant));
+			if (!constant) {
+				diagnostic_error(sema->diagnostics, expression->location, "out of memory creating enum constant");
+				return false;
+			}
+			*constant = (struct ast_enum_constant_expression) {
+				.expression = { .kind = expression_enum_constant, .location = expression->location, .depth = 1 },
+				.bits = node->declaration->enum_bits,
+			};
+			*expression_slot = expression = &constant->expression;
+			result_type = node->declaration->type;
+			break;
+		}
 		if (node->declaration && node->declaration->enum_constant) {
 			struct ast_character_expression *constant = arena_alloc(sema->arena, sizeof(*constant));
 			if (!constant) {
@@ -2049,6 +2129,7 @@ static bool sema_expression(struct sema *sema,
 		expression->depth = depth + 1;
 		break;
 	}
+	case expression_enum_constant:
 	case expression_function_designator:
 	case expression_external_object:
 	case expression_function_decay:

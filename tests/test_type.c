@@ -255,6 +255,19 @@ static void test_enum_types(struct arena *arena)
 	assert(!type_compatible(qualified, &a.type));
 	first.complete = false;
 	assert(!type_is_complete_object(&a.type) && !type_is_complete_object(qualified));
+	{
+		struct enum_definition fixed = { .complete = true, .fixed = true, .underlying = &type_ushort };
+		struct enum_definition wide = { .complete = true, .fixed = true, .underlying = &type_ulong_long };
+		struct enum_type small = { .type = { .kind = type_kind_enum }, .definition = &fixed };
+		struct enum_type large = { .type = { .kind = type_kind_enum }, .definition = &wide };
+		assert(type_is_unsigned(&small.type) && type_integer_width(&small.type) == 16);
+		assert(type_object_size(&small.type) == 2 && type_integer_promotion(&small.type) == &type_int);
+		assert(type_compatible(&small.type, &type_ushort) && !type_compatible(&small.type, &type_int));
+		assert(type_composite(arena, &type_ushort, &small.type) == &small.type);
+		assert(type_is_unsigned(&large.type) && type_integer_width(&large.type) == 64);
+		assert(type_integer_promotion(&large.type) == &type_ulong_long);
+		assert(type_compatible(&large.type, &type_ulong_long) && !type_compatible(&large.type, &small.type));
+	}
 }
 
 int main(void)

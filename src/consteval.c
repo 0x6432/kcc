@@ -207,6 +207,8 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 	switch (expression->kind) {
 	case expression_integer:
 		return constant_success(expression, ((const struct ast_integer_expression *)expression)->value);
+	case expression_enum_constant:
+		return constant_success(expression, ((const struct ast_enum_constant_expression *)expression)->bits);
 	case expression_boolean:
 		return constant_success(expression, ((const struct ast_boolean_expression *)expression)->value);
 	case expression_character:

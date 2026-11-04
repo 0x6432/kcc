@@ -34,6 +34,10 @@ enum type_kind {
 
 struct enum_definition {
 	bool complete;
+	bool defined;
+	bool defining;
+	bool fixed;
+	const struct type *underlying; /* NULL denotes ordinary enum int. */
 };
 
 enum type_qualifier {

@@ -12,6 +12,7 @@ struct external_object_symbol;
 enum expression_kind {
 	expression_integer,
 	expression_floating,
+	expression_enum_constant,
 	expression_boolean,
 	expression_nullptr,
 	expression_character,
@@ -234,6 +235,11 @@ struct ast_nullptr_expression {
 struct ast_boolean_expression {
 	struct ast_expression expression;
 	bool value;
+};
+
+struct ast_enum_constant_expression {
+	struct ast_expression expression;
+	uint64_t bits;
 };
 
 struct ast_integer_expression {
@@ -494,6 +500,7 @@ struct ast_enumerator {
 struct ast_enum_type_syntax {
 	struct ast_type_syntax syntax;
 	struct token tag;
+	struct ast_type_syntax *underlying;
 	bool has_definition;
 	struct ast_enumerator *enumerators;
 };
@@ -805,6 +812,7 @@ struct ast_local_declaration {
 	unsigned alignment; /* Effective storage alignment; zero means natural. */
 	bool enum_constant;
 	int64_t enum_value;
+	uint64_t enum_bits;
 	bool is_register;
 	bool is_auto; /* Written auto; explicit auto still requires an object. */
 	bool is_extern;
