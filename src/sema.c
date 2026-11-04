@@ -650,7 +650,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum ||
 			underlying->kind == type_kind_bool || underlying->qualifiers) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
-				"fixed enum underlying type must be an unqualified non-bool builtin integer");
+				"fixed enum underlying type must be an unqualified non-bool integer");
 			return NULL;
 		}
 	}

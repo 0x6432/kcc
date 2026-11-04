@@ -3,8 +3,9 @@
 This incremental change adds a bounded C23 fixed-underlying-enum slice to the
 ordinary enum implementation. It is not a tested checkpoint.
 
-- Builtin unqualified non-bool integer spellings from char through unsigned
-  long long are accepted after `:`. Target signedness, rank, size, alignment,
+- Unqualified non-bool integer types from char through unsigned long long are
+  accepted after `:`, including typedef names and `typeof`/`typeof_unqual`
+  yielding those types. Target signedness, rank, size, alignment,
   ABI width and promotions follow the chosen underlying integer type.
 - `enum E : unsigned short;` declares a complete fixed enum immediately. A
   matching later definition repeats the underlying type and shares the nominal
@@ -18,14 +19,14 @@ ordinary enum implementation. It is not a tested checkpoint.
   underlying integer type and composite-type identity are retained. Small
   enum constants are canonicalized to the target's signed/unsigned word form.
 
-Boundaries: `_Bool`, qualifiers, typedef names and `typeof` as fixed underlying
-spellings are explicitly rejected in this slice; repeated fixed declarations
-using a compatible alias are therefore not supported. Fixed definitions in
+Boundaries: `_Bool`, qualified types and enum types as fixed underlying
+types are explicitly rejected in this slice. Fixed definitions in
 parameter lists remain unsupported. A fixed forward tag's definition must
 repeat its underlying spelling; bare non-fixed tag-only declarations remain
 unsupported. Non-fixed enum constants remain restricted to signed int range,
 with no general C23 changing-enumerator-type or underlying selection rules.
 This change is not a full C23 enum or cross-toolchain ABI conformance claim.
+The typedef and `typeof` extension has been built but not tested.
 
 Lexer/type/sema and end-to-end fixtures have been added or updated but have not
 been run. A compiler build was used during implementation. Exact-source full

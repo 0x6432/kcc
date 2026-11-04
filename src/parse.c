@@ -923,12 +923,13 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 		node->tag = preprocess_next(parser->preprocessor);
 	if (preprocess_peek(parser->preprocessor).kind == token_colon) {
 		struct token beginning;
+		struct token next;
 		preprocess_next(parser->preprocessor);
-		/* Deliberately bound this first slice to builtin integer spellings.
-		 * Aliases, typeof and qualified underlying types remain future work. */
-		if (!begins_integer_type(preprocess_peek(parser->preprocessor).kind)) {
+		next = preprocess_peek(parser->preprocessor);
+		if (!begins_integer_type(next.kind) && !is_typedef_name(parser, next) &&
+			next.kind != token_typeof && next.kind != token_typeof_unqual) {
 			diagnostic_error(parser->diagnostics, keyword.location,
-				"fixed enum underlying type must use a builtin integer spelling");
+				"fixed enum underlying type must name an integer type");
 			return NULL;
 		}
 		node->underlying = parse_declaration_specifiers(parser, &beginning, NULL, declarator_cast);

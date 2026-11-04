@@ -6533,6 +6533,8 @@ static void test_ordinary_enums(void)
 		"enum F *p; int *q; int f(void) { p=q; return B; }",
 		"enum E : int { A=1 }; int f(void) { enum E : long; "
 		"enum E : long { B=42 }; _Static_assert(sizeof(enum E)==8, \"shadow\"); return B; }",
+		"typedef unsigned short T; enum F : T; enum F : typeof((unsigned short)0) { A=42 }; "
+		"_Static_assert(sizeof(enum F)==2 && A==42, \"aliased underlying type\");",
 	};
 	static const char *const rejected[] = {
 		"enum { };", "enum E;", "enum E *p;",
@@ -6552,7 +6554,8 @@ static void test_ordinary_enums(void)
 		"enum E : int; enum E : long { A };", "enum E : int; enum E { A };",
 		"enum E : int { A }; enum E : int { B };",
 		"enum E : _Bool { A };", "enum E : const int { A };",
-		"typedef int T; enum E : T { A };",
+		"typedef const int T; enum E : T { A };",
+		"typedef double T; enum E : T { A };",
 		"enum E : unsigned char { A=256 };", "enum E : unsigned char { A=-1 };",
 		"enum E : signed char { A=-129 };", "enum E : signed char { A=127, B };",
 		"enum E : unsigned int { A=4294967295U, B };",
