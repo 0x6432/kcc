@@ -32,6 +32,9 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
 #if __has_embed("asset.bin" __limit__(0)) != __STDC_EMBED_EMPTY__ || __has_embed("oversized.bin" limit(2+1)) != __STDC_EMBED_FOUND__
 #error limited resource query failed
 #endif
+#if __has_embed("asset.bin" prefix(7,) suffix(,8)) != __STDC_EMBED_FOUND__ || __has_embed("empty.bin" if_empty(9)) != __STDC_EMBED_EMPTY__
+#error standard embed parameters not recognized
+#endif
 static_assert(__STDC_EMBED_NOT_FOUND__==0 && __STDC_EMBED_FOUND__==1 && __STDC_EMBED_EMPTY__==2);
 unsigned char a[] = {
 #embed RESOURCE
@@ -46,7 +49,18 @@ unsigned char c[] = {
 unsigned char d[] = {
 #embed "oversized.bin" limit(2)
 };
-int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==255 && sizeof b==1 && sizeof c==3 && c[2]==42 && sizeof d==2 ? b[0] : 1; }
+#define HEAD 7,
+#define TAIL ,8
+unsigned char e[] = {
+#embed RESOURCE __suffix__(TAIL) __prefix__(HEAD) limit(2) if_empty(99)
+};
+unsigned char f[] = {
+#embed RESOURCE prefix(1,) if_empty(9,10) suffix(,2) limit(0)
+};
+unsigned char g[] = {
+#embed "empty.bin" if_empty((3+4))
+};
+int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==255 && sizeof b==1 && sizeof c==3 && c[2]==42 && sizeof d==2 && sizeof e==4 && e[0]==7 && e[1]==0 && e[2]==10 && e[3]==8 && sizeof f==2 && f[0]==9 && f[1]==10 && sizeof g==1 && g[0]==7 ? b[0] : 1; }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
@@ -56,11 +70,11 @@ int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
-    for operand in ['"missing.bin"', '"oversized.bin"', '"asset.bin" limit(-1)', '"asset.bin" limit(1) limit(2)', '"asset.bin" prefix(1)']:
+    for operand in ['"missing.bin"', '"oversized.bin"', '"asset.bin" limit(-1)', '"asset.bin" limit(1) limit(2)', '"asset.bin" prefix(1) __prefix__(2)']:
         source.write_text('unsigned char a[] = {\n#embed ' + operand + '\n};\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode != 0 and result.stderr, operand
-    source.write_text('#if __has_embed("asset.bin" prefix((1,[2]))) != __STDC_EMBED_NOT_FOUND__\n#error unsupported parameter was advertised\n#endif\nint main(void) { return 0; }\n')
+    source.write_text('#if __has_embed("asset.bin" vendor::unsupported((1,[2]))) != __STDC_EMBED_NOT_FOUND__\n#error unsupported parameter was advertised\n#endif\nint main(void) { return 0; }\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
     source.write_text('#if __has_embed("asset.bin" prefix([1)))\n#endif\n')

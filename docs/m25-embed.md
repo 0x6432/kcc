@@ -23,10 +23,15 @@ same search rules and budgets, do not use built-in headers, and are not loaded
 in short-circuited operands. The loader's boolean interface cannot distinguish
 missing from unreadable resources.
 
-Parameters such as `prefix`, `suffix`, and `if_empty`, and
-implementation-defined embed parameters remain unsupported. Directives using
-them are rejected; syntactically valid queries using them return
-`__STDC_EMBED_NOT_FOUND__`. Balanced parameter tokens are limited to 128 levels. Existing include-name
+`prefix(...)` and `suffix(...)` insert their token sequences around a nonempty
+resource. `if_empty(...)` supplies tokens when the effective resource is empty;
+prefix and suffix are then suppressed. Parameters can appear in any order, and
+`__prefix__`, `__suffix__` and `__if_empty__` spellings are accepted. Token
+parameters are macro-expanded within the isolated directive and rescanned on
+output; duplicate parameters are rejected. Queries accept these parameters.
+Implementation-defined parameters remain unsupported: directives reject them,
+while syntactically valid queries return `__STDC_EMBED_NOT_FOUND__`.
+Balanced parameter tokens are limited to 128 levels. Existing include-name
 restrictions, including quoted backslashes and whitespace in angle names, apply.
 
 The compiler builds with this feature; the added positive, negative, search and

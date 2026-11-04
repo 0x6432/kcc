@@ -839,8 +839,13 @@ static bool read_pragma_directive(struct preprocessor *preprocessor,
 	return true;
 }
 
+struct embed_parameters {
+	uint64_t limit;
+	struct argument_token *prefix, *suffix, *if_empty;
+};
+
 static bool expand_include_operand(struct preprocessor *preprocessor,
-	struct pp_token marker, struct include_name *header, struct token *error, uint64_t *limit);
+	struct pp_token marker, struct include_name *header, struct token *error, struct embed_parameters *params);
 
 /* Join bounded path slices without changing the process working directory. */
 static bool include_path(struct preprocessor *preprocessor, struct include_name *name,
@@ -2691,6 +2696,7 @@ static const struct condition_operator condition_operators[] = {
 };
 
 struct condition_parser {
+	struct rescan_token expanded;
 	struct preprocessor *preprocessor;
 	struct expansion_cursor *cursor;
 	struct pp_token token;
@@ -2718,6 +2724,7 @@ static void advance_condition(struct condition_parser *parser)
 		return;
 	}
 	parser->token = next.token;
+	parser->expanded = next;
 	if (next.token.kind == pp_invalid)
 		parser->failed = true;
 }
@@ -2799,15 +2806,18 @@ static bool parse_embed_limit(struct condition_parser *parser, uint64_t *limit)
 	return !parser->failed;
 }
 
-/* A syntactically valid unsupported embed parameter makes a query return
- * NOT_FOUND; it is not an error merely because this compiler cannot honor it. */
-static bool parse_embed_query_parameters(struct condition_parser *parser,
-	uint64_t *limit, bool *supported)
+/* Read balanced standard token parameters; retain hide sets for later rescan.
+ * Unknown query parameters are parsed but mark the resource unavailable. */
+static bool parse_embed_parameters(struct condition_parser *parser,
+	struct embed_parameters *params, bool query, bool *supported)
 {
-	bool seen_limit = false;
-	while (!parser->failed && !is_punctuator(parser->token, ")")) {
+	bool seen_limit = false, seen_prefix = false, seen_suffix = false, seen_empty = false;
+	while (!parser->failed && parser->token.kind != pp_eof &&
+		!(query && is_punctuator(parser->token, ")"))) {
 		char expected[preprocess_parentheses_limit];
 		size_t depth = 0;
+		bool *seen = NULL, known = true;
+		struct argument_token **tail = NULL;
 		if (parser->token.kind != pp_identifier) {
 			condition_error(parser, parser->token, "expected embed parameter name");
 			return false;
@@ -2818,13 +2828,30 @@ static bool parse_embed_query_parameters(struct condition_parser *parser,
 				return false;
 			}
 			seen_limit = true;
-			if (!parse_embed_limit(parser, limit))
-				return false;
+			if (!parse_embed_limit(parser, &params->limit)) return false;
 			continue;
 		}
-		*supported = false;
+		if (pp_spelling_is(parser->token, "prefix") || pp_spelling_is(parser->token, "__prefix__")) {
+			seen = &seen_prefix; tail = &params->prefix;
+		} else if (pp_spelling_is(parser->token, "suffix") || pp_spelling_is(parser->token, "__suffix__")) {
+			seen = &seen_suffix; tail = &params->suffix;
+		} else if (pp_spelling_is(parser->token, "if_empty") || pp_spelling_is(parser->token, "__if_empty__")) {
+			seen = &seen_empty; tail = &params->if_empty;
+		} else {
+			known = false;
+			if (!query) {
+				condition_error(parser, parser->token, "unsupported embed parameter");
+				return false;
+			}
+			*supported = false;
+		}
+		if (seen && *seen) {
+			condition_error(parser, parser->token, "duplicate embed parameter");
+			return false;
+		}
+		if (seen) *seen = true;
 		advance_condition(parser);
-		if (is_punctuator(parser->token, "::")) {
+		if (!known && is_punctuator(parser->token, "::")) {
 			advance_condition(parser);
 			if (parser->token.kind != pp_identifier) {
 				condition_error(parser, parser->token, "expected scoped embed parameter name");
@@ -2832,8 +2859,11 @@ static bool parse_embed_query_parameters(struct condition_parser *parser,
 			}
 			advance_condition(parser);
 		}
-		if (!is_punctuator(parser->token, "("))
-			continue;
+		if (!is_punctuator(parser->token, "(")) {
+			if (!known) continue;
+			condition_error(parser, parser->token, "expected '(' after embed parameter");
+			return false;
+		}
 		expected[depth++] = ')';
 		advance_condition(parser);
 		while (!parser->failed && depth) {
@@ -2862,6 +2892,13 @@ static bool parse_embed_query_parameters(struct condition_parser *parser,
 				}
 				depth--;
 			}
+			if (depth && known && !query) {
+				struct argument_token *copy = copy_argument_token(parser->preprocessor,
+					parser->expanded, token, parser->error);
+				if (!copy) { parser->failed = true; return false; }
+				*tail = copy;
+				tail = &copy->next;
+			}
 			advance_condition(parser);
 		}
 	}
@@ -2884,6 +2921,7 @@ static void advance_include_condition(struct condition_parser *parser, bool raw)
 		return;
 	}
 	parser->token = next.token;
+	parser->expanded = next;
 	if (next.token.kind == pp_invalid)
 		parser->failed = true;
 }
@@ -2898,7 +2936,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	size_t length = 0;
 	bool direct, found = false, supported = true;
 	int status = 0;
-	uint64_t limit = UINT64_MAX;
+	struct embed_parameters params = { .limit = UINT64_MAX };
 
 	advance_condition(parser);
 	if (!is_punctuator(parser->token, "(")) {
@@ -2953,7 +2991,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 		name.path[length] = 0;
 	}
 	advance_condition(parser);
-	if (embed && !parse_embed_query_parameters(parser, &limit, &supported))
+	if (embed && !parse_embed_parameters(parser, &params, true, &supported))
 		return signed_condition(0);
 	if (!is_punctuator(parser->token, ")")) {
 		condition_error(parser, parser->token, "expected ')' after resource name or supported parameters");
@@ -2983,7 +3021,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 			}
 			preprocessor->include_bytes += source.length;
 			if (embed) {
-				uint64_t effective = source.length < limit ? source.length : limit;
+				uint64_t effective = source.length < params.limit ? source.length : params.limit;
 				status = effective > 4096 ? 0 : effective ? 1 : 2;
 			} else
 				status = 1;
@@ -3471,7 +3509,7 @@ static bool read_include_token(struct preprocessor *preprocessor,
 
 static bool read_include_name(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor, bool direct, struct include_name *header, struct token *error,
-	uint64_t *limit)
+	struct embed_parameters *params)
 {
 	struct rescan_token input;
 	struct pp_token first;
@@ -3527,11 +3565,12 @@ static bool read_include_name(struct preprocessor *preprocessor,
 		memcpy(header->path, text + 1, length);
 		header->path[length] = 0;
 	}
-	if (limit) {
+	if (params) {
 		struct condition_parser parser = { .preprocessor = preprocessor, .cursor = cursor, .error = error };
-		*limit = UINT64_MAX;
+		bool supported = true;
+		params->limit = UINT64_MAX;
 		advance_condition(&parser);
-		if (!parse_embed_limit(&parser, limit) || parser.failed) {
+		if (!parse_embed_parameters(&parser, params, false, &supported) || parser.failed) {
 			*error = invalid_token(first);
 			return false;
 		}
@@ -3552,7 +3591,7 @@ static bool read_include_name(struct preprocessor *preprocessor,
  * in isolation. Validation must never drain the following source line.
  */
 static bool expand_include_operand(struct preprocessor *preprocessor,
-	struct pp_token marker, struct include_name *header, struct token *error, uint64_t *limit)
+	struct pp_token marker, struct include_name *header, struct token *error, struct embed_parameters *params)
 {
 	struct argument_token *head = NULL;
 	struct argument_token **tail = &head;
@@ -3600,7 +3639,7 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 	}
 	cursor->input = head;
 	cursor->end = token.location;
-	success = read_include_name(preprocessor, cursor, direct, header, error, limit);
+	success = read_include_name(preprocessor, cursor, direct, header, error, params);
 	free(cursor);
 	if (!success && !preprocessor->stopped)
 		*error = invalid_token(marker);
@@ -3618,9 +3657,9 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 	struct argument_token *head = NULL, **tail = &head;
 	bool found;
 	size_t offset = 0, effective;
-	uint64_t limit;
+	struct embed_parameters params = { 0 };
 
-	if (!expand_include_operand(preprocessor, marker, &name, error, &limit))
+	if (!expand_include_operand(preprocessor, marker, &name, error, &params))
 		return false;
 	if (!preprocessor->include_loader) {
 		diagnostic_error(preprocessor->diagnostics, marker.expansion_location,
@@ -3640,7 +3679,7 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 		*error = invalid_token(marker);
 		return false;
 	}
-	effective = resource.length < limit ? resource.length : (size_t)limit;
+	effective = resource.length < params.limit ? resource.length : (size_t)params.limit;
 	if (effective > 4096 || resource.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
 		source_destroy(&resource);
 		*error = stop_preprocessing(preprocessor, marker, "embed resource byte limit exceeded (4096)");
@@ -3649,8 +3688,18 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 	preprocessor->include_bytes += resource.length;
 	if (!effective) {
 		source_destroy(&resource);
-		preprocessor->cursor.deferred_space = true;
-		return true;
+		if (!params.if_empty) {
+			preprocessor->cursor.deferred_space = true;
+			return true;
+		}
+		return push_frame(preprocessor, &preprocessor->cursor, (struct expansion_frame) {
+			.argument = params.if_empty, .invocation = marker.expansion_location,
+			.semantic_location = marker.location, .first = true, .leading_space = true,
+		}, marker, error);
+	}
+	if (params.prefix) {
+		head = params.prefix;
+		while (*tail) tail = &(*tail)->next;
 	}
 	spelling = allocate_spelling(preprocessor, effective * 4 + 1, marker, error);
 	if (!spelling) {
@@ -3691,6 +3740,7 @@ static bool read_embed_directive(struct preprocessor *preprocessor,
 	}
 	spelling->data[offset] = 0;
 	spelling->length = spelling->physical_length = offset;
+	*tail = params.suffix;
 	source_destroy(&resource);
 	return push_frame(preprocessor, &preprocessor->cursor, (struct expansion_frame) {
 		.argument = head, .invocation = marker.expansion_location,
