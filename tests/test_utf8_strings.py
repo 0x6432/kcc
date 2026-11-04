@@ -12,7 +12,11 @@ with tempfile.TemporaryDirectory(prefix='kcc-u8-') as directory:
     path = Path(directory)
     source = path / 'test.c'
     source.write_text('''
+#include <uchar.h>
 unsigned char bytes[]=u8"é" "!";
+char raw[]="é";
+static_assert(sizeof(char8_t)==1 && sizeof(char16_t)==2 && sizeof(char32_t)==4);
+static_assert(_Generic(u8"x", char8_t *: 1, default: 0));
 unsigned char escapes[]=u8"\\u00E9\\U0001F642";
 char ordinary[]="\\u00E9";
 static_assert(_Generic(u8"x", unsigned char *: 1, default: 0));
@@ -28,6 +32,7 @@ int main(void) {
     if (u8"\\377"[0]!=255 || u8'\\377'!=255) return 3;
     if (sizeof escapes!=7 || escapes[0]!=195 || escapes[1]!=169 || escapes[2]!=240 || escapes[3]!=159 || escapes[4]!=153 || escapes[5]!=130 || escapes[6]!=0) return 4;
     if (sizeof ordinary!=3 || (unsigned char)ordinary[0]!=195 || (unsigned char)ordinary[1]!=169) return 5;
+    if (sizeof raw!=3 || (unsigned char)raw[0]!=195 || (unsigned char)raw[1]!=169) return 6;
     return 42;
 }
 ''', encoding='utf-8')

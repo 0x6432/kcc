@@ -600,7 +600,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 	return NULL;
 }
 
-/* ordinary-string ::= '"' { ascii-byte | byte-escape } '"' */
+/* Ordinary and u8 strings use UTF-8 as the target execution encoding. */
 const char *parse_string_spelling(const unsigned char *text, size_t length,
 	unsigned char *output, size_t capacity, size_t *decoded_length)
 {
@@ -669,8 +669,6 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 		} else if (value >= 128) {
 			unsigned continuation;
 			unsigned char first = (unsigned char)value;
-			if (!utf8)
-				return "non-ASCII string bytes are not supported yet";
 			if (first >= 0xc2 && first <= 0xdf) continuation = 1;
 			else if (first >= 0xe0 && first <= 0xef) continuation = 2;
 			else if (first >= 0xf0 && first <= 0xf4) continuation = 3;

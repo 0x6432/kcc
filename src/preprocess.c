@@ -915,6 +915,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		return false;
 	}
 	if (builtins && !absolute) {
+		static const char uchar_header[] =
+			"#ifndef __KCC_UCHAR_H\n#define __KCC_UCHAR_H 1\n"
+			"typedef unsigned char char8_t;\n"
+			"typedef unsigned short char16_t;\n"
+			"typedef unsigned int char32_t;\n"
+			"#endif\n";
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
@@ -1175,7 +1181,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "stdbool.h") == 0) {
+		if (strcmp(name->path, "uchar.h") == 0) {
+			header = uchar_header;
+			source_name = "<kcc/uchar.h>";
+		} else if (strcmp(name->path, "stdbool.h") == 0) {
 			header = stdbool_header;
 			source_name = "<kcc/stdbool.h>";
 		} else if (strcmp(name->path, "stdnoreturn.h") == 0) {
