@@ -1549,6 +1549,21 @@ invalid:
 	return false;
 }
 
+/* Strip only exact indirection/address pairs: no side effect is skipped. */
+static struct ast_local_declaration *direct_vla_local(struct ast_expression *expression)
+{
+	while (expression->kind == expression_indirection) {
+		struct ast_expression *address = ((struct ast_indirection_expression *)expression)->operand;
+		if (address->kind != expression_address)
+			return NULL;
+		expression = ((struct ast_address_expression *)address)->operand;
+	}
+	if (expression->kind != expression_name)
+		return NULL;
+	struct ast_local_declaration *local = ((struct ast_name_expression *)expression)->declaration;
+	return local && local->vla_bound ? local : NULL;
+}
+
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required)
 {
@@ -2095,11 +2110,11 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (node->operand->type->kind == type_kind_array &&
 			((const struct array_type *)node->operand->type)->runtime_bound) {
-			if (node->operand->kind != expression_name) {
-				diagnostic_error(sema->diagnostics, expression->location, "sizeof variable-length array requires its name");
+			node->vla_local = direct_vla_local(node->operand);
+			if (!node->vla_local) {
+				diagnostic_error(sema->diagnostics, expression->location, "sizeof variable-length array requires a direct object reference");
 				return false;
 			}
-			node->vla_local = ((struct ast_name_expression *)node->operand)->declaration;
 			result_type = &type_ulong;
 			expression->depth = node->operand->depth + 1;
 			break;
