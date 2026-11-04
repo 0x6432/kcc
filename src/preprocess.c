@@ -875,7 +875,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			return true;
 		source_destroy(source);
 	}
-	/* Explicit include directories win; provide our target header as fallback. */
+	/* Explicit include directories win; provide target headers as fallback. */
 	if (!absolute && strcmp(name->path, "stdarg.h") == 0) {
 		static const char header[] =
 			"#ifndef __KCC_STDARG_H\n"
@@ -893,6 +893,52 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		*error = stop_preprocessing(preprocessor, name->invocation,
 			"cannot allocate built-in stdarg.h");
 		return false;
+	}
+	if (!absolute) {
+		static const char stdbool_header[] =
+			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
+			"#define __bool_true_false_are_defined 1\n#endif\n";
+		static const char stddef_header[] =
+			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
+			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
+			"typedef int wchar_t;\ntypedef typeof(nullptr) nullptr_t;\n"
+			"#define NULL ((void *)0)\n#endif\n";
+		static const char stdint_header[] =
+			"#ifndef __KCC_STDINT_H\n#define __KCC_STDINT_H 1\n"
+			"typedef signed char int8_t;\ntypedef unsigned char uint8_t;\n"
+			"typedef short int16_t;\ntypedef unsigned short uint16_t;\n"
+			"typedef int int32_t;\ntypedef unsigned int uint32_t;\n"
+			"typedef long int64_t;\ntypedef unsigned long uint64_t;\n"
+			"typedef long intptr_t;\ntypedef unsigned long uintptr_t;\n"
+			"typedef long intmax_t;\ntypedef unsigned long uintmax_t;\n"
+			"#define INT8_MAX 127\n#define INT8_MIN (-127-1)\n#define UINT8_MAX 255\n"
+			"#define INT16_MAX 32767\n#define INT16_MIN (-32767-1)\n#define UINT16_MAX 65535\n"
+			"#define INT32_MAX 2147483647\n#define INT32_MIN (-2147483647-1)\n#define UINT32_MAX 4294967295U\n"
+			"#define INT64_MAX 9223372036854775807L\n"
+			"#define INT64_MIN (-9223372036854775807L-1L)\n#define UINT64_MAX 18446744073709551615UL\n"
+			"#define INTPTR_MAX INT64_MAX\n#define INTPTR_MIN INT64_MIN\n#define UINTPTR_MAX UINT64_MAX\n"
+			"#define INTMAX_MAX INT64_MAX\n#define INTMAX_MIN INT64_MIN\n#define UINTMAX_MAX UINT64_MAX\n"
+			"#define SIZE_MAX UINT64_MAX\n#define PTRDIFF_MAX INT64_MAX\n#define PTRDIFF_MIN INT64_MIN\n"
+			"#endif\n";
+		const char *header = NULL, *source_name = NULL;
+
+		if (strcmp(name->path, "stdbool.h") == 0) {
+			header = stdbool_header;
+			source_name = "<kcc/stdbool.h>";
+		} else if (strcmp(name->path, "stddef.h") == 0) {
+			header = stddef_header;
+			source_name = "<kcc/stddef.h>";
+		} else if (strcmp(name->path, "stdint.h") == 0) {
+			header = stdint_header;
+			source_name = "<kcc/stdint.h>";
+		}
+		if (header) {
+			if (source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header)))
+				return true;
+			*error = stop_preprocessing(preprocessor, name->invocation,
+				"cannot allocate built-in standard header");
+			return false;
+		}
 	}
 
 	{
