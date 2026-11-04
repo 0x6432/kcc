@@ -97,6 +97,39 @@ int run(void); int main(void){return run();}
         host = '''int f(int,int,int,int,int,int,int,...);
 int main(void){return f(1,2,3,4,5,6,7,8,9)!=28;}'''
         link_and_run(d, kcc, host)
+        # Host calls a KCC function that consumes, copies and ends its argument list.
+        kcc = r'''
+#include <stdarg.h>
+int from_host(int n, ...) {
+  va_list a, copy;
+  va_start(a, n);
+  va_copy(copy, a);
+  int first=va_arg(a,int);
+  int also=va_arg(copy,int);
+  double d=va_arg(a,double);
+  long v=va_arg(a,long);
+  int *p=va_arg(a,int *);
+  va_end(copy); va_end(a);
+  return first==7 && also==7 && d==2.5 && v==1234567890123L && *p==9;
+}
+'''
+        host = r'''
+int from_host(int,...);
+int main(void){ int x=9; return !from_host(4,7,2.5,1234567890123L,&x); }
+'''
+        link_and_run(d, kcc, host)
+        # KCC passes a promoted float to a native variadic callee.
+        kcc = 'int host_float(int,...); int run(void){float x=2.5f; return !host_float(1,x);}'
+        host = '#include <stdarg.h>\nint host_float(int n,...){va_list a;va_start(a,n);double x=va_arg(a,double);va_end(a);return x==2.5;} int run(void);int main(void){return run();}'
+        link_and_run(d, kcc, host)
+        for text in [
+            '#include <stdarg.h>\nint f(void){va_list a; va_start(a); return 0;}',
+            '#include <stdarg.h>\nint f(int n,...){va_list a; va_start(a,n); return va_arg(a,short);}',
+            '#include <stdarg.h>\nint f(int n,...){int a=0; va_start(a,n); return 0;}',
+        ]:
+            result = compile_source(d, text)
+            assert result.returncode != 0 and result.stderr and not result.stdout, (text, result.stderr)
+
         # Redeclaration/composite and compatible pointer types preserve ellipsis.
         kcc = '''int host(int,...); int host(int,...);
 typedef int Fn(int,...); int run(void){Fn *p=host; return p(0)!=1;}'''

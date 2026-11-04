@@ -1488,6 +1488,47 @@ static bool has_register_root(const struct ast_expression *expression)
 		((const struct ast_name_expression *)expression)->declaration->is_register;
 }
 
+/* stdarg's array type decays to a pointer to the private SysV va-list tag.
+ * Verify nominal identity, not merely the size of an arbitrary pointer. */
+static bool va_tag_matches(const struct tag_binding *tag, const struct type *referent)
+{
+	static const char name[] = "__kcc_va_list_tag";
+
+	for (; tag; tag = tag->next) {
+		if (tag->type && tag->name.length == sizeof(name) - 1 &&
+			memcmp(tag->name.spelling_location.source->data +
+				tag->name.spelling_location.offset, name, sizeof(name) - 1) == 0 &&
+			tag->type->definition == type_record_definition(referent))
+			return true;
+	}
+	return false;
+}
+
+static bool sema_va_list(struct sema *sema, struct ast_expression **slot)
+{
+	const struct type *type, *referent;
+	bool found = false;
+
+	if (!sema_expression(sema, slot, true))
+		return false;
+	type = (*slot)->type;
+	if (type->kind != type_kind_pointer)
+		goto invalid;
+	referent = ((const struct pointer_type *)type)->referent;
+	if (!type_is_record(referent) || (referent->qualifiers & (type_qualifier_const | type_qualifier_atomic)) ||
+		!type_is_complete_object(referent) || type_object_size(referent) != 24 ||
+		type_object_alignment(referent) != 8)
+		goto invalid;
+	for (struct scope *scope = sema->scope; scope; scope = scope->parent)
+		found |= va_tag_matches(scope->tags, referent);
+	found |= va_tag_matches(sema->file_tags, referent);
+	if (found)
+		return true;
+invalid:
+	diagnostic_error(sema->diagnostics, (*slot)->location, "variadic intrinsic requires a mutable va_list");
+	return false;
+}
+
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required)
 {
@@ -1495,6 +1536,39 @@ static bool sema_expression(struct sema *sema,
 	const struct type *result_type = &type_int;
 
 	switch (expression->kind) {
+	case expression_va: {
+		struct ast_va_expression *node = (struct ast_va_expression *)expression;
+		if (!sema_va_list(sema, &node->list))
+			return false;
+		if (node->operation == ast_va_start &&
+			(!sema->function || !sema->function->declaration->type_syntax->variadic)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"va_start requires a variadic function definition");
+			return false;
+		}
+		if (node->operation == ast_va_copy && !sema_va_list(sema, &node->source))
+			return false;
+		expression->depth = node->list->depth + 1;
+		if (node->source && node->source->depth + 1 > expression->depth)
+			expression->depth = node->source->depth + 1;
+		if (node->operation == ast_va_arg) {
+			result_type = resolve_type_syntax(sema, node->type_syntax);
+			if (!result_type)
+				return false;
+			if ((result_type->qualifiers != 0) ||
+				!(result_type->kind == type_kind_int || result_type->kind == type_kind_uint ||
+				result_type->kind == type_kind_long || result_type->kind == type_kind_ulong ||
+				result_type->kind == type_kind_long_long || result_type->kind == type_kind_ulong_long ||
+				result_type->kind == type_kind_double || result_type->kind == type_kind_pointer)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"va_arg supports promoted integer, double, and pointer types only");
+				return false;
+			}
+		} else {
+			result_type = &type_void;
+		}
+		break;
+	}
 	case expression_compound_literal: {
 		struct ast_compound_literal_expression *node = (struct ast_compound_literal_expression *)expression;
 		if (!sema_compound_literal(sema, node))

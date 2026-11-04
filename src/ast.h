@@ -43,6 +43,7 @@ enum expression_kind {
 	expression_sizeof_type,
 	expression_alignof,
 	expression_call,
+	expression_va,
 	expression_member,
 	expression_compound_literal,
 };
@@ -304,6 +305,21 @@ struct ast_function_decay_expression {
 struct ast_argument {
 	struct ast_expression *value;
 	struct ast_argument *next;
+};
+
+enum ast_va_operation {
+	ast_va_start,
+	ast_va_arg,
+	ast_va_copy,
+	ast_va_end,
+};
+
+struct ast_va_expression {
+	struct ast_expression expression;
+	enum ast_va_operation operation;
+	struct ast_expression *list;
+	struct ast_expression *source; /* va_copy only */
+	struct ast_type_syntax *type_syntax; /* va_arg only */
 };
 
 struct ast_call_expression {

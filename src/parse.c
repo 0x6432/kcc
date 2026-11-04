@@ -1504,6 +1504,55 @@ static const struct infix_operator *find_infix_operator(enum token_kind kind)
 	return NULL;
 }
 
+/* Intrinsics use the reserved names emitted by our stdarg.h.  va_arg's
+ * second operand is a type-name, not an ordinary expression argument. */
+static struct ast_expression *parse_va_expression(struct parser *parser)
+{
+	struct token token = preprocess_next(parser->preprocessor);
+	struct ast_va_expression *node = arena_alloc(parser->arena, sizeof(*node));
+	struct token beginning;
+
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	*node = (struct ast_va_expression) {
+		.expression = { .kind = expression_va, .location = token.location, .depth = 1 },
+		.operation = token.kind == token_kcc_va_start ? ast_va_start :
+			token.kind == token_kcc_va_arg ? ast_va_arg :
+			token.kind == token_kcc_va_copy ? ast_va_copy : ast_va_end,
+	};
+	if (!expect_token(parser, token_left_paren, "expected '(' after va intrinsic", NULL))
+		return NULL;
+	node->list = parse_expression(parser, 1);
+	if (!node->list)
+		return NULL;
+	if (node->operation == ast_va_arg || node->operation == ast_va_copy) {
+		if (!expect_token(parser, token_comma, "expected ',' in va intrinsic", NULL))
+			return NULL;
+		if (node->operation == ast_va_arg) {
+			node->type_syntax = parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+			if (!node->type_syntax)
+				return NULL;
+		} else {
+			node->source = parse_expression(parser, 1);
+			if (!node->source)
+				return NULL;
+		}
+	}
+	if (!expect_token(parser, token_right_paren, "expected ')' after va intrinsic", NULL))
+		return NULL;
+	if (node->list->depth >= ast_max_expression_depth ||
+		(node->source && node->source->depth >= ast_max_expression_depth)) {
+		diagnostic_error(parser->diagnostics, token.location, "expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node->expression.depth = node->list->depth + 1;
+	if (node->source && node->source->depth + 1 > node->expression.depth)
+		node->expression.depth = node->source->depth + 1;
+	return &node->expression;
+}
+
 /* primary-atom ::= integer-expression | boolean-constant | nullptr-constant | character-expression | string-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.
  */
@@ -1521,6 +1570,9 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 		node->expression.type = token.floating_single ? &type_float : &type_double;
 		return &node->expression;
 	}
+	if (token.kind == token_kcc_va_start || token.kind == token_kcc_va_arg ||
+		token.kind == token_kcc_va_copy || token.kind == token_kcc_va_end)
+		return parse_va_expression(parser);
 	if (token.kind == token_nullptr)
 		return parse_nullptr_expression(parser);
 	if (token.kind == token_true || token.kind == token_false)

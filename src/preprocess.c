@@ -866,6 +866,26 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			return true;
 		source_destroy(source);
 	}
+	/* Explicit include directories win; provide our target header as fallback. */
+	if (!absolute && strcmp(name->path, "stdarg.h") == 0) {
+		static const char header[] =
+			"#ifndef __KCC_STDARG_H\n"
+			"#define __KCC_STDARG_H 1\n"
+			"typedef struct __kcc_va_list_tag { unsigned int __gp; unsigned int __fp; "
+			"void *__overflow; void *__save; } va_list[1];\n"
+			"#define va_start(ap,...) __kcc_va_start(ap)\n"
+			"#define va_arg(ap,T) __kcc_va_arg(ap,T)\n"
+			"#define va_copy(dst,src) __kcc_va_copy(dst,src)\n"
+			"#define va_end(ap) __kcc_va_end(ap)\n"
+			"#endif\n";
+		if (source_from_bytes(source, "<kcc/stdarg.h>",
+			(const unsigned char *)header, sizeof(header) - 1))
+			return true;
+		*error = stop_preprocessing(preprocessor, name->invocation,
+			"cannot allocate built-in stdarg.h");
+		return false;
+	}
+
 	{
 		char message[preprocess_include_path_limit + 64];
 

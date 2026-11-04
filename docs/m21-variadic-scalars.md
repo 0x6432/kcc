@@ -1,19 +1,17 @@
-# M21 scalar variadic calling subset
+# M21: bounded scalar variadic support
 
-C23 variadic prototypes and definitions accept a final ellipsis, including
-`(...)`. Function type compatibility and composite types retain the ellipsis;
-fixed arguments use the existing parameter conversions and trailing arguments
-receive integer promotions or retain their pointer type. Direct and indirect
-calls emit QBE's variadic marker at the fixed/variable boundary, including an
-empty tail. The target remains x86-64 SysV, and existing parameter/argument
-limits apply. This increment does not claim M21 completion.
+On x86-64 SysV, variadic prototypes, definitions, direct and indirect calls
+support promoted integers, pointers and `double` arguments. `float` arguments
+receive the default promotion to `double`. Aggregate variadic arguments and
+aggregate call/return ABI are not implemented.
 
-Only integer and pointer variable arguments are supported. `nullptr_t` and void
-arguments are rejected, as are evaluated aggregate arguments and aggregate
-returns by the existing ABI restrictions. Floating types and floating default
-promotions are not implemented in this baseline. No `va_list`, `va_start`,
-`va_arg`, `va_copy`, or `va_end` interface is provided; variadic definitions can
-use named parameters but cannot access the tail. Calls to host variadic
-functions are supported only for the stated scalar subset. Aggregate ABI and
-complete C23/hosted conformance remain future work. Do not rely on a cast to
-adapt incompatible function types or ABIs.
+The compiler provides a fallback `stdarg.h` when no explicit include directory
+supplies one. It defines a SysV-compatible 24-byte `va_list` and macros for
+`va_start`, `va_arg`, `va_copy`, and `va_end`. `va_start` requires a variadic
+function definition; optional arguments to the C23 form are ignored. `va_arg`
+accepts promoted `int`, `unsigned int`, long and long long types, `double`, and
+pointers; other types are rejected. `va_copy` copies the 24-byte state; `va_end`
+evaluates its argument and otherwise performs no operation. QBE's `vastart` and
+`vaarg` implement the target ABI. These newly added argument-access paths have
+been built, but have not yet been integration-tested. This is not full C23
+conformance or M21 completion.

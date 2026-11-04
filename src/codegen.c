@@ -732,6 +732,16 @@ static size_t codegen_expression(struct codegen *codegen,
 
 	assert(type_is_scalar(expression->type) || type_is_record(expression->type));
 	switch (expression->kind) {
+	case expression_va: {
+		const struct ast_va_expression *node = (const struct ast_va_expression *)expression;
+		size_t list = codegen_expression(codegen, node->list);
+
+		assert(node->operation == ast_va_arg);
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c vaarg %%t%zu\n", temporary,
+			qbe_type(expression->type), list);
+		return temporary;
+	}
 	case expression_compound_literal:
 		return codegen_compound_literal(codegen, (const struct ast_compound_literal_expression *)expression);
 	case expression_sizeof: {
@@ -995,6 +1005,18 @@ static void codegen_discard_expression(struct codegen *codegen,
 		return;
 	}
 	switch (expression->kind) {
+	case expression_va: {
+		const struct ast_va_expression *node = (const struct ast_va_expression *)expression;
+		size_t destination = codegen_expression(codegen, node->list);
+		if (node->operation == ast_va_start)
+			emit(codegen, "\tvastart %%t%zu\n", destination);
+		else if (node->operation == ast_va_copy) {
+			size_t source = codegen_expression(codegen, node->source);
+			codegen_record_copy(codegen, source, destination, 24);
+		} else
+			assert(node->operation == ast_va_end);
+		return;
+	}
 	case expression_conditional: {
 		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
 		size_t condition = codegen_truth(codegen, node->condition);
