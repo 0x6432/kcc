@@ -25,6 +25,11 @@ static_assert(_Generic(u'A', unsigned short: 1, default: 0));
 static_assert(_Generic(U'A', unsigned int: 1, default: 0));
 static_assert(_Generic(L'A', int: 1, default: 0));
 static_assert(sizeof(u'A')==2 && sizeof(U'A')==4 && sizeof(L'A')==4);
+static_assert(u'é'==0xe9 && U'🙂'==0x1f642 && L'é'==0xe9);
+static_assert(u'\\u00E9'==0xe9 && U'\\U0001F642'==0x1f642 && L'\\u00E9'==0xe9);
+#if u'\\u00E9' != 0xe9 || U'🙂' != 0x1f642
+#error Unicode character value is incorrect
+#endif
 static_assert(u'\\377'==255 && U'\\377'==255 && L'\\377'==255);
 #if u'\\377' != 255 || U'A' != 65 || L'A' != 65
 #error prefixed character value is incorrect
@@ -54,7 +59,7 @@ int main(void) {
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
-    for invalid in [b'u8"\xc0\x80"', b'u8"\xed\xa0\x80"', b'u8"\xf4\x90\x80\x80"', b'u8"\xe2\x82"',
+    for invalid in [b"u'\\U0001F642'", b"u'\\uD800'", b"U'\\U00110000'", b"U'\\u0041'", b'u8"\xc0\x80"', b'u8"\xed\xa0\x80"', b'u8"\xf4\x90\x80\x80"', b'u8"\xe2\x82"',
                     b'u8"\\uD800"', b'u8"\\U00110000"', b'u8"\\u01"']:
         source.write_bytes(b'int main(void) { ' + invalid + b'; return 0; }\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)

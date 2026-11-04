@@ -562,14 +562,13 @@ static const char *parse_byte_escape(const unsigned char *text, size_t end,
 	return NULL;
 }
 
-/* Bounded one-byte spelling for ordinary and prefixed character constants. */
+/* One character in the target encoding, with a bounded UCN subset. */
 const char *parse_character_spelling(const unsigned char *text, size_t length,
 	int64_t *result)
 {
-	size_t offset = 1;
-	size_t end;
+	size_t offset = 1, end;
 	unsigned value;
-	bool prefixed = false;
+	bool prefixed = false, wide_unicode = false, utf16 = false;
 
 	if (!length)
 		return "expected one character in character constant";
@@ -577,8 +576,9 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 		offset = 3;
 		prefixed = true;
 	} else if (length >= 2 && (text[0] == 'u' || text[0] == 'U' || text[0] == 'L') && text[1] == '\'') {
+		utf16 = text[0] == 'u';
+		wide_unicode = prefixed = true;
 		offset = 2;
-		prefixed = true;
 	} else if (text[0] != '\'') {
 		return "unsupported character constant prefix";
 	}
@@ -586,16 +586,47 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 		return "expected one character in character constant";
 	end = length - 1;
 	value = text[offset++];
-	if (value == '\\') {
+	if (value == '\\' && wide_unicode && offset < end && (text[offset] == 'u' || text[offset] == 'U')) {
+		unsigned digits = text[offset++] == 'u' ? 4 : 8;
+		value = 0;
+		if (digits > end - offset)
+			return "incomplete universal character name";
+		for (unsigned i = 0; i < digits; i++) {
+			int digit = integer_digit(text[offset++]);
+			if (digit < 0)
+				return "invalid universal character name";
+			value = (value << 4) | (unsigned)digit;
+		}
+		if (value < 0xa0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
+			return "unsupported or invalid universal character name";
+	} else if (value == '\\') {
 		const char *error = parse_byte_escape(text, end, &offset, &value);
-
 		if (error)
 			return error;
+	} else if (value >= 128 && wide_unicode) {
+		unsigned continuation;
+		unsigned first = value;
+		if (first >= 0xc2 && first <= 0xdf) { continuation = 1; value = first & 0x1f; }
+		else if (first >= 0xe0 && first <= 0xef) { continuation = 2; value = first & 0x0f; }
+		else if (first >= 0xf0 && first <= 0xf4) { continuation = 3; value = first & 0x07; }
+		else return "invalid UTF-8 character sequence";
+		if (continuation > end - offset)
+			return "truncated UTF-8 character sequence";
+		for (unsigned i = 0; i < continuation; i++) {
+			unsigned next = text[offset++];
+			if (next < 0x80 || next > 0xbf ||
+				(i == 0 && ((first == 0xe0 && next < 0xa0) || (first == 0xed && next > 0x9f) ||
+				(first == 0xf0 && next < 0x90) || (first == 0xf4 && next > 0x8f))))
+				return "invalid UTF-8 character sequence";
+			value = (value << 6) | (next & 0x3f);
+		}
 	} else if (value >= 128) {
 		return "non-ASCII character constants are not supported yet";
 	} else if (!value || value == '\n' || value == '\r' || value == '\'') {
 		return "invalid source character in character constant";
 	}
+	if (utf16 && value > 0xffff)
+		return "UTF-16 character requires more than one code unit";
 	if (offset != end)
 		return "multicharacter constants are not supported yet";
 	*result = prefixed || value < 128 ? (int64_t)value : (int64_t)value - 256;

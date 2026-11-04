@@ -140,7 +140,7 @@ struct integer_spelling {
 const char *parse_integer_spelling(const unsigned char *text, size_t length,
 	struct integer_spelling *result);
 
-/* Single-byte character spellings; ordinary uses signed plain char.
+/* Character spellings; ordinary uses signed plain char.
  * Explicit byte slice; NULL means success. No allocation or diagnostics.
  */
 const char *parse_character_spelling(const unsigned char *text, size_t length,
