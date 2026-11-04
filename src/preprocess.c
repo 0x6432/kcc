@@ -905,6 +905,18 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
+		static const char time_header[] =
+			"#ifndef __KCC_TIME_H\n#define __KCC_TIME_H 1\n"
+			"#include <stddef.h>\n"
+			"typedef long time_t; typedef long clock_t;\n"
+			"struct tm { int tm_sec,tm_min,tm_hour,tm_mday,tm_mon,tm_year,tm_wday,tm_yday,tm_isdst;"
+			" long __kcc_gmtoff; const char *__kcc_zone; };\n"
+			"#define CLOCKS_PER_SEC 1000000L\n"
+			"time_t time(time_t *); clock_t clock(void); double difftime(time_t,time_t);\n"
+			"time_t mktime(struct tm *); struct tm *gmtime(const time_t *);\n"
+			"struct tm *localtime(const time_t *); char *asctime(const struct tm *);\n"
+			"char *ctime(const time_t *); size_t strftime(char *,size_t,const char *,const struct tm *);\n"
+			"#endif\n";
 		static const char errno_header[] =
 			"#ifndef __KCC_ERRNO_H\n#define __KCC_ERRNO_H 1\n"
 			"int *__errno_location(void);\n#define errno (*__errno_location())\n"
@@ -1124,6 +1136,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		if (strcmp(name->path, "stdbool.h") == 0) {
 			header = stdbool_header;
 			source_name = "<kcc/stdbool.h>";
+		} else if (strcmp(name->path, "time.h") == 0) {
+			header = time_header;
+			source_name = "<kcc/time.h>";
 		} else if (strcmp(name->path, "errno.h") == 0) {
 			header = errno_header;
 			source_name = "<kcc/errno.h>";

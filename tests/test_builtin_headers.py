@@ -94,6 +94,22 @@ int main(void) {
     result = subprocess.run([str(compiler), str(source)], env=env, capture_output=True, text=True)
     assert result.returncode != 0 and 'invalid SOURCE_DATE_EPOCH' in result.stderr
     source.write_text(r'''
+#include <time.h>
+static_assert(sizeof(time_t)==8 && sizeof(struct tm)==56);
+int main(void) {
+  time_t epoch=0;
+  struct tm *p=gmtime(&epoch);
+  return p && p->tm_year==70 && p->tm_mon==0 && p->tm_mday==1 ? 42 : 1;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
+    source.write_text(r'''
 #include <math.h>
 #include <stdlib.h>
 int main(void) {

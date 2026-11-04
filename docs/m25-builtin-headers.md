@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `ctype.h` and `inttypes.h`, in addition
+`math.h`, `ctype.h`, `inttypes.h` and `time.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -59,6 +59,9 @@ include directories take precedence.
   functions from libc. `inttypes.h` supplies exact-width, pointer-width and
   max-width print format macros plus `imaxabs`, `strtoimax` and `strtoumax`.
   It does not yet provide scanning or least/fast-width format macros.
+- `time.h` supplies glibc x86-64 `time_t`, `clock_t` and `struct tm` layout,
+  `CLOCKS_PER_SEC`, and common clock, calendar and formatting declarations.
+  It depends on compatible glibc and omits `timespec` and newer time interfaces.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.
