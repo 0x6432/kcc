@@ -35,7 +35,7 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 | M23d | typeof/typeof_unqual | Declarators, qualifiers, evaluation rules | in progress (M23d1 type-name and M23d2 expression operands; declarator normalization and VM/atomic/bit-field interactions remain) |
 | M23e | auto inference | Valid initializers and forbidden declarations | in progress (M23e0 binding phases, M23e1 single-identifier block/for scalar inference, M23e2 register combinations and M23e3 outer-typedef hiding); derived/other storage/constexpr/VM work remains |
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
-| M23g | Attributes | Placement, supported effects and unknown-attribute policy | planned |
+| M23g | Attributes | Placement, supported effects and unknown-attribute policy | in progress (M23g1 bounded maybe_unused declaration prefixes; other attributes/placements remain) |
 | M23h | constexpr objects, expanded record compatibility/redefinitions and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
 | M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | planned |
 | M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | planned |
@@ -3568,3 +3568,21 @@ See m15-completion.md for supported existing-type storage, thread duration,
 lexical/canonical composites, inline external identity, static address constants,
 release gates and exact dependency boundaries. Earlier M15 slice records remain
 historical. General initialization is M17, not silently treated as implemented.
+
+## M23g1 bounded maybe_unused declaration prefixes
+
+File-scope and compound-block ordinary declarations accept one or more C23
+attribute specifiers containing `maybe_unused` (or an empty list), before the
+declaration specifiers. This includes objects, functions and typedefs, including
+multiple declarators. The compiler currently has no unused-entity diagnostics,
+so there is nothing further to suppress; attributes do not affect types or code
+generation. Preprocessing and macro expansion happen before recognition. The
+combined count of lists and attributes per prefix is bounded at 256.
+
+Unknown, vendor-qualified and other standard attributes are rejected, not
+silently ignored; in particular `nodiscard`, `fallthrough`, `deprecated`,
+`noreturn`, `unsequenced` and `reproducible` have no implementation yet.
+Tag-only declarations, labels, statements, members, parameters, for-initializer
+declarations and attributes after declarators or inside types remain unsupported.
+Attribute arguments are rejected. This is a strict supported subset, not the
+standard's general handling of unrecognized attributes.

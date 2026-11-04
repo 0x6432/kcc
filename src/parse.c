@@ -32,6 +32,7 @@ struct parser {
 	size_t designators;
 	size_t compound_literals;
 	bool in_function;
+	bool declaration_attributes;
 	unsigned parameter_nesting;
 	size_t record_declarations;
 	size_t block_items;
@@ -55,6 +56,59 @@ static bool expect_token(struct parser *parser, enum token_kind kind,
 	}
 	if (result)
 		*result = token;
+	return true;
+}
+
+/* Deliberately narrow C23 attribute subset: maybe_unused on ordinary
+ * declaration prefixes only. The compiler emits no unused-entity warnings,
+ * so its diagnostic effect is already satisfied. Never silently erase unknown
+ * or semantics-bearing attributes. Bound the work for hostile input. */
+static bool parse_declaration_attributes(struct parser *parser, bool *present)
+{
+	unsigned count = 0;
+	*present = false;
+	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
+		struct token token = preprocess_next(parser->preprocessor);
+		*present = true;
+		if (!expect_token(parser, token_left_bracket, "expected second '[' in attribute", NULL))
+			return false;
+		for (;;) {
+			token = preprocess_peek(parser->preprocessor);
+			if (token.kind == token_right_bracket)
+				break;
+			if (++count > 256) {
+				diagnostic_error(parser->diagnostics, token.location, "attribute limit exceeded (256)");
+				return false;
+			}
+			if (token.kind != token_identifier || token.length != 12 ||
+				memcmp(token.spelling_location.source->data + token.spelling_location.offset,
+					"maybe_unused", 12) != 0) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"unsupported or unknown attribute (only maybe_unused is supported)");
+				return false;
+			}
+			preprocess_next(parser->preprocessor);
+			token = preprocess_peek(parser->preprocessor);
+			if (token.kind == token_comma) {
+				preprocess_next(parser->preprocessor);
+				continue;
+			}
+			if (token.kind != token_right_bracket) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"maybe_unused takes no arguments; expected ',' or ']]'");
+				return false;
+			}
+			break;
+		}
+		preprocess_next(parser->preprocessor);
+		if (!expect_token(parser, token_right_bracket, "expected ']]' after attribute", NULL))
+			return false;
+		/* Count even empty specifiers. */
+		if (++count > 256) {
+			diagnostic_error(parser->diagnostics, token.location, "attribute limit exceeded (256)");
+			return false;
+		}
+	}
 	return true;
 }
 
@@ -2767,6 +2821,12 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 		struct ast_record_type_syntax *record = record_specifier_base(base);
 
+		if (parser->declaration_attributes) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"attributes on tag-only declarations are not supported");
+			return NULL;
+		}
+
 		/* Storage/qualifier spellings describe no ordinary entity here.
 		 * Specifier combination constraints were already checked above. */
 		if (record->tag.kind != token_identifier) {
@@ -3104,7 +3164,18 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 	while (preprocess_peek(parser->preprocessor).kind != token_right_brace) {
 		struct ast_block_item *item;
 		struct token token = preprocess_peek(parser->preprocessor);
+		bool attributes = false;
 
+		if (token.kind == token_left_bracket) {
+			if (!parse_declaration_attributes(parser, &attributes))
+				return NULL;
+			token = preprocess_peek(parser->preprocessor);
+			if (!begins_declaration_specifier(parser, token)) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"attributes are supported only on declarations here");
+				return NULL;
+			}
+		}
 		if (token.kind == token_eof) {
 			diagnostic_error(parser->diagnostics, token.location,
 				"expected '}' before end of file");
@@ -3114,7 +3185,9 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 		if (token.kind != token_typedef && !begins_declaration_specifier(parser, token) &&
 			!count_block_item(parser, token.location))
 			return NULL;
+		parser->declaration_attributes = attributes;
 		item = parse_block_item(parser);
+		parser->declaration_attributes = false;
 		if (!item)
 			return NULL;
 		*tail = item;
@@ -3447,7 +3520,16 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	struct ast_type_syntax *base;
 	struct token beginning;
 	struct declaration_head head = { 0 };
+	bool attributes;
 
+	if (!parse_declaration_attributes(parser, &attributes))
+		return NULL;
+	parser->declaration_attributes = attributes;
+	if (attributes && !begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+			"attributes are supported only on declarations here");
+		return NULL;
+	}
 	if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
 		struct ast_static_assertion *assertion = parse_static_assertion(parser);
 		struct ast_external_static_assertion *external;
@@ -3499,6 +3581,12 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		struct ast_external_tag_declaration *node;
 
 		struct ast_record_type_syntax *record = record_specifier_base(base);
+
+		if (parser->declaration_attributes) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"attributes on tag-only declarations are not supported");
+			return NULL;
+		}
 
 		if (record->tag.kind != token_identifier) {
 			diagnostic_error(parser->diagnostics, beginning.location,
