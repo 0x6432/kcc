@@ -8,6 +8,6 @@ is evaluated. The selected expression retains its lvalue, function designator,
 or void behavior in the surrounding context.
 
 The parser limits a selection to 128 associations and applies the ordinary
-expression-depth limit. A type-name controlling form and variable-length
+expression-depth limit. The later C2y type-name controlling form and variable-length
 association types are not implemented. This compiler build succeeded; the
 added positive, negative and QBE runtime cases have not been run.

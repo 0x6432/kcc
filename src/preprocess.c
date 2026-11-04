@@ -3080,6 +3080,7 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor;
 	struct condition_parser parser;
 	size_t count = 0;
+	unsigned direct_header_state = 0;
 	struct condition_value result;
 
 	for (;;) {
@@ -3089,9 +3090,21 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 			return false;
 		if (is_directive_end(token))
 			break;
-		if (token.kind == pp_identifier && pp_spelling_is(token, "defined") &&
+		/* The spelling inside a direct angle header is a header name, not
+		 * conditional-expression operators such as the word defined. */
+		if (direct_header_state != 3 && token.kind == pp_identifier &&
+			pp_spelling_is(token, "defined") &&
 			!replace_defined_operand(preprocessor, marker, &token, &count, error))
 			return false;
+		if (direct_header_state == 3) {
+			if (is_punctuator(token, ">"))
+				direct_header_state = 0;
+		} else if (direct_header_state == 2)
+			direct_header_state = is_punctuator(token, "<") ? 3 : 0;
+		else if (direct_header_state == 1)
+			direct_header_state = is_punctuator(token, "(") ? 2 : 0;
+		else if (token.kind == pp_identifier && pp_spelling_is(token, "__has_include"))
+			direct_header_state = 1;
 		/* Directive tokens retain their individual source invocation sites. */
 		copy = copy_argument_token(preprocessor, (struct rescan_token) { .token = token, .semantic_location = token.location }, token, error);
 		if (!copy)
