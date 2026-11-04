@@ -917,9 +917,17 @@ static bool load_include_source(struct preprocessor *preprocessor,
 	if (builtins && !absolute) {
 		static const char uchar_header[] =
 			"#ifndef __KCC_UCHAR_H\n#define __KCC_UCHAR_H 1\n"
+			"#include <stddef.h>\n"
 			"typedef unsigned char char8_t;\n"
 			"typedef unsigned short char16_t;\n"
 			"typedef unsigned int char32_t;\n"
+			"#ifndef __mbstate_t_defined\n#define __mbstate_t_defined 1\n"
+			"typedef struct { int __count; union { unsigned int __wch; char __wchb[4]; } __value; } mbstate_t;\n"
+			"#endif\n"
+			"size_t mbrtoc16(char16_t *,const char *,size_t,mbstate_t *);\n"
+			"size_t c16rtomb(char *,char16_t,mbstate_t *);\n"
+			"size_t mbrtoc32(char32_t *,const char *,size_t,mbstate_t *);\n"
+			"size_t c32rtomb(char *,char32_t,mbstate_t *);\n"
 			"#endif\n";
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"

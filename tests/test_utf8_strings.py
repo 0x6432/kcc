@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-u8-') as directory:
 #include <uchar.h>
 unsigned char bytes[]=u8"é" "!";
 char raw[]="é";
-static_assert(sizeof(char8_t)==1 && sizeof(char16_t)==2 && sizeof(char32_t)==4);
+static_assert(sizeof(char8_t)==1 && sizeof(char16_t)==2 && sizeof(char32_t)==4 && sizeof(mbstate_t)==8);
 static_assert(_Generic(u8"x", char8_t *: 1, default: 0));
 unsigned char escapes[]=u8"\\u00E9\\U0001F642";
 char ordinary[]="\\u00E9";
@@ -33,6 +33,8 @@ int main(void) {
     if (sizeof escapes!=7 || escapes[0]!=195 || escapes[1]!=169 || escapes[2]!=240 || escapes[3]!=159 || escapes[4]!=153 || escapes[5]!=130 || escapes[6]!=0) return 4;
     if (sizeof ordinary!=3 || (unsigned char)ordinary[0]!=195 || (unsigned char)ordinary[1]!=169) return 5;
     if (sizeof raw!=3 || (unsigned char)raw[0]!=195 || (unsigned char)raw[1]!=169) return 6;
+    { mbstate_t state={0}; char32_t c=0; char out[4];
+      if (mbrtoc32(&c,"A",1,&state)!=1 || c!=65 || c32rtomb(out,c,&state)!=1 || out[0]!=65) return 7; }
     return 42;
 }
 ''', encoding='utf-8')
