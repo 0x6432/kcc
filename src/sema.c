@@ -1450,10 +1450,6 @@ static const struct type *sema_update_operand(struct sema *sema,
 	if (!sema_expression(sema, operand, false))
 		return NULL;
 	operand_type = (*operand)->type;
-	if (operand_type->qualifiers & type_qualifier_atomic) {
-		diagnostic_error(sema->diagnostics, expression->location, "atomic read-modify-write is not supported");
-		return NULL;
-	}
 	if (!(*operand)->is_lvalue || (operand_type->qualifiers & type_qualifier_const) ||
 		(!type_is_integer(operand_type) && !type_is_floating(operand_type) &&
 		 operand_type->kind != type_kind_pointer)) {
@@ -2224,10 +2220,6 @@ static bool sema_expression(struct sema *sema,
 		if (!sema_expression(sema, &node->left, false))
 			return false;
 		left_type = node->left->type;
-		if (left_type->qualifiers & type_qualifier_atomic) {
-			diagnostic_error(sema->diagnostics, expression->location, "atomic read-modify-write is not supported");
-			return false;
-		}
 		if (!node->left->is_lvalue || (left_type->qualifiers & type_qualifier_const) ||
 			(!type_is_integer(left_type) && !type_is_floating(left_type) &&
 			 left_type->kind != type_kind_pointer)) {
@@ -2240,6 +2232,15 @@ static bool sema_expression(struct sema *sema,
 		if (!type_is_integer(node->right->type) && !type_is_floating(node->right->type)) {
 			diagnostic_error(sema->diagnostics, node->right->location,
 				"compound assignment requires an arithmetic right operand");
+			return false;
+		}
+		if ((left_type->qualifiers & type_qualifier_atomic) &&
+			(!type_is_integer(node->right->type) ||
+			 (node->operation != binary_add && node->operation != binary_subtract &&
+			  node->operation != binary_bit_and && node->operation != binary_bit_or &&
+			  node->operation != binary_bit_xor))) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"unsupported atomic read-modify-write operation");
 			return false;
 		}
 		result_type = unqualified_type(sema, left_type, expression->location);
