@@ -2395,12 +2395,52 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
+/* Static literal subset: preserve the exact target bits, including -0. A
+ * different-precision conversion or floating arithmetic is not folded here. */
+static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)
+{
+	if (!type_is_floating(expression->type))
+		return false;
+	if (expression->kind == expression_floating) {
+		*bits = ((const struct ast_integer_expression *)expression)->value;
+		return true;
+	}
+	if (expression->kind == expression_unary) {
+		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
+		if ((unary->operation != unary_plus && unary->operation != unary_minus) ||
+			!static_floating_literal_bits(unary->operand, bits))
+			return false;
+		if (unary->operation == unary_minus)
+			*bits ^= expression->type->kind == type_kind_float ?
+				UINT64_C(0x80000000) : UINT64_C(0x8000000000000000);
+		return true;
+	}
+	if (expression->kind == expression_cast || expression->kind == expression_conversion) {
+		const struct ast_expression *operand = expression->kind == expression_cast ?
+			((const struct ast_cast_expression *)expression)->operand :
+			((const struct ast_conversion_expression *)expression)->operand;
+		return operand->type->kind == expression->type->kind &&
+			static_floating_literal_bits(operand, bits);
+	}
+	return false;
+}
+
 /* The source is checked before conversion so narrowing cannot hide invalid
  * evaluated arithmetic. Both queries are pure: no lowered node is re-sema'd. */
 bool sema_validate_static_initializer(const struct ast_expression *source,
 	const struct ast_expression *converted, struct static_data_value *value,
 	struct diagnostics *diagnostics)
 {
+	if (type_is_floating(converted->type)) {
+		uint64_t bits;
+		if (!static_floating_literal_bits(converted, &bits)) {
+			diagnostic_error(diagnostics, source->location,
+				"static floating initializer requires a same-type literal");
+			return false;
+		}
+		*value = (struct static_data_value) { .kind = static_data_floating, .integer_bits = bits };
+		return true;
+	}
 	if (converted->type->kind == type_kind_bool &&
 		(source->type->kind == type_kind_pointer || source->type->kind == type_kind_nullptr))
 		return static_boolean_initializer(source, value, diagnostics);
@@ -2908,7 +2948,7 @@ static bool initializer_character_array(const struct type *type)
 static void initializer_cache_constant(struct ast_initializer_constant *constant,
 	const struct static_data_value *value)
 {
-	if (value->kind == static_data_integer) {
+	if (value->kind == static_data_integer || value->kind == static_data_floating) {
 		constant->kind = ast_initializer_constant_integer;
 		constant->bits = value->integer_bits;
 	} else if (value->kind == static_data_null_pointer) {
@@ -4275,6 +4315,15 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	}
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
+	if (type_is_floating(type)) {
+		target = unqualified_type(sema, type, name.location);
+		if (!target || !convert_expression(sema, initializer, target) ||
+			!sema_validate_static_initializer(*initializer, *initializer,
+				&symbol->initializer_value, sema->diagnostics))
+			goto rollback;
+		symbol->definition = external;
+		return symbol;
+	}
 	/* Check the original expression before narrowing (notably to _Bool).
 	 * An implicit conversion cannot hide evaluated invalid ICE arithmetic.
 	 */

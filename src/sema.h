@@ -5,6 +5,7 @@
 
 enum static_data_kind {
 	static_data_integer,
+	static_data_floating,
 	static_data_null_pointer,
 	static_data_address,
 	static_data_zero,
@@ -13,7 +14,7 @@ enum static_data_kind {
 /* A validated target data value, never a host pointer or a relocation sentinel. */
 struct static_data_value {
 	enum static_data_kind kind;
-	uint64_t integer_bits; /* Used only by static_data_integer. */
+	uint64_t integer_bits; /* Integer value or IEEE floating-point representation. */
 	struct static_address address; /* Used only by static_data_address. */
 };
 

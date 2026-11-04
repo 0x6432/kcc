@@ -1645,6 +1645,11 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 					emit(&data_codegen, "%s %ju }\n", encoding,
 						(uintmax_t)object->initializer_value.integer_bits);
 					break;
+				case static_data_floating:
+					assert(type_is_floating(object->type));
+					emit(&data_codegen, "%s %ju }\n", encoding,
+						(uintmax_t)object->initializer_value.integer_bits);
+					break;
 				case static_data_address: {
 					const struct static_address *address = &object->initializer_value.address;
 					struct token base_name;
