@@ -3742,9 +3742,10 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 			return false;
 		local->alignment = local->alignments->alignment;
 	}
-	/* Only a direct outermost automatic array declarator is eligible. All other
-	 * VM syntax retains the ordinary explicit rejection. */
-	if (sema->function && sema->scope && !sema->scope->parent &&
+	/* Outside loop/switch bodies these declarations execute at most once
+	 * without goto; switch dispatch could otherwise bypass initialization.
+	 * A for initializer is visited before its control context is installed. */
+	if (sema->function && sema->scope && !sema->control &&
 		local->type_syntax->kind == type_syntax_array && !local->is_static &&
 		!local->is_extern && !local->is_thread_local && !local->is_register)
 		sema->vla_candidate = local->type_syntax;

@@ -25,10 +25,12 @@ valid = [
     'int main(void) { int n=2; int a[n++][3]; a[1][2]=42; return n==3 && sizeof a==24 && sizeof a[0]==12 ? a[1][2] : 1; }',
     'int main(void) { int n=2; char a[n][2][3]; a[1][1][2]=42; return sizeof a==12 && sizeof a[0]==6 ? a[1][1][2] : 1; }',
     'struct S { int x; }; int main(void) { int n=2; struct S a[n][3]; a[1][2].x=42; return sizeof a==24 ? a[1][2].x : 1; }',
+    'int main(void) { int n=2; { int a[n]; a[1]=42; if(sizeof a!=8) return 1; n=a[1]; } return n; }',
+    'int main(void) { int n=2; int result=0; if(n) { int a[n]; a[1]=42; result=a[1]; } else { int b[n]; result=b[0]; } return result; }',
 ]
 rejected = [
-    ('int f(int n) { { int a[n]; } return 0; }', 'variable-length arrays'),
     ('int f(int n) { while(n) { int a[n]; n--; } return 0; }', 'variable-length arrays'),
+    ('int f(int n) { switch(n) { case 1: { int a[n]; return sizeof a; } } return 0; }', 'variable-length arrays'),
     ('int f(int n) { int a[n]={0}; return 0; }', 'must be uninitialized'),
     ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
     ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto in a function'),
