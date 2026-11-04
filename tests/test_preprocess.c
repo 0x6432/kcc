@@ -117,7 +117,7 @@ static void test_null_directives_in_code(void)
 static void test_known_and_unknown_directives(void)
 {
 	const char *names[] = {
-		"embed", "line", "pragma",
+		"embed", "line",
 			};
 	const struct expected_token expected[] = {
 		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
@@ -135,6 +135,23 @@ static void test_known_and_unknown_directives(void)
 		1, "unknown preprocessing directive");
 	check_stream("#include X 18446744073709551616\nint", expected,
 		sizeof(expected) / sizeof(expected[0]), 1, "quoted name");
+}
+
+static void test_pragma_directives(void)
+{
+	const struct expected_token result[] = {
+		{ token_int, "int" }, { token_eof, "" },
+	};
+	const struct expected_token rejected[] = {
+		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
+	};
+
+	check_stream("#pragma\n#pragma vendor opaque tokens ( 7 )\nint", result, 2, 0, NULL);
+	check_stream("#if 0\n#pragma once\n#endif\nint", result, 2, 0, NULL);
+	check_stream("#pragma once\nint", rejected, 3, 1, "this pragma is not supported yet");
+	check_stream("#pragma pack(1)\nint", rejected, 3, 1, "this pragma is not supported yet");
+	check_stream("#pragma STDC FENV_ACCESS ON\nint", rejected, 3, 1, "this pragma is not supported yet");
+	check_stream("#pragma stuff\v x\nint", rejected, 3, 1, "only space and tab");
 }
 
 static void test_malformed_and_misplaced(void)
@@ -1707,6 +1724,7 @@ static void test_include_search(void)
 
 int main(void)
 {
+	test_pragma_directives();
 	test_include_search();
 	test_computed_include_operands();
 	test_include_byte_budget();

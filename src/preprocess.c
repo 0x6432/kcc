@@ -726,6 +726,41 @@ static bool read_diagnostic_directive(struct preprocessor *preprocessor,
 	return false;
 }
 
+/* Unknown pragmas have no effect. Recognized pragmas which require semantic,
+ * layout or file-identity support are rejected instead of silently ignored.
+ * The body is consumed as raw preprocessing tokens, without macro expansion.
+ */
+static bool read_pragma_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct token *error)
+{
+	struct pp_token token = pp_lexer_next(&preprocessor->input);
+	bool first = true;
+
+	while (!is_directive_end(token)) {
+		if (token.kind == pp_invalid || token.has_non_directive_space) {
+			*error = reject_directive(preprocessor, marker, token,
+				token.kind == pp_invalid ? NULL :
+				"only space and tab are allowed in a preprocessing directive");
+			return false;
+		}
+		if (first && token.kind == pp_identifier &&
+			(pp_spelling_is(token, "STDC") || pp_spelling_is(token, "once") ||
+			 pp_spelling_is(token, "pack"))) {
+			*error = reject_directive(preprocessor, marker, token,
+				"this pragma is not supported yet");
+			return false;
+		}
+		first = false;
+		token = pp_lexer_next(&preprocessor->input);
+	}
+	if (token.has_non_directive_space) {
+		*error = reject_directive(preprocessor, marker, token,
+			"only space and tab are allowed in a preprocessing directive");
+		return false;
+	}
+	return true;
+}
+
 static bool expand_include_operand(struct preprocessor *preprocessor,
 	struct pp_token marker, struct include_name *header, struct token *error);
 
@@ -846,7 +881,7 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* control-line = '#' newline | define-directive | undef-directive | diagnostic-directive
+/* control-line = '#' newline | define-directive | undef-directive | diagnostic-directive | pragma
  *              | include-directive
  *              | conditional-control
  * Other C23 control lines are recognized but not implemented yet.
@@ -892,6 +927,8 @@ static bool read_directive(struct preprocessor *preprocessor,
 			pp_spelling_is(token, "define"), error);
 	if (pp_spelling_is(token, "error") || pp_spelling_is(token, "warning"))
 		return read_diagnostic_directive(preprocessor, marker, token, error);
+	if (pp_spelling_is(token, "pragma"))
+		return read_pragma_directive(preprocessor, marker, error);
 	*error = reject_directive(preprocessor, marker, token,
 		is_known_directive(token) ? "preprocessing directive is not supported yet" :
 		"unknown preprocessing directive");
