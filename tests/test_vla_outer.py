@@ -17,12 +17,13 @@ valid = [
     'int main(void) { int n=3; const int a[n]; if(sizeof a!=12) return 1; return 42; }',
     'int f(int n) { int a[n]; a[n-1]=42; return a[n-1]; } int main(void) { return f(1); }',
     'int main(void) { int n=2; int a[n]; int i=0; while(i<2) { a[i]=42; i++; } return a[1]; }',
+    'int main(void) { int n=2; int a[n++]; long b[n++]; a[1]=20; b[2]=22; return n==4 && sizeof a==8 && sizeof b==24 ? a[1]+b[2] : 1; }',
+    'int main(void) { int n=2; char a[n], b[n+1]; a[1]=20; b[2]=22; return sizeof a==2 && sizeof b==3 ? a[1]+b[2] : 1; }',
 ]
 rejected = [
     ('int f(int n) { { int a[n]; } return 0; }', 'variable-length arrays'),
     ('int f(int n) { while(n) { int a[n]; n--; } return 0; }', 'variable-length arrays'),
-    ('int f(int n) { int a[n]; int b[n]; return 0; }', 'one uninitialized'),
-    ('int f(int n) { int a[n]={0}; return 0; }', 'one uninitialized'),
+    ('int f(int n) { int a[n]={0}; return 0; }', 'must be uninitialized'),
     ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
     ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto in a function'),
     ('int f(int n) { again:; int a[n]; goto again; }', 'goto in a function'),
@@ -43,6 +44,7 @@ traps = [
     'int main(void) { int n=-1; int a[n]; return 42; }',
     'int main(void) { unsigned long n=18446744073709551615UL; char a[n]; return 42; }',
     'int main(void) { int n=262144; int a[n]; return 42; }',
+    'int main(void) { int n=140000; int a[n]; int b[n]; return 42; }',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc vla ') as tmp:
     tmp = Path(tmp)

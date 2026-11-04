@@ -1252,8 +1252,8 @@ static void codegen_local_initializer(struct codegen *codegen,
 	}
 }
 
-/* One outermost VLA is allocated exactly once per invocation. Invalid or
- * implementation-limit bounds terminate rather than overflowing the stack. */
+/* Outermost VLAs are allocated once per invocation and share a runtime
+ * budget. Invalid or excessive bounds terminate before allocation. */
 static void codegen_vla(struct codegen *codegen, const struct ast_local_declaration *local)
 {
 	const struct array_type *array = (const struct array_type *)local->type;
@@ -1261,20 +1261,29 @@ static void codegen_vla(struct codegen *codegen, const struct ast_local_declarat
 	size_t wide = codegen_convert_value(codegen, bound, local->vla_bound->type, &type_ulong);
 	size_t positive = codegen->next_temporary++;
 	size_t within = codegen->next_temporary++;
+	size_t remaining = codegen->next_temporary++;
+	size_t fits = codegen->next_temporary++;
+	size_t positive_and_within = codegen->next_temporary++;
 	size_t valid = codegen->next_temporary++;
+	size_t new_remaining = codegen->next_temporary++;
 	size_t good = new_label(codegen), bad = new_label(codegen);
 	unsigned alignment = type_object_alignment(array->element);
 	if (alignment < 4)
 		alignment = 4;
 	emit(codegen, "\t%%t%zu =w cnel %%t%zu, 0\n", positive, wide);
 	emit(codegen, "\t%%t%zu =w culel %%t%zu, %ju\n", within, wide, (uintmax_t)local->vla_max_count);
-	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", valid, positive, within);
+	emit(codegen, "\t%%z%zu =l mul %%t%zu, %ju\n", local->slot, wide,
+		(uintmax_t)type_object_size(array->element));
+	emit(codegen, "\t%%t%zu =l loadl %%vla_budget\n", remaining);
+	emit(codegen, "\t%%t%zu =w culel %%z%zu, %%t%zu\n", fits, local->slot, remaining);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", positive_and_within, positive, within);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", valid, positive_and_within, fits);
 	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", valid, good, bad);
 	emit_label(codegen, bad);
 	emit(codegen, "\tcall $abort()\n\thlt\n");
 	emit_label(codegen, good);
-	emit(codegen, "\t%%z%zu =l mul %%t%zu, %ju\n", local->slot, wide,
-		(uintmax_t)type_object_size(array->element));
+	emit(codegen, "\t%%t%zu =l sub %%t%zu, %%z%zu\n", new_remaining, remaining, local->slot);
+	emit(codegen, "\tstorel %%t%zu, %%vla_budget\n", new_remaining);
 	emit(codegen, "\t%%v%zu =l alloc%u %%z%zu\n", local->slot, alignment, local->slot);
 }
 
@@ -1511,6 +1520,13 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 		emit(&codegen, "%s...", parameter_index ? ", " : "");
 	emit(&codegen, ") {\n");
 	emit_label(&codegen, 0);
+	for (const struct ast_local_declaration *vla = function->locals; vla; vla = vla->next_local) {
+		if (vla->vla_bound) {
+			emit(&codegen, "\t%%vla_budget =l alloc8 8\n");
+			emit(&codegen, "\tstorel %ju, %%vla_budget\n", (uintmax_t)function->vla_storage_budget);
+			break;
+		}
+	}
 	while (local) {
 		/* Dynamic storage is allocated at its declaration, not at entry. */
 		if (local->vla_bound) {

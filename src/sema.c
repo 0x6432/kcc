@@ -3486,9 +3486,9 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	if (!type)
 		return false;
 	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
-		if (local->initializer_syntax || local->initializer || local->alignments || local->is_inline || sema->vla_local) {
+		if (local->initializer_syntax || local->initializer || local->alignments || local->is_inline) {
 			diagnostic_error(sema->diagnostics, local->name.location,
-				"variable-length array subset permits one uninitialized, naturally aligned array per function");
+				"variable-length arrays must be uninitialized and naturally aligned");
 			return false;
 		}
 		if (sema->local_count == ast_max_locals) {
@@ -4076,9 +4076,15 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 		success = false;
 	}
 	if (success && sema->vla_local) {
-		const struct array_type *array = (const struct array_type *)sema->vla_local->type;
-		sema->vla_local->vla_max_count = (ast_max_local_storage - sema->local_storage) /
-			type_object_size(array->element);
+		definition->vla_storage_budget = ast_max_local_storage - sema->local_storage;
+		for (struct ast_local_declaration *local = definition->locals; local; local = local->next_local) {
+			if (local->vla_bound) {
+				const struct array_type *array = (const struct array_type *)local->type;
+
+				local->vla_max_count = definition->vla_storage_budget /
+					type_object_size(array->element);
+			}
+		}
 	}
 	if (success) {
 		definition->label_count = sema->label_count;
