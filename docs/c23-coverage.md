@@ -1,21 +1,18 @@
 # C23 coverage
 
-Current implementation: M16 records for existing supported types; see
-`m16-records.md`. Record layout/member/copy/query/storage composition is
-implemented. General initializer syntax (M17), aggregate-by-value ABI (M21),
-bit-fields/flexible arrays (M22), and C23 expanded tag compatibility/repeated
-record definitions (M23h) remain explicit boundaries. Release success requires
-frozen full normal/sanitizer, fuzz and exact-commit CI gates; earlier entries are
-historical, not the current unsupported-feature inventory.
+Current development includes bounded M17 initializers, enums, alignment,
+float/double, scalar variadics, flexible arrays, VLAs, atomics, location macros
+and partial standard headers. Aggregate-by-value ABI, bit-fields, expanded C23
+record compatibility and full language/library coverage remain incomplete.
+Recent integration has not been fully tested; M17 approval and conformance are
+not claimed. Earlier entries and the detailed table below may be historical;
+read the feature-specific documents for current boundaries.
 
 
-Current storage checkpoint: M15 storage/linkage closure for existing supported
-types: block extern/function bindings, static locals, explicit thread storage,
-inline TU-end ownership and checked address offsets/subobjects/character views.
-Static null storage includes typeof(nullptr) targets. Existing tentative and
-explicit ownership rules remain. General initializer syntax/expression domains
-are still M17; further types/qualifiers/environment are their recorded milestones.
-See m15-completion.md for precise boundaries. This is not ISO conformance.
+Storage/linkage for existing supported types includes block extern/function
+bindings, static locals, explicit thread storage, inline TU-end ownership and
+checked address offsets. M17 initializer support is bounded; see the
+feature-specific documents for its limits. This is not ISO conformance.
 
 Status vocabulary: absent, subset, implemented, validated. Implemented means
 code exists, not that conformance has been established. Validated requires
@@ -33,7 +30,7 @@ of complete ISO conformance.
 | Storage/linkage/multiple TUs | implemented for existing types: static/extern/block/thread duration, canonical lexical composites, inline external-definition ownership; Linux amd64 local-exec TLS; general initializer dependencies remain | M15, M17, M25 |
 | Object layout and ABI | subset (byte/halfword/word/long integer calls, separate-object GCC/Clang and dirty-upper-bit tests; M12j) | M12-M17, M20-M22, M24 |
 | C23 additions | subset (warning, elifdef/elifndef, optional macros; runtime binary/separator literals; unnamed definition parameters M14d); bool/true/false, alignof/static_assert and distinct nullptr constant/type implemented; typeof/typeof_unqual type and expression operands, C23 for-typedefs and bounded block/for auto inference (including register and outer typedef hiding) implemented; standard header support incomplete | M10-M11, M23a-M23h, M24a-M24g |
-| Required library/header environment | absent | M25a-M25d |
+| Required library/header environment | partial target-specific fallbacks; libc required | M25a-M25d |
 | Self-hosting | absent | M26 |
 
 Implementation-defined target choices: Linux x86-64 System V ABI; LP64;

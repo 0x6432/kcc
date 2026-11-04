@@ -7,23 +7,21 @@ priority over compile-time performance.
 ## M24c atomic subset
 
 On x86-64 SysV, `_Atomic int` and `_Atomic unsigned int` support ordinary
-sequentially consistent loads and simple stores via libatomic. Link generated
-assembly with `-latomic`. Atomic read-modify-write and atomic record members
-are rejected. See `docs/m24c-atomic-subset.md` for the complete safety boundary
-and pending validation.
+sequentially consistent loads, stores and selected read-modify-write operations
+via libatomic. Link generated assembly with `-latomic`. Other atomic operations
+and atomic record members remain unsupported. See `docs/m24c-atomic-subset.md`
+for the safety boundary and pending validation.
 
 ## Current checkpoint
 
-M21 scalar variadic declarations, definitions and calls are available for
-x86-64 SysV, with integer promotions and pointers. No va_list access, floating
-or aggregate variadic ABI is implemented; see `docs/m21-variadic-scalars.md`.
+The development branch includes bounded initializers, enums, alignment,
+float/double operations, scalar variadic calls and `va_list` access, flexible
+arrays, outermost VLAs, preprocessing location features and partial standard
+headers. See the milestone-specific documents for exact boundaries.
 
-M16 adds struct/union definitions, natural layout, member access, zero record
-storage, checked subobject addresses and address-backed aggregate copies. Existing
-storage/linkage features compose with records. See `docs/m16-records.md` for the
-precise target and resource contracts. General initializers remain M17,
-aggregate-by-value ABI M21, bit-fields/flexible arrays M22, and C23 expanded tag
-compatibility/redefinitions M23h. No ISO C23 conformance claim is made.
+Aggregate-by-value calls, bit-fields, full C23 types and the complete standard
+library remain unsupported. Recent integrated changes have been built but have
+not been fully tested. M17 approval and ISO C23 conformance are not claimed.
 
 ### Previous checkpoint
 

@@ -1,25 +1,18 @@
 # Implementation limitations
 
-Current implementation: M16 records for existing supported types; see
-`m16-records.md`. Record layout/member/copy/query/storage composition is
-implemented. General initializer syntax (M17), aggregate-by-value ABI (M21),
-bit-fields/flexible arrays (M22), and C23 expanded tag compatibility/repeated
-record definitions (M23h) remain explicit boundaries. Release success requires
-frozen full normal/sanitizer, fuzz and exact-commit CI gates; earlier entries are
-historical, not the current unsupported-feature inventory.
+The development branch includes bounded initializers, enums, alignment,
+float/double, scalar variadics, flexible arrays, VLAs, atomics and partial
+standard headers. Aggregate-by-value calls, bit-fields, broader C23 language
+features and a complete library remain unsupported. Recent integrated changes
+have been built but not fully tested; M17 approval and C23 conformance are not
+claimed. Read feature-specific documents for current boundaries; earlier
+entries below are historical.
 
 
-Current milestone: M15 storage/linkage closure for existing supported types.
-Read m15-completion.md for the current normative project scope; earlier entries
-below are historical. Block extern/functions, static locals, TLS, inline linkage,
-nullptr_t static null storage, and checked array/subobject/string address offsets
-are implemented. General initializer syntax/domain handling remains M17, including
-remaining pointer conditional/comma forms and unproved cast alignment/new typed
-reinterpret arithmetic domains. No complete scalar-initializer or C23-conformance
-claim is made. Further types/qualifiers/inference and hosted ABI work retain their
-original milestone ownership. Linux amd64 TLS is tested local-exec executable ABI,
-not shared-library dynamic TLS. Resource limits and fail-fast semantic behavior
-remain explicit; canonical object-state rollback is not whole-sema recovery.
+Storage/linkage boundaries remain documented in m15-completion.md. Linux amd64
+TLS targets the local-exec executable ABI, not shared-library dynamic TLS.
+Resource limits and fail-fast semantic behavior remain explicit; canonical
+object-state rollback is not whole-sema recovery.
 
 ## M00
 
