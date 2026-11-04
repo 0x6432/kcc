@@ -969,6 +969,19 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"wctype_t wctype(const char *); int iswctype(wint_t,wctype_t);\n"
 			"wctrans_t wctrans(const char *); wint_t towctrans(wint_t,wctrans_t);\n"
 			"#endif\n";
+		static const char locale_header[] =
+			"#ifndef __KCC_LOCALE_H\n#define __KCC_LOCALE_H 1\n"
+			"#define LC_CTYPE 0\n#define LC_NUMERIC 1\n#define LC_TIME 2\n"
+			"#define LC_COLLATE 3\n#define LC_MONETARY 4\n#define LC_ALL 6\n"
+			"struct lconv { char *decimal_point; char *thousands_sep; char *grouping;\n"
+			"char *int_curr_symbol; char *currency_symbol; char *mon_decimal_point;\n"
+			"char *mon_thousands_sep; char *mon_grouping; char *positive_sign; char *negative_sign;\n"
+			"char int_frac_digits; char frac_digits; char p_cs_precedes; char p_sep_by_space;\n"
+			"char n_cs_precedes; char n_sep_by_space; char p_sign_posn; char n_sign_posn;\n"
+			"char int_p_cs_precedes; char int_p_sep_by_space; char int_n_cs_precedes;\n"
+			"char int_n_sep_by_space; char int_p_sign_posn; char int_n_sign_posn; };\n"
+			"char *setlocale(int,const char *); struct lconv *localeconv(void);\n"
+			"#endif\n";
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
@@ -1349,7 +1362,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "wctype.h") == 0) {
+		if (strcmp(name->path, "locale.h") == 0) {
+			header = locale_header;
+			source_name = "<kcc/locale.h>";
+		} else if (strcmp(name->path, "wctype.h") == 0) {
 			header = wctype_header;
 			source_name = "<kcc/wctype.h>";
 		} else if (strcmp(name->path, "wchar.h") == 0) {
