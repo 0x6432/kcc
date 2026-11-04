@@ -235,7 +235,9 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
 		size_t result = codegen->next_temporary++;
 
-		assert(name->declaration && type_is_complete_object(name->declaration->type));
+		assert(name->declaration && (type_is_complete_object(name->declaration->type) ||
+			(name->declaration->type->kind == type_kind_array &&
+			((const struct array_type *)name->declaration->type)->runtime_bound)));
 		emit(codegen, "\t%%t%zu =l copy %%v%zu\n", result, name->declaration->slot);
 		return result;
 	}

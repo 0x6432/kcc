@@ -27,6 +27,7 @@ valid = [
     'struct S { int x; }; int main(void) { int n=2; struct S a[n][3]; a[1][2].x=42; return sizeof a==24 ? a[1][2].x : 1; }',
     'int main(void) { int n=2; { int a[n]; a[1]=42; if(sizeof a!=8) return 1; n=a[1]; } return n; }',
     'int main(void) { int n=2; int result=0; if(n) { int a[n]; a[1]=42; result=a[1]; } else { int b[n]; result=b[0]; } return result; }',
+    'int main(void) { int n=2; int a[n]; void *p=&a; (*(&a))[1]=42; return p==(void *)a && sizeof(&a)==8 ? a[1] : 1; }',
 ]
 rejected = [
     ('int f(int n) { while(n) { int a[n]; n--; } return 0; }', 'variable-length arrays'),
@@ -35,7 +36,6 @@ rejected = [
     ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
     ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto in a function'),
     ('int f(int n) { again:; int a[n]; goto again; }', 'goto in a function'),
-    ('int f(int n) { int a[n]; return sizeof(&a); }', 'address of variable-length'),
     ('int f(int n) { int a[n]; typeof(a) b; return 0; }', 'typeof of variable-length'),
     ('int f(int n) { int a[n]; static_assert(sizeof a, "x"); return 0; }', 'constant expression'),
     ('int f(int n) { int (*p)[n]; return 0; }', 'variable-length arrays'),

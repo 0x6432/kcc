@@ -1804,11 +1804,6 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
 			return false;
 		}
-		if (node->operand->type->kind == type_kind_array &&
-			((const struct array_type *)node->operand->type)->runtime_bound) {
-			diagnostic_error(sema->diagnostics, expression->location, "address of variable-length array is not supported");
-			return false;
-		}
 		if (has_register_root(node->operand)) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"cannot take the address of a register object");

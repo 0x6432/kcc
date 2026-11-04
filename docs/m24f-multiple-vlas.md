@@ -15,6 +15,9 @@ is reclaimed on function return.
 
 Other restrictions of the existing outermost VLA subset remain: no VLAs in
 loop or switch bodies, runtime inner dimensions, VLA
-initializers, explicit alignment, VM typedefs or parameters, whole-array address
-or `typeof`. Functions containing VLAs reject `goto`. The compiler was built;
+initializers, explicit alignment, VM typedefs or parameters, or `typeof` of a
+VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
+the whole VLA remains rejected because runtime referent size is not modeled;
+`sizeof` of a VLA expression still requires the array's name. Functions
+containing VLAs reject `goto`. The compiler was built;
 the added regression cases and runtime behavior have not been tested.
