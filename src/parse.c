@@ -104,7 +104,8 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 {
 	enum token_kind kind = token.kind;
 
-	return kind == token_typedef || kind == token_register || kind == token_extern ||
+	return kind == token_alignas || kind == token_legacy_alignas ||
+		kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_auto ||
 		kind == token_void || kind == token_const || kind == token_struct || kind == token_union ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
@@ -145,7 +146,13 @@ struct declaration_head {
 	struct token keyword;
 	struct token auto_keyword;
 	struct token inferred_name;
+	struct ast_alignment_specifier *alignments;
+	size_t alignment_count;
 };
+
+static struct ast_type_syntax *parse_type_name(struct parser *parser,
+	struct token *beginning, struct token *name, bool *has_name,
+	enum declarator_context context);
 
 /* declaration-specifiers ::= permutation of storage-specifiers, qualifiers and builtin-type
  * storage-specifiers ::= [ "typedef" | "register" | "extern" | "static" | "auto" ]
@@ -179,6 +186,54 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 	while (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		struct token token = preprocess_peek(parser->preprocessor);
 
+		if (token.kind == token_alignas || token.kind == token_legacy_alignas) {
+			struct ast_alignment_specifier *alignment;
+			struct token beginning_type;
+
+			if (!head || context != declarator_local) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"alignment specifiers are supported only on automatic block objects");
+				return NULL;
+			}
+			/* Resolve these operands before the declared type, preserving the
+			 * source order of tag definitions and typeof queries. */
+			if (query || seen_int || seen_void || seen_char || seen_short ||
+				seen_bool || seen_sign || long_count) {
+				diagnostic_error(parser->diagnostics, token.location,
+					"alignment specifiers must precede the type specifier in this subset");
+				return NULL;
+			}
+			if (++head->alignment_count > 32) {
+				diagnostic_error(parser->diagnostics, token.location, "too many alignment specifiers (limit 32)");
+				return NULL;
+			}
+			preprocess_next(parser->preprocessor);
+			if (!expect_token(parser, token_left_paren, "expected '(' after alignment specifier", NULL))
+				return NULL;
+			alignment = arena_alloc(parser->arena, sizeof(*alignment));
+			if (!alignment) {
+				allocation_error(parser, token.location);
+				return NULL;
+			}
+			*alignment = (struct ast_alignment_specifier) { .location = token.location };
+			if (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
+				alignment->type_syntax = parse_type_name(parser, &beginning_type, NULL, NULL, declarator_cast);
+				if (!alignment->type_syntax)
+					return NULL;
+			} else {
+				alignment->expression = parse_expression(parser, 2);
+				if (!alignment->expression)
+					return NULL;
+			}
+			if (!expect_token(parser, token_right_paren, "expected ')' after alignment specifier", NULL))
+				return NULL;
+			/* Preserve source order for semantic analysis. */
+			struct ast_alignment_specifier **tail = &head->alignments;
+			while (*tail)
+				tail = &(*tail)->next;
+			*tail = alignment;
+			continue;
+		}
 		if (token.kind == token_inline) {
 			if (!head || context == declarator_parameter || head->keyword.kind == token_typedef) {
 				diagnostic_error(parser->diagnostics, token.location,
@@ -349,6 +404,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			seen_sign = true;
 			unsigned_type = token.kind == token_unsigned;
 		}
+	}
+	if (head && head->alignments && (head->keyword.kind == token_typedef ||
+		head->keyword.kind == token_register || head->keyword.kind == token_extern ||
+		head->keyword.kind == token_static || head->thread_keyword.kind == token_thread_local)) {
+		diagnostic_error(parser->diagnostics, beginning->location,
+			"alignment specifiers are supported only on automatic block objects");
+		return NULL;
 	}
 	if (head && head->thread_keyword.kind == token_thread_local &&
 		(head->keyword.kind == token_register || head->keyword.kind == token_typedef)) {
@@ -2592,6 +2654,10 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
+	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
+		return NULL;
+	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && record_specifier_base(base)) {
 		struct ast_tag_declaration *declaration;
 		struct ast_block_tag_declaration *node;
@@ -2675,6 +2741,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			return NULL;
 		}
 		node->type_syntax = type_syntax;
+		node->alignments = head.alignments;
 		node->initializer_syntax = initializer_syntax;
 		node->is_inline = head.inline_keyword.kind == token_inline;
 		node->is_register = head.keyword.kind == token_register;
@@ -2686,6 +2753,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		tail = &node->item.next;
 		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			break;
+		if (head.alignments) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"aligned declarations with multiple declarators are not supported yet");
+			return NULL;
+		}
 		if (base->kind == type_syntax_inferred) {
 			diagnostic_error(parser->diagnostics, name.location,
 				"multiple inferred auto declarators are not supported");

@@ -2872,6 +2872,54 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
 	const struct type *type);
 
+/* Alignment is object storage metadata, not a type mutation. This first
+ * subset intentionally excludes linkage/redeclaration and member layout. */
+static bool sema_local_alignment(struct sema *sema, struct ast_local_declaration *local)
+{
+	unsigned requested = 0;
+	for (struct ast_alignment_specifier *a = local->alignments; a; a = a->next) {
+		uint64_t value;
+		if (a->type_syntax) {
+			const struct type *operand = resolve_unevaluated_type_syntax(sema, a->type_syntax);
+			if (!operand)
+				return false;
+			if (!type_is_complete_object(operand)) {
+				diagnostic_error(sema->diagnostics, a->location, "alignment type must be a complete object type");
+				return false;
+			}
+			value = type_object_alignment(operand);
+		} else {
+			struct constant_result result;
+			bool saved = sema->unevaluated;
+			bool ok;
+			sema->unevaluated = true;
+			ok = sema_expression(sema, &a->expression, true);
+			sema->unevaluated = saved;
+			if (!ok)
+				return false;
+			result = evaluate_integer_constant(a->expression);
+			if (result.status != constant_value) {
+				diagnostic_error(sema->diagnostics, result.location, result.message);
+				return false;
+			}
+			value = result.bits;
+			if (!type_is_unsigned(result.type) &&
+				(value & (UINT64_C(1) << (type_integer_width(result.type) - 1)))) {
+				diagnostic_error(sema->diagnostics, a->location, "alignment must be nonnegative");
+				return false;
+			}
+		}
+		if (value && (value > 16 || (value & (value - 1)))) {
+			diagnostic_error(sema->diagnostics, a->location, "supported alignments are 0, 1, 2, 4, 8 and 16");
+			return false;
+		}
+		if (value > requested)
+			requested = (unsigned)value;
+	}
+	local->alignment = requested;
+	return true;
+}
+
 static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
@@ -2881,6 +2929,10 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		return false;
 	}
 	if (local->type_syntax->kind == type_syntax_inferred) {
+		if (local->alignments) {
+			diagnostic_error(sema->diagnostics, local->name.location, "alignment with inferred auto is not supported yet");
+			return false;
+		}
 		if (local->is_static || local->is_extern) {
 			diagnostic_error(sema->diagnostics, local->name.location,
 				"static or extern auto inference is not supported yet");
@@ -2888,6 +2940,8 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		}
 		return sema_inferred_local(sema, local);
 	}
+	if (local->alignments && !sema_local_alignment(sema, local))
+		return false;
 	type = resolve_type_syntax(sema, local->type_syntax);
 	if (!type)
 		return false;
@@ -2899,11 +2953,19 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		diagnostic_error(sema->diagnostics, local->name.location, "auto storage requires an object type");
 		return false;
 	}
+	if (local->alignments && type->kind == type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location, "alignment requires an object type");
+		return false;
+	}
 	if (local->is_extern || local->is_static || type->kind == type_kind_function)
 		return sema_block_storage(sema, local, type);
 	if (!type_is_complete_object(type) && !(type->kind == type_kind_array &&
 		local->initializer_syntax && !((const struct array_type *)type)->count)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
+		return false;
+	}
+	if (local->alignment && local->alignment < type_object_alignment(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location, "alignment cannot weaken the natural alignment");
 		return false;
 	}
 	return bind_local(sema, local, type);

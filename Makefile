@@ -119,6 +119,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	QBE="$(QBE)" python3 tests/test_boolean_keywords.py
 	QBE="$(QBE)" python3 tests/test_conditional_expressions.py
 	QBE="$(QBE)" python3 tests/test_sizeof_alignment.py
+	QBE="$(QBE)" python3 tests/test_declaration_alignment.py
 	python3 tests/test_constant_array_bounds.py
 	python3 tests/test_null_pointer_constants.py
 	python3 tests/test_nullptr.py
@@ -278,6 +279,7 @@ test: build/pp_oracle build/kcc build/test_support build/test_source build/test_
 	python3 tests/test_boolean_keywords.py
 	python3 tests/test_conditional_expressions.py
 	python3 tests/test_sizeof_alignment.py
+	python3 tests/test_declaration_alignment.py
 	python3 tests/test_constant_array_bounds.py
 	python3 tests/test_null_pointer_constants.py
 	python3 tests/test_nullptr.py

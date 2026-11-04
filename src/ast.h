@@ -760,6 +760,14 @@ struct ast_block_tag_declaration {
 	struct ast_tag_declaration *declaration;
 };
 
+/* A declaration-only alignment request, not a type qualifier. */
+struct ast_alignment_specifier {
+	struct source_location location;
+	struct ast_type_syntax *type_syntax;
+	struct ast_expression *expression;
+	struct ast_alignment_specifier *next;
+};
+
 struct ast_local_declaration {
 	struct ast_block_item item;
 	struct ast_type_syntax *type_syntax;
@@ -767,6 +775,8 @@ struct ast_local_declaration {
 	struct ast_expression *initializer;
 	struct ast_initializer *initializer_syntax;
 	struct ast_initializer_plan *initializer_plan;
+	struct ast_alignment_specifier *alignments;
+	unsigned alignment; /* Effective storage alignment; zero means natural. */
 	bool is_register;
 	bool is_auto; /* Written auto; explicit auto still requires an object. */
 	bool is_extern;

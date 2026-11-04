@@ -1335,6 +1335,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 		uint64_t bytes = type_object_size(local->type);
 		unsigned alignment = type_object_alignment(local->type);
 
+		if (local->alignment > alignment)
+			alignment = local->alignment;
 		if (alignment < 4)
 			alignment = 4;
 		emit(&codegen, "\t%%v%zu =l alloc%u %ju\n", local->slot, alignment, (uintmax_t)bytes);

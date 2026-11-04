@@ -37,6 +37,8 @@ enum token_kind {
 	token_typeof,
 	token_typeof_unqual,
 	token_sizeof,
+	token_alignas,
+	token_legacy_alignas,
 	token_alignof,
 	token_legacy_alignof,
 	token_static_assert,
