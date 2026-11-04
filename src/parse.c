@@ -937,11 +937,6 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 			return NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
-		if (node->underlying && preprocess_peek(parser->preprocessor).kind != token_semicolon) {
-			diagnostic_error(parser->diagnostics, keyword.location,
-				"fixed enum without a definition must be a tag-only declaration");
-			return NULL;
-		}
 		if (!node->tag.length) {
 			diagnostic_error(parser->diagnostics, keyword.location, "expected enum tag or definition");
 			return NULL;

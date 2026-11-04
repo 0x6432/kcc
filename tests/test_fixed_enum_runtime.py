@@ -31,6 +31,8 @@ programs = [
     'enum T : long { INNER=42 }; return sizeof(enum T)==8 && OUTER==1 ? INNER : 1; }',
     'typedef unsigned short U; enum T : U; enum T : typeof((unsigned short)0) { ANSWER=42 }; '
     'int main(void) { enum T x=ANSWER; return sizeof x==2 ? x : 1; }',
+    'enum T : int value; enum T : int { ANSWER=42 }; '
+    'int main(void) { value=ANSWER; return value; }',
 ]
 
 probe = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-x', 'c', '-fsyntax-only', '-'],

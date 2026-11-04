@@ -10,6 +10,8 @@ ordinary enum implementation. It is not a tested checkpoint.
 - `enum E : unsigned short;` declares a complete fixed enum immediately. A
   matching later definition repeats the underlying type and shares the nominal
   identity; scope shadowing and mismatched/repeated definitions are checked.
+  A declarator can follow a fixed tag without an enumerator list, for example
+  `enum E : int value;`.
 - Fixed enum constants have the nominal enum type, including during their
   definition. Explicit ICE values must be representable; implicit successors
   must not overflow the underlying range. Unsigned explicit arithmetic may wrap
