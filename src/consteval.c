@@ -3,6 +3,7 @@
 #include "sema.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -60,6 +61,41 @@ static struct constant_result compare_initializer_addresses(const struct ast_bin
 static struct constant_result difference_initializer_addresses(const struct ast_pointer_difference_expression *node);
 
 static struct constant_result evaluate(const struct ast_expression *expression, bool evaluated, bool initializer_condition);
+
+/* An immediately cast floating constant may occur in a C integer constant
+ * expression. Reject out-of-range conversions rather than invoking host UB. */
+static struct constant_result evaluate_float_literal_cast(const struct ast_expression *expression,
+	const struct ast_expression *operand, bool evaluated)
+{
+	uint64_t raw = ((const struct ast_integer_expression *)operand)->value;
+	double number, boundary;
+	unsigned width = type_integer_width(expression->type);
+
+	if (!evaluated)
+		return constant_success(expression, 0);
+	if (operand->type->kind == type_kind_float) {
+		uint32_t word = (uint32_t)raw;
+		float single;
+		memcpy(&single, &word, sizeof(single));
+		number = single;
+	} else {
+		memcpy(&number, &raw, sizeof(number));
+	}
+	if (!isfinite(number))
+		return constant_failure(expression, constant_invalid, "non-finite floating-to-integer constant conversion");
+	if (expression->type->kind == type_kind_bool)
+		return constant_success(expression, number != 0.0);
+	boundary = (double)(UINT64_C(1) << (width - 1));
+	if (type_is_unsigned(expression->type)) {
+		boundary *= 2.0;
+		if (number <= -1.0 || number >= boundary)
+			return constant_failure(expression, constant_invalid, "floating-to-integer constant conversion is out of range");
+		return constant_success(expression, number < 0.0 ? 0 : (uint64_t)number);
+	}
+	if (number < -boundary || number >= boundary)
+		return constant_failure(expression, constant_invalid, "floating-to-integer constant conversion is out of range");
+	return constant_success(expression, (uint64_t)(int64_t)number);
+}
 
 static struct constant_result evaluate_unary(const struct ast_unary_expression *node, bool evaluated, bool initializer_condition)
 {
@@ -226,7 +262,11 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 		const struct ast_expression *operand = expression->kind == expression_cast ?
 			((const struct ast_cast_expression *)expression)->operand :
 			((const struct ast_conversion_expression *)expression)->operand;
-		struct constant_result value = evaluate(operand, evaluated, initializer_condition);
+		struct constant_result value;
+
+		if (expression->kind == expression_cast && operand->kind == expression_floating)
+			return evaluate_float_literal_cast(expression, operand, evaluated);
+		value = evaluate(operand, evaluated, initializer_condition);
 
 		if (initializer_condition && expression->type->kind == type_kind_bool &&
 			!type_is_integer(operand->type) && value.status == constant_value)
