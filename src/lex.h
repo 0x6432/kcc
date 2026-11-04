@@ -112,6 +112,12 @@ enum token_kind {
 	token_kcc_va_copy,
 	token_kcc_va_end,
 	token_kcc_offsetof,
+	token_kcc_atomic_fetch_add,
+	token_kcc_atomic_fetch_sub,
+	token_kcc_atomic_fetch_and,
+	token_kcc_atomic_fetch_or,
+	token_kcc_atomic_fetch_xor,
+	token_kcc_atomic_exchange,
 	token_arrow,
 };
 

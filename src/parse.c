@@ -1660,6 +1660,40 @@ static struct ast_expression *parse_va_expression(struct parser *parser)
 	return &node->expression;
 }
 
+static struct ast_expression *parse_atomic_expression(struct parser *parser)
+{
+	struct token token = preprocess_next(parser->preprocessor);
+	struct ast_atomic_expression *node = arena_alloc(parser->arena, sizeof(*node));
+
+	if (!node) {
+		allocation_error(parser, token.location);
+		return NULL;
+	}
+	*node = (struct ast_atomic_expression) {
+		.expression = { .kind = expression_atomic_fetch, .location = token.location, .depth = 1 },
+		.operation = token.kind == token_kcc_atomic_fetch_add ? ast_atomic_fetch_add :
+			token.kind == token_kcc_atomic_fetch_sub ? ast_atomic_fetch_sub :
+			token.kind == token_kcc_atomic_fetch_and ? ast_atomic_fetch_and :
+			token.kind == token_kcc_atomic_fetch_or ? ast_atomic_fetch_or :
+			token.kind == token_kcc_atomic_fetch_xor ? ast_atomic_fetch_xor : ast_atomic_exchange,
+	};
+	if (!expect_token(parser, token_left_paren, "expected '(' after atomic intrinsic", NULL))
+		return NULL;
+	node->object = parse_expression(parser, 1);
+	if (!node->object || !expect_token(parser, token_comma, "expected ',' in atomic intrinsic", NULL))
+		return NULL;
+	node->argument = parse_expression(parser, 1);
+	if (!node->argument || !expect_token(parser, token_right_paren, "expected ')' after atomic intrinsic", NULL))
+		return NULL;
+	if (node->object->depth >= ast_max_expression_depth || node->argument->depth >= ast_max_expression_depth) {
+		diagnostic_error(parser->diagnostics, token.location, "expression tree exceeds depth limit (128)");
+		return NULL;
+	}
+	node->expression.depth = 1 + (node->object->depth > node->argument->depth ?
+		node->object->depth : node->argument->depth);
+	return &node->expression;
+}
+
 /* primary-atom ::= integer-expression | boolean-constant | nullptr-constant | character-expression | string-expression | identifier
  * Parenthesized primaries share cast disambiguation after one opening parenthesis.
  */
@@ -1682,6 +1716,10 @@ static struct ast_expression *parse_primary_expression(struct parser *parser)
 		return parse_va_expression(parser);
 	if (token.kind == token_kcc_offsetof)
 		return parse_offsetof_expression(parser);
+	if (token.kind == token_kcc_atomic_fetch_add || token.kind == token_kcc_atomic_fetch_sub ||
+		token.kind == token_kcc_atomic_fetch_and || token.kind == token_kcc_atomic_fetch_or ||
+		token.kind == token_kcc_atomic_fetch_xor || token.kind == token_kcc_atomic_exchange)
+		return parse_atomic_expression(parser);
 	if (token.kind == token_nullptr)
 		return parse_nullptr_expression(parser);
 	if (token.kind == token_true || token.kind == token_false)

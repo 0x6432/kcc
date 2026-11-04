@@ -111,8 +111,9 @@ int main(void) {
 atomic_int x=ATOMIC_VAR_INIT(0);
 int main(void) {
   atomic_init(&x,40);
-  atomic_store(&x,atomic_load(&x)+2);
-  return atomic_load(&x);
+  int prior=atomic_fetch_add(&x,2);
+  int old=atomic_exchange(&x,42);
+  return prior==40 && old==42 ? atomic_load(&x) : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)

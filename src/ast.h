@@ -44,6 +44,7 @@ enum expression_kind {
 	expression_alignof,
 	expression_call,
 	expression_va,
+	expression_atomic_fetch,
 	expression_member,
 	expression_compound_literal,
 };
@@ -328,6 +329,18 @@ struct ast_va_expression {
 	struct ast_expression *list;
 	struct ast_expression *source; /* va_copy only */
 	struct ast_type_syntax *type_syntax; /* va_arg only */
+};
+
+enum ast_atomic_operation {
+	ast_atomic_fetch_add, ast_atomic_fetch_sub, ast_atomic_fetch_and,
+	ast_atomic_fetch_or, ast_atomic_fetch_xor, ast_atomic_exchange,
+};
+
+struct ast_atomic_expression {
+	struct ast_expression expression;
+	enum ast_atomic_operation operation;
+	struct ast_expression *object;
+	struct ast_expression *argument;
 };
 
 struct ast_call_expression {

@@ -761,6 +761,26 @@ static size_t codegen_expression(struct codegen *codegen,
 
 	assert(type_is_scalar(expression->type) || type_is_record(expression->type));
 	switch (expression->kind) {
+	case expression_atomic_fetch: {
+		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
+		size_t object = codegen_expression(codegen, node->object);
+		size_t argument = codegen_expression(codegen, node->argument);
+		const char *operation;
+
+		switch (node->operation) {
+		case ast_atomic_fetch_add: operation = "fetch_add"; break;
+		case ast_atomic_fetch_sub: operation = "fetch_sub"; break;
+		case ast_atomic_fetch_and: operation = "fetch_and"; break;
+		case ast_atomic_fetch_or: operation = "fetch_or"; break;
+		case ast_atomic_fetch_xor: operation = "fetch_xor"; break;
+		case ast_atomic_exchange: operation = "exchange"; break;
+		default: abort();
+		}
+		temporary = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w call $__atomic_%s_4(l %%t%zu, w %%t%zu, w 5)\n",
+			temporary, operation, object, argument);
+		return temporary;
+	}
 	case expression_va: {
 		const struct ast_va_expression *node = (const struct ast_va_expression *)expression;
 		size_t list = codegen_expression(codegen, node->list);

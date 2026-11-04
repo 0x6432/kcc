@@ -356,6 +356,12 @@ static const struct keyword keywords[] = {
 	{ "__kcc_va_start", token_kcc_va_start }, { "__kcc_va_arg", token_kcc_va_arg },
 	{ "__kcc_va_copy", token_kcc_va_copy }, { "__kcc_va_end", token_kcc_va_end },
 	{ "__kcc_offsetof", token_kcc_offsetof },
+	{ "__kcc_atomic_fetch_add", token_kcc_atomic_fetch_add },
+	{ "__kcc_atomic_fetch_sub", token_kcc_atomic_fetch_sub },
+	{ "__kcc_atomic_fetch_and", token_kcc_atomic_fetch_and },
+	{ "__kcc_atomic_fetch_or", token_kcc_atomic_fetch_or },
+	{ "__kcc_atomic_fetch_xor", token_kcc_atomic_fetch_xor },
+	{ "__kcc_atomic_exchange", token_kcc_atomic_exchange },
 	{ "struct", token_struct }, { "union", token_union }, { "enum", token_enum },
 	{ "char", token_char }, { "short", token_short }, { "_Bool", token_bool },
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
@@ -947,6 +953,12 @@ const char *token_kind_name(enum token_kind kind)
 	case token_kcc_va_copy: return "__kcc_va_copy";
 	case token_kcc_va_end: return "__kcc_va_end";
 	case token_kcc_offsetof: return "__kcc_offsetof";
+	case token_kcc_atomic_fetch_add: return "__kcc_atomic_fetch_add";
+	case token_kcc_atomic_fetch_sub: return "__kcc_atomic_fetch_sub";
+	case token_kcc_atomic_fetch_and: return "__kcc_atomic_fetch_and";
+	case token_kcc_atomic_fetch_or: return "__kcc_atomic_fetch_or";
+	case token_kcc_atomic_fetch_xor: return "__kcc_atomic_fetch_xor";
+	case token_kcc_atomic_exchange: return "__kcc_atomic_exchange";
 	case token_arrow: return "->";
 	}
 	return "unknown";

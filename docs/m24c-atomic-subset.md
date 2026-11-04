@@ -26,12 +26,16 @@ on the supported atomic integer types use the corresponding libatomic 4-byte
 read-modify-write operations. Prefix, postfix and compound expressions yield the
 appropriate new or old value, and the object address is evaluated once. Atomic
 compound multiplication, division, remainder, shifts and floating right operands
-are rejected rather than expanded as a non-atomic load and store. Atomic record or
-union members, including arrays of atomic members, are rejected because existing
+are rejected rather than expanded as a non-atomic load and store.
+
+The partial `stdatomic.h` also offers sequentially consistent exchange and
+fetch-add/subtract/and/or/xor via libatomic; each evaluates its pointer and
+integer operand once and returns the previous value. These additions are not
+yet tested. Atomic record or union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
 Atomic pointer, other integer widths, bool, enum, floating, aggregate and array
-atomic types, volatile/restrict, fences, explicit memory orders, atomic library
-macros and lock-free queries are not implemented. `_Atomic(type-name)` rejects
+atomic types, volatile/restrict, fences, explicit memory orders, other atomic
+library operations and lock-free queries are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
 query limit. The libatomic ABI's reserved function names must not be redefined by

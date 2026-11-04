@@ -957,6 +957,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define atomic_init(object,value) ((void)(*(object)=(value)))\n"
 			"#define atomic_load(object) (*(object))\n"
 			"#define atomic_store(object,value) ((void)(*(object)=(value)))\n"
+			"#define atomic_fetch_add(object,value) __kcc_atomic_fetch_add(object,value)\n"
+			"#define atomic_fetch_sub(object,value) __kcc_atomic_fetch_sub(object,value)\n"
+			"#define atomic_fetch_and(object,value) __kcc_atomic_fetch_and(object,value)\n"
+			"#define atomic_fetch_or(object,value) __kcc_atomic_fetch_or(object,value)\n"
+			"#define atomic_fetch_xor(object,value) __kcc_atomic_fetch_xor(object,value)\n"
+			"#define atomic_exchange(object,value) __kcc_atomic_exchange(object,value)\n"
 			"#endif\n";
 		static const char stdlib_header[] =
 			"#ifndef __KCC_STDLIB_H\n#define __KCC_STDLIB_H 1\n"

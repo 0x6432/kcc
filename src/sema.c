@@ -1556,6 +1556,32 @@ static bool sema_expression(struct sema *sema,
 	const struct type *result_type = &type_int;
 
 	switch (expression->kind) {
+	case expression_atomic_fetch: {
+		struct ast_atomic_expression *node = (struct ast_atomic_expression *)expression;
+		const struct type *referent;
+
+		if (!sema_expression(sema, &node->object, true) || !sema_expression(sema, &node->argument, true))
+			return false;
+		if (node->object->type->kind != type_kind_pointer) {
+			diagnostic_error(sema->diagnostics, expression->location, "atomic operation requires a pointer to an atomic object");
+			return false;
+		}
+		referent = ((const struct pointer_type *)node->object->type)->referent;
+		if (!(referent->qualifiers & type_qualifier_atomic) ||
+			(referent->qualifiers & type_qualifier_const) ||
+			(referent->kind != type_kind_int && referent->kind != type_kind_uint) ||
+			!type_is_integer(node->argument->type)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"atomic operation requires a mutable atomic int or unsigned int and an integer value");
+			return false;
+		}
+		result_type = unqualified_type(sema, referent, expression->location);
+		if (!result_type || !convert_expression(sema, &node->argument, result_type))
+			return false;
+		expression->depth = 1 + (node->object->depth > node->argument->depth ?
+			node->object->depth : node->argument->depth);
+		break;
+	}
 	case expression_va: {
 		struct ast_va_expression *node = (struct ast_va_expression *)expression;
 		if (!sema_va_list(sema, &node->list))
