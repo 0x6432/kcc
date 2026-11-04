@@ -958,6 +958,17 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"size_t mbsrtowcs(wchar_t *,const char **,size_t,mbstate_t *);\n"
 			"size_t wcsrtombs(char *,const wchar_t **,size_t,mbstate_t *);\n"
 			"#endif\n";
+		static const char wctype_header[] =
+			"#ifndef __KCC_WCTYPE_H\n#define __KCC_WCTYPE_H 1\n"
+			"#include <wchar.h>\n"
+			"typedef unsigned long wctype_t; typedef const int *wctrans_t;\n"
+			"int iswalnum(wint_t); int iswalpha(wint_t); int iswblank(wint_t); int iswcntrl(wint_t);\n"
+			"int iswdigit(wint_t); int iswgraph(wint_t); int iswlower(wint_t); int iswprint(wint_t);\n"
+			"int iswpunct(wint_t); int iswspace(wint_t); int iswupper(wint_t); int iswxdigit(wint_t);\n"
+			"wint_t towlower(wint_t); wint_t towupper(wint_t);\n"
+			"wctype_t wctype(const char *); int iswctype(wint_t,wctype_t);\n"
+			"wctrans_t wctrans(const char *); wint_t towctrans(wint_t,wctrans_t);\n"
+			"#endif\n";
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
@@ -1331,12 +1342,17 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define INT_FAST64_MIN INT64_MIN\n#define INT_FAST64_MAX INT64_MAX\n#define UINT_FAST64_MAX UINT64_MAX\n"
 			"#define INT8_C(c) c\n#define UINT8_C(c) c\n#define INT16_C(c) c\n#define UINT16_C(c) c\n"
 			"#define INT32_C(c) c\n#define UINT32_C(c) c ## U\n"
+			"#ifndef WCHAR_MIN\n#define WCHAR_MIN (-2147483647-1)\n#define WCHAR_MAX 2147483647\n#endif\n"
+			"#define WINT_MIN 0U\n#define WINT_MAX 4294967295U\n"
 			"#define INT64_C(c) c ## L\n#define UINT64_C(c) c ## UL\n"
 			"#define INTMAX_C(c) c ## L\n#define UINTMAX_C(c) c ## UL\n"
 			"#endif\n";
 		const char *header = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "wchar.h") == 0) {
+		if (strcmp(name->path, "wctype.h") == 0) {
+			header = wctype_header;
+			source_name = "<kcc/wctype.h>";
+		} else if (strcmp(name->path, "wchar.h") == 0) {
 			header = wchar_header;
 			source_name = "<kcc/wchar.h>";
 		} else if (strcmp(name->path, "uchar.h") == 0) {

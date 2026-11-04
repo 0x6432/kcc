@@ -221,12 +221,16 @@ int main(void) {
     source.write_text(r'''
 #include <wchar.h>
 #include <uchar.h>
+#include <wctype.h>
+#include <stdint.h>
+static_assert(WCHAR_MIN < 0 && WCHAR_MAX==2147483647 && WINT_MAX==4294967295U);
 static_assert(sizeof(wchar_t)==4 && sizeof(wint_t)==4 && sizeof(mbstate_t)==8);
 int main(void) {
   wchar_t a[3]={65,66,0}, b[3]={0}; char out[8]; mbstate_t state={0};
   wchar_t ch=0;
   if (wcslen(a)!=2 || wcscpy(b,a)!=b || wcscmp(a,b)!=0 || wcschr(b,66)!=b+1) return 1;
   if (mbrtowc(&ch,"A",1,&state)!=1 || ch!=65 || wcrtomb(out,ch,&state)!=1 || out[0]!=65) return 2;
+  if (!iswalpha(ch) || towlower(ch)!=97 || !iswctype(ch,wctype("alpha"))) return 3;
   return 42;
 }
 ''')

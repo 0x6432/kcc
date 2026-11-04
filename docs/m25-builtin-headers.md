@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `wchar.h` and `uchar.h`, in addition
+`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `wchar.h`, `wctype.h` and `uchar.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -18,7 +18,7 @@ include directories take precedence.
   least- and fast-width types, pointer-sized and maximum-width integer types,
   their corresponding limits, size and pointer-difference limits, and
   constant constructors. The fast-width type choices match Linux x86-64
-  glibc. Other standard macros are not yet provided.
+  glibc. The target `WCHAR_MIN`, `WCHAR_MAX`, `WINT_MIN` and `WINT_MAX` macros are also provided. Other standard macros are not yet provided.
 - `limits.h` supplies ordinary integer limits and C23 integer width macros for
   the target's 8-bit signed `char`, 16-bit short, 32-bit int and 64-bit long
   and long long. `MB_LEN_MAX` is 16, matching glibc. Bit-precise limits are
@@ -69,6 +69,8 @@ include directories take precedence.
   string and memory operations, and basic multibyte conversion declarations.
   Wide I/O and other interfaces are omitted; wide string literals are still
   unsupported. The declarations require compatible libc.
+- `wctype.h` declares wide classification and case-conversion functions and
+  glibc-compatible classification and transformation descriptor types.
 - `uchar.h` supplies the C23 character typedefs, glibc-compatible `mbstate_t`,
   and 16/32-bit conversion function declarations. C23 8-bit conversion
   functions are omitted on the current glibc 2.34 target.
