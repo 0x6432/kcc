@@ -906,6 +906,14 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define assert(...) ((__VA_ARGS__) ? (void)0 : "
 			"__assert_fail(#__VA_ARGS__, __FILE__, __LINE__, \"(unknown)\"))\n"
 			"#endif\n";
+		static const char stdatomic_header[] =
+			"#ifndef __KCC_STDATOMIC_H\n#define __KCC_STDATOMIC_H 1\n"
+			"typedef _Atomic int atomic_int;\ntypedef _Atomic unsigned int atomic_uint;\n"
+			"#define ATOMIC_VAR_INIT(value) (value)\n"
+			"#define atomic_init(object,value) ((void)(*(object)=(value)))\n"
+			"#define atomic_load(object) (*(object))\n"
+			"#define atomic_store(object,value) ((void)(*(object)=(value)))\n"
+			"#endif\n";
 		static const char stddef_header[] =
 			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
 			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
@@ -971,6 +979,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "assert.h") == 0) {
 			header = assert_header;
 			source_name = "<kcc/assert.h>";
+		} else if (strcmp(name->path, "stdatomic.h") == 0) {
+			header = stdatomic_header;
+			source_name = "<kcc/stdatomic.h>";
 		} else if (strcmp(name->path, "stddef.h") == 0) {
 			header = stddef_header;
 			source_name = "<kcc/stddef.h>";

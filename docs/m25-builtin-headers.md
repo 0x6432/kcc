@@ -1,8 +1,8 @@
 # Bounded compiler-provided headers
 
 After explicit include paths have been searched, the x86-64 SysV compiler
-provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`
-and `assert.h`, in addition
+provides fallback subsets of `stdbool.h`, `stddef.h`, `stdint.h`, `limits.h`,
+`assert.h` and `stdatomic.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence.
 
@@ -24,6 +24,12 @@ include directories take precedence.
   `__func__` is not yet available, the failure message uses `(unknown)` for the
   function name. This fallback therefore does not yet provide full standard
   diagnostic behavior and requires a compatible libc.
+- `stdatomic.h` exposes `atomic_int`, `atomic_uint`, `ATOMIC_VAR_INIT`,
+  `atomic_init`, `atomic_load` and `atomic_store` for the compiler's bounded
+  atomic int/unsigned-int subset. Initialization uses a sequentially consistent
+  store; load and store use sequential consistency and require `-latomic`.
+  Volatile atomic objects, other atomic types, explicit orders, fences,
+  exchange/fetch operations and lock-free queries are not provided.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.
