@@ -858,7 +858,7 @@ static bool include_path(struct preprocessor *preprocessor, struct include_name 
  */
 static bool load_include_source(struct preprocessor *preprocessor,
 	struct pp_token marker, struct include_name *name, struct source *source,
-	struct token *error, bool *found)
+	struct token *error, bool *found, bool builtins)
 {
 	const char *parent = marker.location.source->name;
 	bool absolute = name->path[0] == '/';
@@ -888,7 +888,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		source_destroy(source);
 	}
 	/* Explicit include directories win; provide target headers as fallback. */
-	if (!absolute && strcmp(name->path, "stdarg.h") == 0) {
+	if (builtins && !absolute && strcmp(name->path, "stdarg.h") == 0) {
 		static const char header[] =
 			"#ifndef __KCC_STDARG_H\n"
 			"#define __KCC_STDARG_H 1\n"
@@ -906,7 +906,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"cannot allocate built-in stdarg.h");
 		return false;
 	}
-	if (!absolute) {
+	if (builtins && !absolute) {
 		static const char stdbool_header[] =
 			"#ifndef __KCC_STDBOOL_H\n#define __KCC_STDBOOL_H 1\n"
 			"#define __bool_true_false_are_defined 1\n#endif\n";
@@ -1273,7 +1273,7 @@ static bool read_include_directive(struct preprocessor *preprocessor,
 		return false;
 	*child = (struct include_source) { 0 };
 	preprocessor->include_count++;
-	if (!load_include_source(preprocessor, marker, &name, &child->source, error, NULL))
+	if (!load_include_source(preprocessor, marker, &name, &child->source, error, NULL, true))
 		return false;
 	if (once_file_seen(preprocessor, child->source.name)) {
 		source_destroy(&child->source);
@@ -1309,6 +1309,9 @@ static bool read_include_directive(struct preprocessor *preprocessor,
  * Other C23 control lines are recognized but not implemented yet.
  */
 static bool read_line_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct token *error);
+
+static bool read_embed_directive(struct preprocessor *preprocessor,
 	struct pp_token marker, struct token *error);
 
 static bool read_directive(struct preprocessor *preprocessor,
@@ -1347,6 +1350,8 @@ static bool read_directive(struct preprocessor *preprocessor,
 	}
 	if (pp_spelling_is(token, "include"))
 		return read_include_directive(preprocessor, marker, error);
+	if (pp_spelling_is(token, "embed"))
+		return read_embed_directive(preprocessor, marker, error);
 	if (pp_spelling_is(token, "line"))
 		return read_line_directive(preprocessor, marker, error);
 	if (pp_spelling_is(token, "define") || pp_spelling_is(token, "undef"))
@@ -2697,7 +2702,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 			return signed_condition(0);
 		}
 		preprocessor->include_count++;
-		if (!load_include_source(preprocessor, operator, &name, &source, parser->error, &found)) {
+		if (!load_include_source(preprocessor, operator, &name, &source, parser->error, &found, true)) {
 			parser->failed = true;
 			return signed_condition(0);
 		}
@@ -3315,6 +3320,95 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 	if (!success && !preprocessor->stopped)
 		*error = invalid_token(marker);
 	return success;
+}
+
+/* Bounded parameter-free C23 embed: the resource stays raw binary, never
+ * source-prepared; each byte becomes a decimal pp-number separated by commas. */
+static bool read_embed_directive(struct preprocessor *preprocessor,
+	struct pp_token marker, struct token *error)
+{
+	struct include_name name;
+	struct source resource = { 0 };
+	struct source *spelling;
+	struct argument_token *head = NULL, **tail = &head;
+	bool found;
+	size_t offset = 0;
+
+	if (!expand_include_operand(preprocessor, marker, &name, error))
+		return false;
+	if (!preprocessor->include_loader) {
+		diagnostic_error(preprocessor->diagnostics, marker.expansion_location,
+			"embed requires a configured source loader");
+		*error = invalid_token(marker);
+		return false;
+	}
+	if (preprocessor->include_count == preprocess_include_count_limit) {
+		*error = stop_preprocessing(preprocessor, marker, "include attempt limit (128) exceeded");
+		return false;
+	}
+	preprocessor->include_count++;
+	if (!load_include_source(preprocessor, marker, &name, &resource, error, &found, false))
+		return false;
+	if (!found) {
+		diagnostic_error(preprocessor->diagnostics, marker.expansion_location, "cannot load embed resource");
+		*error = invalid_token(marker);
+		return false;
+	}
+	if (resource.length > 4096 || resource.length > preprocess_include_bytes_limit - preprocessor->include_bytes) {
+		source_destroy(&resource);
+		*error = stop_preprocessing(preprocessor, marker, "embed resource byte limit exceeded (4096)");
+		return false;
+	}
+	preprocessor->include_bytes += resource.length;
+	if (!resource.length) {
+		source_destroy(&resource);
+		preprocessor->cursor.deferred_space = true;
+		return true;
+	}
+	spelling = allocate_spelling(preprocessor, resource.length * 4 + 1, marker, error);
+	if (!spelling) {
+		source_destroy(&resource);
+		return false;
+	}
+	for (size_t i = 0; i < resource.length; i++) {
+		for (unsigned part = 0; part < (i ? 2u : 1u); part++) {
+			bool comma = i && !part;
+			size_t length;
+			struct argument_token *copy;
+			struct pp_token token = marker;
+			if (comma) {
+				spelling->data[offset] = ',';
+				length = 1;
+			} else {
+				int written = snprintf((char *)spelling->data + offset,
+					resource.length * 4 + 1 - offset, "%u", (unsigned)resource.data[i]);
+				assert(written > 0 && written <= 3);
+				length = (size_t)written;
+			}
+			token.kind = comma ? pp_punctuator : pp_number;
+			token.location = (struct source_location) { spelling, offset };
+			token.length = length;
+			token.at_line_start = false;
+			token.leading_space = false;
+			copy = copy_argument_token(preprocessor, (struct rescan_token) {
+				.token = token, .semantic_location = marker.location,
+			}, marker, error);
+			if (!copy) {
+				source_destroy(&resource);
+				return false;
+			}
+			*tail = copy;
+			tail = &copy->next;
+			offset += length;
+		}
+	}
+	spelling->data[offset] = 0;
+	spelling->length = spelling->physical_length = offset;
+	source_destroy(&resource);
+	return push_frame(preprocessor, &preprocessor->cursor, (struct expansion_frame) {
+		.argument = head, .invocation = marker.expansion_location,
+		.semantic_location = marker.location, .first = true, .leading_space = true,
+	}, marker, error);
 }
 
 /* The directive line is fully collected before rescan, so a malformed or
