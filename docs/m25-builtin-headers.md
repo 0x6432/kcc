@@ -55,10 +55,11 @@ include directories take precedence.
   evaluating each argument once after conversion to double. Long double,
   other classifications and many math interfaces remain unsupported; link
   math functions with `-lm`.
-- `tgmath.h` provides the unary real functions listed in `math.h` as generic
-  macros for float, double and integer arguments. Float selects the `f`
-  variant; double and integer select the double variant. Arguments are evaluated
-  once. Binary, complex and long-double generic math is not provided.
+- `tgmath.h` provides the listed unary real functions, plus `atan2`, `pow` and
+  `fmod`, as generic macros for float, double and integer arguments. All-float
+  arguments select the `f` variant; any double or integer selects the double
+  variant. Arguments are evaluated once. Other generic functions, complex and
+  long-double generic math are not provided.
 - `ctype.h` declares the usual narrow-character classification and conversion
   functions from libc. `inttypes.h` supplies exact-width, pointer-width and
   max-width print format macros plus `imaxabs`, `strtoimax` and `strtoumax`.

@@ -959,6 +959,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define ceil(x) _Generic((x),float:ceilf,default:ceil)(x)\n"
 			"#define trunc(x) _Generic((x),float:truncf,default:trunc)(x)\n"
 			"#define round(x) _Generic((x),float:roundf,default:round)(x)\n"
+			"#define atan2(x,y) _Generic((x),float:_Generic((y),float:atan2f,default:atan2),default:atan2)((x),(y))\n"
+			"#define pow(x,y) _Generic((x),float:_Generic((y),float:powf,default:pow),default:pow)((x),(y))\n"
+			"#define fmod(x,y) _Generic((x),float:_Generic((y),float:fmodf,default:fmod),default:fmod)((x),(y))\n"
 			"#endif\n";
 		static const char ctype_header[] =
 			"#ifndef __KCC_CTYPE_H\n#define __KCC_CTYPE_H 1\n"

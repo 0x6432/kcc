@@ -130,10 +130,13 @@ int main(void) {
 static_assert(sizeof(sqrt(4.0f))==sizeof(float));
 static_assert(sizeof(sqrt(4.0))==sizeof(double));
 static_assert(sizeof(sqrt(4))==sizeof(double));
+static_assert(sizeof(pow(4.0f,2.0f))==sizeof(float));
+static_assert(sizeof(pow(4.0f,2))==sizeof(double));
+static_assert(sizeof(pow(4,2.0f))==sizeof(double));
 int main(void) {
   int n=4;
   float f=4.0f;
-  return sqrt(n++)==2.0 && n==5 && sqrt(f)==2.0f ? 42 : 1;
+  return sqrt(n++)==2.0 && n==5 && sqrt(f)==2.0f && pow(f,2)==16.0 ? 42 : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
