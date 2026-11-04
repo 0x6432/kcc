@@ -122,6 +122,7 @@ struct preprocessor {
 	size_t paste_depth;
 	char translation_date[14];
 	char translation_time[11];
+	bool invalid_source_date_epoch;
 	bool stopped;
 	bool has_lookahead;
 	struct token lookahead;

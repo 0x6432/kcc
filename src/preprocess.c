@@ -1548,8 +1548,14 @@ static bool expand_predefined_clock(struct preprocessor *preprocessor,
 {
 	const char *value = pp_spelling_is(input->token, "__DATE__") ?
 		preprocessor->translation_date : preprocessor->translation_time;
-	size_t length = strlen(value);
-	struct source *spelling = allocate_spelling(preprocessor, length + 1, input->token, error);
+	size_t length;
+	struct source *spelling;
+	if (preprocessor->invalid_source_date_epoch) {
+		*error = stop_preprocessing(preprocessor, input->token, "invalid SOURCE_DATE_EPOCH");
+		return false;
+	}
+	length = strlen(value);
+	spelling = allocate_spelling(preprocessor, length + 1, input->token, error);
 	if (!spelling)
 		return false;
 	memcpy(spelling->data, value, length + 1);
@@ -3254,10 +3260,37 @@ void preprocess_init(struct preprocessor *preprocessor, const struct source *sou
 		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 	};
-	time_t now = time(NULL);
-	struct tm *clock = now == (time_t)-1 ? NULL : gmtime(&now);
+	const char *epoch = getenv("SOURCE_DATE_EPOCH");
+	time_t now;
+	struct tm *clock;
 
 	*preprocessor = (struct preprocessor) { .diagnostics = diagnostics };
+	now = time(NULL);
+	if (epoch) {
+		uint64_t seconds = 0;
+		const char *p = epoch;
+		if (!*p)
+			preprocessor->invalid_source_date_epoch = true;
+		for (; *p; p++) {
+			unsigned digit;
+			if (*p < '0' || *p > '9') {
+				preprocessor->invalid_source_date_epoch = true;
+				break;
+			}
+			digit = (unsigned)(*p - '0');
+			if (seconds > (UINT64_C(253402300799) - digit) / 10) {
+				preprocessor->invalid_source_date_epoch = true;
+				break;
+			}
+			seconds = seconds * 10 + digit;
+		}
+		if (!preprocessor->invalid_source_date_epoch) {
+			now = (time_t)seconds;
+			if (now < (time_t)0 || (uint64_t)now != seconds)
+				preprocessor->invalid_source_date_epoch = true;
+		}
+	}
+	clock = now == (time_t)-1 || preprocessor->invalid_source_date_epoch ? NULL : gmtime(&now);
 	memcpy(preprocessor->translation_date, "\"??? ?? ????\"", 14);
 	memcpy(preprocessor->translation_time, "\"??:??:??\"", 11);
 	if (clock && clock->tm_mon >= 0 && clock->tm_mon < 12 &&

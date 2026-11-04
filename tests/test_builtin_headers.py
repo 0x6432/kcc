@@ -76,6 +76,24 @@ int main(void) {
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
+int main(void) {
+  return __DATE__[0]=='J' && __DATE__[4]==' ' && __DATE__[5]=='1' &&
+    __DATE__[7]=='1' && __DATE__[8]=='9' && __DATE__[9]=='7' &&
+    __DATE__[10]=='0' && __TIME__[0]=='0' && __TIME__[7]=='0' ? 42 : 1;
+}
+''')
+    env = dict(os.environ, SOURCE_DATE_EPOCH='0')
+    result = subprocess.run([str(compiler), str(source)], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
+    env['SOURCE_DATE_EPOCH'] = 'not-a-timestamp'
+    result = subprocess.run([str(compiler), str(source)], env=env, capture_output=True, text=True)
+    assert result.returncode != 0 and 'invalid SOURCE_DATE_EPOCH' in result.stderr
+    source.write_text(r'''
 #include <math.h>
 #include <stdlib.h>
 int main(void) {
