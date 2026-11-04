@@ -21,6 +21,11 @@ _Static_assert(alignof(double)==8, "double alignment");
 typedef const float CF;
 double global_float=1.5;
 float global_negzero=-0.0f;
+float global_narrow=42.0;
+double global_widen=42.0f;
+float global_integer=42;
+double global_unsigned=18446744073709551615UL;
+double global_signed=(-9223372036854775807L-1L);
 struct Holder { double x; float y; };
 struct Holder global_holder={-2.5, 3.0f};
 float add(float a, float b) { CF x = a; return x+b; }
@@ -50,6 +55,7 @@ float pass(float (*)(float,float),float,float);
 double widen(float); float narrow(double); double mixed(float,int); long to_long(double); _Bool as_bool(double);
 float update(float *); int compound_int(int);
 extern double global_float; extern float global_negzero;
+extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 struct Holder { double x; float y; }; extern struct Holder global_holder;
 double stack(int,double,int,double,int,double,int,double,int,double,double,double,double,double);
 int main(void) {
@@ -62,6 +68,8 @@ int main(void) {
  if (to_long(-3.5)!=-3 || as_bool(0.0) || !as_bool(1.0)) return 7;
  { float x=1.0f; if (update(&x)!=4.5f || x!=3.5f || compound_int(1)!=2) return 8; }
  if (global_float!=1.5 || !signbit(global_negzero) || global_holder.x!=-2.5 || global_holder.y!=3.0f) return 9;
+ if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
+     global_unsigned!=(double)18446744073709551615UL || global_signed!=(double)(-9223372036854775807L-1L)) return 10;
  return 0;
 }
 '''
@@ -81,7 +89,7 @@ reject = [
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
  'float f(void){return 1.0L;}',
  'float f(void){return 1e9999f;}', 'float f(void){return 1e-9999f;}',
- 'float f(void){return 1.0e1\'f;}', 'float x=1.0;', 'double x=1.0+2.0;',
+ 'float f(void){return 1.0e1\'f;}', 'double x=1.0+2.0;',
  'int x[1.0];', '#if 1.0\nint x;\n#endif\n',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-float-') as directory:

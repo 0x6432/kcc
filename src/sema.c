@@ -2593,8 +2593,8 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
-/* Static literal subset: preserve the exact target bits, including -0. A
- * different-precision conversion or floating arithmetic is not folded here. */
+/* Static constants use the host's target-matching binary32/binary64 format,
+ * as does literal parsing. Floating arithmetic is not folded here. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)
 {
 	if (!type_is_floating(expression->type))
@@ -2617,8 +2617,56 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 		const struct ast_expression *operand = expression->kind == expression_cast ?
 			((const struct ast_cast_expression *)expression)->operand :
 			((const struct ast_conversion_expression *)expression)->operand;
-		return operand->type->kind == expression->type->kind &&
-			static_floating_literal_bits(operand, bits);
+		if (type_is_floating(operand->type)) {
+			uint64_t source_bits;
+
+			if (!static_floating_literal_bits(operand, &source_bits))
+				return false;
+			if (operand->type->kind == expression->type->kind) {
+				*bits = source_bits;
+			} else if (operand->type->kind == type_kind_float) {
+				uint32_t raw = (uint32_t)source_bits;
+				float source;
+				double converted;
+				memcpy(&source, &raw, sizeof(source));
+				converted = (double)source;
+				memcpy(bits, &converted, sizeof(converted));
+			} else {
+				double source;
+				float converted;
+				uint32_t raw;
+				memcpy(&source, &source_bits, sizeof(source));
+				converted = (float)source;
+				memcpy(&raw, &converted, sizeof(raw));
+				*bits = raw;
+			}
+			return true;
+		}
+		if (type_is_integer(operand->type)) {
+			struct constant_result value = evaluate_integer_constant(operand);
+			unsigned width;
+			uint64_t mask;
+			bool negative;
+			int64_t signed_number;
+
+			if (value.status != constant_value)
+				return false;
+			width = type_integer_width(value.type);
+			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+			negative = !type_is_unsigned(value.type) && (value.bits & (UINT64_C(1) << (width - 1)));
+			signed_number = negative ? -1 - (int64_t)(mask - value.bits) :
+				(type_is_unsigned(value.type) ? 0 : (int64_t)value.bits);
+			if (expression->type->kind == type_kind_float) {
+				float converted = type_is_unsigned(value.type) ? (float)value.bits : (float)signed_number;
+				uint32_t raw;
+				memcpy(&raw, &converted, sizeof(raw));
+				*bits = raw;
+			} else {
+				double converted = type_is_unsigned(value.type) ? (double)value.bits : (double)signed_number;
+				memcpy(bits, &converted, sizeof(converted));
+			}
+			return true;
+		}
 	}
 	return false;
 }
@@ -2633,7 +2681,7 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		uint64_t bits;
 		if (!static_floating_literal_bits(converted, &bits)) {
 			diagnostic_error(diagnostics, source->location,
-				"static floating initializer requires a same-type literal");
+				"static floating initializer requires a supported literal or integer constant conversion");
 			return false;
 		}
 		*value = (struct static_data_value) { .kind = static_data_floating, .integer_bits = bits };
