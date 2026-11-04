@@ -940,6 +940,26 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"char *strrchr(const char *,int); char *strstr(const char *,const char *);\n"
 			"char *strerror(int);\n"
 			"#endif\n";
+		static const char stdio_header[] =
+			"#ifndef __KCC_STDIO_H\n#define __KCC_STDIO_H 1\n"
+			"#include <stddef.h>\n"
+			"typedef struct _IO_FILE FILE;\n"
+			"extern FILE *stdin; extern FILE *stdout; extern FILE *stderr;\n"
+			"#define EOF (-1)\n#define SEEK_SET 0\n#define SEEK_CUR 1\n#define SEEK_END 2\n"
+			"#define BUFSIZ 8192\n"
+			"FILE *fopen(const char *,const char *); FILE *freopen(const char *,const char *,FILE *);\n"
+			"int fclose(FILE *); int fflush(FILE *);\n"
+			"size_t fread(void *,size_t,size_t,FILE *); size_t fwrite(const void *,size_t,size_t,FILE *);\n"
+			"int fgetc(FILE *); int getc(FILE *); int getchar(void);\n"
+			"int fputc(int,FILE *); int putc(int,FILE *); int putchar(int);\n"
+			"char *fgets(char *,int,FILE *); int fputs(const char *,FILE *); int puts(const char *);\n"
+			"int printf(const char *,...); int fprintf(FILE *,const char *,...);\n"
+			"int sprintf(char *,const char *,...); int snprintf(char *,size_t,const char *,...);\n"
+			"int scanf(const char *,...); int fscanf(FILE *,const char *,...); int sscanf(const char *,const char *,...);\n"
+			"int fseek(FILE *,long,int); long ftell(FILE *); void rewind(FILE *);\n"
+			"int feof(FILE *); int ferror(FILE *); void clearerr(FILE *);\n"
+			"int remove(const char *); int rename(const char *,const char *);\n"
+			"#endif\n";
 		static const char stddef_header[] =
 			"#ifndef __KCC_STDDEF_H\n#define __KCC_STDDEF_H 1\n"
 			"typedef unsigned long size_t;\ntypedef long ptrdiff_t;\n"
@@ -1030,6 +1050,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		} else if (strcmp(name->path, "string.h") == 0) {
 			header = string_header;
 			source_name = "<kcc/string.h>";
+		} else if (strcmp(name->path, "stdio.h") == 0) {
+			header = stdio_header;
+			source_name = "<kcc/stdio.h>";
 		} else if (strcmp(name->path, "stddef.h") == 0) {
 			header = stddef_header;
 			source_name = "<kcc/stddef.h>";

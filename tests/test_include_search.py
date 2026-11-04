@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
     for operand, message in [('<>', 'nonempty'), ('< local.h>', 'whitespace'),
                              ('<local.h >', 'whitespace'), ('<local/**/.h>', 'whitespace'),
                              ('<local.h', "expected '>'"), ('<local.h> extra', 'exactly one'),
-                             ('<a@b>', 'unsupported byte'), ('<stdio.h>', 'cannot load angle'),
+                             ('<a@b>', 'unsupported byte'), ('<missing-header.h>', 'cannot load angle'),
                              (f'<{first}/local.h>', 'whitespace')]:
         source.write_text(f'#include {operand}\nint main(void) {{ return 0; }}\n')
         result = run(compiler, ['-I'+str(first), source])

@@ -69,6 +69,21 @@ int main(void) {
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
+#include <stdio.h>
+int main(void) {
+  char buf[8];
+  int n=snprintf(buf,sizeof buf,"%d",42);
+  return n==2 && buf[0]=='4' && buf[1]=='2' ? 42 : 1;
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    if qbe:
+        il.write_text(result.stdout)
+        subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), "-o", str(exe)], check=True)
+        assert subprocess.run([str(exe)]).returncode == 42
+    source.write_text(r'''
 #include <stdatomic.h>
 atomic_int x=ATOMIC_VAR_INIT(0);
 int main(void) {
