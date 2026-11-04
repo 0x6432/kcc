@@ -18,6 +18,12 @@ source_text = r"""
 #if !defined(__DATE__) || !defined(__TIME__)
 #error missing translation clock macros
 #endif
+#if !defined(__has_c_attribute)
+#error missing attribute query operator
+#endif
+#if __has_c_attribute(maybe_unused) || __has_c_attribute(example::unknown)
+#error incomplete attributes must not be advertised
+#endif
 static_assert(sizeof(__DATE__)==12 && sizeof(__TIME__)==9);
 static_assert(sizeof(size_t)==8 && sizeof(ptrdiff_t)==8);
 static_assert(alignof(max_align_t)==16 && sizeof(max_align_t)==32);

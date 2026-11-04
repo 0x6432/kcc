@@ -13,3 +13,8 @@ parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
 handling, and unknown attributes are diagnosed rather than ignored. Expanded
 placements have been built but have not been regression-tested yet.
+
+`__has_c_attribute` is recognized in preprocessing conditions, accepts an
+identifier or scoped identifier, and currently returns zero for every
+attribute: no attribute is advertised as fully supported while placements
+remain restricted. The operand is macro-expanded. Query coverage is untested.

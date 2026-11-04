@@ -205,7 +205,9 @@ static bool macro_is_defined(struct preprocessor *preprocessor, struct pp_token 
 {
 	struct macro *macro = find_macro(preprocessor, name);
 
-	return is_predefined_location(name) || is_predefined_clock(name) || (macro && macro->defined);
+	return is_predefined_location(name) || is_predefined_clock(name) ||
+		(name.kind == pp_identifier && pp_spelling_is(name, "__has_c_attribute")) ||
+		(macro && macro->defined);
 }
 
 /* Reserved implementation names are deliberately outside this milestone. */
@@ -2624,6 +2626,35 @@ static struct condition_value parse_condition_operand(struct condition_parser *p
 			condition_error(parser, parser->token, "expected ')' in conditional expression");
 		advance_condition(parser);
 		return value;
+	}
+	if (token.kind == pp_identifier && pp_spelling_is(token, "__has_c_attribute")) {
+		advance_condition(parser);
+		if (!is_punctuator(parser->token, "(")) {
+			condition_error(parser, parser->token, "expected '(' after __has_c_attribute");
+			return signed_condition(0);
+		}
+		advance_condition(parser);
+		if (parser->token.kind != pp_identifier) {
+			condition_error(parser, parser->token, "expected attribute name in __has_c_attribute");
+			return signed_condition(0);
+		}
+		advance_condition(parser);
+		if (is_punctuator(parser->token, "::")) {
+			advance_condition(parser);
+			if (parser->token.kind != pp_identifier) {
+				condition_error(parser, parser->token, "expected scoped attribute name in __has_c_attribute");
+				return signed_condition(0);
+			}
+			advance_condition(parser);
+		}
+		if (!is_punctuator(parser->token, ")")) {
+			condition_error(parser, parser->token, "expected ')' after __has_c_attribute");
+			return signed_condition(0);
+		}
+		advance_condition(parser);
+		/* All currently recognized attributes have restricted placements;
+		 * do not advertise them as fully supported. */
+		return signed_condition(0);
 	}
 	if (token.kind == pp_number) {
 		value = parse_condition_integer(parser, token);
