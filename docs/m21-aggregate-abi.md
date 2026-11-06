@@ -19,8 +19,8 @@ unaligned scalar fields are refused rather than passed as pointers. Aggregate
 arguments after an ellipsis and `va_arg` of aggregate type remain unsupported.
 Fixed aggregate parameters of a variadic function are supported alongside the
 existing scalar variadic subset. Supported named int bit-fields are documented
-in `m22-bit-fields.md`; some field layouts with byte offsets not aligned for
-`int` are conservatively rejected by the small-record ABI classifier. Other bit-field base types, vectors,
+in `m22-bit-fields.md`; their actual occupied bits are classified as INTEGER,
+including fields starting at byte offsets not aligned for `int`. Other bit-field base types, vectors,
 `long double`, complex types and aggregate atomics are not added by this slice.
 
 ## Lowering and resource policy
@@ -56,6 +56,9 @@ both directions using pinned QBE 1.2. It exercises byte sizes 1–16, 24 and 64,
 INTEGER/SSE mixtures, unions, arrays, alignment 8, indirect calls, register
 exhaustion and rollback, memory returns, fixed parameters of variadic functions,
 `va_start`, recursion, discarded results, tail subobjects and limits/rejections.
-See the commit handoff for the exact commands and results run on this checkpoint.
+`tests/test_bitfield_aggregate_abi.py` additionally exercises 448 named signed
+and unsigned field layouts by value in both host/KCC directions, plus mixed
+INTEGER/SSE, unions, nested records and register pressure. See the commit
+handoff for exact commands and results.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

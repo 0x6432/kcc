@@ -56,7 +56,10 @@ discrepancies. The integrated focused bit-field, aggregate ABI, enum and
 8/16/32/64-bit `_BitInt` value checks passed; host `_BitInt` comparison was
 unavailable. A subsequent bounded increment supports unnamed int bit-fields
 and zero-width barriers, with 231 GCC/KCC pointer-layout combinations in both
-directions; records containing them by value remain rejected. Full `make test`
+directions; records containing them by value remain rejected. Named bit-fields
+with unaligned byte offsets now have bounded aggregate-by-value classification;
+448 signed and unsigned layouts passed the GCC/KCC cross-call matrix in both
+directions. Full `make test`
 remains blocked by the exact C23 pthread host-companion limitation.
 
 The current work branch is `development`, per the revised user instruction.

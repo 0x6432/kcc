@@ -838,9 +838,20 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 	if (type_is_record(type)) {
 		const struct record_definition *record = type_record_definition(type);
 		if (!record->complete || record->has_flexible_array) return false;
-		for (const struct record_member *member = record->members; member; member = member->next)
-			if (!classify_aggregate_part(member->type, offset + member->offset, classes, depth + 1))
+		for (const struct record_member *member = record->members; member; member = member->next) {
+			if (member->is_bit_field) {
+				/* A named int bit-field occupies only its actual bits, not an
+				 * int-sized scalar at its byte offset. Allocation units do
+				 * not cross a 32-bit boundary on this target. */
+				uint64_t start = offset + member->offset;
+				uint64_t bytes = (member->bit_offset + member->bit_width + 7) / 8;
+				if (!member->name.length || !bytes || start + bytes > 16)
+					return false;
+				for (uint64_t i = start / 8; i <= (start + bytes - 1) / 8; i++)
+					classes[i] = aggregate_abi_integer;
+			} else if (!classify_aggregate_part(member->type, offset + member->offset, classes, depth + 1))
 				return false;
+		}
 		return true;
 	}
 	if (!type_is_scalar(type)) return false;

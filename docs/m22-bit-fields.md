@@ -40,9 +40,8 @@ is rejected, as is a later byte-range override that partially covers a field.
 Overlapping fields with different bit ranges are rejected if initializer union
 selection has not already discarded the earlier alternative. Bounded aggregate
 calls and returns are also available;
-see `m21-aggregate-abi.md`. The aggregate classifier currently rejects some
-otherwise-supported layouts, including fields at byte offsets not aligned for `int` in small records (whether
-or not the bit start is byte-aligned), rather than guessing their ABI.
+see `m21-aggregate-abi.md`. Named fields are classified from their occupied
+bits even when their byte offsets are not int-aligned.
 
 Taking a field's address, applying `sizeof`, `typeof` or `typeof_unqual`
 directly to it, and using it in an `offsetof` designator are rejected. Const

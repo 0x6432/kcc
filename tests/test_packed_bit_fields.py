@@ -56,6 +56,8 @@ int main(void) {
 LOCAL = r'''
 #include <stdarg.h>
 struct S { unsigned a:3, b:4, c:9; signed d:7; char end; };
+struct AbiFormerRejection { unsigned a:9,b:4; };
+struct AbiFormerRejection abi_copy(struct AbiFormerRejection s) { s.b++; return s; }
 struct S g = { .a={3}, .b={5}, .c={400}, .d={-20}, .a={7}, .end=9 };
 struct S array[2] = { [1]={.b=9, .c=300}, [0]={.a=7, .d=-4} };
 union V { struct S s; unsigned raw; };
@@ -64,6 +66,8 @@ struct Flex { unsigned a:3, b:4; char data[]; };
 int var(int n, ...) { va_list ap; va_start(ap,n); int r=va_arg(ap,int); va_end(ap); return r; }
 int main(void) {
  struct S s = { .a={3}, .b={5}, .c={400}, .d={-20}, .a={7}, .end=9 };
+ struct AbiFormerRejection abi={300,7}, result=abi_copy(abi);
+ if(result.a!=300 || result.b!=8 || abi.b!=7) return 8;
  if (g.a!=7 || g.b!=5 || g.c!=400 || g.d!=-20 || g.end!=9) return 1;
  if (s.a!=7 || s.b!=5 || s.c!=400 || s.d!=-20 || s.end!=9) return 2;
  if (v.s.a!=1 || v.s.b!=2 || v.s.c!=3 || v.s.d!=-4 || v.s.end!=5) return 4;
@@ -85,7 +89,6 @@ REJECT = [
  ('struct S { unsigned a:3,b:4; } s; int f(void){return _Generic(s.b,int:1,default:0);}', 'bit-field'),
  ('struct S { _BitInt(32) a:3; unsigned b:4; };', 'bit-field'),
  ('struct S { unsigned a:3,b:4; _BitInt(32) x; }; struct S f(struct S x) {return x;}', 'aggregate ABI unsupported'),
- ('struct S { unsigned a:9,b:4; }; struct S f(struct S x){return x;}', 'aggregate ABI unsupported'),
  # A whole-record copy followed by a partial bit write is not representable by the bounded plan.
  ('struct S { unsigned a:3,b:4; }; struct O { struct S s; }; int f(struct S p) { struct O x = { .s=p, .s.b=3 }; return x.s.a; }', 'initializer'),
 ]
