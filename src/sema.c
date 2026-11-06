@@ -3426,6 +3426,8 @@ static bool static_floating_number(const struct ast_expression *expression, doub
 static bool is_static_float_conditioned_integer(const struct ast_expression *expression);
 static bool static_float_conditioned_integer(const struct ast_expression *expression,
 	struct constant_result *result);
+static bool static_integer_arithmetic(const struct ast_expression *expression,
+	struct constant_result *result);
 
 /* Validate the supported arithmetic-constant operand forms without executing
  * a skipped expression. This does not prove its value finite or make it an ICE. */
@@ -3573,8 +3575,72 @@ static bool static_float_conditioned_integer(const struct ast_expression *expres
 	const struct ast_expression *skipped = condition ? node->else_value : node->then_value;
 	if (!static_arithmetic_constant_form(skipped))
 		return false;
-	*result = evaluate_integer_constant(selected);
-	return result->status == constant_value || static_float_conditioned_integer(selected, result);
+	return static_integer_arithmetic(selected, result);
+}
+
+/* Fold integer operators around supported floating comparisons and conditional
+ * values, reusing the checked ICE operator semantics on temporary typed leaves.
+ * This is only for static initializers, never an ICE classification. */
+static bool static_integer_arithmetic(const struct ast_expression *expression,
+	struct constant_result *result)
+{
+	if (!type_is_integer(expression->type))
+		return false;
+	*result = evaluate_integer_constant(expression);
+	if (result->status == constant_value)
+		return true;
+	if (is_static_floating_boolean(expression)) {
+		bool truth;
+		if (!static_floating_condition(expression, &truth))
+			return false;
+		*result = (struct constant_result) { .status = constant_value, .type = expression->type,
+			.bits = truth, .location = expression->location };
+		return true;
+	}
+	if (is_static_float_conditioned_integer(expression))
+		return static_float_conditioned_integer(expression, result);
+	if (expression->kind == expression_unary) {
+		const struct ast_unary_expression *node = (const struct ast_unary_expression *)expression;
+		struct constant_result operand;
+		if (!static_integer_arithmetic(node->operand, &operand))
+			return false;
+		struct ast_integer_expression leaf = { .expression = *node->operand, .value = operand.bits };
+		leaf.expression.kind = expression_integer;
+		struct ast_unary_expression copy = *node;
+		copy.operand = &leaf.expression;
+		*result = evaluate_integer_constant(&copy.expression);
+		return result->status == constant_value;
+	}
+	if (expression->kind == expression_binary) {
+		const struct ast_binary_expression *node = (const struct ast_binary_expression *)expression;
+		struct constant_result left, right;
+		if (!static_integer_arithmetic(node->left, &left) ||
+			!static_integer_arithmetic(node->right, &right))
+			return false;
+		struct ast_integer_expression lhs = { .expression = *node->left, .value = left.bits };
+		struct ast_integer_expression rhs = { .expression = *node->right, .value = right.bits };
+		lhs.expression.kind = rhs.expression.kind = expression_integer;
+		struct ast_binary_expression copy = *node;
+		copy.left = &lhs.expression;
+		copy.right = &rhs.expression;
+		*result = evaluate_integer_constant(&copy.expression);
+		return result->status == constant_value;
+	}
+	if (expression->kind == expression_conversion || expression->kind == expression_cast) {
+		const struct ast_expression *operand = expression->kind == expression_cast ?
+			((const struct ast_cast_expression *)expression)->operand :
+			((const struct ast_conversion_expression *)expression)->operand;
+		struct constant_result value;
+		if (!static_integer_arithmetic(operand, &value))
+			return false;
+		struct ast_integer_expression leaf = { .expression = *operand, .value = value.bits };
+		leaf.expression.kind = expression_integer;
+		struct ast_conversion_expression copy = { .expression = *expression, .operand = &leaf.expression };
+		copy.expression.kind = expression_conversion;
+		*result = evaluate_integer_constant(&copy.expression);
+		return result->status == constant_value;
+	}
+	return false;
 }
 
 /* Static constants use the host's target-matching binary32/binary64 format,
@@ -3697,7 +3763,7 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				if (is_static_floating_boolean(operand) && static_floating_condition(operand, &truth)) {
 					value.type = operand->type;
 					value.bits = truth;
-				} else if (!static_float_conditioned_integer(operand, &value)) {
+				} else if (!static_integer_arithmetic(operand, &value)) {
 					return false;
 				}
 			}
@@ -3836,15 +3902,13 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		return static_floating_to_integer(source, converted->type, value, diagnostics);
 	if (is_static_float_cast(source) && type_is_integer(converted->type))
 		return static_float_cast_to_integer(source, converted->type, value, diagnostics);
-	if (is_static_float_conditioned_integer(source) && type_is_integer(converted->type)) {
-		struct constant_result result;
+	struct constant_result arithmetic_result;
+	if (type_is_integer(source->type) && type_is_integer(converted->type) &&
+		evaluate_integer_constant(source).status != constant_value &&
+		static_integer_arithmetic(source, &arithmetic_result)) {
+		struct constant_result result = arithmetic_result;
 		unsigned width, target_width;
 		uint64_t bits;
-		if (!static_float_conditioned_integer(source, &result)) {
-			diagnostic_error(diagnostics, source->location,
-				"static initializer requires supported finite condition and constant arms");
-			return false;
-		}
 		bits = result.bits;
 		width = type_integer_width(result.type);
 		target_width = type_integer_width(converted->type);
@@ -5861,8 +5925,12 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	}
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
+	struct constant_result arithmetic_result;
 	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer) ||
-		is_static_floating_boolean(*initializer) || is_static_float_conditioned_integer(*initializer)) &&
+		is_static_floating_boolean(*initializer) || is_static_float_conditioned_integer(*initializer) ||
+		(type_is_integer((*initializer)->type) &&
+			evaluate_integer_constant(*initializer).status != constant_value &&
+			static_integer_arithmetic(*initializer, &arithmetic_result))) &&
 		type_is_integer(type)) {
 		struct ast_expression *source_expression = *initializer;
 		target = unqualified_type(sema, type, name.location);

@@ -78,8 +78,8 @@ A direct comparison of two supported finite floating constant expressions,
 or logical negation of one, can initialize an integer, boolean or floating
 static object or aggregate subobject. Mixed integer/floating comparisons use
 the semantically converted operand types. This does not turn floating
-comparisons into integer constant expressions and does not yet support their
-use inside arbitrary integer arithmetic or all logical constant expressions.
+comparisons into integer constant expressions. Integer arithmetic around these
+values is supported within the bounded subset described below.
 
 The compiler build and focused compile/IL and rejection checks were run; one
 example was lowered by pinned QBE 1.2 and assembled. Regression, generated-program
@@ -92,7 +92,8 @@ integer constant operands can initialize integer, boolean or floating static
 objects and can serve as conditions in supported floating conditional
 initializers. A short-circuited right operand must have supported arithmetic
 constant form, but is not evaluated. This does not extend integer constant
-expression rules. Broader arithmetic containing these results is not supported.
+expression rules. Arithmetic containing these results is supported only within
+the bounded subset described below.
 
 The compiler rebuilt; eight values were checked in emitted IL, lowered by pinned
 QBE 1.2 and assembled. Seven invalid or unsupported focused examples were
@@ -107,8 +108,8 @@ floating objects and aggregate elements. The selected arm must fold; a skipped
 arm must have supported arithmetic-constant form. Usual arithmetic conversions
 on the arms and the destination conversion
 are retained. This is initializer-only support; it does not make these
-expressions integer constant expressions or cover arbitrary arithmetic around
-them.
+expressions integer constant expressions; support for arithmetic around them
+is bounded as described below.
 
 The compiler rebuilt. Six focused scalar/aggregate values were inspected in
 emitted IL, lowered with pinned QBE 1.2, and assembled; seven invalid or
@@ -140,3 +141,20 @@ The compiler rebuilt; twelve focused values were checked in emitted IL, lowered
 with pinned QBE 1.2 and assembled, and ten invalid or unsupported examples were
 rejected. Added regression fixtures, generated-program execution, ABI, sanitizer
 and fuzz checks remain unrun. This does not complete M20.
+
+## Integer arithmetic around floating-derived constants
+
+Static initializers can apply checked integer unary, binary and integer-cast
+operations to supported floating comparisons, logical results, and
+floating-conditioned integer choices. Nested conversion to float/double and
+aggregate subobjects use the same support. Integer operators reuse the strict
+ICE evaluator's width, signed-overflow, division, and shift checks on typed
+intermediate values, without classifying the original expression as an ICE.
+This is still a bounded subset: arbitrary floating-to-integer casts inside
+arithmetic, other unsupported forms, host rounding subtleties and broader
+constant-expression coverage remain unresolved.
+
+The compiler rebuilt; ten scalar values and two aggregate fields were checked
+in IL, lowered with pinned QBE 1.2 and assembled. Eight invalid or unsupported
+examples were rejected. Regression fixtures, generated-program runtime, ABI,
+sanitizer and fuzz checks remain unrun. M20 remains incomplete.
