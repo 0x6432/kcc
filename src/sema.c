@@ -637,6 +637,14 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		unsigned bit_width = 0;
 		if (member->bit_width) {
 			struct constant_result width;
+			const struct type *field_type = type;
+			/* Bounded enum bit-fields use only complete int-compatible or
+			 * unsigned-int-compatible enum representations. */
+			if (type->kind == type_kind_enum && type_is_complete_object(type)) {
+				const struct type *base = ((const struct enum_type *)type)->definition->underlying;
+				if (base && (base->kind == type_kind_int || base->kind == type_kind_uint))
+					field_type = base;
+			}
 			if (member->alignments) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"alignment specifier cannot apply to a bit-field");
@@ -645,23 +653,23 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if (!sema_expression(sema, &member->bit_width, true))
 				goto done;
 			width = evaluate_integer_constant(member->bit_width);
-			if ((type->kind != type_kind_int && type->kind != type_kind_uint &&
-				type->kind != type_kind_bool && type->kind != type_kind_char &&
-				type->kind != type_kind_schar && type->kind != type_kind_uchar &&
-				type->kind != type_kind_short && type->kind != type_kind_ushort &&
-				type->kind != type_kind_long && type->kind != type_kind_ulong &&
-				type->kind != type_kind_long_long && type->kind != type_kind_ulong_long) ||
+			if ((field_type->kind != type_kind_int && field_type->kind != type_kind_uint &&
+				field_type->kind != type_kind_bool && field_type->kind != type_kind_char &&
+				field_type->kind != type_kind_schar && field_type->kind != type_kind_uchar &&
+				field_type->kind != type_kind_short && field_type->kind != type_kind_ushort &&
+				field_type->kind != type_kind_long && field_type->kind != type_kind_ulong &&
+				field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 64 ||
-				((type->kind == type_kind_int || type->kind == type_kind_uint) && width.bits > 32) ||
-				(type->kind == type_kind_bool && width.bits > 1) ||
-				((type->kind == type_kind_char || type->kind == type_kind_schar ||
-					type->kind == type_kind_uchar) && width.bits > 8) ||
-				((type->kind == type_kind_short || type->kind == type_kind_ushort) &&
+				((field_type->kind == type_kind_int || field_type->kind == type_kind_uint) && width.bits > 32) ||
+				(field_type->kind == type_kind_bool && width.bits > 1) ||
+				((field_type->kind == type_kind_char || field_type->kind == type_kind_schar ||
+					field_type->kind == type_kind_uchar) && width.bits > 8) ||
+				((field_type->kind == type_kind_short || field_type->kind == type_kind_ushort) &&
 					width.bits > 16) ||
-				((type->kind == type_kind_long || type->kind == type_kind_ulong ||
-					type->kind == type_kind_long_long || type->kind == type_kind_ulong_long) &&
+				((field_type->kind == type_kind_long || field_type->kind == type_kind_ulong ||
+					field_type->kind == type_kind_long_long || field_type->kind == type_kind_ulong_long) &&
 					width.bits > 32 && width.bits != 64) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,

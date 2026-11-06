@@ -74,17 +74,24 @@ both host/KCC directions. Historical short-field unsupported fixtures were
 retargeted to the then-unsupported long type and their diagnostics updated.
 Long and long long bit-fields now support widths 1–32 and 64, with 924 named
 and 132 unnamed aggregate layouts checked in both GCC/KCC directions; widths
-33–63 remain unsupported. The historical long-field fixtures now use width 33.
-At `767aefc`, `KCC_ALLOW_MISSING_TLS_COMPANION=1 make -j2 test` completed
-successfully with QBE 1.2 in gap-aware mode; this is not a strict release-gate
+33–63 remain unsupported. The historical long-field fixtures now use width 33. Int- and unsigned-int-
+compatible enum bit-fields support widths 1–32; a typedef is needed for unnamed
+enum fields because of a direct enum/colon parser boundary. The ordinary-enum
+host matrix covers 288 layouts; 448 fixed-enum layouts were checked against
+primitive-field surrogates, not native C23 syntax.
+At `767aefc` and later `bb4c8a1`, `KCC_ALLOW_MISSING_TLS_COMPANION=1 make -j2
+test` completed successfully with QBE 1.2 in gap-aware mode; this is not a strict release-gate
 pass. Four TLS cases lacked exact C23 host companions and were not run. The
 frozen initializer and compound-literal suites also retained their reported
 host capability gaps and semantic discrepancies, which are not agreements or
 M17 approval. Strict `make test` remains blocked by the missing companions.
 At `1c354ce`, focused lexer, preprocessor, semantic, conditional-literal,
 bit-precise literal/value/layout/rejection and enum-successor checks passed;
-the full batch above predates that commit. No native C23 `_BitInt` comparison
-or recent fuzzing is claimed. A later preprocessing increment adds `wb`/`WB`
+the earlier `767aefc` batch predates that commit; `bb4c8a1` includes it. No native C23 `_BitInt` comparison
+or recent fuzzing is claimed. The frozen record, initializer and compound
+harnesses also ran at detached `9ba485b` (source tree identical to integrated
+`0fe3674`), retaining their reported gaps and discrepancies. A UBSan-backed
+long-field matrix passed at that source tree. A later preprocessing increment adds `wb`/`WB`
 conditions using the intmax/uintmax model; see `m23b-integer-literals.md`.
 
 The current work branch is `development`, per the revised user instruction.

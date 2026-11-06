@@ -666,25 +666,32 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 	for (struct record_member *member = definition->members; member; member = member->next) {
 		uint64_t member_size, offset;
 		unsigned member_alignment, bit_offset = 0;
+		const struct type *field_type = member->type;
+		if (member->is_bit_field && field_type->kind == type_kind_enum &&
+			type_is_complete_object(field_type)) {
+			const struct type *base = ((const struct enum_type *)field_type)->definition->underlying;
+			if (base && (base->kind == type_kind_int || base->kind == type_kind_uint))
+				field_type = base;
+		}
 		if (++count > 1024 ||
 			(member->is_bit_field && (member->anonymous ||
 			member->alignment || member->is_flexible ||
-			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint &&
-			member->type->kind != type_kind_bool && member->type->kind != type_kind_char &&
-			member->type->kind != type_kind_schar && member->type->kind != type_kind_uchar &&
-			member->type->kind != type_kind_short && member->type->kind != type_kind_ushort &&
-			member->type->kind != type_kind_long && member->type->kind != type_kind_ulong &&
-			member->type->kind != type_kind_long_long && member->type->kind != type_kind_ulong_long) ||
+			(field_type->kind != type_kind_int && field_type->kind != type_kind_uint &&
+			field_type->kind != type_kind_bool && field_type->kind != type_kind_char &&
+			field_type->kind != type_kind_schar && field_type->kind != type_kind_uchar &&
+			field_type->kind != type_kind_short && field_type->kind != type_kind_ushort &&
+			field_type->kind != type_kind_long && field_type->kind != type_kind_ulong &&
+			field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long) ||
 			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 64 ||
-			((member->type->kind == type_kind_int || member->type->kind == type_kind_uint) &&
+			((field_type->kind == type_kind_int || field_type->kind == type_kind_uint) &&
 			member->bit_width > 32) ||
-			(member->type->kind == type_kind_bool && member->bit_width > 1) ||
-			((member->type->kind == type_kind_char || member->type->kind == type_kind_schar ||
-			member->type->kind == type_kind_uchar) && member->bit_width > 8) ||
-			((member->type->kind == type_kind_short || member->type->kind == type_kind_ushort) &&
+			(field_type->kind == type_kind_bool && member->bit_width > 1) ||
+			((field_type->kind == type_kind_char || field_type->kind == type_kind_schar ||
+			field_type->kind == type_kind_uchar) && member->bit_width > 8) ||
+			((field_type->kind == type_kind_short || field_type->kind == type_kind_ushort) &&
 			member->bit_width > 16) ||
-			((member->type->kind == type_kind_long || member->type->kind == type_kind_ulong ||
-			member->type->kind == type_kind_long_long || member->type->kind == type_kind_ulong_long) &&
+			((field_type->kind == type_kind_long || field_type->kind == type_kind_ulong ||
+			field_type->kind == type_kind_long_long || field_type->kind == type_kind_ulong_long) &&
 			member->bit_width > 32 && member->bit_width != 64) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||

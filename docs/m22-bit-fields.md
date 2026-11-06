@@ -1,4 +1,4 @@
-# M22: bounded int, short, char, bool and bounded long bit-fields
+# M22: bounded integer and enum bit-fields
 
 ## Target and supported declarations
 
@@ -23,7 +23,12 @@ and natural alignment, with zero-width separators aligning to a two-byte
 boundary. Named signed/unsigned `long` and `long long` fields accept widths
 1–32 or 64; unnamed fields accept 0–32 or 64. They use eight-byte allocation
 units and natural alignment, with zero-width separators aligning to eight-byte
-boundaries. Widths 33–63 remain unsupported for these base types. Structs,
+boundaries. Widths 33–63 remain unsupported for these base types. Enums
+compatible with `int` or `unsigned int`, including ordinary int-compatible enums
+and fixed-underlying enums, use the corresponding 32-bit unit and accept named
+widths 1–32 or unnamed widths 0–32. Direct `enum E : 0` syntax is still
+rejected by the parser; an enum typedef can be used for an unnamed field or
+separator instead. Other enum base types remain unsupported. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
 retain the existing record restrictions.
 
@@ -69,8 +74,8 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Enum and `_BitInt` base types, long/long-long widths 33–63, volatile and
-atomic fields are rejected. Known GNU
+Enum base types other than `int`/`unsigned int`, `_BitInt` base types,
+long/long-long widths 33–63, volatile and atomic fields are rejected. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
@@ -80,7 +85,11 @@ can share the legacy M22 diagnostic.
 
 ## Validation
 
-`tests/test_long_bit_fields.py` checks 924 named long/long-long layouts and
+`tests/test_enum_bit_fields.py` checks 288 ordinary-enum layouts with matching
+GCC/KCC declarations in both call directions, plus 448 fixed-enum layouts
+against separately compiled representation-compatible primitive-field
+surrogates. GCC 11 cannot compile C23 fixed enums, so the surrogate checks are
+not native C23 syntax or semantics agreements. `tests/test_long_bit_fields.py` checks 924 named long/long-long layouts and
 132 unnamed floating/mixed layouts across by-value calls in both GCC/KCC
 directions, plus static and local initialization, signed/unsigned conversions,
 updates and 64-bit-unit zero-width pointer layout. Historical unsupported-long
