@@ -643,13 +643,16 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			width = evaluate_integer_constant(member->bit_width);
 			if ((type->kind != type_kind_int && type->kind != type_kind_uint &&
 				type->kind != type_kind_bool && type->kind != type_kind_char &&
-				type->kind != type_kind_schar && type->kind != type_kind_uchar) ||
+				type->kind != type_kind_schar && type->kind != type_kind_uchar &&
+				type->kind != type_kind_short && type->kind != type_kind_ushort) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 32 ||
 				(type->kind == type_kind_bool && width.bits > 1) ||
 				((type->kind == type_kind_char || type->kind == type_kind_schar ||
 					type->kind == type_kind_uchar) && width.bits > 8) ||
+				((type->kind == type_kind_short || type->kind == type_kind_ushort) &&
+					width.bits > 16) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");

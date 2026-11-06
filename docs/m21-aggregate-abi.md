@@ -18,7 +18,7 @@ array members, unrepresentable/empty ABI eightbytes, unsupported types and
 unaligned scalar fields are refused rather than passed as pointers. Aggregate
 arguments after an ellipsis and `va_arg` of aggregate type remain unsupported.
 Fixed aggregate parameters of a variadic function are supported alongside the
-existing scalar variadic subset. Supported named int, char and boolean bit-fields are documented
+existing scalar variadic subset. Supported named int, short, char and boolean bit-fields are documented
 in `m22-bit-fields.md`; their actual occupied bits are classified as INTEGER,
 including fields starting at byte offsets not aligned for `int`. Other bit-field base types, vectors,
 `long double`, complex types and aggregate atomics are not added by this slice.
@@ -45,7 +45,7 @@ to the existing 256 record-temporary and 1 MiB per-function storage limits.
 The 64-byte ceiling also bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
-Nonzero unnamed int, char and boolean bit-fields contribute INTEGER classes for their occupied
+Nonzero unnamed int, short, char and boolean bit-fields contribute INTEGER classes for their occupied
 bits. Records containing zero-width barriers are conservatively rejected by
 value, including nested and MEMORY-class records: the available GCC 11 host
 passed a float/zero-width/float record differently from a classifier ignoring

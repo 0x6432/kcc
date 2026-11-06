@@ -355,7 +355,7 @@ def native_constraint(cc, source, output, name):
 # These are native-valid out-of-scope forms, NOT language constraints. They are
 # never executed and native acceptance is not treated as semantic evidence.
 SUBSET = [
-    ('M22 bitfield', 'struct S { unsigned short x:3; }; struct S s;'),
+    ('M22 bitfield', 'struct S { unsigned long x:3; }; struct S s;'),
 ]
 
 
@@ -390,7 +390,7 @@ KCC_REFUSALS = {
     'dot on pointer': (1, 51, 'member access requires a complete struct or union type'),
     'arrow on record': (1, 56, 'arrow member access requires a pointer to struct or union'),
     'incompatible record assignment': (1, 81, 'aggregate copy requires the same complete struct or union type'),
-    'M22 bitfield': (1, 28, 'bit-fields are not supported yet (M22)'),
+    'M22 bitfield': (1, 27, 'bit-fields are not supported yet (M22)'),
     'member scalar beyond onepast': (1, 65, 'static pointer offset is outside its captured object bounds'),
     'member array beyond onepast': (1, 67, 'static pointer offset is outside its captured object bounds'),
     'member subscript beyond onepast': (1, 61, 'static pointer offset is outside its captured object bounds'),

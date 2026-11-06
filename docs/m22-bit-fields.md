@@ -1,4 +1,4 @@
-# M22: bounded int, char and bool bit-fields
+# M22: bounded int, short, char and bool bit-fields
 
 ## Target and supported declarations
 
@@ -16,7 +16,11 @@ boolean separators align the next member to a byte boundary. Assignments convert
 values to 0 or 1 before storage. Named `char`, `signed char` and `unsigned
 char` fields accept widths 1 through 8; unnamed ones accept widths 0 through
 8. Their allocation units and natural alignment are one byte, plain `char`
-is signed on this target, and zero-width separators align to a byte. Structs,
+is signed on this target, and zero-width separators align to a byte. Named
+`signed short` and `unsigned short` fields accept widths 1 through 16;
+unnamed fields accept widths 0 through 16. They use two-byte allocation units
+and natural alignment, with zero-width separators aligning to a two-byte
+boundary. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
 retain the existing record restrictions.
 
@@ -26,7 +30,7 @@ current unit starts in the next one. Adjacent fields may start at any bit
 within a byte, share bytes, or cross byte boundaries within a unit. Ordinary
 members start at their normal alignment after the occupied bits, and union
 alternatives overlap. For example, `unsigned a:3, b:4;` shares one byte;
-`unsigned a:3, b:31;` places `b` in the next unit. These int allocation-unit rules do not apply to boolean or character fields. This is not
+`unsigned a:3, b:31;` places `b` in the next unit. These int allocation-unit rules do not apply to boolean, character or short fields. This is not
 general SysV bit-field coverage.
 
 ## Values, initialization and expressions
@@ -59,7 +63,7 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Enum, short and wider integer base types, `_BitInt`, volatile and atomic fields are rejected. Known GNU
+Enum and wider integer base types, `_BitInt`, volatile and atomic fields are rejected. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
@@ -69,6 +73,7 @@ can share the legacy M22 diagnostic.
 
 ## Validation
 
+`tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
 `tests/test_char_bit_fields.py` checks 112 signed/unsigned layouts across
 by-value calls in both host/KCC directions. `tests/test_bool_bit_fields.py` checks boolean conversion, packing,
 initialization and cross-compiler aggregate calls. `tests/test_bit_fields.py`,

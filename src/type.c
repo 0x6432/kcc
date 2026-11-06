@@ -671,11 +671,14 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			member->alignment || member->is_flexible ||
 			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint &&
 			member->type->kind != type_kind_bool && member->type->kind != type_kind_char &&
-			member->type->kind != type_kind_schar && member->type->kind != type_kind_uchar) ||
+			member->type->kind != type_kind_schar && member->type->kind != type_kind_uchar &&
+			member->type->kind != type_kind_short && member->type->kind != type_kind_ushort) ||
 			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32 ||
 			(member->type->kind == type_kind_bool && member->bit_width > 1) ||
 			((member->type->kind == type_kind_char || member->type->kind == type_kind_schar ||
 			member->type->kind == type_kind_uchar) && member->bit_width > 8) ||
+			((member->type->kind == type_kind_short || member->type->kind == type_kind_ushort) &&
+			member->bit_width > 16) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))

@@ -66,7 +66,11 @@ directions. Named and unnamed boolean bit-fields now support width 1, with
 boolean conversion, packing and cross-compiler aggregate checks; zero-width
 boolean separators have the same conservative by-value ABI boundary. Named and
 unnamed character-type fields are supported through 8 bits, with 112 signed/
-unsigned by-value layouts checked in both host/KCC directions. Full `make test`
+unsigned by-value layouts checked in both host/KCC directions. Short bit-fields
+now support 1–16 bits; 480 signed/unsigned by-value layouts were checked in
+both host/KCC directions. Historical short-field unsupported fixtures were
+retargeted to the still-unsupported long type and their diagnostics updated.
+Full `make test`
 remains blocked by the exact C23 pthread host-companion limitation.
 
 The current work branch is `development`, per the revised user instruction.
