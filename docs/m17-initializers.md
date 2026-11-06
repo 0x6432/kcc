@@ -123,3 +123,13 @@ The compiler rebuilt; eight relocation values and one null were checked in IL,
 lowered with pinned QBE 1.2 and assembled. Six invalid or unsupported cases
 were rejected. Regression fixtures, generated-program runtime, ABI, sanitizer
 and fuzz checks remain unrun. This does not imply M17 approval.
+
+## Pointer-derived integer conditions
+
+Symbolic address proofs have no numeric integer value. Pointer-to-integer casts
+in static address-selection conditions are rejected rather than treating a
+proof as an integer or crashing. Pointer-to-bool truth conversion remains
+supported. Five focused unsupported forms produced diagnostics rather than a
+crash; two supported pointer-truth forms compiled, and the earlier focused
+floating-pointer checks continued to pass. The compiler rebuilt. Regression
+fixtures, generated-program runtime and fuzz checks remain unrun.

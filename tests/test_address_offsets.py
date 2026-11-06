@@ -340,6 +340,9 @@ INVALID = [
     'extern int target[3]; signed char *cell=(signed char *)((unsigned char *)target+3)+2;',
 ]
 DEFERRED = [
+    'int target; int *cell=(long)&target ? &target : nullptr;',
+    'int target; int *cell=(int)(long)&target ? &target : nullptr;',
+    'int target; int *cell=((long)&target+1) ? &target : nullptr;',
     'extern int target[]; int (*cell)[3]=(int (*)[3])&target+0;',
     'extern int target[3]; int *cell=(0,target+1);',
     'extern int target[3]; int n; int *cell=target+n;',

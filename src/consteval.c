@@ -296,6 +296,12 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 			return constant_success(expression, value.bits != 0);
 		if (value.status != constant_value)
 			return value;
+		/* Address proofs carry no integer value or numeric address type. Only
+		 * bool conversion above can consume their truth; a pointer-to-integer
+		 * cast must not feed a symbolic proof to integer conversion. */
+		if (initializer_condition && !type_is_integer(operand->type))
+			return constant_failure(expression, constant_not_constant,
+				"pointer-derived integer is not a supported initializer condition");
 		return constant_success(expression, evaluated ? converted_bits(value, expression->type) : 0);
 	}
 	case expression_unary:
