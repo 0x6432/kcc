@@ -656,7 +656,7 @@ static bool checked_record_member_layout(const struct record_member *member,
 	return checked_member_layout(member->type, 0, size, alignment);
 }
 
-/* SysV packs int fields low-bit-first within 32-bit allocation units. */
+/* SysV packs fields low-bit-first within their base-type allocation units. */
 static bool record_layout_pass(struct record_definition *definition, bool publish,
 	uint64_t *result_size, unsigned *result_alignment, size_t *result_count)
 {
@@ -669,8 +669,10 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 		if (++count > 1024 ||
 			(member->is_bit_field && (member->anonymous ||
 			member->alignment || member->is_flexible ||
-			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint) ||
+			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint &&
+			member->type->kind != type_kind_bool) ||
 			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32 ||
+			(member->type->kind == type_kind_bool && member->bit_width > 1) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))
@@ -691,8 +693,9 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 				union_size = member_size;
 		} else if (member->is_bit_field) {
 			unsigned width = member->bit_width;
-			if (!width || bits % 32 + width > 32)
-				bits = (bits + 31) & ~UINT64_C(31);
+			unsigned unit = member->type->kind == type_kind_bool ? 8 : 32;
+			if (!width || bits % unit + width > unit)
+				bits = (bits + unit - 1) & ~(uint64_t)(unit - 1);
 			bit_offset = (unsigned)(bits % 8);
 			offset = bits / 8;
 			bits += width;
@@ -841,9 +844,8 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 		if (!record->complete || record->has_flexible_array) return false;
 		for (const struct record_member *member = record->members; member; member = member->next) {
 			if (member->is_bit_field) {
-				/* An int bit-field occupies only its actual bits, not an
-				 * int-sized scalar at its byte offset. Allocation units do
-				 * not cross a 32-bit boundary on this target. */
+				/* A bit-field occupies only its actual bits, not a
+				 * base-type-sized scalar at its byte offset. */
 				uint64_t start = offset + member->offset;
 				uint64_t bytes = (member->bit_offset + member->bit_width + 7) / 8;
 				if (!member->bit_width)

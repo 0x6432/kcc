@@ -82,7 +82,7 @@ REJECT = {
     'negative': ('struct S { int x:-1; };', 'bit-fields are not supported yet'),
     'unnamed': ('struct S { unsigned :32; };', 'bit-fields are not supported yet'),
     'zero-barrier': ('struct S { unsigned :0; };', 'bit-fields are not supported yet'),
-    'bool': ('struct S { _Bool x:1; };', 'bit-fields are not supported yet'),
+    'bool-too-wide': ('struct S { _Bool x:2; };', 'bit-fields are not supported yet'),
     'short': ('struct S { unsigned short x:32; };', 'bit-fields are not supported yet'),
     'enum': ('enum E { A }; struct S { enum E x:32; };', 'bit-fields are not supported yet'),
     'long': ('struct S { unsigned long x:32; };', 'bit-fields are not supported yet'),

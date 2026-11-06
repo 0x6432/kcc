@@ -62,7 +62,9 @@ containing zero-width barriers are still rejected by value because a float/zero-
 width/float host case disagreed with the initial classifier. Named bit-fields
 with unaligned byte offsets now have bounded aggregate-by-value classification;
 448 signed and unsigned layouts passed the GCC/KCC cross-call matrix in both
-directions. Full `make test`
+directions. Named and unnamed boolean bit-fields now support width 1, with
+boolean conversion, packing and cross-compiler aggregate checks; zero-width
+boolean separators have the same conservative by-value ABI boundary. Full `make test`
 remains blocked by the exact C23 pthread host-companion limitation.
 
 The current work branch is `development`, per the revised user instruction.

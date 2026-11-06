@@ -641,10 +641,12 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if (!sema_expression(sema, &member->bit_width, true))
 				goto done;
 			width = evaluate_integer_constant(member->bit_width);
-			if ((type->kind != type_kind_int && type->kind != type_kind_uint) ||
+			if ((type->kind != type_kind_int && type->kind != type_kind_uint &&
+				type->kind != type_kind_bool) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 32 ||
+				(type->kind == type_kind_bool && width.bits > 1) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");
