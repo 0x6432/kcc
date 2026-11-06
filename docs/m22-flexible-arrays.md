@@ -7,7 +7,7 @@ address and element type. Initializers may initialize the preceding members, not
 the flexible member itself. Whole-record copies use the fixed struct size.
 
 This subset rejects structs containing a flexible-array struct as a member or
-array element, unions with a flexible array, direct flexible-array initialization,
+array element, direct flexible-array members in unions, direct flexible-array initialization,
 and static addresses of flexible-array members. These are implementation
 boundaries, not a complete C23 flexible-array implementation. Access must stay
 within storage actually allocated by the program. Bit-fields remain unsupported.
@@ -25,3 +25,15 @@ The compiler build and focused layout, compilation and rejection checks were
 run; one example was lowered by pinned QBE and assembled, and the host compiler
 accepted an equivalent layout. Generated-program runtime, ABI, regression
 fixtures and fuzzing remain unrun. This is not M22 completion or a C23 conformance claim.
+
+## Unions containing flexible-array structures
+
+A union may contain a named structure with a flexible array member, or another
+such union recursively. The restriction is propagated: the resulting union may
+not be a member of a structure or an array element. Anonymous members containing
+such a type remain outside this subset, as do the earlier flexible-array limits.
+
+The compiler build and focused layout, initializer and rejection checks were
+run; one example was lowered through pinned QBE and assembled. Generated-program
+runtime, host ABI, regression fixtures and fuzzing remain unrun. M22 is not
+complete or approved.

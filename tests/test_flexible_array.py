@@ -17,6 +17,11 @@ struct Promoted { struct { int n; }; long items[]; static_assert(1); };
 static_assert(sizeof(struct Promoted)==8);
 static_assert(alignof(struct Promoted)==8);
 long promoted_read(struct Promoted *p) { return p->items[p->n]; }
+union PacketChoice { struct Packet packet; long aligner; };
+union OuterChoice { union PacketChoice choice; double alternate; };
+union PacketChoice choice={.packet={.n=3,.tag=4}};
+static_assert(sizeof(union PacketChoice)==8);
+static_assert(sizeof(union OuterChoice)==8);
 struct Nested { union { struct { int n; }; long pad; }; long items[]; static_assert(1); };
 static_assert(sizeof(struct Nested)==8 && alignof(struct Nested)==8);
 long read_item(struct Packet *p) { return p->items[1]; }
@@ -53,6 +58,8 @@ invalid = [
  'union U { int n; int a[]; };',
  'struct S { int n; int a[]; }; struct S rows[2];',
  'struct S { int n; int a[]; }; struct Outer { struct S s; };',
+ 'struct S { int n; int a[]; }; union U { struct S s; int i; }; struct O { union U u; };',
+ 'struct S { int n; int a[]; }; union U { struct S s; }; union U rows[2];',
  'struct S { int n; int a[]; }; struct S x={1,2};',
  'struct S { int n; int a[]; }; struct S x={.a={1}};',
  'struct S { int n; int a[]; }; int f(struct S *p){return sizeof p->a;}',
