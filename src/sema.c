@@ -1085,10 +1085,14 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "volatile atomic types are not supported yet");
 			return NULL;
 		}
-		if ((qualified->qualifiers & type_qualifier_volatile) &&
-			(type_is_record(base) || base->kind == type_kind_array)) {
-			diagnostic_error(sema->diagnostics, syntax->location, "volatile aggregate types are not supported yet");
-			return NULL;
+		if (qualified->qualifiers & type_qualifier_volatile) {
+			const struct type *element = base;
+			while (element->kind == type_kind_array)
+				element = ((const struct array_type *)element)->element;
+			if (type_is_record(element)) {
+				diagnostic_error(sema->diagnostics, syntax->location, "volatile record types are not supported yet");
+				return NULL;
+			}
 		}
 		if ((qualified->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(base)) {
 			diagnostic_error(sema->diagnostics, syntax->location,
@@ -1175,10 +1179,6 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!element)
 			return NULL;
-		if (element->qualifiers & type_qualifier_volatile) {
-			diagnostic_error(sema->diagnostics, syntax->location, "volatile array elements are not supported yet");
-			return NULL;
-		}
 		if (!type_is_complete_object(element)) {
 			diagnostic_error(sema->diagnostics, syntax->location, "array element type must be complete");
 			return NULL;
@@ -4228,6 +4228,11 @@ static struct ast_initializer_plan *sema_initializer(struct sema *sema,
 	const struct type *type, const struct ast_initializer *syntax, bool is_static, unsigned *expression_depth)
 {
 	struct initializer_builder builder = { .sema = sema, .is_static = is_static };
+	if (!is_static && type->kind == type_kind_array && (type->qualifiers & type_qualifier_volatile)) {
+		diagnostic_error(sema->diagnostics, syntax->location,
+			"automatic volatile array initialization is not supported yet");
+		return NULL;
+	}
 	struct initializer_path path = { .components = { { .type = type } } };
 	bool incomplete = type->kind == type_kind_array && !((const struct array_type *)type)->count;
 	if ((!incomplete && !type_is_complete_object(type)) ||
@@ -4522,6 +4527,11 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	if (!type)
 		return false;
 	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
+		if ((type->qualifiers & type_qualifier_volatile) && local->initializer_syntax) {
+			diagnostic_error(sema->diagnostics, local->name.location,
+				"automatic volatile array initialization is not supported yet");
+			return false;
+		}
 		if ((local->initializer_syntax &&
 			(local->initializer_syntax->kind != ast_initializer_list || local->initializer_syntax->entries)) ||
 			local->initializer || local->is_inline || local->is_noreturn) {
