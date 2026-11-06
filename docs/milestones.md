@@ -9,7 +9,7 @@ not an up-to-date release gate. Recent feature-branch checkpoints also implement
 bounded enum definitions and fixed underlying types, matching enum redefinitions,
 parameter-scope enum bindings, additional alignment placement, fixed array
 parameter `static`/`const`, outermost prototype `[*]` and variable bounds,
-limited definition bounds including parameter updates, and conservative
+limited definition bounds including named-object updates and direct calls, and conservative
 `restrict` qualification. Floating,
 variadic, atomic, VLA and C23 work exists only in documented subsets. The recent
 changes build and have had limited focused compile checks; their new regression

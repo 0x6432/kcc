@@ -1207,9 +1207,9 @@ static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *pa
 	return true;
 }
 
-/* Bound expressions can use earlier non-atomic integer parameters and
- * enumerators. Restrict writes to named parameter objects; calls, indirection,
- * compound literals and other expression kinds remain outside this subset. */
+/* Bounded parameter expressions can use integer names, literals, direct
+ * calls, casts and named-object updates. Indirection, compound literals and
+ * other expression kinds remain outside this subset. */
 static bool definition_bound(struct sema *sema, const struct ast_expression *expression,
 	bool *effect)
 {
@@ -1223,11 +1223,34 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 		struct ast_local_declaration *prior = find_in_scope(sema->scope, name->name);
 		if (!prior)
 			prior = find_file_enumerator(sema, name->name);
-		return prior && prior->type && type_is_integer(prior->type) &&
-			!(prior->type->qualifiers & type_qualifier_atomic);
+		if (prior)
+			return prior->type && type_is_integer(prior->type) &&
+				!(prior->type->qualifiers & type_qualifier_atomic);
+		struct external_object_symbol *object = find_external_object(sema, name->name);
+		return object && object->file_type && type_is_integer(object->file_type) &&
+			!(object->file_type->qualifiers & type_qualifier_atomic);
 	}
 	case expression_unary:
 		return definition_bound(sema, ((const struct ast_unary_expression *)expression)->operand, effect);
+	case expression_cast:
+		return definition_bound(sema, ((const struct ast_cast_expression *)expression)->operand, effect);
+	case expression_call: {
+		const struct ast_call_expression *call = (const struct ast_call_expression *)expression;
+		struct function_symbol *function;
+		if (call->callee->kind != expression_name)
+			return false;
+		const struct ast_name_expression *name = (const struct ast_name_expression *)call->callee;
+		if (find_in_scope(sema->scope, name->name))
+			return false;
+		function = find_function(sema, name->name);
+		if (!function || !function->file_type)
+			return false;
+		for (const struct ast_argument *argument = call->arguments; argument; argument = argument->next)
+			if (!definition_bound(sema, argument->value, effect))
+				return false;
+		*effect = true;
+		return true;
+	}
 	case expression_binary: {
 		const struct ast_binary_expression *node = (const struct ast_binary_expression *)expression;
 		return definition_bound(sema, node->left, effect) && definition_bound(sema, node->right, effect);

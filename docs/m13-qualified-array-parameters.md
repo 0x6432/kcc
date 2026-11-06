@@ -15,10 +15,11 @@ scope only; its array spelling adjusts immediately to a pointer. Nonconstant
 integer outer bounds in prototypes are analyzed but not evaluated, and also
 adjust immediately to a pointer. This includes `static` bounds; no dynamic
 minimum check is emitted. A definition may use integer expressions over earlier non-atomic integer
-parameters, enumerators, and literals as its outer bound. Supported assignments
-and increments of earlier parameters are evaluated in the function prologue;
-pure expressions are omitted because their values are discarded by adjustment.
-Casts, calls, indirect accesses, compound literals, nested `[*]`, nested variable
-bounds, `volatile`,
+parameters, visible non-atomic integer objects, enumerators, and literals as its
+outer bound. Supported named-object assignments, increments, and direct calls
+with supported arguments are evaluated in the function prologue; pure
+expressions are omitted because adjustment discards their values. Casts of
+supported expressions are accepted. Indirect accesses, compound literals,
+nested `[*]`, nested variable bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.
