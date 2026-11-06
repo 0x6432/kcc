@@ -1214,6 +1214,17 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		parameter->type = adjust_parameter_type(sema, declared, parameter->location);
 		if (!parameter->type)
 			goto done;
+		if (parameter->type_syntax->kind == type_syntax_array) {
+			struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)parameter->type_syntax;
+			if (array->parameter_qualifiers) {
+				parameter->type = type_qualified(sema->arena, parameter->type, array->parameter_qualifiers);
+				if (!parameter->type) {
+					diagnostic_error(sema->diagnostics, parameter->location,
+						"out of memory qualifying adjusted parameter");
+					goto done;
+				}
+			}
+		}
 		parameters[count] = unqualified_type(sema, parameter->type, parameter->location);
 		if (!parameters[count] || !bind_prototype_parameter(sema, parameter))
 			goto done;

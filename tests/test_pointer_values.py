@@ -99,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix='kcc pointer values ') as directory:
         result = subprocess.run([str(compiler),str(source)],capture_output=True,text=True,timeout=5)
         assert result.returncode==1 and not result.stdout and message in result.stderr,(text,result.stderr)
     # Unsupported declarations and real qualifier constraints must still reject.
-    for text in ('int f(int p[static 2]);','void *f(void x);','void f(int *const p,int *q) { p=q; }'):
+    for text in ('int f(int p[static]);','void *f(void x);','void f(int *const p,int *q) { p=q; }'):
         source.write_text(text+'\n')
         result = subprocess.run([str(compiler),str(source)],capture_output=True,text=True,timeout=5)
         assert result.returncode==1 and not result.stdout and result.stderr,(text,result.stderr)

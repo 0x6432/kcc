@@ -102,7 +102,7 @@ subset_errors = [
     ('typedef int F(int); int main(void) { F static f; return 0; }','block-scope static function declaration is not permitted'),
     ('typedef int T; int main(void) { static auto T=42; return 0; }','static or extern auto inference is not supported yet'),
     ('static int main(void) { return 42; }','static main'),
-    ('int f(int a[static 3]);','error:'),
+    ('int f(int a[static]);','error:'),
     ('static int f(void); int main(void) { return sizeof(int[1?2:f()]); }','array bound must be an integer constant expression'),
 ]
 ub_refusals = [

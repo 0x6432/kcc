@@ -719,23 +719,50 @@ static bool parse_function_suffix(struct parser *parser,
  * arrays may retain an unknown outer bound. Append dimensions in source order.
  */
 static bool parse_object_array_suffixes(struct parser *parser,
-	struct parsed_declarator *declarator)
+	struct parsed_declarator *declarator, enum declarator_context context)
 {
 	while (preprocess_peek(parser->preprocessor).kind == token_left_bracket &&
 		preprocess_peek_second(parser->preprocessor).kind != token_left_bracket) {
 		struct token opening = preprocess_next(parser->preprocessor);
 		struct ast_expression *bound = NULL;
 		struct ast_array_type_syntax *array;
-		bool has_bound = preprocess_peek(parser->preprocessor).kind != token_right_bracket;
+		bool has_bound, parameter_static = false, qualifiers_before_static = false;
+		unsigned qualifiers = 0;
 
 		if (declarator->dimensions == ast_max_array_dimensions) {
 			diagnostic_error(parser->diagnostics, opening.location,
 				"array declarator exceeds dimension limit (64)");
 			return false;
 		}
-		if (preprocess_peek(parser->preprocessor).kind == token_static) {
-			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-				"static array bounds are not supported yet");
+		while (preprocess_peek(parser->preprocessor).kind == token_static ||
+			preprocess_peek(parser->preprocessor).kind == token_const) {
+			struct token specifier = preprocess_next(parser->preprocessor);
+			if (context != declarator_parameter) {
+				diagnostic_error(parser->diagnostics, specifier.location,
+					"array bracket qualifiers and static require a parameter");
+				return false;
+			}
+			if (specifier.kind == token_static) {
+				if (parameter_static) {
+					diagnostic_error(parser->diagnostics, specifier.location,
+						"duplicate static in array parameter");
+					return false;
+				}
+				parameter_static = true;
+				qualifiers_before_static = qualifiers != 0;
+			} else {
+				if (parameter_static && qualifiers_before_static) {
+					diagnostic_error(parser->diagnostics, specifier.location,
+						"qualifiers cannot appear on both sides of static");
+					return false;
+				}
+				qualifiers |= type_qualifier_const;
+			}
+		}
+		has_bound = preprocess_peek(parser->preprocessor).kind != token_right_bracket;
+		if (parameter_static && !has_bound) {
+			diagnostic_error(parser->diagnostics, opening.location,
+				"static array parameter requires a bound");
 			return false;
 		}
 		if (has_bound) {
@@ -750,6 +777,8 @@ static bool parse_object_array_suffixes(struct parser *parser,
 			allocation_error(parser, opening.location);
 			return false;
 		}
+		array->parameter_qualifiers = qualifiers;
+		array->parameter_static = parameter_static;
 		*declarator->base_slot = &array->syntax;
 		declarator->base_slot = &array->element;
 		declarator->dimensions++;
@@ -833,7 +862,7 @@ static bool parse_declarator_contents(struct parser *parser,
 		if (token.kind == token_left_bracket) {
 			if (preprocess_peek_second(parser->preprocessor).kind == token_left_bracket)
 				break;
-			if (!parse_object_array_suffixes(parser, declarator))
+			if (!parse_object_array_suffixes(parser, declarator, context))
 				return false;
 		} else if (token.kind == token_left_paren) {
 			preprocess_next(parser->preprocessor);
@@ -887,6 +916,27 @@ static struct ast_type_syntax *parse_derived_type(struct parser *parser,
 		return NULL;
 	}
 	*declarator.base_slot = base;
+	/* Bracket qualifiers/static belong only to the outermost array derivation
+	 * of a parameter, never a pointed-to array or an inner dimension. */
+	for (struct ast_type_syntax *item = declarator.syntax; item;) {
+		if (item->kind == type_syntax_array) {
+			struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)item;
+			if ((array->parameter_qualifiers || array->parameter_static) && item != declarator.syntax) {
+				diagnostic_error(parser->diagnostics, item->location,
+					"array bracket qualifiers and static require the outermost parameter array");
+				return NULL;
+			}
+			item = array->element;
+		} else if (item->kind == type_syntax_pointer) {
+			item = ((struct ast_pointer_type_syntax *)item)->referent;
+		} else if (item->kind == type_syntax_qualified) {
+			item = ((struct ast_qualified_type_syntax *)item)->base;
+		} else if (item->kind == type_syntax_function) {
+			item = ((struct ast_function_type_syntax *)item)->return_syntax;
+		} else {
+			break;
+		}
+	}
 	if (name)
 		*name = declarator.name;
 	if (has_name)

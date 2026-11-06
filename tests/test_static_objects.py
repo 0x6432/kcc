@@ -140,7 +140,7 @@ ub_refusals = [
 # Integer initializers now have independent acceptance/ownership coverage.
 subset_errors = [
     'static auto cell=42;', 'auto static cell=42;',
-    'int f(int cell[static 3]);',
+    'int f(int cell[static]);',
 ]
 
 
