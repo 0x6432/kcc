@@ -556,6 +556,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	address = codegen_address(codegen, node->left);
 	if (node->left->type->qualifiers & type_qualifier_atomic) {
 		const char *atomic_op;
+		bool pointer = node->left->type->kind == type_kind_pointer;
 
 		switch (node->operation) {
 		case binary_add: atomic_op = "add"; break;
@@ -565,15 +566,16 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		case binary_bit_xor: atomic_op = "xor"; break;
 		default: abort(); /* semantic analysis excludes unsupported operations */
 		}
-		if (type_value_width(node->right->type) == 64) {
+		if (!pointer && type_value_width(node->right->type) == 64) {
 			size_t narrowed = codegen->next_temporary++;
 
 			emit(codegen, "\t%%t%zu =w copy %%t%zu\n", narrowed, right);
 			right = narrowed;
 		}
 		value = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w call $__atomic_%s_fetch_4(l %%t%zu, w %%t%zu, w 5)\n",
-			value, atomic_op, address, right);
+		emit(codegen, "\t%%t%zu =%c call $__atomic_%s_fetch_%u(l %%t%zu, %c %%t%zu, w 5)\n",
+			value, pointer ? 'l' : 'w', atomic_op, pointer ? 8u : 4u,
+			address, pointer ? 'l' : 'w', right);
 		return value;
 	}
 	left = codegen->next_temporary++;
@@ -608,10 +610,13 @@ static struct update_values codegen_update(struct codegen *codegen,
 	uint64_t step = element_size ? element_size : 1;
 
 	if (operand->type->qualifiers & type_qualifier_atomic) {
-		emit(codegen, "\t%%t%zu =w call $__atomic_fetch_%s_4(l %%t%zu, w 1, w 5)\n",
-			previous, operation == update_increment ? "add" : "sub", address);
-		emit(codegen, "\t%%t%zu =w %s %%t%zu, 1\n", value,
-			operation == update_increment ? "add" : "sub", previous);
+		bool pointer = operand->type->kind == type_kind_pointer;
+
+		emit(codegen, "\t%%t%zu =%c call $__atomic_fetch_%s_%u(l %%t%zu, %c %ju, w 5)\n",
+			previous, pointer ? 'l' : 'w', operation == update_increment ? "add" : "sub",
+			pointer ? 8u : 4u, address, pointer ? 'l' : 'w', (uintmax_t)step);
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %ju\n", value, pointer ? 'l' : 'w',
+			operation == update_increment ? "add" : "sub", previous, (uintmax_t)step);
 		return (struct update_values) { .previous = previous, .current = value };
 	}
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),

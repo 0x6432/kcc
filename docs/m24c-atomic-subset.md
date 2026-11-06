@@ -9,9 +9,8 @@ lvalue conversion performs a sequentially consistent atomic load; simple
 assignment performs a sequentially consistent atomic store and yields the stored
 non-atomic value. Atomic pointers are also supported for ordinary loads and simple
 stores, using the target’s 8-byte pointer size and alignment and libatomic’s
-`__atomic_load_8` and `__atomic_store_8` ABI. Atomic pointer read-modify-write
-operations and pointer arguments to the partial `stdatomic.h` intrinsics are
-rejected. Addresses are evaluated once. Unevaluated expressions emit no
+`__atomic_load_8` and `__atomic_store_8` ABI. Pointer arguments to the partial
+`stdatomic.h` intrinsics are rejected. Addresses are evaluated once. Unevaluated expressions emit no
 operation. Object initialization (including parameter initialization, zero and
 aggregate initialization) is initialization, not a concurrent atomic store;
 programs must not access an object concurrently before initialization completes.
@@ -30,7 +29,10 @@ on the supported atomic integer types use the corresponding libatomic 4-byte
 read-modify-write operations. Prefix, postfix and compound expressions yield the
 appropriate new or old value, and the object address is evaluated once. Atomic
 compound multiplication, division, remainder, shifts and floating right operands
-are rejected rather than expanded as a non-atomic load and store.
+are rejected rather than expanded as a non-atomic load and store. Atomic pointers
+to complete object types support `++`, `--`, `+=`, and `-=` via the corresponding
+8-byte libatomic read-modify-write functions. Integer offsets are scaled by the
+referent size before the call. Pointer bounds and lifetime rules still apply.
 
 The partial `stdatomic.h` also offers sequentially consistent exchange and
 fetch-add/subtract/and/or/xor via libatomic; each evaluates its pointer and

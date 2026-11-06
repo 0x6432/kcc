@@ -1865,11 +1865,6 @@ static const struct type *sema_update_operand(struct sema *sema,
 			"update requires a modifiable arithmetic or pointer lvalue");
 		return NULL;
 	}
-	if ((operand_type->qualifiers & type_qualifier_atomic) && operand_type->kind == type_kind_pointer) {
-		diagnostic_error(sema->diagnostics, expression->location,
-			"atomic pointer read-modify-write is not supported yet");
-		return NULL;
-	}
 	result_type = unqualified_type(sema, operand_type, expression->location);
 	if (!result_type)
 		return NULL;
@@ -2889,7 +2884,7 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if ((left_type->qualifiers & type_qualifier_atomic) &&
-			(left_type->kind == type_kind_pointer || !type_is_integer(node->right->type) ||
+			(!type_is_integer(node->right->type) ||
 			 (node->operation != binary_add && node->operation != binary_subtract &&
 			  node->operation != binary_bit_and && node->operation != binary_bit_or &&
 			  node->operation != binary_bit_xor))) {

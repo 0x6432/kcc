@@ -10,6 +10,9 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    'int main(void) { int a[4]={0,1,2,42}; _Atomic(int *) p=a; int *x=p++; int *y=++p; p+=1; return x==a && y==a+2 && *p==42 ? 42 : 1; }',
+    'int main(void) { int a[4]={42,1,2,3}; _Atomic(int *) p=a+3; int *x=p--; int *y=--p; int *z=(p-=1L); return x==a+3 && y==a+1 && z==a && *p==42 ? 42 : 1; }',
+    'int main(void) { int a[3]={0,0,42}; _Atomic(int *) p[2]={a,a}; int i=0; p[i++]+=2; return i==1 && *p[0]==42 ? 42 : 1; }',
     'int main(void) { int x=1,y=42; _Atomic(int *) p=&x; p=&y; int *q=p; return *q; }',
     'int main(void) { int x=42; int * _Atomic p=&x; return *p; }',
     'int main(void) { int x=42; auto _Atomic p=&x; return *p; }',
@@ -32,8 +35,8 @@ positive = [
     'int main(void) { _Atomic unsigned x=63; x &= 42; x |= 1; x ^= 1; return x; }',
 ]
 negative = [
-    'int main(void) { int x[2]; _Atomic(int *) p=x; p++; return 0; }',
-    'int main(void) { int x[2]; _Atomic(int *) p=x; p+=1; return 0; }',
+    'int f(void) { _Atomic(void *) p=0; p++; return 0; }',
+    'int f(void) { int x[2]; _Atomic(int *) p=x; p&=1; return 0; }',
     'struct S { _Atomic(int *) p; };',
     '_Atomic long x;', '_Atomic _Bool x;',
     '_Atomic void x;', '_Atomic(int[2]) x;',
@@ -73,6 +76,9 @@ with tempfile.TemporaryDirectory(prefix='kcc-atomics-') as tmp:
 
     pointer_output = compile_kcc('int *f(_Atomic(int *) *p) { return *p; } void g(_Atomic(int *) *p,int *q) { *p=q; }')
     assert '$__atomic_load_8' in pointer_output and '$__atomic_store_8' in pointer_output
+    pointer_updates = compile_kcc('int *f(_Atomic(int *) *p, int n) { (*p)++; return *p+=n; }')
+    assert '$__atomic_fetch_add_8' in pointer_updates and '$__atomic_add_fetch_8' in pointer_updates
+    assert 'mul' in pointer_updates and ', 4' in pointer_updates
 
     # Both translation units access the same atomic objects; synchronize iterations
     # without racing on result slots. The forbidden outcome violates seq_cst.
