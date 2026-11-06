@@ -19,9 +19,10 @@ supported positions and before ordinary statements, including controlled
 statements without braces. Their optional argument lists must contain balanced
 parentheses, brackets and braces and are limited to 64 nesting levels and 256
 items/tokens per sequence. Argument tokens must be supported language tokens;
-this is not yet a general preprocessing-token attribute parser. Known standard
-attributes other than `maybe_unused`, `deprecated` and `fallthrough` are still
-rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
+this is not yet a general preprocessing-token attribute parser. The `noreturn` attribute is additionally accepted as a file-scope prefix on
+function identifier declarations; its other placements are rejected. Known
+standard attributes other than `maybe_unused`, `deprecated`, `fallthrough` and
+this bounded `noreturn` are still rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
 members, unnamed parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
 handling, including placement and token-grammar coverage. Expanded

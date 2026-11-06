@@ -8,4 +8,9 @@ that returns; returning from such a function has undefined behavior under C.
 The deprecated `<stdnoreturn.h>` fallback defines `noreturn` as `_Noreturn`.
 
 The compiler has been built, but the added regression cases have not been run.
-The C23 `[[noreturn]]` attribute remains unsupported.
+The C23 `[[noreturn]]` attribute is supported as a file-scope declaration
+prefix for function identifiers, including typedef-derived function declarations.
+It uses the same recorded flag and has the same code-generation limitations as
+`_Noreturn`; it is rejected on objects, typedefs and tag-only declarations.
+Block-scope and declarator-suffix attribute placements remain unsupported. The
+new attribute cases were added but not regression-tested.

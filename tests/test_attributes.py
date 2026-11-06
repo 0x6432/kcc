@@ -8,6 +8,10 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('[[noreturn]] void stop(void); int f(void){stop(); return 1;}',
+     '_Noreturn void stop(void); int f(void){stop(); return 1;}'),
+    ('typedef void F(void); [[noreturn]] F stop;',
+     'typedef void F(void); _Noreturn F stop;'),
     ('[[deprecated("use " "new")]] int old(int x){return x;} int f([[deprecated]] int y){return old(y);}',
      'int old(int x){return x;} int f(int y){return old(y);}'),
     ('int f(int x){ [[vendor::trace]] if(x) [[ignored(2)]] return 1; [[unknown]] return 0; }',
@@ -39,6 +43,12 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
+    ('[[noreturn]] int x;', 'requires a function declaration'),
+    ('[[noreturn]] typedef void F(void);', 'requires a function identifier'),
+    ('[[noreturn]] enum E { X };', 'requires a function identifier'),
+    ('[[noreturn(1)]] void f(void);', 'take no arguments'),
+    ('void f(void) [[noreturn]];', 'only supported before file-scope'),
+    ('void f(void){ [[noreturn]] void g(void); }', 'only supported before file-scope'),
     ('[[nodiscard]] int f(void);', 'unsupported standard attribute'),
     ('[[fallthrough]] int x;', 'fallthrough is only supported'),
     ('[[maybe_unused(1)]] int x;', 'take no arguments'),

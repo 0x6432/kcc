@@ -69,6 +69,7 @@ struct parsed_attributes {
 	bool maybe_unused;
 	bool fallthrough;
 	bool deprecated;
+	bool noreturn;
 };
 
 static bool token_spells(struct token token, const char *name, size_t length)
@@ -156,8 +157,10 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 			} else if (!scoped && token_spells(token, "deprecated", 10)) {
 				attributes->deprecated = true;
 				known = deprecated = true;
+			} else if (!scoped && token_spells(token, "noreturn", 8)) {
+				attributes->noreturn = true;
+				known = true;
 			} else if (!scoped && (token_spells(token, "nodiscard", 9) ||
-				token_spells(token, "noreturn", 8) ||
 				token_spells(token, "unsequenced", 11) || token_spells(token, "reproducible", 12))) {
 				diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute");
 				return false;
@@ -217,6 +220,11 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 
 	if (!parse_attributes(parser, &attributes))
 		return false;
+	if (attributes.noreturn) {
+		diagnostic_error(parser->diagnostics, location.location,
+			"noreturn attribute is only supported before file-scope function declarations");
+		return false;
+	}
 	if (attributes.fallthrough) {
 		diagnostic_error(parser->diagnostics, location.location,
 			"fallthrough is only supported on a null statement in a switch");
@@ -3257,6 +3265,11 @@ static struct ast_statement *parse_statement(struct parser *parser)
 		if (!parse_attributes(parser, &attributes))
 			return NULL;
 		token = preprocess_peek(parser->preprocessor);
+		if (attributes.noreturn) {
+			diagnostic_error(parser->diagnostics, first.location,
+				"noreturn attribute is only supported before file-scope function declarations");
+			return NULL;
+		}
 		if (attributes.deprecated) {
 			diagnostic_error(parser->diagnostics, first.location,
 				"deprecated is supported only on declarations");
@@ -3823,6 +3836,11 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			if (!parse_attributes(parser, &attributes))
 				return NULL;
 			token = preprocess_peek(parser->preprocessor);
+			if (attributes.noreturn) {
+				diagnostic_error(parser->diagnostics, first.location,
+					"noreturn attribute is only supported before file-scope function declarations");
+				return NULL;
+			}
 			if (attributes.deprecated && !begins_declaration_specifier(parser, token)) {
 				diagnostic_error(parser->diagnostics, first.location,
 					"deprecated is supported only on declarations");
@@ -4256,10 +4274,18 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	struct ast_type_syntax *base;
 	struct token beginning;
 	struct declaration_head head = { 0 };
+	struct parsed_attributes parsed;
+	struct token attribute_location = preprocess_peek(parser->preprocessor);
 	bool attributes;
 
-	if (!parse_declaration_attributes(parser, &attributes))
+	if (!parse_attributes(parser, &parsed))
 		return NULL;
+	if (parsed.fallthrough) {
+		diagnostic_error(parser->diagnostics, attribute_location.location,
+			"fallthrough is only supported on a null statement in a switch");
+		return NULL;
+	}
+	attributes = parsed.present;
 	parser->declaration_attributes = attributes;
 	if (attributes && !begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4292,6 +4318,11 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	}
 	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
+		return NULL;
+	}
+	if (parsed.noreturn && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		diagnostic_error(parser->diagnostics, attribute_location.location,
+			"noreturn attribute requires a function identifier declaration");
 		return NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
@@ -4353,12 +4384,18 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			allocation_error(parser, beginning.location);
 		return node ? &node->external : NULL;
 	}
-	if (head.keyword.kind == token_typedef)
+	if (head.keyword.kind == token_typedef) {
+		if (parsed.noreturn) {
+			diagnostic_error(parser->diagnostics, attribute_location.location,
+				"noreturn attribute requires a function identifier declaration");
+			return NULL;
+		}
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
+	}
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
 		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
-		head.noreturn_keyword.kind == token_noreturn, head.alignments);
+		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, head.alignments);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */
