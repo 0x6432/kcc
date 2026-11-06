@@ -45,6 +45,10 @@ to the existing 256 record-temporary and 1 MiB per-function storage limits.
 The 64-byte ceiling also bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
+Records containing unnamed bit-fields are conservatively rejected by value,
+including nested and MEMORY-class records, pending ABI-specific validation.
+Pointer-based interoperation is separately supported.
+
 ## Focused validation and remaining gates
 
 `tests/test_aggregate_abi.py` links separately compiled GCC and kcc objects in

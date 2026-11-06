@@ -49,6 +49,16 @@ native capability gaps and discrepancies. Aggregate ABI, narrow bit-fields and
 32/64-bit `_BitInt` received focused checks; the full integrated suite has not
 passed.
 
+At `5a73867`, frozen record, initializer and compound-literal harnesses ran
+again after the packed-field changes: 33, 83 and 57 QBE runtime cases,
+respectively; the latter two still reported host capability gaps and semantic
+discrepancies. The integrated focused bit-field, aggregate ABI, enum and
+8/16/32/64-bit `_BitInt` value checks passed; host `_BitInt` comparison was
+unavailable. A subsequent bounded increment supports unnamed int bit-fields
+and zero-width barriers, with 231 GCC/KCC pointer-layout combinations in both
+directions; records containing them by value remain rejected. Full `make test`
+remains blocked by the exact C23 pthread host-companion limitation.
+
 The current work branch is `development`, per the revised user instruction.
 Earlier feature-branch-only instructions and the old development pin below
 are historical, not the current branching policy. The M17 and M15-null

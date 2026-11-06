@@ -667,10 +667,11 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 		uint64_t member_size, offset;
 		unsigned member_alignment, bit_offset = 0;
 		if (++count > 1024 ||
-			(member->is_bit_field && (member->anonymous || !member->name.length ||
+			(member->is_bit_field && (member->anonymous ||
 			member->alignment || member->is_flexible ||
 			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint) ||
-			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32)) ||
+			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32 ||
+			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))
 			return false;
@@ -680,15 +681,17 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 				return false;
 			member_alignment = member->alignment;
 		}
-		if (member_alignment > alignment)
+		if (!(member->is_bit_field && !member->name.length) && member_alignment > alignment)
 			alignment = member_alignment;
 		if (definition->is_union) {
 			offset = 0;
+			if (member->is_bit_field && !member->name.length)
+				member_size = (member->bit_width + 7) / 8;
 			if (member_size > union_size)
 				union_size = member_size;
 		} else if (member->is_bit_field) {
-			unsigned width = member->bit_width ? member->bit_width : 32;
-			if (bits % 32 + width > 32)
+			unsigned width = member->bit_width;
+			if (!width || bits % 32 + width > 32)
 				bits = (bits + 31) & ~UINT64_C(31);
 			bit_offset = (unsigned)(bits % 8);
 			offset = bits / 8;
@@ -797,21 +800,22 @@ const struct record_member *type_record_find_member(const struct type *type,
 	return member;
 }
 
-/* Bit-precise scalar calling conventions are not yet verified. Reject records
- * containing them even for MEMORY-class calls; pointers do not contain their
- * referents by value. Bound the type walk for deeply shared union trees. */
-static bool aggregate_has_unverified_bitint(const struct type *type, unsigned depth,
+/* Bit-precise scalar and unnamed-field calling conventions are not yet
+ * verified. Reject containing records even for MEMORY-class calls; pointers
+ * do not contain their referents by value. Bound deeply shared union trees. */
+static bool aggregate_has_unverified_members(const struct type *type, unsigned depth,
 	size_t *budget)
 {
 	if (depth > 128 || !*budget) return true;
 	--*budget;
 	if (type_is_bitint(type)) return true;
 	if (type->kind == type_kind_array)
-		return aggregate_has_unverified_bitint(((const struct array_type *)type)->element, depth + 1, budget);
+		return aggregate_has_unverified_members(((const struct array_type *)type)->element, depth + 1, budget);
 	if (type_is_record(type)) {
 		const struct record_definition *record = type_record_definition(type);
 		for (const struct record_member *member = record->members; member; member = member->next)
-			if (aggregate_has_unverified_bitint(member->type, depth + 1, budget)) return true;
+			if ((member->is_bit_field && !member->name.length) ||
+				aggregate_has_unverified_members(member->type, depth + 1, budget)) return true;
 	}
 	return false;
 }
@@ -858,8 +862,8 @@ bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
 	uint64_t size = type_object_size(type);
 	unsigned alignment = type_object_alignment(type);
 	if (!size || size > type_max_abi_record_size || alignment > 8) return false;
-	size_t bitint_budget = 65536;
-	if (aggregate_has_unverified_bitint(type, 0, &bitint_budget)) return false;
+	size_t member_budget = 65536;
+	if (aggregate_has_unverified_members(type, 0, &member_budget)) return false;
 	abi->size = (unsigned)size;
 	abi->alignment = alignment;
 	if (size > 16) return true; /* QBE opaque MEMORY type. */

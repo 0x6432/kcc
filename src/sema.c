@@ -478,6 +478,8 @@ static bool check_promoted_names(struct sema *sema, const struct record_definiti
 	}
 	for (const struct record_member *member = definition->members; member; member = member->next) {
 		struct promoted_member_name *entry;
+		if (member->is_bit_field && !member->name.length)
+			continue;
 		if (member->anonymous) {
 			if (!check_promoted_names(sema, type_record_definition(member->type), names,
 				count, depth + 1, location))
@@ -617,7 +619,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				goto done;
 			continue;
 		}
-		if (!member->anonymous && !member->name.length) {
+		if (!member->anonymous && !member->name.length && !member->bit_width) {
 			if (member->type_syntax->kind != type_syntax_record ||
 				!resolve_record_syntax(sema, (struct ast_record_type_syntax *)member->type_syntax, true))
 				goto done;
@@ -642,7 +644,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if ((type->kind != type_kind_int && type->kind != type_kind_uint) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
-				width.status != constant_value || width.bits < 1 || width.bits > 32) {
+				width.status != constant_value || width.bits > 32 ||
+				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");
 				goto done;
@@ -720,7 +723,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if (state->depth < child->depth + 1)
 				state->depth = child->depth + 1;
 		}
-		state->has_const |= has_const_subobject(sema, type);
+		if (!member->bit_width || member->name.length)
+			state->has_const |= has_const_subobject(sema, type);
 		resolved = arena_alloc(sema->arena, sizeof(*resolved));
 		if (!resolved) {
 			diagnostic_error(sema->diagnostics, member->type_syntax->location, "out of memory creating record member");
@@ -737,6 +741,13 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	}
 	if (!check_promoted_names(sema, definition, &names, &promoted_count, 0, syntax->syntax.location))
 		goto done;
+	/* Records with no named members have undefined behavior in C and are
+	 * outside this subset. Preserve the existing diagnostic for these forms. */
+	if (definition->members && !record_has_named_member(definition)) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location,
+			"bit-fields are not supported yet (M22): record requires a named member");
+		goto done;
+	}
 	if (!type_record_layout(definition)) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location,
 			"record must contain members and fit record layout storage limit (1 MiB)");
@@ -4557,7 +4568,7 @@ static enum initializer_ancestry_result initializer_contains_union(
 	} else {
 		for (const struct record_member *member = type_record_definition(type)->members;
 			member; member = member->next) {
-			if (member->is_flexible)
+			if (member->is_flexible || (member->is_bit_field && !member->name.length))
 				continue;
 			if (!initializer_ancestry_step(query))
 				return initializer_ancestry_failed;
@@ -4693,8 +4704,12 @@ static bool initializer_first(struct initializer_builder *builder, struct initia
 	const struct type *type = path->components[path->depth].type;
 	if (type->kind == type_kind_array)
 		return initializer_child(builder, path, 0, NULL, location);
-	if (type_is_record(type))
-		return initializer_child(builder, path, 0, type_record_definition(type)->members, location);
+	if (type_is_record(type)) {
+		const struct record_member *member = type_record_definition(type)->members;
+		while (member && member->is_bit_field && !member->name.length)
+			member = member->next;
+		return member && initializer_child(builder, path, 0, member, location);
+	}
 	return false;
 }
 
@@ -4716,9 +4731,12 @@ static bool initializer_next(struct initializer_builder *builder, struct initial
 				builder->inferred_count = inferred;
 				return success;
 			}
-		} else if (parent->kind == type_kind_struct && old.member->next &&
-			!old.member->next->is_flexible) {
-			return initializer_child(builder, path, 0, old.member->next, location);
+		} else if (parent->kind == type_kind_struct) {
+			const struct record_member *member = old.member->next;
+			while (member && member->is_bit_field && !member->name.length)
+				member = member->next;
+			if (member && !member->is_flexible)
+				return initializer_child(builder, path, 0, member, location);
 		}
 	}
 	return false;

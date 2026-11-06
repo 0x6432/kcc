@@ -1375,17 +1375,16 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			struct source_location bit_colon = beginning.location;
 
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
-				diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-					"bit-fields are not supported yet (M22)");
-				return false;
-			}
-			syntax = parse_derived_type(parser, base, &name, &has_name, declarator_parameter);
-			if (!syntax)
-				return false;
-			{
-				bool suffix_attributes;
-				if (!parse_declaration_attributes(parser, &suffix_attributes))
+				syntax = base;
+			} else {
+				syntax = parse_derived_type(parser, base, &name, &has_name, declarator_parameter);
+				if (!syntax)
 					return false;
+				{
+					bool suffix_attributes;
+					if (!parse_declaration_attributes(parser, &suffix_attributes))
+						return false;
+				}
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
 				bit_colon = preprocess_next(parser->preprocessor).location;
@@ -1393,7 +1392,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				if (!bit_width)
 					return false;
 			}
-			if (!has_name) {
+			if (!has_name && !bit_width) {
 				diagnostic_error(parser->diagnostics, beginning.location, "expected member name");
 				return false;
 			}
