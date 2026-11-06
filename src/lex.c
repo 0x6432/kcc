@@ -877,7 +877,8 @@ static struct token convert_character(struct token token, struct diagnostics *di
 
 /* Parse only C decimal/hex floating forms, avoiding strtod extensions and
  * locale-sensitive spellings. Conversion assumes the host's IEEE formats and
- * C locale; out-of-range results are rejected rather than silently changed. */
+ * C locale; nonzero representable subnormals are retained even when strto*
+ * reports ERANGE. Overflow and underflow to zero remain rejected. */
 static struct token convert_floating(struct token token, struct diagnostics *diagnostics)
 {
 	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
@@ -932,12 +933,14 @@ static struct token convert_floating(struct token token, struct diagnostics *dia
 	if (single) {
 		float v = strtof(buf, &end);
 		uint32_t bits;
-		if (errno || *end || !isfinite(v)) goto range;
+		if (*end || !isfinite(v) || (errno &&
+			(errno != ERANGE || v == 0.0f || v >= FLT_MIN))) goto range;
 		memcpy(&bits, &v, sizeof(bits));
 		token.floating_bits = bits;
 	} else {
 		double v = strtod(buf, &end);
-		if (errno || *end || !isfinite(v)) goto range;
+		if (*end || !isfinite(v) || (errno &&
+			(errno != ERANGE || v == 0.0 || v >= DBL_MIN))) goto range;
 		memcpy(&token.floating_bits, &v, sizeof(v));
 	}
 	token.kind = token_floating;

@@ -1534,12 +1534,14 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define FLT_MIN 1.17549435082228750796873653722224568e-38F\n"
 			"#define FLT_MAX 3.40282346638528859811704183484516925e+38F\n"
 			"#define FLT_EPSILON 1.1920928955078125e-7F\n"
+			"#define FLT_TRUE_MIN 0x1p-149F\n#define FLT_HAS_SUBNORM 1\n"
 			"#define DBL_MANT_DIG 53\n#define DBL_DIG 15\n#define DBL_DECIMAL_DIG 17\n"
 			"#define DBL_MIN_EXP (-1021)\n#define DBL_MIN_10_EXP (-307)\n"
 			"#define DBL_MAX_EXP 1024\n#define DBL_MAX_10_EXP 308\n"
 			"#define DBL_MIN 2.22507385850720138309023271733240406e-308\n"
 			"#define DBL_MAX 1.79769313486231570814527423731704357e+308\n"
 			"#define DBL_EPSILON 2.220446049250313080847263336181640625e-16\n"
+			"#define DBL_TRUE_MIN 0x1p-1074\n#define DBL_HAS_SUBNORM 1\n"
 			"#endif\n";
 		static const char stdint_header[] =
 			"#ifndef __KCC_STDINT_H\n#define __KCC_STDINT_H 1\n"

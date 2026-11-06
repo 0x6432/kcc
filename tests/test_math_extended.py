@@ -13,13 +13,16 @@ with tempfile.TemporaryDirectory(prefix='kcc-math-') as directory:
     source.write_text(r'''
 #include <tgmath.h>
 #include <stdlib.h>
+#include <float.h>
 static_assert(_Generic(fma(1.0f,2.0f,3.0f),float:1,default:0));
 static_assert(_Generic(fma(1.0f,2,3.0f),double:1,default:0));
 static_assert(_Generic(hypot(1.0f,2.0f),float:1,default:0));
 static_assert(_Generic(hypot(1.0f,2.0),double:1,default:0));
 int main(void) {
   float x=2.0f;
-  float tiny=strtof("1.40129846e-45",nullptr);
+  float tiny=FLT_TRUE_MIN;
+  double double_tiny=DBL_TRUE_MIN;
+  if (!issubnormal(double_tiny)) return 6;
   if (fpclassify(tiny)!=FP_SUBNORMAL || !issubnormal(tiny) || !isnormal(x)) return 4;
   if (!iszero(0.0f) || issignaling(x)) return 5;
   if (fma(x++,3.0f,1.0f)!=7.0f || x!=3.0f) return 1;

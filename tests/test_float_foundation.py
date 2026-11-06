@@ -21,6 +21,8 @@ _Static_assert(alignof(double)==8, "double alignment");
 typedef const float CF;
 double global_float=1.5;
 float global_negzero=-0.0f;
+float global_subnormal=0x1p-149f;
+double global_subnormal_double=0x1p-1074;
 float global_narrow=42.0;
 double global_widen=42.0f;
 float global_integer=42;
@@ -64,6 +66,7 @@ float pass(float (*)(float,float),float,float);
 double widen(float); float narrow(double); double mixed(float,int); long to_long(double); _Bool as_bool(double);
 float update(float *); int compound_int(int);
 extern double global_float; extern float global_negzero;
+extern float global_subnormal; extern double global_subnormal_double;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 extern float global_arithmetic; extern double global_mixed;
 extern int static_int; extern unsigned int static_unsigned; extern _Bool static_bool;
@@ -81,6 +84,7 @@ int main(void) {
  if (to_long(-3.5)!=-3 || as_bool(0.0) || !as_bool(1.0)) return 7;
  { float x=1.0f; if (update(&x)!=4.5f || x!=3.5f || compound_int(1)!=2) return 8; }
  if (global_float!=1.5 || !signbit(global_negzero) || global_holder.x!=-2.5 || global_holder.y!=3.0f) return 9;
+ if (global_subnormal!=0x1p-149f || global_subnormal_double!=0x1p-1074) return 13;
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
      global_unsigned!=(double)18446744073709551615UL || global_signed!=(double)(-9223372036854775807L-1L)) return 10;
  if (global_arithmetic!=3.75f || global_mixed!=9.0) return 11;

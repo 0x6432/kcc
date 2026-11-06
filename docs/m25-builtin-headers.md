@@ -37,8 +37,9 @@ Source provenance, not a filename, determines which budget is charged.
   not provided.
 - `float.h` supplies radix, evaluation, rounding and common binary32/binary64
   precision, exponent and normalized-range macros for the default
-  round-to-nearest environment. It omits long-double and subnormal limit
-  macros; runtime floating-environment changes are not modeled.
+  round-to-nearest environment, including binary32/binary64 true-minimum and
+  subnormal availability macros. Long-double macros are omitted; runtime
+  floating-environment changes are not modeled.
 - `assert.h` responds to `NDEBUG` at each inclusion, evaluates its condition
   once when enabled, and calls glibc's `__assert_fail` on failure with source
   and function information. It requires a compatible libc.
