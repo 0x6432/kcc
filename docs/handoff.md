@@ -72,9 +72,9 @@ unsigned by-value layouts checked in both host/KCC directions. Short bit-fields
 now support 1–16 bits; 480 signed/unsigned by-value layouts were checked in
 both host/KCC directions. Historical short-field unsupported fixtures were
 retargeted to the then-unsupported long type and their diagnostics updated.
-Long and long long bit-fields now support widths 1–32, with 896 named and 128
-unnamed aggregate layouts checked in both GCC/KCC directions; wider long fields
-remain unsupported. The historical long-field fixtures now use width 33.
+Long and long long bit-fields now support widths 1–32 and 64, with 924 named
+and 132 unnamed aggregate layouts checked in both GCC/KCC directions; widths
+33–63 remain unsupported. The historical long-field fixtures now use width 33.
 At `767aefc`, `KCC_ALLOW_MISSING_TLS_COMPANION=1 make -j2 test` completed
 successfully with QBE 1.2 in gap-aware mode; this is not a strict release-gate
 pass. Four TLS cases lacked exact C23 host companions and were not run. The

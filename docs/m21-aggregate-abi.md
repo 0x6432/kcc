@@ -18,7 +18,7 @@ array members, unrepresentable/empty ABI eightbytes, unsupported types and
 unaligned scalar fields are refused rather than passed as pointers. Aggregate
 arguments after an ellipsis and `va_arg` of aggregate type remain unsupported.
 Fixed aggregate parameters of a variadic function are supported alongside the
-existing scalar variadic subset. Supported named int, short, char, boolean and narrow long-base bit-fields are documented
+existing scalar variadic subset. Supported named int, short, char, boolean and bounded long-base bit-fields are documented
 in `m22-bit-fields.md`; their actual occupied bits are classified as INTEGER,
 including fields starting at byte offsets not aligned for `int`. Other bit-field base types, vectors,
 `long double`, complex types and aggregate atomics are not added by this slice.
@@ -61,7 +61,7 @@ exhaustion and rollback, memory returns, fixed parameters of variadic functions,
 `tests/test_bitfield_aggregate_abi.py` additionally exercises 448 named signed
 and unsigned field layouts by value in both host/KCC directions, plus mixed
 INTEGER/SSE, unions, nested records and register pressure.
-`tests/test_long_bit_fields.py` checks 896 named and 128 unnamed long-base
+`tests/test_long_bit_fields.py` checks 924 named and 132 unnamed long-base
 layouts by value in both host/KCC directions.
 `tests/test_unnamed_field_aggregate_abi.py` covers 288 floating and mixed
 nonzero-unnamed-field layouts by value in both directions and exercises a union,

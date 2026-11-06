@@ -1,4 +1,4 @@
-# M22: bounded int, short, char, bool and narrow long bit-fields
+# M22: bounded int, short, char, bool and bounded long bit-fields
 
 ## Target and supported declarations
 
@@ -21,9 +21,9 @@ is signed on this target, and zero-width separators align to a byte. Named
 unnamed fields accept widths 0 through 16. They use two-byte allocation units
 and natural alignment, with zero-width separators aligning to a two-byte
 boundary. Named signed/unsigned `long` and `long long` fields accept widths
-1–32; unnamed fields accept 0–32. They use eight-byte allocation units and
-natural alignment, with zero-width separators aligning to eight-byte
-boundaries. Widths 33–64 remain unsupported for these base types. Structs,
+1–32 or 64; unnamed fields accept 0–32 or 64. They use eight-byte allocation
+units and natural alignment, with zero-width separators aligning to eight-byte
+boundaries. Widths 33–63 remain unsupported for these base types. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
 retain the existing record restrictions.
 
@@ -46,7 +46,8 @@ old value. Mutations evaluate the field base once and preserve other bytes or
 bits. Narrow `unsigned int` fields and supported long-base fields below 32 bits
 promote to `int` in integer-promotion contexts; 32-bit signed long-base fields
 promote to `int`, and 32-bit unsigned long-base fields to `unsigned int`.
-These promotions apply to arithmetic, shifts, conditional operands and variadic calls.
+Full 64-bit fields retain their declared long-base types. These rules apply to
+arithmetic, shifts, conditional operands and variadic calls.
 Within existing initializer limits, static and automatic, positional and
 designated initializers, scalar braces, record copies and pointer-based host
 interop are supported. Adjacent fields are merged bitwise; repeated field
@@ -68,7 +69,7 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Enum and `_BitInt` base types, long/long-long widths above 32, volatile and
+Enum and `_BitInt` base types, long/long-long widths 33–63, volatile and
 atomic fields are rejected. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
@@ -79,8 +80,8 @@ can share the legacy M22 diagnostic.
 
 ## Validation
 
-`tests/test_long_bit_fields.py` checks 896 named long/long-long layouts and
-128 unnamed floating/mixed layouts across by-value calls in both GCC/KCC
+`tests/test_long_bit_fields.py` checks 924 named long/long-long layouts and
+132 unnamed floating/mixed layouts across by-value calls in both GCC/KCC
 directions, plus static and local initialization, signed/unsigned conversions,
 updates and 64-bit-unit zero-width pointer layout. Historical unsupported-long
 fixtures now use width 33; the original narrow example has a positive runtime

@@ -675,7 +675,9 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			member->type->kind != type_kind_short && member->type->kind != type_kind_ushort &&
 			member->type->kind != type_kind_long && member->type->kind != type_kind_ulong &&
 			member->type->kind != type_kind_long_long && member->type->kind != type_kind_ulong_long) ||
-			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32 ||
+			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 64 ||
+			((member->type->kind == type_kind_int || member->type->kind == type_kind_uint) &&
+			member->bit_width > 32) ||
 			(member->type->kind == type_kind_bool && member->bit_width > 1) ||
 			((member->type->kind == type_kind_char || member->type->kind == type_kind_schar ||
 			member->type->kind == type_kind_uchar) && member->bit_width > 8) ||
@@ -683,7 +685,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			member->bit_width > 16) ||
 			((member->type->kind == type_kind_long || member->type->kind == type_kind_ulong ||
 			member->type->kind == type_kind_long_long || member->type->kind == type_kind_ulong_long) &&
-			member->bit_width > 32) ||
+			member->bit_width > 32 && member->bit_width != 64) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))

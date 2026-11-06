@@ -372,7 +372,7 @@ static size_t codegen_field_storage_load(struct codegen *codegen, size_t address
 static size_t codegen_byte_offset(struct codegen *codegen, size_t base, uint64_t offset);
 
 /* Long-base fields use a 64-bit value and can touch five bytes even when
- * their supported width is at most 32. Access exactly the occupied bytes so a
+ * their supported width is at most 32 or exactly 64. Access exactly the occupied bytes so a
  * field at the end of an object does not read or write beyond it. */
 static size_t codegen_wide_field_load(struct codegen *codegen, size_t address,
 	const struct record_member *member)
@@ -403,7 +403,7 @@ static size_t codegen_wide_field_store(struct codegen *codegen, size_t address,
 	size_t value, const struct record_member *member)
 {
 	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
-	uint64_t mask = (UINT64_C(1) << member->bit_width) - 1;
+	uint64_t mask = member->bit_width == 64 ? UINT64_MAX : (UINT64_C(1) << member->bit_width) - 1;
 	size_t bits = codegen->next_temporary++, placed = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =l and %%t%zu, %ju\n", bits, value, (uintmax_t)mask);
 	emit(codegen, "\t%%t%zu =l shl %%t%zu, %u\n", placed, bits, member->bit_offset);
@@ -2216,7 +2216,8 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 				const struct ast_initializer_plan_entry *f = entries[k];
 				if (f->kind == ast_initializer_write_zero) continue;
 				assert(f->constant.kind == ast_initializer_constant_integer);
-				uint64_t mask = (UINT64_C(1) << f->bit_field->bit_width) - 1;
+				uint64_t mask = f->bit_field->bit_width == 64 ? UINT64_MAX :
+					(UINT64_C(1) << f->bit_field->bit_width) - 1;
 				uint64_t bits = (f->constant.bits & mask) << f->bit_field->bit_offset;
 				for (size_t j = 0; j < f->length; j++)
 					bytes[f->offset - start + j] |= (unsigned char)(bits >> (8 * j));
