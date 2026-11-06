@@ -1370,6 +1370,24 @@ static void codegen_vla(struct codegen *codegen, const struct ast_local_declarat
 	emit(codegen, "\t%%t%zu =l sub %%t%zu, %%z%zu\n", new_remaining, remaining, local->slot);
 	emit(codegen, "\tstorel %%t%zu, %%vla_budget\n", new_remaining);
 	emit(codegen, "\t%%v%zu =l alloc%u %%z%zu\n", local->slot, alignment, local->slot);
+	if (local->initializer_syntax) {
+		/* C23 empty initialization; supported x86-64 types use all-zero
+		 * representations for zero, null pointers, and aggregate padding. */
+		size_t predecessor = codegen->current_label;
+		size_t loop = new_label(codegen), done = new_label(codegen);
+		size_t index = codegen->next_temporary++, next = codegen->next_temporary++;
+		size_t address = codegen->next_temporary++, more = codegen->next_temporary++;
+
+		emit(codegen, "\tjmp @b%zu\n", loop);
+		emit_label(codegen, loop);
+		emit(codegen, "\t%%t%zu =l phi @b%zu 0, @b%zu %%t%zu\n", index, predecessor, loop, next);
+		emit(codegen, "\t%%t%zu =l add %%v%zu, %%t%zu\n", address, local->slot, index);
+		emit(codegen, "\tstoreb 0, %%t%zu\n", address);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, 1\n", next, index);
+		emit(codegen, "\t%%t%zu =w cultl %%t%zu, %%z%zu\n", more, next, local->slot);
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", more, loop, done);
+		emit_label(codegen, done);
+	}
 }
 
 static bool codegen_for(struct codegen *codegen, const struct ast_for_statement *node)

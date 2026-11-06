@@ -10,6 +10,10 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=3; int a[n++]={}; return n==4 && a[0]==0 && a[2]==0 && sizeof a==12 ? 42 : 1; }',
+    'int main(void) { int n=2; int *a[n]={}; return a[0]==0 && a[1]==0 ? 42 : 1; }',
+    'struct S { int x; double y; }; int main(void) { int n=2; struct S a[n]={}; return a[1].x==0 && a[1].y==0.0 ? 42 : 1; }',
+    'int main(void) { int n=2; for(int i=0;i<3;i++) { int a[n]={}; if(a[0] || a[1]) return 1; a[1]=7; } return 42; }',
     'int main(void) { int n=2; switch(n) { case 2: { int a[n]; a[1]=42; return sizeof a==8 ? a[1] : 1; } default: return 1; } }',
     'int main(void) { int n=2; switch(n) { case 2: { int a[n]; a[1]=42; switch(n) { case 2: return a[1]; default: return 1; } } default: return 1; } }',
     'int main(void) { int n=3, sum=0; while(n) { int a[n]; a[n-1]=n; sum+=a[n-1]; n--; } return sum==6 ? 42 : 1; }',
@@ -38,7 +42,7 @@ valid = [
 rejected = [
     ('int f(int n) { switch(n) { int a[n]; case 1: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { switch(n) { case 1:; int a[n]; default: return sizeof a; } return 0; }', 'switch label enters'),
-    ('int f(int n) { int a[n]={0}; return 0; }', 'must be uninitialized'),
+    ('int f(int n) { int a[n]={0}; return 0; }', 'require an empty initializer'),
     ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
     ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto in a function'),
     ('int f(int n) { again:; int a[n]; goto again; }', 'goto in a function'),

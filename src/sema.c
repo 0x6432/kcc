@@ -4353,9 +4353,11 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	if (!type)
 		return false;
 	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
-		if (local->initializer_syntax || local->initializer || local->alignments || local->is_inline || local->is_noreturn) {
+		if ((local->initializer_syntax &&
+			(local->initializer_syntax->kind != ast_initializer_list || local->initializer_syntax->entries)) ||
+			local->initializer || local->alignments || local->is_inline || local->is_noreturn) {
 			diagnostic_error(sema->diagnostics, local->name.location,
-				"variable-length arrays must be uninitialized and naturally aligned");
+				"variable-length arrays require an empty initializer and natural alignment");
 			return false;
 		}
 		if (sema->local_count == ast_max_locals) {
