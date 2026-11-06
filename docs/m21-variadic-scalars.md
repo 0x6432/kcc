@@ -15,3 +15,17 @@ evaluates its argument and otherwise performs no operation. QBE's `vastart` and
 `vaarg` implement the target ABI. These newly added argument-access paths have
 been built, but have not yet been integration-tested. This is not full C23
 conformance or M21 completion.
+
+## C23 nullptr_t variadic arguments
+
+`nullptr_t` values, including the `nullptr` constant, are passed unchanged
+through an ellipsis and can be retrieved with `va_arg(ap, nullptr_t)`. The
+existing target represents them in the same 64-bit QBE scalar class as object
+pointers. `nullptr_t` remains a distinct C type: retrieving it as a pointer is
+not made type-compatible by this implementation. Other existing variadic and
+aggregate ABI limits remain.
+
+The compiler build and focused compile/IL and rejection checks were run. One
+example was lowered through pinned QBE and assembled; generated-program runtime,
+host ABI interop, regression fixtures and fuzzing remain pending. This is not
+M21 completion or a general ABI conformance claim.

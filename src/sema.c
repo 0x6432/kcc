@@ -2281,9 +2281,10 @@ static bool sema_expression(struct sema *sema,
 				!(result_type->kind == type_kind_int || result_type->kind == type_kind_uint ||
 				result_type->kind == type_kind_long || result_type->kind == type_kind_ulong ||
 				result_type->kind == type_kind_long_long || result_type->kind == type_kind_ulong_long ||
-				result_type->kind == type_kind_double || result_type->kind == type_kind_pointer)) {
+				result_type->kind == type_kind_double || result_type->kind == type_kind_pointer ||
+				result_type->kind == type_kind_nullptr)) {
 				diagnostic_error(sema->diagnostics, expression->location,
-					"va_arg supports promoted integer, double, and pointer types only");
+					"va_arg supports promoted integer, double, pointer, and nullptr_t types only");
 				return false;
 			}
 		} else {
@@ -2413,6 +2414,7 @@ static bool sema_expression(struct sema *sema,
 					type_integer_promotion(argument->value->type)))
 					return false;
 			} else if (argument->value->type->kind != type_kind_pointer &&
+				argument->value->type->kind != type_kind_nullptr &&
 				!(sema->unevaluated && type_is_record(argument->value->type))) {
 				diagnostic_error(sema->diagnostics, argument->value->location,
 					"unsupported variadic argument type");

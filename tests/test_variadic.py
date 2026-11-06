@@ -58,7 +58,6 @@ def main():
             'int f(int ...);', 'int f(int, ...,);',
             'struct S { int x; }; int f(int,...); int g(void){ struct S s; return f(1,s); }',
             'int f(int,...); void v(void); int g(void){return f(0,v());}',
-            'int f(int,...); int g(void){return f(0,nullptr);}',
         ]
         for source in invalid:
             result = compile_source(d, source)
@@ -66,6 +65,20 @@ def main():
 
         # New C23 ellipsis-only syntax, including a no-argument call and a definition.
         source = 'int f(...){return 7;} int main(void){return f()!=7 || f(3,4)!=7;}'
+        link_and_run(d, source, '')
+
+        # nullptr_t retains its type under default argument promotions.
+        source = r'''
+#include <stdarg.h>
+#include <stddef.h>
+int take(int marker, ...) {
+  va_list a, copy; va_start(a); va_copy(copy,a);
+  nullptr_t p=va_arg(a, nullptr_t), q=va_arg(copy, nullptr_t);
+  int n=va_arg(a,int); va_end(copy); va_end(a);
+  return marker==3 && p==nullptr && q==nullptr && n==42;
+}
+int main(void) { return !take(3,nullptr,42); }
+'''
         link_and_run(d, source, '')
 
         # KCC calls a real host va_arg implementation, both directly and via a pointer.

@@ -9,7 +9,8 @@ plus partial target-specific headers and runtime helpers. Static float/double
 initializer folding includes bounded arithmetic-conditioned expressions with two
 finite supported arms, direct finite floating comparisons, and decimal/
 hexadecimal literals that round to zero;
-see `m20-floating-foundation.md`. See each feature's
+see `m20-floating-foundation.md`. Variadic calls and `va_arg` now include
+C23 `nullptr_t`; see `m21-variadic-scalars.md`. See each feature's
 documentation for boundaries. Notable remaining work includes aggregate-by-value
 ABI, bit-fields, source `_BitInt`, `long double`, complete preprocessing and
 attributes, and a complete hosted C library. The internal bit-precise arithmetic
