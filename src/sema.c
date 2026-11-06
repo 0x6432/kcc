@@ -98,6 +98,7 @@ struct sema {
 	size_t local_count;
 	uint64_t local_storage;
 	struct ast_type_syntax *vla_candidate;
+	struct ast_type_syntax *alignment_vla_candidate;
 	struct ast_type_syntax *prototype_vla_candidate;
 	struct ast_type_syntax *definition_vla_candidate;
 	unsigned evaluated_parameter_depth;
@@ -986,6 +987,27 @@ static const struct type *resolve_unevaluated_type_syntax(struct sema *sema,
 	return type;
 }
 
+/* An outer VLA bound in an alignment type-name is checked but never
+ * evaluated. Keep incomplete array types distinguishable from this case. */
+static const struct type *resolve_alignment_type_syntax(struct sema *sema,
+	struct ast_type_syntax *syntax)
+{
+	struct ast_type_syntax *saved = sema->alignment_vla_candidate;
+	const struct type *type;
+
+	sema->alignment_vla_candidate = syntax->kind == type_syntax_array ? syntax : NULL;
+	type = resolve_unevaluated_type_syntax(sema, syntax);
+	sema->alignment_vla_candidate = saved;
+	return type;
+}
+
+static const struct type *alignment_complete_type(const struct type *type)
+{
+	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound)
+		return ((const struct array_type *)type)->element;
+	return type;
+}
+
 /* Only target types with implemented libatomic ABI paths are accepted. */
 static bool supported_atomic_type(const struct type *type)
 {
@@ -1162,7 +1184,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 				syntax->type = &type->type;
 				break;
 			}
-			if (result.status == constant_not_constant && syntax == sema->vla_candidate &&
+			if (result.status == constant_not_constant &&
+				(syntax == sema->vla_candidate || syntax == sema->alignment_vla_candidate) &&
 				type_is_integer(array->bound->type)) {
 				type = type_new_incomplete_array(sema->arena, element);
 				if (!type) {
@@ -2669,10 +2692,11 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_alignof: {
 		struct ast_alignof_expression *node = (struct ast_alignof_expression *)expression;
-		const struct type *type = resolve_unevaluated_type_syntax(sema, node->type_syntax);
+		const struct type *type = resolve_alignment_type_syntax(sema, node->type_syntax);
 
 		if (!type)
 			return false;
+		type = alignment_complete_type(type);
 		if (!type_is_complete_object(type)) {
 			diagnostic_error(sema->diagnostics, expression->location, "alignof requires a complete object type");
 			return false;
@@ -4281,9 +4305,10 @@ static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *
 		if (a->preceding_type && !resolve_type_syntax(sema, a->preceding_type))
 			return false;
 		if (a->type_syntax) {
-			const struct type *operand = resolve_unevaluated_type_syntax(sema, a->type_syntax);
+			const struct type *operand = resolve_alignment_type_syntax(sema, a->type_syntax);
 			if (!operand)
 				return false;
+			operand = alignment_complete_type(operand);
 			if (!type_is_complete_object(operand)) {
 				diagnostic_error(sema->diagnostics, a->location, "alignment type must be a complete object type");
 				return false;

@@ -33,3 +33,7 @@ at the source. Re-entering a declaration consumes the cumulative budget again. T
 the added regression cases and runtime behavior have not been tested.
 Runtime-bound markers are retained when array qualification is copied or when
 two unknown-bound array types are combined.
+`alignof` and alignment specifiers accept a direct outer variable-bound array
+type-name with a complete fixed-size element type. Its bound is checked but
+not evaluated; the result is the element alignment. More general variably
+modified type-names remain unsupported. This path has not been runtime-tested.
