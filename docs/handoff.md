@@ -64,7 +64,9 @@ with unaligned byte offsets now have bounded aggregate-by-value classification;
 448 signed and unsigned layouts passed the GCC/KCC cross-call matrix in both
 directions. Named and unnamed boolean bit-fields now support width 1, with
 boolean conversion, packing and cross-compiler aggregate checks; zero-width
-boolean separators have the same conservative by-value ABI boundary. Full `make test`
+boolean separators have the same conservative by-value ABI boundary. Named and
+unnamed character-type fields are supported through 8 bits, with 112 signed/
+unsigned by-value layouts checked in both host/KCC directions. Full `make test`
 remains blocked by the exact C23 pthread host-companion limitation.
 
 The current work branch is `development`, per the revised user instruction.

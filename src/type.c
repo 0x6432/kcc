@@ -670,9 +670,12 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			(member->is_bit_field && (member->anonymous ||
 			member->alignment || member->is_flexible ||
 			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint &&
-			member->type->kind != type_kind_bool) ||
+			member->type->kind != type_kind_bool && member->type->kind != type_kind_char &&
+			member->type->kind != type_kind_schar && member->type->kind != type_kind_uchar) ||
 			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32 ||
 			(member->type->kind == type_kind_bool && member->bit_width > 1) ||
+			((member->type->kind == type_kind_char || member->type->kind == type_kind_schar ||
+			member->type->kind == type_kind_uchar) && member->bit_width > 8) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))
@@ -693,7 +696,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 				union_size = member_size;
 		} else if (member->is_bit_field) {
 			unsigned width = member->bit_width;
-			unsigned unit = member->type->kind == type_kind_bool ? 8 : 32;
+			unsigned unit = (unsigned)member_size * 8;
 			if (!width || bits % unit + width > unit)
 				bits = (bits + unit - 1) & ~(uint64_t)(unit - 1);
 			bit_offset = (unsigned)(bits % 8);
