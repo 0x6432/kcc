@@ -10,7 +10,7 @@ compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 pairs = [
     ('typedef int F(void); [[nodiscard]] F f;', 'typedef int F(void); F f;'),
     ('typedef int F(void); F f [[nodiscard]];', 'typedef int F(void); F f;'),
-    ('typedef int F(void); void g(void){[[nodiscard]] F f; f();}', 'typedef int F(void); void g(void){F f; f();}'),
+    ('typedef int F(void); void g(void){[[nodiscard]] F f; (void)f();}', 'typedef int F(void); void g(void){F f; (void)f();}'),
     ('[[nodiscard]] int f(void){return 42;}', 'int f(void){return 42;}'),
     ('[[nodiscard("use " "result")]] int f(void);', 'int f(void);'),
     ('int f(void) [[nodiscard]];', 'int f(void);'),
