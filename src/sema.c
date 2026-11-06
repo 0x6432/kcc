@@ -3891,6 +3891,11 @@ static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *
 		return true;
 	for (struct ast_alignment_specifier *a = group->specifiers; a; a = a->next) {
 		uint64_t value;
+		/* A specifier may declare tags or names used by later alignment
+		 * operands. Its cached type also protects an earlier typedef lookup
+		 * from a name introduced by such an operand. */
+		if (a->preceding_type && !resolve_type_syntax(sema, a->preceding_type))
+			return false;
 		if (a->type_syntax) {
 			const struct type *operand = resolve_unevaluated_type_syntax(sema, a->type_syntax);
 			if (!operand)

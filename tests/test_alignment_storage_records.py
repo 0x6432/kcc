@@ -13,6 +13,8 @@ accepted = [
     ('alignas(16) int x;', 'export data $x = align 16'),
     ('int alignas(16) x=3;', 'export data $x = align 16'),
     ('struct S { char c; int alignas(16) x; }; static_assert(sizeof(struct S)==32);', ''),
+    ('struct S { struct T { int n; } alignas(16) x; }; static_assert(sizeof(struct S)==16);', ''),
+    ('struct S { int n; } alignas(sizeof(struct S)*4) x;','export data $x = align 16'),
     ('extern unsigned alignas(16) long x; unsigned long alignas(16) x=1;', 'export data $x = align 16'),
     ('extern alignas(16) int x; alignas(16) int x=3;', 'export data $x = align 16'),
     ('alignas(16) int x; extern int x;', 'export data $x = align 16'),
@@ -46,7 +48,7 @@ rejected = [
     ('struct S { alignas(2) int x; };', 'weaken'),
     ('struct S { alignas(3) char x; };', 'supported alignments'),
     ('struct S { alignas(16) struct { int x; }; };', 'anonymous member'),
-    ('struct S { struct T { int n; } alignas(16) x; };', 'must precede non-builtin'),
+    ('struct S { alignas(sizeof(struct T)) struct T { int n; } x; };', 'complete'),
     ('struct S { int alignas(2) x; };', 'weaken'),
 ]
 runtime = '''int aligned(void *p, int n); int check_record(void *p);

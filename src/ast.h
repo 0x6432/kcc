@@ -849,6 +849,8 @@ struct ast_block_tag_declaration {
 /* A declaration-only alignment request, not a type qualifier. */
 struct ast_alignment_specifier {
 	struct source_location location;
+	/* Resolve a preceding non-builtin specifier before this operand. */
+	struct ast_type_syntax *preceding_type;
 	struct ast_type_syntax *type_syntax;
 	struct ast_expression *expression;
 	struct ast_alignment_specifier *next;

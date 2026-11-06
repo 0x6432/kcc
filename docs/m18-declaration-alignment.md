@@ -4,11 +4,11 @@ This is not M18 completion or a tested/release checkpoint. Both `alignas` and
 `_Alignas` are recognized after preprocessing. This slice supports automatic,
 static, file-scope and thread-local objects, including linked extern objects,
 and named struct/union members. A declaration list shares one specifier group;
-the group is resolved exactly once before the declared type and before any
-list identifier enters semantic scope. Up to 32 specifiers are allowed. They
-may be interleaved with built-in type, storage and qualifier specifiers.
-They must precede a typedef, record, enum, typeof, or atomic type specifier: these
-can introduce bindings whose source order is not yet modeled by this slice.
+the group is resolved exactly once before any list identifier enters semantic
+scope, interleaving preceding non-builtin type resolution as described below. Up to 32 specifiers are allowed. They
+may be interleaved with type, storage and qualifier specifiers. A preceding
+non-builtin type specifier is resolved before a later alignment operand, so
+tags and typedef bindings follow source order.
 
 An operand is a complete object type-name or checked integer constant
 expression. Zero has no effect; nonzero requests combine by maximum and cannot
@@ -35,8 +35,8 @@ an explicit implementation policy, not a claim those questions are resolved.
 Across translation units kcc cannot verify matching declarations; callers must
 supply consistent alignment themselves.
 
-Still unsupported: specifiers after non-builtin type specifiers, alignment on
-typedefs, parameters, register objects, functions, anonymous members, or
+Still unsupported: alignment on typedefs, parameters, register objects,
+functions, anonymous members, or
 requests above 16. Alignment on inferred automatic objects is supported.
 These are implementation limits, not claims that all such programs violate C. No broader C23 alignment conformance is claimed.
 
@@ -58,5 +58,17 @@ members. Built-in keywords create no semantic bindings, so evaluating the shared
 alignment group before the type retains operand ordering. Declarator-list and
 existing alignment constraints are unchanged. Fixtures cover keyword permutations,
 storage and record layouts, constraint failures, and binding in an alignment
-operand; they have not been run. The compiler build succeeded at this checkpoint. Other specifier types remain restricted as above, and no milestone
-completion or approval is implied.
+operand; they have not been run. The compiler build succeeded at this checkpoint. The later checkpoint below supersedes the restriction on other specifier
+types. No milestone completion or approval is implied.
+
+## Alignment placement after non-builtin type specifiers
+
+Alignment specifiers can follow a typedef name, record, enum, typeof, or
+supported atomic type specifier. The alignment group resolves the preceding
+type before later operands, while retaining earlier alignment operands before
+the type. The resolved type is cached so that a later operand introducing a
+name cannot change an earlier typedef lookup. Declarator-list sharing and
+existing placement/storage limits remain in force. New fixtures cover
+source-order dependencies, typedef shadowing, record layout, and rejection of
+forward use. The compiler build succeeded and three focused source-order examples compiled.
+The new fixture suites, runtime, ABI and fuzzing have not been run. This does not complete or approve M18.

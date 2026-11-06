@@ -290,15 +290,6 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 					"alignment specifier is not permitted in this context");
 				return NULL;
 			}
-			/* Built-in type keywords introduce no bindings, so alignment
-			 * operands may be resolved first even when interleaved with them.
-			 * Other type syntax can introduce tags or names and must retain
-			 * source order until semantic resolution supports interleaving. */
-			if (query) {
-				diagnostic_error(parser->diagnostics, token.location,
-					"alignment specifiers must precede non-builtin type specifiers in this subset");
-				return NULL;
-			}
 			if (++head->alignment_count > 32) {
 				diagnostic_error(parser->diagnostics, token.location, "too many alignment specifiers (limit 32)");
 				return NULL;
@@ -311,7 +302,9 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 				allocation_error(parser, token.location);
 				return NULL;
 			}
-			*alignment = (struct ast_alignment_specifier) { .location = token.location };
+			*alignment = (struct ast_alignment_specifier) {
+				.location = token.location, .preceding_type = query,
+			};
 			if (begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 				alignment->type_syntax = parse_type_name(parser, &beginning_type, NULL, NULL, declarator_cast);
 				if (!alignment->type_syntax)
