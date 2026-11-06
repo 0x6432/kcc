@@ -118,3 +118,8 @@ The fallback header reports the standard integer/pointer `ATOMIC_*_LOCK_FREE`
 macros as 2 for naturally aligned target objects, relying on the x86-64
 libatomic implementation. A local libatomic query reported lock-free for
 aligned sizes 1, 2, 4 and 8; other libraries and concurrency remain untested.
+
+The fallback `kill_dependency` is a single-evaluation pass-through. It makes no
+optimization promise and can retain stronger ordering than dependency removal
+would permit; it does not establish a complete consume/dependency model. The
+macro has only been compile-checked, not concurrency-tested.

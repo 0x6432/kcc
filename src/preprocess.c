@@ -1447,6 +1447,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define ATOMIC_VAR_INIT(value) (value)\n"
 			"#define ATOMIC_FLAG_INIT 0U\n"
 			"#define atomic_init(object,value) ((void)(*(object)=(value)))\n"
+			"#define kill_dependency(value) (value)\n"
 			"#define atomic_is_lock_free(object) __kcc_atomic_is_lock_free(object)\n"
 			"#define atomic_flag_test_and_set(object) ((_Bool)__kcc_atomic_exchange(object,1U))\n"
 			"#define atomic_flag_test_and_set_explicit(object,order) ((_Bool)__kcc_atomic_exchange(object,1U,order))\n"
