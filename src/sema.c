@@ -278,6 +278,16 @@ static const struct type *unqualified_type(struct sema *sema, const struct type 
 
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required);
+/* Restrict may qualify a pointer to an object (including void), or an
+ * array typedef whose ultimately qualified element is such a pointer. */
+static bool restrict_qualifiable(const struct type *type)
+{
+	while (type->kind == type_kind_array)
+		type = ((const struct array_type *)type)->element;
+	return type->kind == type_kind_pointer &&
+		((const struct pointer_type *)type)->referent->kind != type_kind_function;
+}
+
 static const struct type *resolve_function_syntax(struct sema *sema,
 	struct ast_function_type_syntax *function);
 
@@ -1006,6 +1016,11 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		if ((qualified->qualifiers & type_qualifier_atomic) &&
 			base->kind != type_kind_int && base->kind != type_kind_uint) {
 			diagnostic_error(sema->diagnostics, syntax->location, "atomic subset supports only int and unsigned int");
+			return NULL;
+		}
+		if ((qualified->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(base)) {
+			diagnostic_error(sema->diagnostics, syntax->location,
+				"restrict requires a pointer to an object type");
 			return NULL;
 		}
 		if (base->kind == type_kind_function && qualified->qualifiers) {
@@ -3964,6 +3979,11 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if ((syntax->qualifiers & type_qualifier_atomic) &&
 		type->kind != type_kind_int && type->kind != type_kind_uint) {
 		diagnostic_error(sema->diagnostics, local->name.location, "atomic subset supports only int and unsigned int");
+		return false;
+	}
+	if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"restrict requires a pointer to an object type");
 		return false;
 	}
 	type = type_qualified(sema->arena, type, syntax->qualifiers);

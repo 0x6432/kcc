@@ -489,6 +489,12 @@ static void test_const_tokens(void)
 	check_tokens("#define READONLY const\nconst constness READONLY", kinds,
 		sizeof(kinds) / sizeof(kinds[0]), 0);
 	assert(strcmp(token_kind_name(token_const), "const") == 0);
+	{
+		const enum token_kind restricted[] = { token_restrict, token_identifier, token_restrict };
+		check_tokens("#define R restrict\nrestrict restricted R", restricted,
+			sizeof(restricted) / sizeof(restricted[0]), 0);
+		assert(strcmp(token_kind_name(token_restrict), "restrict") == 0);
+	}
 }
 
 static void test_boolean_keywords(void)

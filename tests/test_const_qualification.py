@@ -209,7 +209,7 @@ with tempfile.TemporaryDirectory(prefix='kcc const qualification ') as directory
         'int f(int a[const 3]) { a=0; return 0; }',
         'int f(int a[static]);',
         'int f(void) { volatile int x=1; return x; }',
-        'int f(void) { int *restrict p; return 0; }',
+        'int f(void) { restrict int p; return 0; }',
         'int f(int (*p)(int)) { int (*const q)(int)=p; q=p; return 0; }',
     ]
     for text in invalid:

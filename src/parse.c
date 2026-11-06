@@ -196,7 +196,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 	return kind == token_alignas || kind == token_legacy_alignas ||
 		kind == token_typedef || kind == token_register || kind == token_extern ||
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_noreturn || kind == token_auto ||
-		kind == token_void || kind == token_float || kind == token_double || kind == token_const || kind == token_atomic ||
+		kind == token_void || kind == token_float || kind == token_double || kind == token_const || kind == token_atomic || kind == token_restrict ||
 		kind == token_struct || kind == token_union || kind == token_enum ||
 		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
@@ -481,10 +481,11 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 				return NULL;
 			continue;
 		}
-		if (token.kind == token_const || token.kind == token_atomic) {
+		if (token.kind == token_const || token.kind == token_atomic || token.kind == token_restrict) {
 			if (!qualifiers)
 				qualifier = token;
-			qualifiers |= token.kind == token_const ? type_qualifier_const : type_qualifier_atomic;
+			qualifiers |= token.kind == token_const ? type_qualifier_const :
+				token.kind == token_restrict ? type_qualifier_restrict : type_qualifier_atomic;
 			continue;
 		}
 		if (token.kind == token_float || token.kind == token_double) {
@@ -735,7 +736,8 @@ static bool parse_object_array_suffixes(struct parser *parser,
 			return false;
 		}
 		while (preprocess_peek(parser->preprocessor).kind == token_static ||
-			preprocess_peek(parser->preprocessor).kind == token_const) {
+			(preprocess_peek(parser->preprocessor).kind == token_const ||
+			 preprocess_peek(parser->preprocessor).kind == token_restrict)) {
 			struct token specifier = preprocess_next(parser->preprocessor);
 			if (context != declarator_parameter) {
 				diagnostic_error(parser->diagnostics, specifier.location,
@@ -756,7 +758,7 @@ static bool parse_object_array_suffixes(struct parser *parser,
 						"qualifiers cannot appear on both sides of static");
 					return false;
 				}
-				qualifiers |= type_qualifier_const;
+				qualifiers |= specifier.kind == token_const ? type_qualifier_const : type_qualifier_restrict;
 			}
 		}
 		has_bound = preprocess_peek(parser->preprocessor).kind != token_right_bracket;
@@ -819,12 +821,14 @@ static bool parse_declarator_contents(struct parser *parser,
 		if (!prefix)
 			prefix_base = &pointer->referent;
 		while (preprocess_peek(parser->preprocessor).kind == token_const ||
-			preprocess_peek(parser->preprocessor).kind == token_atomic) {
+			preprocess_peek(parser->preprocessor).kind == token_atomic ||
+			preprocess_peek(parser->preprocessor).kind == token_restrict) {
 			struct token qualifier = preprocess_next(parser->preprocessor);
 
 			if (!qualifiers)
 				qualifier_location = qualifier.location;
-			qualifiers |= qualifier.kind == token_const ? type_qualifier_const : type_qualifier_atomic;
+			qualifiers |= qualifier.kind == token_const ? type_qualifier_const :
+				qualifier.kind == token_restrict ? type_qualifier_restrict : type_qualifier_atomic;
 		}
 		prefix = qualify_type_syntax(parser, &pointer->syntax, qualifiers, qualifier_location);
 		if (!prefix)
@@ -979,7 +983,7 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 		preprocess_next(parser->preprocessor);
 		next = preprocess_peek(parser->preprocessor);
 		if (!begins_integer_type(next.kind) && !is_typedef_name(parser, next) &&
-			next.kind != token_const && next.kind != token_atomic &&
+			next.kind != token_const && next.kind != token_atomic && next.kind != token_restrict &&
 			next.kind != token_typeof && next.kind != token_typeof_unqual) {
 			diagnostic_error(parser->diagnostics, keyword.location,
 				"fixed enum underlying type must name an integer type");

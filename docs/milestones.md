@@ -4,6 +4,16 @@ Each milestone ends in a dedicated tested commit and push. Completion records
 must state tests, limitations, component changes and remote checkpoint status.
 Do not implement a later milestone just to hide a failure in an earlier one.
 
+**Implementation update (2026-11-06):** The table below is a historical ledger,
+not an up-to-date release gate. Recent feature-branch checkpoints also implement
+bounded enum definitions and fixed underlying types, matching enum redefinitions,
+parameter-scope enum bindings, additional alignment placement, fixed array
+parameter `static`/`const`, and conservative `restrict` qualification. Floating,
+variadic, atomic, VLA and C23 work exists only in documented subsets. The recent
+changes build and have had limited focused compile checks; their new regression
+suites and fuzzing remain outstanding. M17 is not approved and full C23
+conformance is not claimed.
+
 | ID | Deliverable | Acceptance evidence | Status |
 | --- | --- | --- | --- |
 | M00 | Build/driver, style, CI, architecture and handoff | Normal/sanitizer CLI tests, invalid input rejected | complete |
