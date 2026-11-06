@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -681,6 +682,19 @@ static bool track_ordinary_enum_value(struct constant_result value,
 	return true;
 }
 
+/* Sort once at completion so repeated compatibility queries compare members
+ * linearly rather than searching a potentially large list quadratically. */
+static int compare_enum_member_names(const void *left, const void *right)
+{
+	const struct enum_member_info *a = left, *b = right;
+	size_t shared = a->name.length < b->name.length ? a->name.length : b->name.length;
+	int order = memcmp(a->name.spelling_location.source->data + a->name.spelling_location.offset,
+		b->name.spelling_location.source->data + b->name.spelling_location.offset, shared);
+	if (order)
+		return order;
+	return (a->name.length > b->name.length) - (a->name.length < b->name.length);
+}
+
 /* Repeated C23 enum definitions must name the same members with the same
  * values. Reuse existing ordinary-name bindings, whose completed types are
  * already the types in force during the repeated definition. */
@@ -819,6 +833,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			.complete = syntax->underlying != NULL,
 			.fixed = syntax->underlying != NULL,
 			.underlying = underlying,
+			.tag = syntax->tag,
 		};
 		*type = (struct enum_type) { .type = { .kind = type_kind_enum }, .definition = definition };
 		sema->record_count++;
@@ -933,6 +948,20 @@ range:
 			constant->enum_bits = converted;
 			constant->type = &type->type;
 		}
+	}
+	if (definition->tag.length) {
+		size_t count = 0, index = 0;
+		for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next)
+			count++;
+		struct enum_member_info *members = arena_alloc(sema->arena, count * sizeof(*members));
+		if (!members) goto oom;
+		for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next)
+			members[index++] = (struct enum_member_info) {
+				.name = item->name, .bits = item->binding->enum_bits,
+			};
+		qsort(members, count, sizeof(*members), compare_enum_member_names);
+		definition->members = members;
+		definition->member_count = count;
 	}
 	definition->complete = true;
 	definition->defined = true;

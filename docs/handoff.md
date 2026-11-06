@@ -13,28 +13,23 @@ helpers do **not** enable `_BitInt` source programs.
 
 The current work branch is `development`, per the revised user instruction.
 Earlier feature-branch-only instructions and the old development pin below
-are historical, not the current branching policy. Merge feature branches
-without losing their unique changes; delete a branch only after its history
-has been integrated and pushed.
-
-Local integration status: `feature/m17-initializers` and the divergent
-`feature/m15-null-initializers` history are in local `development`. The
-divergent `feature/m18-enums-alignment` history is not merged: a merge preview
-reports conflicts in core compiler files and documents. Its separate M18
-implementation includes choices and machinery that need deliberate
-reconciliation, including enum representation, tentative-object alignment
-policy, transaction handling, and its additive test gates. Newer bounded
-parameter and compound-literal alignment implementations do not by themselves
-prove the branch's other changes are incorporated. Do not resolve the merge by
-discarding a side wholesale, claim the branch is integrated, or delete it
-before that reconciliation. Remote push and branch deletion status must be
-checked directly rather than inferred from this local record.
+are historical, not the current branching policy. The M17 and M15-null
+histories were integrated into `development` and their branches deleted.
+The divergent `feature/m18-enums-alignment` branch (last tip `42571a1`) was
+deleted unmerged at the user's explicit request; its separate implementation
+and test gates were not integrated. Existing bounded enum and alignment
+implementations on `development` remain, and must be audited and extended
+independently; the deleted branch's completion or validation must not be
+attributed to them.
 
 M18 increments support bounded alignment on anonymous struct/union members,
 function parameters and compound literals;
 see `m18-declaration-alignment.md`. The compiler build and focused compile/IL
 checks succeeded, with a focused host GCC layout comparison. The regression
 fixtures and generated-program runtime checks have not been run.
+Completed tagged enums with matching members also support bounded cross-scope
+compatibility; see `m18-ordinary-enums.md` for the exact rules and pending
+validation.
 
 Builds and selected compile/IL checks have run during this lane, together with a
 few host-only helper smoke checks. Newly added regression suites, fuzzing,

@@ -32,12 +32,20 @@ enum type_kind {
 	type_kind_enum,
 };
 
+struct enum_member_info {
+	struct token name;
+	uint64_t bits;
+};
+
 struct enum_definition {
 	bool complete;
 	bool defined;
 	bool defining;
 	bool fixed;
 	const struct type *underlying; /* NULL denotes ordinary enum int. */
+	struct token tag;
+	struct enum_member_info *members; /* Sorted by name after definition. */
+	size_t member_count;
 };
 
 enum type_qualifier {

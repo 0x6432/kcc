@@ -363,6 +363,31 @@ const struct type *type_unqualified(struct arena *arena, const struct type *type
 	return type_with_qualifiers(arena, type, 0);
 }
 
+static bool enum_name_equal(const struct token *a, const struct token *b)
+{
+	return a->kind == token_identifier && b->kind == token_identifier &&
+		a->length == b->length &&
+		!memcmp(a->spelling_location.source->data + a->spelling_location.offset,
+			b->spelling_location.source->data + b->spelling_location.offset, a->length);
+}
+
+/* Distinct completed tagged enums may be compatible across scopes in C23.
+ * Underlying types in this implementation are unqualified non-enum integers.
+ * Unnamed enums and fixed forward declarations retain nominal identity. */
+static bool enum_definitions_compatible(const struct enum_definition *a,
+	const struct enum_definition *b)
+{
+	if (!a->defined || !b->defined || !enum_name_equal(&a->tag, &b->tag) ||
+		a->fixed != b->fixed || a->member_count != b->member_count ||
+		!a->underlying || !b->underlying || a->underlying->kind != b->underlying->kind)
+		return false;
+	for (size_t i = 0; i < a->member_count; i++)
+		if (!enum_name_equal(&a->members[i].name, &b->members[i].name) ||
+			a->members[i].bits != b->members[i].bits)
+			return false;
+	return true;
+}
+
 /* Array elements repeat their array's qualifier, not a new pointer level. */
 static bool compatible_types(const struct type *left, const struct type *right,
 	bool ignore_root_qualifiers, bool require_same_type)
@@ -387,9 +412,11 @@ static bool compatible_types(const struct type *left, const struct type *right,
 			underlying = &type_int;
 		return enumeration && !require_same_type && underlying->kind == other->kind;
 	}
-	if (left->kind == type_kind_enum)
-		return ((const struct enum_type *)left)->definition ==
-			((const struct enum_type *)right)->definition;
+	if (left->kind == type_kind_enum) {
+		const struct enum_definition *a = ((const struct enum_type *)left)->definition;
+		const struct enum_definition *b = ((const struct enum_type *)right)->definition;
+		return a == b || (!require_same_type && enum_definitions_compatible(a, b));
+	}
 	if (type_is_record(left))
 		return type_record_definition(left) == type_record_definition(right);
 	if (type_is_integer(left) || type_is_floating(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)

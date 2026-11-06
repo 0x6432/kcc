@@ -106,3 +106,22 @@ outer-definition enumerators. This supersedes the previous nested-form
 restriction; other type, VLA, aggregate ABI and resource limits still apply.
 The compiler build and three focused nested-scope sources compiled. Added
 fixtures and runtime, regression, ABI and fuzz suites have not been run.
+
+## Tagged enum compatibility across scopes
+
+Distinct completed enum definitions with the same tag can be compatible across
+scopes when their enumerator names and values match, regardless of order. Fixed
+definitions additionally require the same fixed underlying type; fixed and
+non-fixed definitions do not match. This implementation also conservatively
+requires the same chosen underlying integer kind for ordinary enums. Unnamed
+enums and distinct fixed forward declarations retain nominal identity.
+Matching uses an arena-owned member inventory sorted once at definition and
+linear comparison, with the existing 1,024-enumerator per-definition limit.
+`type_same` remains identity-based, while compatibility is available to
+pointer conversions, function types and generic associations.
+
+The compiler build and focused acceptance, rejection and generic-selection
+compilation checks succeeded. New fixtures, QBE/runtime, ABI, sanitizer, fuzz
+and full regression checks have not been run. This is a bounded implementation
+increment, not M18 completion, M17 approval or full C23 conformance.
+See ISO C 2024 working draft N3220 6.2.7 and 6.7.3.3.
