@@ -290,12 +290,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 					"alignment specifier is not permitted in this context");
 				return NULL;
 			}
-			/* Resolve these operands before the declared type, preserving the
-			 * source order of tag definitions and typeof queries. */
-			if (query || seen_float || seen_double || seen_int || seen_void || seen_char || seen_short ||
-				seen_bool || seen_sign || long_count) {
+			/* Built-in type keywords introduce no bindings, so alignment
+			 * operands may be resolved first even when interleaved with them.
+			 * Other type syntax can introduce tags or names and must retain
+			 * source order until semantic resolution supports interleaving. */
+			if (query) {
 				diagnostic_error(parser->diagnostics, token.location,
-					"alignment specifiers must precede the type specifier in this subset");
+					"alignment specifiers must precede non-builtin type specifiers in this subset");
 				return NULL;
 			}
 			if (++head->alignment_count > 32) {

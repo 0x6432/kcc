@@ -11,6 +11,9 @@ qbe = os.environ.get('QBE')
 
 accepted = [
     ('alignas(16) int x;', 'export data $x = align 16'),
+    ('int alignas(16) x=3;', 'export data $x = align 16'),
+    ('struct S { char c; int alignas(16) x; }; static_assert(sizeof(struct S)==32);', ''),
+    ('extern unsigned alignas(16) long x; unsigned long alignas(16) x=1;', 'export data $x = align 16'),
     ('extern alignas(16) int x; alignas(16) int x=3;', 'export data $x = align 16'),
     ('alignas(16) int x; extern int x;', 'export data $x = align 16'),
     ('extern int x; alignas(16) int x=3; extern alignas(16) int x;', 'export data $x = align 16'),
@@ -43,11 +46,12 @@ rejected = [
     ('struct S { alignas(2) int x; };', 'weaken'),
     ('struct S { alignas(3) char x; };', 'supported alignments'),
     ('struct S { alignas(16) struct { int x; }; };', 'anonymous member'),
-    ('struct S { int alignas(16) x; };', 'must precede'),
+    ('struct S { struct T { int n; } alignas(16) x; };', 'must precede non-builtin'),
+    ('struct S { int alignas(2) x; };', 'weaken'),
 ]
 runtime = '''int aligned(void *p, int n); int check_record(void *p);
-struct S { char c; alignas(16) int x; char d; };
-alignas(16) int global=7;
+struct S { char c; int alignas(16) x; char d; };
+int alignas(16) global=7;
 thread_local alignas(16) int tls=9;
 struct S obj;
 int main(void) {

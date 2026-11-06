@@ -11,6 +11,11 @@ qbe = os.environ.get('QBE')
 
 accepted = [
     ('int f(void) { alignas(16) int x=1; return x; }', 'alloc16 4'),
+    ('int f(void) { int alignas(16) x=1; return x; }', 'alloc16 4'),
+    ('int f(void) { unsigned alignas(8) long _Alignas(16) int x=1; return x; }', 'alloc16 8'),
+    ('int f(void) { double alignas(16) x; return sizeof x; }', 'alloc16 8'),
+    ('int f(void) { const int alignas(16) x=1; return x; }', 'alloc16 4'),
+    ('int f(void) { int alignas(sizeof(enum E { A=8 })) x; return A; }', 'alloc4 4'),
     ('int f(void) { alignas(16) auto x=1; return x; }', 'alloc16 4'),
     ('int f(void) { for (alignas(16) auto x=0; x<1; x=x+1) {} return 0; }', 'alloc16 4'),
     ('int f(void) { _Alignas(8) char x; return sizeof x; }', 'alloc8 1'),
@@ -36,7 +41,9 @@ rejected = [
     ('int f(void) { alignas(int[]) int x; return 0; }', 'complete object'),
     ('int f(void) { alignas(16 int x; return 0; }', "expected ')'"),
     ('int f(void) { alignas(1, 2) int x; return 0; }', "expected ')'"),
-    ('int f(void) { int alignas(16) x; return 0; }', 'must precede'),
+    ('typedef int T; int f(void) { T alignas(16) x; return 0; }', 'must precede non-builtin'),
+    ('int f(void) { int alignas(2) x; return 0; }', 'weaken'),
+    ('int f(void) { int alignas(16) register x; return 0; }', 'typedef or register'),
     ('int f(void) { alignas(16) register int x; return 0; }', 'typedef or register'),
     ('int f(void) { alignas(16) typedef int T; return 0; }', 'typedef or register'),
     ('int f(alignas(16) int x);', 'not permitted in this context'),
@@ -48,7 +55,7 @@ rejected = [
 
 runtime = '''int aligned(void *p, int n);
 int main(void) {
-    alignas(16) int x=3;
+    int alignas(16) x=3;
     alignas(16) auto inferred=5;
     _Alignas(16) char a[3]={1,2,3};
     alignas(long) char b=4;
