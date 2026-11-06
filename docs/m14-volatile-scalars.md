@@ -17,9 +17,9 @@ aliasing behavior. It is not a general memory-mapped I/O or concurrency
 contract; `volatile` does not make operations atomic.
 
 Volatile arrays, volatile aggregate types and members, and volatile atomic
-objects are rejected. Braced automatic volatile initializers are also rejected;
-static scalar braced initializers and simple automatic scalar initializers are
-supported. No general aggregate volatile copy or C23 conformance is claimed.
+objects are rejected. Scalar braced initializers, including empty initializers
+and automatic compound literals, emit one volatile store after evaluating the
+surviving initializer expression. Static scalar initializers are also supported. No general aggregate volatile copy or C23 conformance is claimed.
 The compiler and runtime archive build, and focused compile/IL checks were run.
 Regression, QBE backend, signal, concurrency and generated-program runtime tests
 remain unrun.

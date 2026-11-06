@@ -4228,11 +4228,6 @@ static struct ast_initializer_plan *sema_initializer(struct sema *sema,
 	const struct type *type, const struct ast_initializer *syntax, bool is_static, unsigned *expression_depth)
 {
 	struct initializer_builder builder = { .sema = sema, .is_static = is_static };
-	if (!is_static && (type->qualifiers & type_qualifier_volatile)) {
-		diagnostic_error(sema->diagnostics, syntax->location,
-			"braced automatic volatile initialization is not supported yet");
-		return NULL;
-	}
 	struct initializer_path path = { .components = { { .type = type } } };
 	bool incomplete = type->kind == type_kind_array && !((const struct array_type *)type)->count;
 	if ((!incomplete && !type_is_complete_object(type)) ||

@@ -17,7 +17,12 @@ volatile double real=1.5;
 volatile int *target=&global;
 static_assert(_Generic(&global, volatile int *: 1, default: 0));
 int f(volatile int n) {
-    volatile int x=1;
+    volatile int x={1};
+    volatile int empty={};
+    volatile double floating={2.0};
+    int * volatile ptr={};
+    (void)empty; (void)floating; (void)ptr;
+    (void)(volatile int){3};
     x += n; x++;
     (void)global;
     narrow++; real += 0.5;
@@ -40,7 +45,7 @@ int main(void) { return f(2); }
                         '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
     for text in ('volatile int a[2];', 'struct S { volatile int member; };',
-                 '_Atomic volatile int x;', 'int f(void){volatile int x={1}; return x;}',
+                 '_Atomic volatile int x;',
                  'int f(void){volatile int x=1; int *p=&x; return 0;}'):
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)

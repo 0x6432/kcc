@@ -411,6 +411,24 @@ static void codegen_initializer_plan(struct codegen *codegen,
 	struct initializer_capture *captures = NULL;
 	size_t capacity = 1;
 
+	/* Volatile scalar plans have one whole-object surviving write. Evaluate
+	 * its expression before writing, including for re-evaluated literals. */
+	if (plan->type->qualifiers & type_qualifier_volatile) {
+		const struct ast_initializer_plan_entry *entry = plan->entries;
+		unsigned width = (unsigned)plan->size;
+		assert(type_is_scalar(plan->type));
+		assert(entry && !entry->next && entry->offset == 0 && entry->length == plan->size);
+		if (entry->kind == ast_initializer_write_zero) {
+			emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, %c 0)\n",
+				width, destination, width == 8 ? 'l' : 'w');
+		} else {
+			assert(entry->kind == ast_initializer_write_expression && entry->expression);
+			size_t value = codegen_expression(codegen, entry->expression);
+			codegen_volatile_store(codegen, destination, value, plan->type);
+		}
+		return;
+	}
+
 	assert(plan->entry_count <= ast_max_initializer_entries);
 	while (capacity < plan->entry_count * 2)
 		capacity *= 2;
