@@ -21,6 +21,10 @@ struct static_data_value {
 /* Bounded semantic work, including overridden/split stores. */
 enum { sema_max_initializer_stores = 65536 };
 
+/* Pure bounded arithmetic value for initializer-condition selection only. */
+bool sema_static_arithmetic_value(const struct ast_expression *expression,
+	struct constant_result *result);
+
 /* Pure validation of an already checked source and its assignment conversion.
  * Does not analyze either tree again. */
 bool sema_validate_static_initializer(const struct ast_expression *source,

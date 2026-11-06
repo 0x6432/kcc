@@ -108,3 +108,18 @@ GCC/Clang capability gaps and known defined-runtime disagreements are reported
 separately, never counted as agreements. Normal/sanitized full matrices, bounded
 lexer/pipeline fuzzing and exact-commit remote CI remain mandatory release gates;
 results are recorded separately, not inferred from component checkpoints.
+
+## Floating arithmetic conditions for static addresses
+
+A pointer-result conditional initializer can select a previously supported
+symbolic address or null using a supported floating or floating-derived
+arithmetic condition. These conditions also compose with the existing proved
+pointer logical conditions. Floating truth and the numeric values of checked
+integer casts remain distinct; out-of-range casts and unsupported evaluated
+conditions are rejected. This does not expand strict ICE, pointer-offset,
+thread-local address, or static symbolic-address proof rules.
+
+The compiler rebuilt; eight relocation values and one null were checked in IL,
+lowered with pinned QBE 1.2 and assembled. Six invalid or unsupported cases
+were rejected. Regression fixtures, generated-program runtime, ABI, sanitizer
+and fuzz checks remain unrun. This does not imply M17 approval.

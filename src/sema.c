@@ -3693,6 +3693,22 @@ static bool static_integer_arithmetic(const struct ast_expression *expression,
 	return false;
 }
 
+bool sema_static_arithmetic_value(const struct ast_expression *expression,
+	struct constant_result *result)
+{
+	if (type_is_integer(expression->type))
+		return static_integer_arithmetic(expression, result);
+	if (type_is_floating(expression->type)) {
+		bool truth;
+		if (!static_floating_condition(expression, &truth))
+			return false;
+		*result = (struct constant_result) { .status = constant_value, .type = &type_int,
+			.bits = truth, .location = expression->location };
+		return true;
+	}
+	return false;
+}
+
 /* Static constants use the host's target-matching binary32/binary64 format,
  * as does literal parsing. Non-finite arithmetic results are refused. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)

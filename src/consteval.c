@@ -239,6 +239,24 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 	if (initializer_condition && !evaluated)
 		return (struct constant_result) { .status = constant_value, .type = expression->type,
 			.bits = 0, .location = expression->location };
+	if (initializer_condition && (type_is_integer(expression->type) || type_is_floating(expression->type))) {
+		struct constant_result arithmetic;
+		if (sema_static_arithmetic_value(expression, &arithmetic))
+			return arithmetic;
+		/* A floating value here is only usable as a truth value. In
+		 * particular, never convert that truth bit into a numeric cast. */
+		if (type_is_floating(expression->type))
+			return constant_failure(expression, constant_not_constant,
+				"unsupported floating initializer condition");
+		if (expression->kind == expression_cast || expression->kind == expression_conversion) {
+			const struct ast_expression *operand = expression->kind == expression_cast ?
+				((const struct ast_cast_expression *)expression)->operand :
+				((const struct ast_conversion_expression *)expression)->operand;
+			if (type_is_floating(operand->type))
+				return constant_failure(expression, constant_not_constant,
+					"unsupported floating conversion in initializer condition");
+		}
+	}
 	if (initializer_condition && !type_is_integer(expression->type))
 		return evaluate_initializer_condition(expression);
 	if (!type_is_integer(expression->type))
@@ -1105,7 +1123,7 @@ static struct null_initializer_result evaluate_pointer_null(const struct ast_exp
 
 static struct constant_result evaluate_initializer_condition(const struct ast_expression *expression)
 {
-	if (type_is_integer(expression->type))
+	if (type_is_integer(expression->type) || type_is_floating(expression->type))
 		return evaluate(expression, true, true);
 	struct address_proof proof = prove_address(expression);
 	return (struct constant_result) { .status = proof.result.status,
