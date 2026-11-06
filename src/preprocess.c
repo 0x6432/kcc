@@ -1215,6 +1215,19 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef _Atomic int atomic_int;\ntypedef _Atomic unsigned int atomic_uint;\n"
 			"typedef _Atomic long atomic_long;\ntypedef _Atomic unsigned long atomic_ulong;\n"
 			"typedef _Atomic long long atomic_llong;\ntypedef _Atomic unsigned long long atomic_ullong;\n"
+			"typedef atomic_int atomic_wchar_t; typedef atomic_ushort atomic_char16_t; typedef atomic_uint atomic_char32_t;\n"
+			"typedef atomic_schar atomic_int_least8_t; typedef atomic_uchar atomic_uint_least8_t;\n"
+			"typedef atomic_short atomic_int_least16_t; typedef atomic_ushort atomic_uint_least16_t;\n"
+			"typedef atomic_int atomic_int_least32_t; typedef atomic_uint atomic_uint_least32_t;\n"
+			"typedef atomic_long atomic_int_least64_t; typedef atomic_ulong atomic_uint_least64_t;\n"
+			"typedef atomic_schar atomic_int_fast8_t; typedef atomic_uchar atomic_uint_fast8_t;\n"
+			"typedef atomic_long atomic_int_fast16_t; typedef atomic_ulong atomic_uint_fast16_t;\n"
+			"typedef atomic_long atomic_int_fast32_t; typedef atomic_ulong atomic_uint_fast32_t;\n"
+			"typedef atomic_long atomic_int_fast64_t; typedef atomic_ulong atomic_uint_fast64_t;\n"
+			"typedef atomic_long atomic_intptr_t; typedef atomic_ulong atomic_uintptr_t;\n"
+			"typedef atomic_ulong atomic_size_t; typedef atomic_long atomic_ptrdiff_t;\n"
+			"typedef atomic_long atomic_intmax_t; typedef atomic_ulong atomic_uintmax_t;\n";
+		static const char stdatomic_header_tail[] =
 			"typedef _Atomic unsigned int atomic_flag;\n"
 			"typedef enum { memory_order_relaxed=0, memory_order_consume=1, memory_order_acquire=2,"
 			" memory_order_release=3, memory_order_acq_rel=4, memory_order_seq_cst=5 } memory_order;\n"
@@ -1376,7 +1389,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define INT64_C(c) c ## L\n#define UINT64_C(c) c ## UL\n"
 			"#define INTMAX_C(c) c ## L\n#define UINTMAX_C(c) c ## UL\n"
 			"#endif\n";
-		const char *header = NULL, *source_name = NULL;
+		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
 		if (strcmp(name->path, "locale.h") == 0) {
 			header = locale_header;
@@ -1419,6 +1432,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			source_name = "<kcc/assert.h>";
 		} else if (strcmp(name->path, "stdatomic.h") == 0) {
 			header = stdatomic_header;
+			header_tail = stdatomic_header_tail;
 			source_name = "<kcc/stdatomic.h>";
 		} else if (strcmp(name->path, "stdlib.h") == 0) {
 			header = stdlib_header;
@@ -1443,7 +1457,19 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			source_name = "<kcc/float.h>";
 		}
 		if (header) {
-			if (source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header))) {
+			bool loaded = false;
+			if (header_tail) {
+				size_t first = strlen(header), second = strlen(header_tail);
+				unsigned char *joined = malloc(first + second);
+				if (joined) {
+					memcpy(joined, header, first);
+					memcpy(joined + first, header_tail, second);
+					loaded = source_from_bytes(source, source_name, joined, first + second);
+					free(joined);
+				}
+			} else
+				loaded = source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header));
+			if (loaded) {
 				source->compiler_builtin = true;
 				return true;
 			}

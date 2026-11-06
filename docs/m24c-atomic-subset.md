@@ -107,3 +107,7 @@ Atomic `float` and `double` support loads, stores, exchange, compare-exchange,
 and lock-free queries. Values are bitcast to/from the libatomic integer ABI, so
 compare-exchange compares representations. Floating atomic updates and fetch
 arithmetic are rejected. These paths have not been runtime- or concurrency-tested.
+
+The fallback header also declares atomic character, least/fast-width, pointer-
+sized, size, difference and maximum-width integer typedefs using this target’s
+integer types. This does not make the fallback header a complete hosted library.
