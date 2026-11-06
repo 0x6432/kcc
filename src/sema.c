@@ -3452,12 +3452,16 @@ static bool static_arithmetic_constant_form(const struct ast_expression *express
 	if (expression->kind == expression_unary) {
 		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
 		return (unary->operation == unary_plus || unary->operation == unary_minus ||
-			unary->operation == unary_not) && static_arithmetic_constant_form(unary->operand);
+			unary->operation == unary_not || unary->operation == unary_complement) &&
+			static_arithmetic_constant_form(unary->operand);
 	}
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
 		return (binary->operation == binary_add || binary->operation == binary_subtract ||
 			binary->operation == binary_multiply || binary->operation == binary_divide ||
+			binary->operation == binary_remainder || binary->operation == binary_bit_and ||
+			binary->operation == binary_bit_or || binary->operation == binary_bit_xor ||
+			binary->operation == binary_shift_left || binary->operation == binary_shift_right ||
 			comparison_operator(binary->operation)) &&
 			static_arithmetic_constant_form(binary->left) && static_arithmetic_constant_form(binary->right);
 	}
@@ -3469,6 +3473,10 @@ static bool static_arithmetic_constant_form(const struct ast_expression *express
 		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
 		return static_arithmetic_constant_form(node->condition) &&
 			static_arithmetic_constant_form(node->then_value) && static_arithmetic_constant_form(node->else_value);
+	}
+	if (expression->kind == expression_comma) {
+		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
+		return static_arithmetic_constant_form(node->left) && static_arithmetic_constant_form(node->right);
 	}
 	return false;
 }

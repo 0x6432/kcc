@@ -172,3 +172,18 @@ with pinned QBE 1.2 and assembled, and eight invalid or unsupported examples wer
 rejected. Added regression fixtures, generated-program runtime, ABI, sanitizer
 and fuzz checks remain unrun. M20 and general arithmetic constant-expression
 coverage remain incomplete.
+
+## Additional skipped arithmetic forms
+
+The skipped-operand shape check also accepts supported integer remainder,
+bitwise and shift operations, bitwise complement, and comma expressions whose
+operands themselves have supported arithmetic-constant form. The comma is only
+accepted by this path when the entire expression is unevaluated. Nonconstant
+loads or calls remain conservatively rejected even when skipped; evaluated
+comma expressions do not become constants.
+
+The compiler rebuilt; eight focused values were checked in IL, lowered through
+pinned QBE 1.2 and assembled; the host accepted equivalent C11 syntax. Six
+invalid or unsupported examples were rejected. Regression fixtures,
+generated-program runtime, ABI, sanitizer and fuzz checks remain unrun. M20
+and general arithmetic constant-expression coverage remain incomplete.

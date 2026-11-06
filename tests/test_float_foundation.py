@@ -55,6 +55,9 @@ float skipped_nested=1.0 ? -0.0f : (float)(1.0 / 0.0);
 int skipped_int=1.0 ? 3 : 1/0;
 int skipped_or=1.0 || 1.0/0.0;
 int skipped_and=0.0 && 1.0/0.0;
+double skipped_comma=1?2.0:(1.0/0.0,3.0);
+int skipped_bitwise=1.0||((int)(1.0/0.0)&3);
+int skipped_complement=0.0&&~(int)(1.0/0.0);
 float global_nested_float=(1.0 ? 2 : 3) ? 9.0f : 8.0f;
 unsigned long global_unsigned_choice=0.0 ? 5 : -1;
 float global_integer_choice_float=(2.0 > 1.0) ? 9 : 4;
@@ -103,7 +106,8 @@ extern double global_float; extern float global_negzero;
 extern float global_subnormal, global_tiny, global_tiny_above; extern double global_subnormal_double, global_tiny_double, global_tiny_double_above;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 extern int global_nested_choice, global_nested_logic; extern float global_nested_float;
-extern double skipped_float; extern float skipped_nested; extern int skipped_int, skipped_or, skipped_and;
+extern double skipped_float, skipped_comma; extern float skipped_nested;
+extern int skipped_int, skipped_or, skipped_and, skipped_bitwise, skipped_complement;
 extern int global_comparison_arithmetic, global_conditional_arithmetic; extern float global_comparison_arithmetic_float;
 extern int global_nested_float_cast, global_cast_condition, global_cast_short_circuit;
 extern int global_integer_choice; extern unsigned long global_unsigned_choice; extern float global_integer_choice_float;
@@ -139,6 +143,7 @@ int main(void) {
      global_compare_as_float!=1.0f) return 11;
  if (global_nested_float_cast!=5 || global_cast_condition!=11 || global_cast_short_circuit!=1) return 18;
  if (global_comparison_arithmetic!=9 || global_comparison_arithmetic_float!=3.0f || global_conditional_arithmetic!=5) return 17;
+ if (skipped_comma!=2.0 || skipped_bitwise!=1 || skipped_complement!=0) return 19;
  if (skipped_float!=2.0 || !signbit(skipped_nested) || skipped_int!=3 || skipped_or!=1 || skipped_and!=0) return 16;
  if (static_int!=-5 || static_cast!=-3 || static_unsigned_cast!=(unsigned long)-3 || static_unsigned!=0 || static_bool ||
      static_ints.a!=6 || static_ints.b!=42 || !static_ints.c) return 12;
@@ -158,6 +163,7 @@ int main(void) {
 hostimpl = 'float hf(float x,float y){return x+y;} double hd(double x,double y){return x+y;} float host_zero(void){return -0.0f;}'
 reject = [
  'int n; int x=1.0 ? 1 : n;', 'int x=0.0 ? 1 : 1/0;',
+ 'double y; double x=1?2.0:(y,3.0);', 'double x=0?2.0:(1.0/0.0,3.0);',
  'static_assert(1.0 ? 1 : 0);',
  'int a=0.0 || (1.0/0.0);', 'int a=1.0 && (1.0/0.0);',
  'int x; int a=1.0 && x;', 'static_assert(1.0 && 1);',
