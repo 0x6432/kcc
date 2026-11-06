@@ -3394,6 +3394,20 @@ static bool static_floating_condition(const struct ast_expression *expression, b
 	return false;
 }
 
+static bool is_static_floating_boolean(const struct ast_expression *expression)
+{
+	if (expression->kind == expression_unary) {
+		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
+		return unary->operation == unary_not && type_is_floating(unary->operand->type);
+	}
+	if (expression->kind == expression_binary) {
+		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
+		return comparison_operator(binary->operation) && type_is_floating(binary->left->type) &&
+			type_is_floating(binary->right->type);
+	}
+	return false;
+}
+
 /* Static constants use the host's target-matching binary32/binary64 format,
  * as does literal parsing. Non-finite arithmetic results are refused. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)
@@ -3514,8 +3528,13 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 			bool negative;
 			int64_t signed_number;
 
-			if (value.status != constant_value)
-				return false;
+			if (value.status != constant_value) {
+				bool truth;
+				if (!is_static_floating_boolean(operand) || !static_floating_condition(operand, &truth))
+					return false;
+				value.type = operand->type;
+				value.bits = truth;
+			}
 			width = type_integer_width(value.type);
 			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
 			negative = !type_is_unsigned(value.type) && (value.bits & (UINT64_C(1) << (width - 1)));
@@ -3651,6 +3670,16 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		return static_floating_to_integer(source, converted->type, value, diagnostics);
 	if (is_static_float_cast(source) && type_is_integer(converted->type))
 		return static_float_cast_to_integer(source, converted->type, value, diagnostics);
+	if (is_static_floating_boolean(source) && type_is_integer(converted->type)) {
+		bool truth;
+		if (!static_floating_condition(source, &truth)) {
+			diagnostic_error(diagnostics, source->location,
+				"static initializer requires supported finite floating operands");
+			return false;
+		}
+		*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = truth };
+		return true;
+	}
 	if (type_is_floating(converted->type)) {
 		uint64_t bits;
 		if (!static_floating_literal_bits(converted, &bits)) {
@@ -5663,8 +5692,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	}
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
-	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer)) &&
-		type_is_integer(type)) {
+	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer) ||
+		is_static_floating_boolean(*initializer)) && type_is_integer(type)) {
 		struct ast_expression *source_expression = *initializer;
 		target = unqualified_type(sema, type, name.location);
 		if (!target || !convert_expression(sema, initializer, target) ||

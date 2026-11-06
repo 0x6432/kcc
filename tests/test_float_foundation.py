@@ -40,6 +40,9 @@ float global_float_condition=-0.0 ? 10.0f : 11.0f;
 double global_compare_condition=(1.0f + 2 > 2.5) ? 12.0 : 13.0;
 float global_not_condition=!0.0 ? 14.0f : 15.0f;
 int global_choice_int=1 ? 42.75 : 3.0;
+int global_float_compare=1.0f < 2.0;
+_Bool global_float_not=!0.0;
+float global_compare_as_float=1.0 == 1.0;
 double global_mixed=2.5*4-1.0;
 int static_int=4.75-10.0;
 long static_cast=(int)(1.25-4.75);
@@ -79,7 +82,7 @@ float update(float *); int compound_int(int);
 extern double global_float; extern float global_negzero;
 extern float global_subnormal, global_tiny, global_tiny_above; extern double global_subnormal_double, global_tiny_double, global_tiny_double_above;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
-extern float global_arithmetic, global_choice, global_float_condition, global_not_condition; extern double global_mixed, global_choice_mixed, global_compare_condition; extern int global_choice_int;
+extern float global_arithmetic, global_choice, global_float_condition, global_not_condition; extern double global_mixed, global_choice_mixed, global_compare_condition; extern int global_choice_int, global_float_compare; extern _Bool global_float_not; extern float global_compare_as_float;
 extern signed char low_char; extern short low_short; extern int low_int;
 extern int static_int; extern unsigned int static_unsigned; extern _Bool static_bool;
 extern long static_cast; extern unsigned long static_unsigned_cast;
@@ -103,7 +106,8 @@ int main(void) {
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
      global_unsigned!=(double)18446744073709551615UL || global_signed!=(double)(-9223372036854775807L-1L)) return 10;
  if (global_arithmetic!=3.75f || global_mixed!=9.0 || global_choice!=2.25f || global_choice_mixed!=2.5 || global_choice_int!=42 ||
-     global_float_condition!=11.0f || global_compare_condition!=12.0 || global_not_condition!=14.0f) return 11;
+     global_float_condition!=11.0f || global_compare_condition!=12.0 || global_not_condition!=14.0f || global_float_compare!=1 || !global_float_not ||
+     global_compare_as_float!=1.0f) return 11;
  if (static_int!=-5 || static_cast!=-3 || static_unsigned_cast!=(unsigned long)-3 || static_unsigned!=0 || static_bool ||
      static_ints.a!=6 || static_ints.b!=42 || !static_ints.c) return 12;
  return 0;
@@ -123,7 +127,9 @@ hostimpl = 'float hf(float x,float y){return x+y;} double hd(double x,double y){
 reject = [
  'int n; double x=n?1.0:2.0;', 'double x=1?2.0:1.0/0.0;',
  'double z; double x=z?1.0:2.0;', 'double x=(1.0/0.0)?1.0:2.0;',
- 'int a[(1.0<2.0)?1:2];',
+ 'int a[(1.0<2.0)?1:2];', 'int a[1.0<2.0];',
+ 'double x; int a=x<1.0;', 'int a=(1.0/0.0)<2.0;',
+ 'int a=(1.0<2.0)+2;',
  'int a[(int)(1?2.0:3.0)];',
  'long double x;', 'unsigned float x;', 'double double x;', 'float long x;',
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',

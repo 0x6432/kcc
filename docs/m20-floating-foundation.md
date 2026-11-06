@@ -71,3 +71,16 @@ error-reporting edge cases have not been established.
 The compiler build and focused literal-bit/negative checks were run. One
 example also lowered through pinned QBE 1.2 and assembled. Regression fixtures,
 generated-program execution, ABI and fuzzing remain unrun.
+
+## Floating comparisons in static initializers
+
+A direct comparison of two supported finite floating constant expressions,
+or logical negation of one, can initialize an integer, boolean or floating
+static object or aggregate subobject. Mixed integer/floating comparisons use
+the semantically converted operand types. This does not turn floating
+comparisons into integer constant expressions and does not yet support their
+use inside arbitrary integer arithmetic or all logical constant expressions.
+
+The compiler build and focused compile/IL and rejection checks were run; one
+example was lowered by pinned QBE 1.2 and assembled. Regression, generated-program
+runtime, ABI and fuzz validation remain pending.
