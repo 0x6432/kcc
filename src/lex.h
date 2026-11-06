@@ -153,13 +153,19 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 const char *parse_string_spelling(const unsigned char *text, size_t length,
 	unsigned char *output, size_t capacity, size_t *decoded_length);
 
+enum character_encoding { character_ordinary, character_utf8, character_utf16,
+	character_utf32, character_wide };
+
+/* Decode a u, U, or L literal as little-endian UTF-16 or 32-bit code units.
+ * Output length is in bytes and excludes the final code unit. */
+const char *parse_wide_string_spelling(const unsigned char *text, size_t length,
+	enum character_encoding encoding, unsigned char *output, size_t capacity, size_t *decoded_length);
+
 /* Spelling uses spelling_location; location is the diagnostic invocation.
  * Both offsets address prepared source data, with explicit logical length.
  * Spelling may use an arena-owned generated source view, not the input source.
  * Use source_physical_offset() only for physical positions, not spelling reads.
  */
-enum character_encoding { character_ordinary, character_utf8, character_utf16,
-	character_utf32, character_wide };
 
 struct token {
 	enum token_kind kind;
@@ -172,7 +178,7 @@ struct token {
 	int64_t character;
 	enum character_encoding character_encoding;
 	size_t string_length;
-	bool string_utf8;
+	enum character_encoding string_encoding;
 	unsigned integer_base;
 	unsigned integer_long_suffix;
 	bool integer_unsigned_suffix;

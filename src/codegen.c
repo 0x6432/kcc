@@ -1831,9 +1831,10 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 
 	for (const struct ast_string_expression *string = unit->strings; string;
 		string = string->next_string) {
-		emit(&data_codegen, "data $.Lkcc.string.%zu = align 1 {\n", string->object_id);
-		for (size_t i = 0; i <= string->length; i++)
-			emit(&data_codegen, "\tb %u%s\n", (unsigned)string->bytes[i], i == string->length ? "" : ",");
+		unsigned width = string->encoding == character_utf16 ? 2 : string->encoding >= character_utf32 ? 4 : 1;
+		emit(&data_codegen, "data $.Lkcc.string.%zu = align %u {\n", string->object_id, width);
+		for (size_t i = 0; i < string->length + width; i++)
+			emit(&data_codegen, "\tb %u%s\n", (unsigned)string->bytes[i], i + 1 == string->length + width ? "" : ",");
 		emit(&data_codegen, "}\n");
 	}
 	if (!data_codegen.output_ok)

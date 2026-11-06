@@ -11,7 +11,19 @@ Fixed-width `\u` and `\U` universal names from U+00A0 through U+10FFFF,
 excluding surrogates, encode to UTF-8 in ordinary and `u8` strings. The
 permitted special basic-set UCNs for `$`, `@`, and backtick are also accepted; other basic-set UCNs and delimited or named UCNs are rejected.
 
-UTF-16/UTF-32/wide string literals remain unsupported. Bounded `u`, `U`, and `L`
+Bounded `u`, `U`, and `L` strings produce UTF-16, UTF-32, and 32-bit
+wide code units respectively on the little-endian target. Raw UTF-8 scalars and
+fixed-width UCNs are transcoded, including UTF-16 surrogate pairs; numeric
+escapes directly represent one target code unit and must fit its supported
+range. Matching-prefixed and ordinary fragments concatenate in the selected
+encoding; different nonordinary prefixes are rejected. As with ordinary
+strings, ordinary fragments are initially validated as byte strings, so an
+ordinary numeric escape above 255 is rejected even beside a wide fragment.
+Strings initialize matching unsigned-short, unsigned-int, or int arrays, with
+inferred bounds and optional omitted terminating code unit. Wide assertion
+messages are not supported. Other C23 literal and UCN extensions remain incomplete.
+
+Bounded `u`, `U`, and `L`
 character constants have unsigned-short, unsigned-int, and int types
 respectively. They accept one UTF-8 source character or fixed-width UCN in the
 range U+00A0–U+10FFFF (excluding surrogates), the three permitted special

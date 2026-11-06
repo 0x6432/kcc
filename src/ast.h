@@ -288,7 +288,7 @@ struct ast_string_expression {
 	struct ast_expression expression;
 	const unsigned char *bytes;
 	size_t length;
-	bool is_utf8;
+	enum character_encoding encoding;
 	size_t object_id;
 	struct ast_string_expression *next_string;
 };

@@ -753,15 +753,104 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 	return NULL;
 }
 
+/* UTF-16, UTF-32 and target-wide strings. The target is little-endian;
+ * numeric escapes denote individual code units, while source characters and
+ * UCNs denote Unicode scalars and may need a UTF-16 surrogate pair. */
+const char *parse_wide_string_spelling(const unsigned char *text, size_t length,
+	enum character_encoding encoding, unsigned char *output, size_t capacity, size_t *decoded_length)
+{
+	size_t offset, count = 0, end;
+	unsigned width, maximum;
+	*decoded_length = 0;
+	if (encoding < character_utf16 || length < 2 || text[length - 1] != '"')
+		return "invalid wide string literal";
+	if (text[0] == '"')
+		offset = 1;
+	else if (length >= 3 && text[1] == '"' &&
+		((text[0] == 'u' && encoding == character_utf16) ||
+		 (text[0] == 'U' && encoding == character_utf32) ||
+		 (text[0] == 'L' && encoding == character_wide)))
+		offset = 2;
+	else
+		return "invalid wide string literal";
+	width = encoding == character_utf16 ? 2 : 4;
+	maximum = encoding == character_utf16 ? 65535u : encoding == character_utf32 ? UINT32_MAX : INT32_MAX;
+	end = length - 1;
+	while (offset < end) {
+		unsigned value = text[offset++], units[2], n = 1;
+		bool scalar = true;
+		if (value == '\\' && offset < end && (text[offset] == 'u' || text[offset] == 'U')) {
+			unsigned digits = text[offset++] == 'u' ? 4 : 8;
+			value = 0;
+			if (digits > end - offset)
+				return "incomplete universal character name";
+			for (unsigned i = 0; i < digits; i++) {
+				int digit = integer_digit(text[offset++]);
+				if (digit < 0)
+					return "invalid universal character name";
+				value = (value << 4) | (unsigned)digit;
+			}
+			if ((value < 0xa0 && value != 0x24 && value != 0x40 && value != 0x60) ||
+				value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
+				return "unsupported or invalid universal character name";
+		} else if (value == '\\') {
+			const char *error = parse_character_escape(text, end, &offset, &value, maximum);
+			if (error) return error;
+			scalar = false;
+		} else if (value >= 128) {
+			unsigned first = value, continuation;
+			if (first >= 0xc2 && first <= 0xdf) { continuation = 1; value = first & 0x1f; }
+			else if (first >= 0xe0 && first <= 0xef) { continuation = 2; value = first & 0x0f; }
+			else if (first >= 0xf0 && first <= 0xf4) { continuation = 3; value = first & 0x07; }
+			else return "invalid UTF-8 string sequence";
+			if (continuation > end - offset)
+				return "truncated UTF-8 string sequence";
+			for (unsigned i = 0; i < continuation; i++) {
+				unsigned next = text[offset++];
+				if (next < 0x80 || next > 0xbf ||
+					(i == 0 && ((first == 0xe0 && next < 0xa0) || (first == 0xed && next > 0x9f) ||
+					(first == 0xf0 && next < 0x90) || (first == 0xf4 && next > 0x8f))))
+					return "invalid UTF-8 string sequence";
+				value = (value << 6) | (next & 0x3f);
+			}
+		} else if (!value || value == '\n' || value == '\r' || value == '"') {
+			return "invalid source byte in string literal";
+		}
+		units[0] = value;
+		if (width == 2 && scalar && value > 0xffff) {
+			value -= 0x10000;
+			units[0] = 0xd800 | (value >> 10);
+			units[1] = 0xdc00 | (value & 0x3ff);
+			n = 2;
+		}
+		if (output && n * width > capacity - count)
+			return "string output buffer is too small";
+		for (unsigned i = 0; i < n; i++)
+			for (unsigned b = 0; b < width; b++) {
+				if (output) output[count] = (unsigned char)(units[i] >> (8 * b));
+				count++;
+			}
+	}
+	*decoded_length = count;
+	return NULL;
+}
+
 static struct token convert_string(struct token token, struct diagnostics *diagnostics)
 {
 	const unsigned char *text = token.spelling_location.source->data + token.spelling_location.offset;
-	const char *error = parse_string_spelling(text, token.length, NULL, 0, &token.string_length);
+	bool wide = token.length >= 2 && text[1] == '"' &&
+		(text[0] == 'u' || text[0] == 'U' || text[0] == 'L');
+	enum character_encoding encoding = wide ? (text[0] == 'u' ? character_utf16 :
+		text[0] == 'U' ? character_utf32 : character_wide) :
+		(token.length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '"' ?
+		character_utf8 : character_ordinary);
+	const char *error = wide ? parse_wide_string_spelling(text, token.length, encoding, NULL, 0, &token.string_length) :
+		parse_string_spelling(text, token.length, NULL, 0, &token.string_length);
 
 	if (error)
 		return invalid_language_token(token, diagnostics, error);
 	token.kind = token_string;
-	token.string_utf8 = token.length >= 3 && text[0] == 'u' && text[1] == '8' && text[2] == '"';
+	token.string_encoding = encoding;
 	return token;
 }
 

@@ -1371,7 +1371,8 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 	size_t length = 0;
 	size_t offset = 0;
 	size_t count = 0;
-	bool utf8 = false;
+	enum character_encoding encoding = character_ordinary;
+	unsigned width;
 
 	if (parser->string_count == ast_max_string_literals) {
 		diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -1392,7 +1393,15 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 			return NULL;
 		}
 		length += token.string_length;
-		utf8 |= token.string_utf8;
+		if (count && encoding != character_ordinary && token.string_encoding != character_ordinary &&
+			(encoding >= character_utf16 || token.string_encoding >= character_utf16) &&
+			encoding != token.string_encoding) {
+			diagnostic_error(parser->diagnostics, token.location,
+				"mixed wide string literal encodings are not supported yet");
+			return NULL;
+		}
+		if (!count || token.string_encoding != character_ordinary)
+			encoding = token.string_encoding;
 		if (length >= ast_max_string_storage - parser->string_bytes) {
 			diagnostic_error(parser->diagnostics, token.location, "string literal storage/count limit exceeded");
 			return NULL;
@@ -1410,7 +1419,31 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 		parser->string_fragment_count++;
 	} while (preprocess_peek(parser->preprocessor).kind == token_string);
 
-	bytes = arena_alloc(parser->arena, length + 1);
+	/* Re-measure ordinary fragments in the selected wide encoding. */
+	if (encoding >= character_utf16) {
+		length = 0;
+		for (struct string_fragment *fragment = fragments; fragment; fragment = fragment->next) {
+			struct token token = fragment->token;
+			const unsigned char *spelling = token.spelling_location.source->data + token.spelling_location.offset;
+			size_t decoded_length;
+			const char *error = parse_wide_string_spelling(spelling, token.length, encoding, NULL, 0, &decoded_length);
+			if (error || decoded_length > ast_max_string_length - length) {
+				diagnostic_error(parser->diagnostics, token.location, error ? error : "string literal storage/count limit exceeded");
+				return NULL;
+			}
+			length += decoded_length;
+		}
+	}
+	width = encoding == character_utf16 ? 2 : encoding >= character_utf32 ? 4 : 1;
+	if (length > ast_max_string_storage - parser->string_bytes) {
+		diagnostic_error(parser->diagnostics, fragments->token.location, "string literal storage/count limit exceeded");
+		return NULL;
+	}
+	if (width > ast_max_string_storage - parser->string_bytes - length) {
+		diagnostic_error(parser->diagnostics, fragments->token.location, "string literal storage/count limit exceeded");
+		return NULL;
+	}
+	bytes = arena_alloc(parser->arena, length + width);
 	if (!bytes) {
 		allocation_error(parser, fragments->token.location);
 		return NULL;
@@ -1419,25 +1452,26 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 		struct token token = fragment->token;
 		const unsigned char *spelling = token.spelling_location.source->data + token.spelling_location.offset;
 		size_t decoded_length;
-		const char *error = parse_string_spelling(spelling, token.length,
-			bytes + offset, length - offset, &decoded_length);
+		const char *error = encoding >= character_utf16 ?
+			parse_wide_string_spelling(spelling, token.length, encoding, bytes + offset, length - offset, &decoded_length) :
+			parse_string_spelling(spelling, token.length, bytes + offset, length - offset, &decoded_length);
 
 		if (error) {
 			diagnostic_error(parser->diagnostics, token.location, error);
 			return NULL;
 		}
-		assert(decoded_length == token.string_length);
+		assert(encoding >= character_utf16 || decoded_length == token.string_length);
 		offset += decoded_length;
 	}
 	assert(offset == length);
-	bytes[length] = 0;
+	memset(bytes + length, 0, width);
 	node = ast_new_string(parser->arena, fragments->token.location, bytes, length);
 	if (!node) {
 		allocation_error(parser, fragments->token.location);
 		return NULL;
 	}
-	node->is_utf8 = utf8;
-	parser->string_bytes += length + 1;
+	node->encoding = encoding;
+	parser->string_bytes += length + width;
 	parser->string_count++;
 	return &node->expression;
 }
@@ -3487,6 +3521,11 @@ static struct ast_static_assertion *parse_static_assertion(struct parser *parser
 		if (!string)
 			return NULL;
 		message = (struct ast_string_expression *)string;
+		if (message->encoding >= character_utf16) {
+			diagnostic_error(parser->diagnostics, message->expression.location,
+				"wide static assertion messages are not supported");
+			return NULL;
+		}
 	}
 	if (!expect_token(parser, token_right_paren, "expected ')' after static assertion", NULL) ||
 		!expect_token(parser, token_semicolon, "expected ';' after static assertion", NULL))

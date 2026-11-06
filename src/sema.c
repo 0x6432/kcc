@@ -2432,8 +2432,12 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_string: {
 		struct ast_string_expression *node = (struct ast_string_expression *)expression;
-		struct array_type *array = type_new_array(sema->arena,
-			node->is_utf8 ? &type_uchar : &type_char, node->length + 1);
+		unsigned width = node->encoding == character_utf16 ? 2 : node->encoding >= character_utf32 ? 4 : 1;
+		const struct type *element = node->encoding == character_utf8 ? &type_uchar :
+			node->encoding == character_utf16 ? &type_ushort :
+			node->encoding == character_utf32 ? &type_uint :
+			node->encoding == character_wide ? &type_int : &type_char;
+		struct array_type *array = type_new_array(sema->arena, element, node->length / width + 1);
 
 		if (!array) {
 			diagnostic_error(sema->diagnostics, expression->location, "out of memory creating string type");
@@ -3986,12 +3990,19 @@ static bool initializer_designate(struct initializer_builder *builder,
 	return true;
 }
 
-static bool initializer_character_array(const struct type *type)
+static bool initializer_string_array(const struct type *type, const struct ast_string_expression *literal)
 {
 	if (type->kind != type_kind_array)
 		return false;
 	enum type_kind kind = ((const struct array_type *)type)->element->kind;
-	return kind == type_kind_char || kind == type_kind_schar || kind == type_kind_uchar;
+	switch (literal->encoding) {
+	case character_ordinary: case character_utf8:
+		return kind == type_kind_char || kind == type_kind_schar || kind == type_kind_uchar;
+	case character_utf16: return kind == type_kind_ushort;
+	case character_utf32: return kind == type_kind_uint;
+	case character_wide: return kind == type_kind_int;
+	}
+	return false;
 }
 
 static void initializer_cache_constant(struct ast_initializer_constant *constant,
@@ -4039,9 +4050,10 @@ static bool initializer_list(struct initializer_builder *builder,
 	if (type_is_complete_object(type) && !initializer_clear(builder, type, offset, syntax))
 		return false;
 	/* A string in optional braces initializes the array itself, not char[0]. */
-	if (initializer_character_array(type) && syntax->entries && !syntax->entries->next &&
+	if (syntax->entries && !syntax->entries->next &&
 		!syntax->entries->designators && syntax->entries->value->kind == ast_initializer_expression &&
-		syntax->entries->value->expression->kind == expression_string)
+		syntax->entries->value->expression->kind == expression_string &&
+		initializer_string_array(type, (const struct ast_string_expression *)syntax->entries->value->expression))
 		return initializer_value(builder, &path, syntax->entries->value, false);
 	if (syntax->entries && (type->kind == type_kind_array || type_is_record(type)))
 		available = initializer_first(builder, &path, syntax->location);
@@ -4093,7 +4105,7 @@ static bool initializer_value(struct initializer_builder *builder,
 		builder->expression_depth = expression->depth;
 	for (;;) {
 		object = &path->components[path->depth];
-		if ((string && initializer_character_array(object->type)) ||
+		if ((string && initializer_string_array(object->type, (const struct ast_string_expression *)expression)) ||
 			(type_is_record(object->type) && type_unqualified_compatible(object->type, expression->type)) ||
 			type_is_scalar(object->type))
 			break;
@@ -4105,11 +4117,13 @@ static bool initializer_value(struct initializer_builder *builder,
 	store.offset = object->offset;
 	store.type = object->type;
 	store.length = type_is_complete_object(object->type) ? type_object_size(object->type) : 0;
-	if (string && initializer_character_array(object->type)) {
+	if (string && initializer_string_array(object->type, (const struct ast_string_expression *)expression)) {
 		const struct ast_string_expression *literal = (const struct ast_string_expression *)expression;
 		const struct array_type *array = (const struct array_type *)object->type;
-		uint64_t count = array->count ? array->count : literal->length + 1;
-		if (count < literal->length)
+		unsigned width = literal->encoding == character_utf16 ? 2 : literal->encoding >= character_utf32 ? 4 : 1;
+		uint64_t units = literal->length / width;
+		uint64_t count = array->count ? array->count : units + 1;
+		if (count < units)
 			return initializer_error(builder, syntax->location, "string initializer is too long for character array");
 		if (!array->count)
 			builder->inferred_count = count;
@@ -4118,7 +4132,7 @@ static bool initializer_value(struct initializer_builder *builder,
 		store.kind = ast_initializer_write_string;
 		store.bytes = literal->bytes;
 		store.expression = expression;
-		store.length = count > literal->length ? literal->length + 1 : literal->length;
+		store.length = (count > units ? units + 1 : units) * width;
 		return initializer_store(builder, &store, syntax->location);
 	}
 	/* String used for a pointer (or invalid scalar): decay the already typed
