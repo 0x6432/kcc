@@ -31,7 +31,10 @@ build/checked.o: runtime/checked.c | build
 build/memset_explicit.o: runtime/memset_explicit.c | build
 	$(CC) $(CFLAGS) -fno-lto -fno-builtin -c $< -o $@
 
-build/libkccrt.a: build/volatile.o build/checked.o build/memset_explicit.o
+build/free_sized.o: runtime/free_sized.c | build
+	$(CC) $(CFLAGS) -fno-lto -c $< -o $@
+
+build/libkccrt.a: build/volatile.o build/checked.o build/memset_explicit.o build/free_sized.o
 	ar rcs $@ $^
 
 build/test_support: tests/test_support.c src/source.c src/arena.c src/diagnostic.c src/source.h src/arena.h src/diagnostic.h | build
@@ -131,6 +134,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_threads_header.py
 	QBE="$(QBE)" python3 tests/test_stdckdint_header.py
 	QBE="$(QBE)" python3 tests/test_memset_explicit.py
+	QBE="$(QBE)" python3 tests/test_free_sized.py
 	QBE="$(QBE)" python3 tests/test_volatile.py
 	QBE="$(QBE)" python3 tests/test_string_concatenation.py
 	QBE="$(QBE)" python3 tests/test_array_parameters.py
@@ -324,6 +328,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_threads_header.py
 	python3 tests/test_stdckdint_header.py
 	python3 tests/test_memset_explicit.py
+	python3 tests/test_free_sized.py
 	python3 tests/test_volatile.py
 	python3 tests/test_string_concatenation.py
 	python3 tests/test_array_parameters.py

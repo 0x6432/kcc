@@ -50,8 +50,10 @@ suite remains unrun.
   The runtime archive provides a separate `memset_explicit` fallback using
   volatile byte stores; link `build/libkccrt.a` after generated objects. It
   must be compiled without LTO. It does not erase register copies, swap, or
-  other copies of the data. Other standard interfaces are not supplied by that
-  archive; generated-program runtime checks remain unrun.
+  other copies of the data. The archive also supplies C23 `free_sized` and
+  `free_aligned_sized` wrappers over libc `free`; callers must satisfy the
+  standard matching size, alignment, and allocation requirements. They do not
+  validate metadata. Generated-program runtime checks remain unrun.
 - `stdio.h` exposes an opaque glibc `FILE` and common stream, file, formatted
   input/output and positioning declarations, including `va_list` variants and
   buffering controls. It omits other standard stdio interfaces and relies on glibc and the

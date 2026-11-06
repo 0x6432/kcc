@@ -1376,6 +1376,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define EXIT_SUCCESS 0\n#define EXIT_FAILURE 1\n#define RAND_MAX 2147483647\n"
 			"void *malloc(size_t); void *calloc(size_t,size_t); void *realloc(void *,size_t);\n"
 			"void free(void *); void *aligned_alloc(size_t,size_t);\n"
+			"void free_sized(void *,size_t); void free_aligned_sized(void *,size_t,size_t);\n"
 			"void abort(void); void exit(int); void _Exit(int); void quick_exit(int);\n"
 			"int atexit(void (*)(void)); int at_quick_exit(void (*)(void)); char *getenv(const char *);\n"
 			"int atoi(const char *); long atol(const char *); long long atoll(const char *);\n"
