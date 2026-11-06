@@ -1,7 +1,7 @@
 # M18 ordinary enums: int-range implementation checkpoint
 
 This is the earlier ordinary-enum checkpoint. For subsequent fixed-enum work
-and same-scope tag-only redeclarations, see `m18-fixed-enums.md`.
+and fixed-enum tag declarations, see `m18-fixed-enums.md`.
 
 This change implements a bounded ordinary-enum subset. The work is an
 implementation checkpoint, not a tested or approved milestone.

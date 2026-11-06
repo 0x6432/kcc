@@ -3229,11 +3229,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
 		struct ast_enum_type_syntax *enumeration = enum_specifier_base(base);
 		struct ast_tag_declaration *declaration;
-		/* A bare reference can redeclare an enum already in this scope.
-		 * Unknown non-fixed tags still fail in semantic analysis; a
-		 * qualified no-declarator form does not get this special rule. */
-		if (!enumeration->has_definition && !enumeration->underlying && base != &enumeration->syntax) {
-			diagnostic_error(parser->diagnostics, beginning.location, "qualified enum declaration requires a declarator");
+		/* Bare enum references do not declare a tag or enumerator, even
+		 * when the named type is already complete. */
+		if (!enumeration->has_definition && !enumeration->underlying) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"enum declaration without underlying type or enumerators declares no entity");
 			return NULL;
 		}
 		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind || head.noreturn_keyword.kind) {
@@ -4073,11 +4073,11 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
 		struct ast_enum_type_syntax *enumeration = enum_specifier_base(base);
 		struct ast_tag_declaration *declaration;
-		/* A bare reference can redeclare an enum already in this scope.
-		 * Unknown non-fixed tags still fail in semantic analysis; a
-		 * qualified no-declarator form does not get this special rule. */
-		if (!enumeration->has_definition && !enumeration->underlying && base != &enumeration->syntax) {
-			diagnostic_error(parser->diagnostics, beginning.location, "qualified enum declaration requires a declarator");
+		/* Bare enum references do not declare a tag or enumerator, even
+		 * when the named type is already complete. */
+		if (!enumeration->has_definition && !enumeration->underlying) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"enum declaration without underlying type or enumerators declares no entity");
 			return NULL;
 		}
 		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind || head.noreturn_keyword.kind) {

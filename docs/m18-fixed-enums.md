@@ -25,9 +25,9 @@ Boundaries: enum types as fixed underlying types are explicitly rejected.
 Qualifiers on an underlying integer type are discarded; atomic spellings are
 limited by the existing atomic type subset. Fixed definitions in
 parameter lists remain unsupported. A fixed forward tag's definition must
-repeat its underlying spelling; a bare tag-only redeclaration is supported
-only when an enum tag already exists in the same scope. An unknown non-fixed
-tag still cannot be introduced this way. Non-fixed enum constants remain restricted to signed int range,
+repeat its underlying type; a bare tag-only `enum E;` is rejected because it
+declares no entity, even if the tag is already visible. An unknown non-fixed
+tag cannot be introduced this way. Non-fixed enum constants remain restricted to signed int range,
 with no general C23 changing-enumerator-type or underlying selection rules.
 This change is not a full C23 enum or cross-toolchain ABI conformance claim.
 The typedef and `typeof` extension has been built but not tested.
@@ -38,16 +38,15 @@ regression, QBE and host ABI interop, sanitizers, bounded fuzz and CI remain
 required. See WG14 N3030 for the fixed enum model:
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3030.htm
 
-## Same-scope bare enum tag redeclarations
+## Correction: bare enum tag-only declarations
 
-Bare `enum E;` now redeclares an existing ordinary or fixed enum tag in the
-same scope. It does not create a new non-fixed incomplete enum, and a bare
-tag-only declaration in an inner scope does not reuse an outer tag. Kind
-conflicts remain errors. Qualified bare no-declarator references remain
-rejected in this slice. Fixtures were added for same-scope identities, fixed
-enums, scope and kind failures, and runtime use; these have not been run.
-The compiler was built; regression, runtime, ABI and fuzz verification remain
-outstanding. This does not complete M18 or approve M17.
+The earlier same-scope `enum E;` checkpoint incorrectly accepted a declaration
+that declares no entity. ISO C 2024 draft N3220 6.7.1p2 and 6.7.3.4p11–13
+only give the standalone tag-declaring form to a fixed enum with its type
+specifier. Bare references to complete enums remain valid in declarations
+with declarators. The incorrect acceptance has been removed and rejection
+fixtures added; no fixtures have been run. This corrects the earlier
+checkpoint, not an M18 completion claim.
 
 ## Boolean underlying type checkpoint
 

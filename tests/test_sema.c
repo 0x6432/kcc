@@ -6545,14 +6545,13 @@ static void test_ordinary_enums(void)
 		"enum Flag x=3; int f(void) { enum Flag y=0; y++; y++; return x+y; }",
 		"typedef bool B; enum Flag : B { YES=1, NO=0 }; "
 		"_Static_assert((enum Flag)-8==1 && (enum Flag)0==0, \"bool casts\");",
-		"enum E { A=42 }; enum E; enum E; enum E x=A; "
-		"int f(void) { enum F { B=2 }; enum F; enum F y=B; return x+y; }",
-		"enum E : unsigned short; enum E; enum E : unsigned short { A=42 }; enum E; "
-		"int f(void) { enum E e=A; return e; }",
 	};
 	static const char *const rejected[] = {
 		"enum { };", "enum E;", "enum E *p;",
 		"enum E { A }; int f(void) { enum E; return A; }",
+		"enum E { A }; enum E;",
+		"enum E : unsigned short; enum E;",
+		"int f(void) { enum E { A }; enum E; return A; }",
 		"struct E { int x; }; enum E;",
 		"enum E { A }; const enum E;",
 		"enum E { A=2147483648LL };", "enum E { A=2147483647, B };",
