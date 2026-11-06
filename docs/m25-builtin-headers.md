@@ -23,8 +23,8 @@ suite remains unrun.
   representation is a target-specific 32-byte struct rather than long double.
 - `stdint.h` supplies exact-width 8-, 16-, 32- and 64-bit integer types,
   least- and fast-width types, pointer-sized and maximum-width integer types,
-  their corresponding limits, size and pointer-difference limits, and
-  constant constructors. The fast-width type choices match Linux x86-64
+  their corresponding limits and C23 width macros, size and pointer-difference
+  limits, and constant constructors. The fast-width type choices match Linux x86-64
   glibc. The target `WCHAR_MIN`, `WCHAR_MAX`, `WINT_MIN` and `WINT_MAX` macros are also provided. Other standard macros are not yet provided.
 - `limits.h` supplies ordinary integer limits and C23 integer width macros for
   the target's 8-bit signed `char`, 16-bit short, 32-bit int and 64-bit long
