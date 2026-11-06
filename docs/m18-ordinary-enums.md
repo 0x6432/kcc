@@ -136,3 +136,16 @@ can be the target of a cast during its definition.
 
 The compiler build and focused acceptance and rejection checks succeeded.
 Regression fixtures, runtime, sanitizer and fuzz checks remain unrun.
+
+## Implicit successor expression type
+
+An implicit ordinary enumerator uses the type of the prior enumeration
+constant plus an `int` one, including the usual arithmetic conversions, before
+applying the existing checked same-signedness widening. This matters when the
+prior constant has a supported bit-precise type: for example, a large
+`unsigned _BitInt(32)` value plus `1` has type `unsigned int`, rather than
+retaining the bit-precise type. No wider-than-64-bit successor is implemented.
+`tests/test_enum_successor_types.py` exercises the intermediate enumerator
+types, widening, fixed-enum predecessors and rejection paths through QBE.
+See C23 working draft N3220 6.7.3.3 for the processing rules. This does not
+claim M18 completion or full enum conformance.

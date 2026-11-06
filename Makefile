@@ -251,6 +251,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_storage_promotions.py
 	python3 tests/test_enum_runtime.py
 	python3 tests/test_ordinary_enum_wide.py
+	python3 tests/test_enum_successor_types.py
 	python3 tests/test_enum_compatibility.py
 	python3 tests/test_enum_parameters.py
 	python3 tests/test_fixed_enum_runtime.py
@@ -456,6 +457,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_storage_promotions.py
 	python3 tests/test_enum_runtime.py
 	python3 tests/test_ordinary_enum_wide.py
+	python3 tests/test_enum_successor_types.py
 	python3 tests/test_enum_compatibility.py
 	python3 tests/test_enum_parameters.py
 	python3 tests/test_fixed_enum_runtime.py

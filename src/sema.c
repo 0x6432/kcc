@@ -1026,7 +1026,10 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		} else {
 			struct constant_result prior = { .type = previous_type, .bits = previous };
 			uint64_t checked;
-			constant_type = type_integer_promotion(previous_type);
+			/* The implicit expression is previous + 1, not merely a
+			 * promotion of previous. In particular, unsigned _BitInt(32)
+			 * and int combine as unsigned int on this target. */
+			constant_type = type_usual_arithmetic(previous_type, &type_int);
 			width = type_integer_width(constant_type);
 			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
 			maximum = type_is_unsigned(constant_type) ? mask : mask >> 1;
