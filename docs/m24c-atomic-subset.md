@@ -1,13 +1,13 @@
 # M24c: bounded atomic types and sequentially consistent loads/stores
 
 This is an intentionally small x86-64 SysV subset, not full C atomic support.
-Atomic complete enum types, `_Bool`, `char`, signed and unsigned `char`, `short`, `int`, `long`, and `long long`
+Atomic complete enum types, `_Bool`, `float`, `double`, `char`, signed and
+unsigned `char`, `short`, `int`, `long`, and `long long`
 are recognized using
 both qualifier and type-specifier syntax, including typedefs, const, pointers
 to these types, arrays of them,
 `sizeof`, `alignof`, and the existing `typeof` facilities. Each has the same size and alignment as its non-atomic integer counterpart:
-enum size and alignment follow the underlying type, 1 byte for `_Bool` and `char`, 2 bytes for `short`, 4 bytes for `int`, and 8 bytes for
-`long` and `long long`. Ordinary
+enum size and alignment follow the underlying type, 1 byte for `_Bool` and `char`, 2 bytes for `short`, 4 bytes for `int` and `float`, and 8 bytes for `double`, `long` and `long long`. Ordinary
 lvalue conversion performs a sequentially consistent atomic load; simple
 assignment performs a sequentially consistent atomic store and yields the stored
 non-atomic value. Atomic pointers are also supported for ordinary loads and simple
@@ -29,7 +29,7 @@ non-atomic accesses to the same object and data races are not made safe by casts
 
 Sequentially consistent atomic `++`, `--`, `+=`, `-=`, `&=`, `|=` and `^=`
 on the supported atomic integer types use the corresponding 1-, 2-, 4-, or
-8-byte libatomic read-modify-write operations (except `_Bool` and enums). Subword results are sign- or
+8-byte libatomic read-modify-write operations (except `_Bool`, enums and floating types). Subword results are sign- or
 zero-extended according to their C type. Prefix, postfix and compound expressions yield the
 appropriate new or old value, and the object address is evaluated once. Atomic
 compound multiplication, division, remainder, shifts and floating right operands
@@ -76,7 +76,7 @@ not been runtime-tested.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
-Floating, aggregate and array atomic types,
+Aggregate and array atomic types,
 volatile atomic types and other atomic library operations are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
@@ -102,3 +102,8 @@ Complete atomic enum objects support loads, stores, exchange, compare-exchange,
 and lock-free queries using the underlying integer representation. Atomic enum
 updates and fetch arithmetic/bitwise intrinsics are currently rejected. These
 paths have not been runtime- or concurrency-tested.
+
+Atomic `float` and `double` support loads, stores, exchange, compare-exchange,
+and lock-free queries. Values are bitcast to/from the libatomic integer ABI, so
+compare-exchange compares representations. Floating atomic updates and fetch
+arithmetic are rejected. These paths have not been runtime- or concurrency-tested.

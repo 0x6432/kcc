@@ -101,6 +101,29 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	return result;
 }
 
+/* libatomic transports floating values as representation bits, not FP ABI
+ * arguments. QBE cast between matching-width FP and integer classes is a bitcast. */
+static size_t atomic_to_bits(struct codegen *codegen, size_t value, const struct type *type)
+{
+	if (type_is_floating(type)) {
+		size_t bits = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c cast %%t%zu\n", bits,
+			type->kind == type_kind_float ? 'w' : 'l', value);
+		return bits;
+	}
+	return value;
+}
+
+static size_t atomic_from_bits(struct codegen *codegen, size_t bits, const struct type *type)
+{
+	if (type_is_floating(type)) {
+		size_t value = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c cast %%t%zu\n", value, qbe_type(type), bits);
+		return value;
+	}
+	return codegen_canonicalize(codegen, bits, type);
+}
+
 static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
 {
 	bool unsigned_operands;
@@ -784,12 +807,13 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t order = node->order ? codegen_expression(codegen, node->order) : 0;
 		size_t failure_order = node->failure_order ? codegen_expression(codegen, node->failure_order) : 0;
 		const char *operation;
+		size_t argument_bits = node->argument ? atomic_to_bits(codegen, argument, referent) : 0;
 
 		if (node->pointer_element_size > 1) {
 			size_t scaled = codegen->next_temporary++;
-			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, argument,
+			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, argument_bits,
 				(uintmax_t)node->pointer_element_size);
-			argument = scaled;
+			argument_bits = scaled;
 		}
 		if (node->operation == ast_atomic_is_lock_free) {
 			size_t result = codegen->next_temporary++;
@@ -803,7 +827,7 @@ static size_t codegen_expression(struct codegen *codegen,
 			size_t result = codegen->next_temporary++;
 			temporary = codegen->next_temporary++;
 			emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_%u(l %%t%zu, l %%t%zu, %c %%t%zu, ",
-				result, width, object, expected, value_type, argument);
+				result, width, object, expected, value_type, argument_bits);
 			if (node->order)
 				emit(codegen, "w %%t%zu, w %%t%zu)\n", order, failure_order);
 			else
@@ -817,13 +841,13 @@ static size_t codegen_expression(struct codegen *codegen,
 				emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w %%t%zu)\n", temporary, value_type, width, object, order);
 			else
 				emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n", temporary, value_type, width, object);
-			return codegen_canonicalize(codegen, temporary, referent);
+			return atomic_from_bits(codegen, temporary, referent);
 		}
 		if (node->operation == ast_atomic_store) {
 			if (node->order)
-				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w %%t%zu)\n", width, object, value_type, argument, order);
+				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w %%t%zu)\n", width, object, value_type, argument_bits, order);
 			else
-				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n", width, object, value_type, argument);
+				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n", width, object, value_type, argument_bits);
 			return argument;
 		}
 		switch (node->operation) {
@@ -838,11 +862,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		if (node->order)
 			emit(codegen, "\t%%t%zu =%c call $__atomic_%s_%u(l %%t%zu, %c %%t%zu, w %%t%zu)\n",
-				temporary, value_type, operation, width, object, value_type, argument, order);
+				temporary, value_type, operation, width, object, value_type, argument_bits, order);
 		else
 			emit(codegen, "\t%%t%zu =%c call $__atomic_%s_%u(l %%t%zu, %c %%t%zu, w 5)\n",
-				temporary, value_type, operation, width, object, value_type, argument);
-		return codegen_canonicalize(codegen, temporary, referent);
+				temporary, value_type, operation, width, object, value_type, argument_bits);
+		return atomic_from_bits(codegen, temporary, referent);
 	}
 	case expression_va: {
 		const struct ast_va_expression *node = (const struct ast_va_expression *)expression;
@@ -1044,7 +1068,7 @@ static size_t codegen_expression(struct codegen *codegen,
 			bool wide = width == 8;
 			emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n",
 				temporary, wide ? 'l' : 'w', width, address);
-			return codegen_canonicalize(codegen, temporary, node->operand->type);
+			return atomic_from_bits(codegen, temporary, node->operand->type);
 		}
 		if (type_is_record(expression->type)) {
 			/* Captures live in entry-allocated slots, never loop allocations.
@@ -1083,8 +1107,9 @@ static size_t codegen_expression(struct codegen *codegen,
 		if (node->left->type->qualifiers & type_qualifier_atomic) {
 			unsigned width = (unsigned)type_object_size(node->left->type);
 			bool wide = width == 8;
+			size_t bits = atomic_to_bits(codegen, value, node->left->type);
 			emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n",
-				width, address, wide ? 'l' : 'w', value);
+				width, address, wide ? 'l' : 'w', bits);
 		}
 		else if (type_is_record(node->left->type))
 			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));

@@ -10,6 +10,9 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    '#include <stdatomic.h>\nint main(void) { _Atomic(float) x=1.0F; float old=atomic_exchange(&x,42.0F); return old==1.0F && atomic_load(&x)==42.0F ? 42 : 1; }',
+    '#include <stdatomic.h>\nint main(void) { _Atomic(double) x=1.0; double expected=1.0; if(!atomic_compare_exchange_strong(&x,&expected,42.0)) return 1; return (int)atomic_load(&x); }',
+    'int main(void) { _Atomic double x=1.0; x=42.0; return (int)x; }',
     '#include <stdatomic.h>\nenum E : unsigned char { A=1, B=42 }; int main(void) { _Atomic(enum E) x=A; enum E expected=A; if(!atomic_compare_exchange_strong(&x,&expected,B)) return 1; return atomic_load(&x); }',
     'enum E { A=1, B=42 }; int main(void) { _Atomic(enum E) x=A; x=B; return x; }',
     '#include <stdatomic.h>\nint main(void) { atomic_bool b=0; atomic_store(&b,8); _Bool old=atomic_exchange(&b,0); _Bool expected=0; if(!atomic_compare_exchange_strong(&b,&expected,1)) return 1; return old && atomic_load(&b) ? 42 : 1; }',
@@ -48,6 +51,9 @@ positive = [
     'int main(void) { _Atomic unsigned x=63; x &= 42; x |= 1; x ^= 1; return x; }',
 ]
 negative = [
+    'int f(void) { _Atomic(float) x=1.0F; x++; return 0; }',
+    'int f(void) { _Atomic(double) x=1.0; x+=1; return 0; }',
+    '#include <stdatomic.h>\nint f(_Atomic(float) *p) { return atomic_fetch_add(p,1); }',
     'enum E { A=0 }; int f(void) { _Atomic(enum E) e=A; e++; return 0; }',
     '#include <stdatomic.h>\nenum E { A=0 }; int f(_Atomic(enum E) *p) { return atomic_fetch_add(p,1); }',
     'int f(void) { _Atomic _Bool b=1; b++; return 0; }',
