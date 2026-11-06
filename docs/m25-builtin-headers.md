@@ -89,8 +89,12 @@ Source provenance, not a filename, determines which budget is charged.
   retains its documented C-locale assumption.
 - `wchar.h` supplies glibc-compatible `wchar_t`, `wint_t`, `mbstate_t`, wide
   string and memory operations, and basic multibyte conversion declarations.
-  Wide I/O and other interfaces are omitted; bounded wide string literals are
-  described in `m23-utf8-strings.md`. The declarations require compatible libc.
+  Wide I/O, formatted wide I/O, numeric conversion, tokenization, collation and
+  `wcsftime` declarations are also supplied; they depend on the fallback
+  `FILE` and limited variadic ABI and a compatible libc. `long double`
+  conversion and other interfaces remain omitted. Bounded wide string
+  literals are described in `m23-utf8-strings.md`. New declarations have only
+  been compile-checked, not runtime-tested.
 - `wctype.h` declares wide classification and case-conversion functions and
   glibc-compatible classification and transformation descriptor types.
 - `uchar.h` supplies the C23 character typedefs, glibc-compatible `mbstate_t`,
