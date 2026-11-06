@@ -14,6 +14,8 @@ pairs = [
      'enum : unsigned short { A=42 }; int f(void){return A;}'),
     ('enum [[deprecated]] E { A=1 }; enum E x; int f(void){return A;}',
      'enum E { A=1 }; enum E x; int f(void){return A;}'),
+    ('enum [[nodiscard("check result")]] E { A=1 }; enum E x;',
+     'enum E { A=1 }; enum E x;'),
     ('typedef int F(void); [[nodiscard]] F f;', 'typedef int F(void); F f;'),
     ('typedef int F(void); F f [[nodiscard]];', 'typedef int F(void); F f;'),
     ('typedef int F(void); void g(void){[[nodiscard]] F f; (void)f();}', 'typedef int F(void); void g(void){F f; (void)f();}'),
@@ -68,7 +70,8 @@ invalid = [
     ('enum [[maybe_unused]] E;', 'require an enumeration definition'),
     ('enum E { A [[fallthrough]] };', 'fallthrough is only supported'),
     ('enum E { A [[maybe_unused(1)]] };', 'take no arguments'),
-    ('enum [[nodiscard]] E { A };', 'nodiscard is only supported'),
+    ('enum [[nodiscard]] E;', 'require an enumeration definition'),
+    ('enum E { A [[nodiscard]] };', 'nodiscard is only supported'),
     ('enum E { A [[noreturn]] };', 'noreturn attribute is only supported'),
     ('[[noreturn]] int x;', 'requires a function declaration'),
     ('[[noreturn]] typedef void F(void);', 'requires a function identifier'),
@@ -129,6 +132,14 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
     result = compile('int f(void); int g(void){[[nodiscard]] int f(void); f(); return 0;} int h(void){f(); return 0;}')
     assert result.returncode == 0, result.stderr
     assert result.stderr.count('warning: discarded result of nodiscard function') == 1, result.stderr
+    result = compile('enum [[nodiscard]] E { A=1 }; enum E f(void); '
+                     'void g(enum E (*p)(void)){ f(); p(); (void)f(); }')
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.count('warning: discarded result of function returning nodiscard enum') == 2, result.stderr
+    result = compile('enum E : int; enum E f(void); enum [[nodiscard]] E : int { A=1 }; '
+                     'void g(void){ f(); (void)f(); }')
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.count('warning: discarded result of function returning nodiscard enum') == 1, result.stderr
     for count, success in [(256, True), (257, False)]:
         result = compile('[[]]' * count + ' int x;')
         assert (result.returncode == 0) == success, (count, result.stderr)

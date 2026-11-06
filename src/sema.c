@@ -814,6 +814,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			definition->defining = false;
 			if (!success)
 				return NULL;
+			definition->is_nodiscard |= syntax->is_nodiscard;
 			return syntax->syntax.type = &type->type;
 		}
 	} else {
@@ -966,6 +967,7 @@ range:
 	definition->complete = true;
 	definition->defined = true;
 	definition->defining = false;
+	definition->is_nodiscard |= syntax->is_nodiscard;
 	if (tag)
 		tag->enum_definition = syntax;
 	return &type->type;
@@ -4990,8 +4992,9 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 		struct ast_expression_statement *node =
 			(struct ast_expression_statement *)statement;
 		bool warn_nodiscard = false;
-		/* This deliberately diagnoses only a direct, stand-alone call; wider
-		 * discarded-value analysis and indirect calls remain future work. */
+		bool standalone_call = node->value->kind == expression_call;
+		/* Function-attribute provenance is tracked only for direct calls.
+		 * Enum return-type attributes also apply to indirect calls below. */
 		if (node->value->kind == expression_call) {
 			struct ast_call_expression *call = (struct ast_call_expression *)node->value;
 			if (call->callee->kind == expression_name) {
@@ -5004,6 +5007,12 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 		}
 		if (!sema_expression(sema, &node->value, true))
 			return false;
+		if (standalone_call && node->value->type->kind == type_kind_enum &&
+			((const struct enum_type *)node->value->type)->definition->is_nodiscard) {
+			diagnostic_warning(sema->diagnostics, node->value->location,
+				"discarded result of function returning nodiscard enum");
+			return true;
+		}
 		if (warn_nodiscard && node->value->type->kind != type_kind_void)
 			diagnostic_warning(sema->diagnostics, node->value->location,
 				"discarded result of nodiscard function");

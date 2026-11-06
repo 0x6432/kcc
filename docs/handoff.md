@@ -31,7 +31,8 @@ Completed tagged enums with matching members also support bounded cross-scope
 compatibility; see `m18-ordinary-enums.md` for the exact rules and pending
 validation.
 Known bounded and ignored unknown attributes are parsed on enum definitions
-and enumerators; enum-type `nodiscard` and deprecation-use diagnostics remain
+and enumerators. Enum-type `nodiscard` emits a bounded standalone-call warning;
+deprecation-use diagnostics and broader discarded-value analysis remain
 unsupported. See `m23g-extended-attributes.md`.
 
 Builds and selected compile/IL checks have run during this lane, together with a

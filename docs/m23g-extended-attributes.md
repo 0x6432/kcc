@@ -26,11 +26,13 @@ this is not yet a general preprocessing-token attribute parser. `[[nodiscard]]` 
 identifier declarations, at file and block scope, as declaration prefixes or
 declarator suffixes. Adjacent ordinary strings are accepted as a message. The
 compiler warns for a stand-alone direct call that discards the result of a
-visible nodiscard function. It does not warn for indirect calls, nested discarded
+visible nodiscard function. It also accepts `nodiscard` on an enum definition
+and warns for a stand-alone call returning that enum, including an indirect
+call. It does not warn for indirect calls to a nodiscard function, nested discarded
 expressions or all declaration-redeclaration scopes. `(void)` casts suppress this
 limited warning. It does not advertise partial support through `__has_c_attribute`. Typedef- and `typeof`-derived
-function identifiers are resolved semantically; objects, record/enum
-declarations and other placements are currently rejected. The flag is retained
+function identifiers are resolved semantically; objects, record definitions
+and other unsupported placements are currently rejected. The flag is retained
 on declaration nodes for future warning support.
 
 The `noreturn` attribute is additionally accepted as a file- or block-scope prefix or declarator suffix on
@@ -42,8 +44,9 @@ attributes and attribute lists per sequence. This is not complete C23 attribute
 handling, including placement and token-grammar coverage. Expanded
 placements have been built but have not been regression-tested yet.
 Enum-specifier and enumerator positions accept the same bounded unknown
-attributes; `nodiscard` on enum types remains unsupported, and enum-reference
-or fixed-forward forms with an attribute after `enum` are rejected.
+attributes. `nodiscard` is supported on enum definitions but not enumerators;
+enum-reference or fixed-forward forms with an attribute after `enum` are rejected.
+Nodiscard and deprecated message text is not yet included in diagnostics.
 
 `__has_c_attribute` is recognized in preprocessing conditions, accepts an
 identifier or scoped identifier, and currently returns zero for every
