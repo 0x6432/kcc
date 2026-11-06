@@ -144,10 +144,25 @@ Conditional/logical evaluation retains the initializer-only treatment of
 unselected branches; it does not make these expressions integer constant
 expressions. Pointer loads, thread-local addresses, unproved string identity,
 pointer-to-integer numeric values and evaluated invalid arithmetic remain
-rejected. A floating-valued conditional with a pointer condition remains
-outside this slice.
+rejected. Floating-valued conditionals with proved pointer conditions are
+covered by the subsequent checkpoint.
 
 The compiler rebuilt; ten scalar values were inspected in IL, lowered by pinned
 QBE 1.2 and assembled, and nine invalid or unsupported examples were rejected.
 Added regression fixtures, generated-program runtime, ABI, sanitizer and fuzz
 checks remain unrun. This does not imply M17 approval.
+
+## Pointer-conditioned floating values
+
+Supported static float/double conditionals may select their value using a
+proved pointer or nullptr truth condition, address comparison/difference, or
+logical combination with a supported arithmetic condition. The selected arm
+must fold and the skipped arm must satisfy the existing bounded arithmetic
+form check. Pointer loads, unsupported address relationships, thread-local
+addresses, pointer-to-integer numeric casts and evaluated invalid arithmetic
+remain rejected; strict ICE rules are unchanged.
+
+The compiler rebuilt; eight values were inspected in IL, lowered through
+pinned QBE 1.2 and assembled; six invalid or unsupported examples were
+rejected. Regression fixtures, generated-program runtime, ABI, sanitizer
+and fuzz checks remain unrun. M17 remains unapproved.

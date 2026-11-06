@@ -1143,6 +1143,13 @@ static struct constant_result evaluate_initializer_condition(const struct ast_ex
 		.location = proof.result.location, .message = proof.result.message };
 }
 
+struct constant_result evaluate_pointer_initializer_truth(const struct ast_expression *expression)
+{
+	assert(expression && expression->type &&
+		(expression->type->kind == type_kind_pointer || expression->type->kind == type_kind_nullptr));
+	return evaluate_initializer_condition(expression);
+}
+
 /* Symbol identity is enough for same-object equality and offsets. Do not
  * invent linker placement or assume distinct potentially merged strings differ. */
 static struct constant_result compare_initializer_addresses(const struct ast_binary_expression *node)

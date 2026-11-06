@@ -47,6 +47,8 @@ int *float_pointer_mixed=(&pointer_target && ((int)(2.0+1.0)==3)) ? &pointer_tar
 int *float_pointer_null=0.0 ? &pointer_target : nullptr;
 int address_dependent=(&pointer_target ? 3 : 4)+2;
 float address_dependent_float=(&pointer_target ? 3 : 4);
+float address_conditioned_float=&pointer_target ? 3.0f : 4.0f;
+double address_compared_double=(&pointer_target==&pointer_other) ? 5.0 : 6.0;
 int address_float_condition=(&pointer_target && (1.0<2.0)) ? 12 : 13;
 int global_comparison_arithmetic=((1.0<2.0)+2)*3;
 float global_comparison_arithmetic_float=(1.0<2.0)+2;
@@ -114,7 +116,8 @@ extern float global_subnormal, global_tiny, global_tiny_above; extern double glo
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 extern int global_nested_choice, global_nested_logic; extern float global_nested_float;
 extern int pointer_target, *float_pointer_choice, *float_pointer_mixed, *float_pointer_null;
-extern int address_dependent, address_float_condition; extern float address_dependent_float;
+extern int address_dependent, address_float_condition; extern float address_dependent_float, address_conditioned_float;
+extern double address_compared_double;
 extern double skipped_float, skipped_comma; extern float skipped_nested;
 extern int skipped_int, skipped_or, skipped_and, skipped_bitwise, skipped_complement;
 extern int global_comparison_arithmetic, global_conditional_arithmetic; extern float global_comparison_arithmetic_float;
@@ -150,6 +153,7 @@ int main(void) {
      global_float_logic!=1 || global_float_logic_value!=1.0f || global_float_logic_choice!=9.0 ||
      global_float_condition!=11.0f || global_compare_condition!=12.0 || global_not_condition!=14.0f || global_float_compare!=1 || !global_float_not ||
      global_compare_as_float!=1.0f) return 11;
+ if (address_conditioned_float!=3.0f || address_compared_double!=6.0) return 22;
  if (address_dependent!=5 || address_dependent_float!=3.0f || address_float_condition!=12) return 21;
  if (float_pointer_choice!=&pointer_target || float_pointer_mixed!=&pointer_target || float_pointer_null) return 20;
  if (global_nested_float_cast!=5 || global_cast_condition!=11 || global_cast_short_circuit!=1) return 18;
@@ -180,6 +184,8 @@ reject = [
  'int n; int x=1.0 ? 1 : n;', 'int x=0.0 ? 1 : 1/0;',
  'int x; int *p=(int)(1e300)?&x:nullptr;',
  'int x; int a=(long)&x ? 1 : 2;', 'int x; static_assert(&x ? 1 : 0);',
+ 'int x; float a=(long)&x ? 1.0f : 2.0f;',
+ 'thread_local int x; float a=&x ? 1.0f : 2.0f;',
  'int x; int *p=(&x && ((int)(1e300)==1))?&x:nullptr;',
  'double y; double x=1?2.0:(y,3.0);', 'double x=0?2.0:(1.0/0.0,3.0);',
  'static_assert(1.0 ? 1 : 0);',

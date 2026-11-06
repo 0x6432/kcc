@@ -3483,6 +3483,13 @@ static bool static_arithmetic_constant_form(const struct ast_expression *express
 
 static bool static_floating_condition(const struct ast_expression *expression, bool *truth)
 {
+	if (expression->type->kind == type_kind_pointer || expression->type->kind == type_kind_nullptr) {
+		struct constant_result pointer = evaluate_pointer_initializer_truth(expression);
+		if (pointer.status != constant_value)
+			return false;
+		*truth = pointer.bits != 0;
+		return true;
+	}
 	if (type_is_floating(expression->type)) {
 		double number;
 		if (!static_floating_number(expression, &number))
@@ -3539,10 +3546,13 @@ static bool static_floating_condition(const struct ast_expression *expression, b
 		}
 	}
 	/* Avoid re-entering the special Boolean/conditional paths on failure. */
-	if (!is_static_floating_boolean(expression) && !is_static_float_conditioned_integer(expression) &&
-		static_integer_arithmetic(expression, &integer)) {
-		*truth = integer.bits != 0;
-		return true;
+	if (!is_static_floating_boolean(expression) && !is_static_float_conditioned_integer(expression)) {
+		if (!static_integer_arithmetic(expression, &integer))
+			integer = evaluate_integer_initializer(expression);
+		if (integer.status == constant_value) {
+			*truth = integer.bits != 0;
+			return true;
+		}
 	}
 	return false;
 }
