@@ -4377,7 +4377,7 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	 * entry are checked separately, and the runtime budget is cumulative. */
 	if (sema->function && sema->scope &&
 		local->type_syntax->kind == type_syntax_array && !local->is_static &&
-		!local->is_extern && !local->is_thread_local && !local->is_register)
+		!local->is_extern && !local->is_thread_local)
 		sema->vla_candidate = local->type_syntax;
 	type = resolve_type_syntax(sema, local->type_syntax);
 	sema->vla_candidate = NULL;

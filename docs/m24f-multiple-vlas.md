@@ -1,6 +1,6 @@
 # Multiple outermost VLAs
 
-Multiple automatic VLAs can
+Multiple automatic or `register` VLAs can
 be declared in the outermost block or nested blocks, including loop and switch
 bodies. A case or default label is rejected if switch dispatch would enter the
 scope of a VLA declared inside that switch; a VLA enclosing a nested switch is
@@ -13,7 +13,8 @@ bound is evaluated once in declaration order. Explicit alignment up to 16 bytes
 is supported when it does not weaken natural alignment; `sizeof` uses the saved size
 of the corresponding array. A C23 empty initializer `{}` zero-initializes the
 runtime-sized storage using the target’s all-zero representations; nonempty VLA
-initializers remain rejected. They share the existing 1 MiB local-storage
+initializers remain rejected. Register VLA bounds and `sizeof` are supported;
+register array-to-pointer conversion and taking its address remain rejected. They share the existing 1 MiB local-storage
 budget, after fixed-size locals; an invalid bound or exhausted budget calls
 `abort` before allocation. This budget is cumulative across executed VLA
 declarations for the whole invocation, including successive loop iterations, even

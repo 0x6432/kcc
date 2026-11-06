@@ -10,6 +10,7 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=3; register int a[n++]={}; return n==4 && sizeof a==12 ? 42 : 1; }',
     'int main(void) { int n=2; int a[n]; a[1]=42; goto done; done: return a[1]; }',
     'int main(void) { int n=2; int result=0; { int a[n]; a[1]=42; result=a[1]; goto out; } out: return result; }',
     'int main(void) { int n=2, i=0, result=0; again:; int a[n]; a[0]=21; result+=a[0]; if(++i<2) goto again; return result; }',
@@ -45,6 +46,8 @@ valid = [
     'int main(void) { int n=3; int a[n++]; a[2]=42; return n==4 && sizeof *(&a)==12 && sizeof *(&*(&a))==12 ? a[2] : 1; }',
 ]
 rejected = [
+    ('int f(int n) { register int a[n]; int *p=a; return 0; }', 'register array-to-pointer'),
+    ('int f(int n) { register int a[n]; return &a!=0; }', 'address of a register object'),
     ('int f(int n) { alignas(1) int a[n]; return 0; }', 'cannot weaken'),
     ('int f(int n) { alignas(32) int a[n]; return 0; }', 'supported alignments'),
     ('int f(int n) { switch(n) { int a[n]; case 1: return sizeof a; } return 0; }', 'switch label enters'),
