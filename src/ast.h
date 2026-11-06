@@ -570,6 +570,7 @@ struct ast_enum_type_syntax {
 	struct ast_type_syntax *underlying;
 	bool has_definition;
 	bool is_nodiscard;
+	bool is_deprecated;
 	struct ast_enumerator *enumerators;
 };
 

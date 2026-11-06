@@ -833,8 +833,12 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 				"fixed enum definition must repeat its underlying type in this subset");
 			return NULL;
 		}
-		if (!syntax->has_definition)
+		if (!syntax->has_definition) {
+			if (!standalone && !syntax->underlying && definition->is_deprecated)
+				diagnostic_warning(sema->diagnostics, syntax->tag.location,
+					"use of deprecated enum type");
 			return syntax->syntax.type = &type->type;
+		}
 		underlying = definition->underlying ? definition->underlying : &type_int;
 		if (syntax->has_definition && definition->defined) {
 			bool success;
@@ -844,6 +848,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			if (!success)
 				return NULL;
 			definition->is_nodiscard |= syntax->is_nodiscard;
+			definition->is_deprecated |= syntax->is_deprecated;
 			return syntax->syntax.type = &type->type;
 		}
 	} else {
@@ -998,6 +1003,7 @@ range:
 	definition->defined = true;
 	definition->defining = false;
 	definition->is_nodiscard |= syntax->is_nodiscard;
+	definition->is_deprecated |= syntax->is_deprecated;
 	if (tag)
 		tag->enum_definition = syntax;
 	return &type->type;

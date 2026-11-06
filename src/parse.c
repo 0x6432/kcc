@@ -1145,6 +1145,7 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 		return NULL;
 	}
 	node->is_nodiscard = enum_attributes.nodiscard;
+	node->is_deprecated = enum_attributes.deprecated;
 	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
 		node->tag = preprocess_next(parser->preprocessor);
 	if (preprocess_peek(parser->preprocessor).kind == token_colon) {

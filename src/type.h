@@ -43,6 +43,7 @@ struct enum_definition {
 	bool defining;
 	bool fixed;
 	bool is_nodiscard;
+	bool is_deprecated;
 	const struct type *underlying; /* NULL denotes ordinary enum int. */
 	struct token tag;
 	struct enum_member_info *members; /* Sorted by name after definition. */

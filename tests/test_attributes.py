@@ -8,8 +8,8 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
-    ('enum [[__nodiscard__, __deprecated__]] E { A [[__maybe_unused__]]=42 }; enum E x=A;',
-     'enum [[nodiscard, deprecated]] E { A [[maybe_unused]]=42 }; enum E x=A;'),
+    ('enum [[__nodiscard__, __deprecated__]] E { A [[__maybe_unused__]]=42 } x=A;',
+     'enum [[nodiscard, deprecated]] E { A [[maybe_unused]]=42 } x=A;'),
     ('void stop(void) [[__noreturn__]];', 'void stop(void) [[noreturn]];'),
     ('int f(int x){switch(x){case 0: x++; [[__fallthrough__]]; case 1: return x;} return 0;}',
      'int f(int x){switch(x){case 0: x++; [[fallthrough]]; case 1: return x;} return 0;}'),
@@ -17,8 +17,8 @@ pairs = [
      'enum E { A=40, B=2 }; int f(void){return A+2;}'),
     ('enum [[vendor::hint(1, [2])]] : unsigned short { A [[unknown]]=42 }; int f(void){return A;}',
      'enum : unsigned short { A=42 }; int f(void){return A;}'),
-    ('enum [[deprecated]] E { A=1 }; enum E x; int f(void){return A;}',
-     'enum E { A=1 }; enum E x; int f(void){return A;}'),
+    ('enum [[deprecated]] E { A=1 }; int f(void){return A;}',
+     'enum E { A=1 }; int f(void){return A;}'),
     ('enum [[nodiscard("check result")]] E { A=1 }; enum E x;',
      'enum E { A=1 }; enum E x;'),
     ('typedef int F(void); [[nodiscard]] F f;', 'typedef int F(void); F f;'),
@@ -157,6 +157,16 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
         result = compile(source)
         assert result.returncode == 0, result.stderr
         assert result.stderr.count('warning: use of deprecated enumerator') == count, result.stderr
+    for source, count in [
+        ('enum [[deprecated("old")]] E { A=1 }; enum E x; int f(void){return sizeof(enum E);}', 2),
+        ('enum E : int; enum E x; enum [[__deprecated__]] E : int { A=1 }; enum E y;', 1),
+        ('enum E { A=1 }; enum [[deprecated]] E { A=1 }; enum E x;', 1),
+        ('enum [[deprecated]] E { A=1 }; int f(void){enum E { B=2 }; enum E x=B; return x;}', 0),
+        ('enum [[deprecated]] E : int { A=1 }; enum E : int; int f(void){return A;}', 0),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.count('warning: use of deprecated enum type') == count, result.stderr
     for count, success in [(256, True), (257, False)]:
         result = compile('[[]]' * count + ' int x;')
         assert (result.returncode == 0) == success, (count, result.stderr)

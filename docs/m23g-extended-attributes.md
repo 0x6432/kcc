@@ -11,9 +11,11 @@ enumerator names; these are distinct from attributes on a declaration prefix.
 `[[deprecated]]` and `[[deprecated("message")]]` are accepted on the same
 supported declaration positions. Messages may contain adjacent ordinary
 string fragments. The compiler warns on uses of enumerators marked deprecated, including uses
-in later enumerator initializers. It does not yet warn on uses of other
-deprecated entities or types, and does not advertise the attribute through
-`__has_c_attribute`. It is also accepted on enum definitions and enumerators
+in later enumerator initializers. It also warns on direct references to a
+named enum after a deprecated enum definition (including one completing a
+fixed forward declaration). Standalone tag declarations, references through
+typedefs, and other deprecated entities and types do not yet produce warnings.
+The compiler does not advertise the attribute through `__has_c_attribute`. It is also accepted on enum definitions and enumerators
 in the positions above. Matching same-scope enum redefinitions can mark an
 existing enumerator deprecated for subsequent uses.
 
@@ -59,3 +61,8 @@ Scoped vendor attributes remain ignored under the existing bounded policy.
 identifier or scoped identifier, and currently returns zero for every
 attribute: no attribute is advertised as fully supported while placements
 remain restricted. The operand is macro-expanded. Query coverage is untested.
+
+Focused development check: the compiler rebuilt and five direct-use, fixed-forward,
+redefinition, shadowing, and fixed tag-only examples compiled with the expected
+warning counts and lowered through pinned QBE 1.2. The added regression fixtures
+have not been run as a suite; no generated program was executed for this change.
