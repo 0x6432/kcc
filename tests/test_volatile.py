@@ -25,6 +25,7 @@ int f(volatile int n) {
     volatile double floating={2.0};
     int * volatile ptr={};
     volatile int local_array[2]; local_array[0]=3;
+    volatile int vla[n]={}; vla[0]=local_array[0];
     array[1]++; via_typedef[0]=local_array[0];
     (void)empty; (void)floating; (void)ptr;
     (void)(volatile int){3};
@@ -50,7 +51,6 @@ int main(void) { return f(2); }
                         '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
     for text in ('int f(void){volatile int a[2]={1}; return 0;}',
-                 'int f(int n){volatile int a[n]={}; return 0;}',
                  'struct S { volatile int member; };',
                  'struct S { int x; }; typedef struct S A[2]; volatile A a;',
                  '_Atomic volatile int x;',

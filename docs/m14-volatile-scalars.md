@@ -17,9 +17,9 @@ aliasing behavior. It is not a general memory-mapped I/O or concurrency
 contract; `volatile` does not make operations atomic.
 
 Arrays of volatile scalar elements, including multidimensional arrays and VLAs,
-support indexed access and static initialization. Automatic volatile array
-initialization is rejected, including empty VLA initialization; scalar accesses
-use the same helpers. Volatile record types and members, and volatile atomic
+support indexed access and static initialization. Empty-initialized automatic VLAs use a loop with one helper store per scalar
+element. Fixed automatic volatile array initialization remains rejected; scalar
+accesses use the same helpers. Volatile record types and members, and volatile atomic
 objects are rejected. Scalar braced initializers, including empty initializers
 and automatic compound literals, emit one volatile store after evaluating the
 surviving initializer expression. Static scalar initializers are also supported. No general aggregate volatile copy or C23 conformance is claimed.

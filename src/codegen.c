@@ -1494,8 +1494,18 @@ static void codegen_vla(struct codegen *codegen, const struct ast_local_declarat
 		emit_label(codegen, loop);
 		emit(codegen, "\t%%t%zu =l phi @b%zu 0, @b%zu %%t%zu\n", index, predecessor, loop, next);
 		emit(codegen, "\t%%t%zu =l add %%v%zu, %%t%zu\n", address, local->slot, index);
-		emit(codegen, "\tstoreb 0, %%t%zu\n", address);
-		emit(codegen, "\t%%t%zu =l add %%t%zu, 1\n", next, index);
+		if (local->type->qualifiers & type_qualifier_volatile) {
+			const struct type *element = array->element;
+			while (element->kind == type_kind_array)
+				element = ((const struct array_type *)element)->element;
+			unsigned width = (unsigned)type_object_size(element);
+			emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, %c 0)\n",
+				width, address, width == 8 ? 'l' : 'w');
+			emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", next, index, width);
+		} else {
+			emit(codegen, "\tstoreb 0, %%t%zu\n", address);
+			emit(codegen, "\t%%t%zu =l add %%t%zu, 1\n", next, index);
+		}
 		emit(codegen, "\t%%t%zu =w cultl %%t%zu, %%z%zu\n", more, next, local->slot);
 		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", more, loop, done);
 		emit_label(codegen, done);

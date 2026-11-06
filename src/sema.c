@@ -4527,11 +4527,6 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	if (!type)
 		return false;
 	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
-		if ((type->qualifiers & type_qualifier_volatile) && local->initializer_syntax) {
-			diagnostic_error(sema->diagnostics, local->name.location,
-				"automatic volatile array initialization is not supported yet");
-			return false;
-		}
 		if ((local->initializer_syntax &&
 			(local->initializer_syntax->kind != ast_initializer_list || local->initializer_syntax->entries)) ||
 			local->initializer || local->is_inline || local->is_noreturn) {
