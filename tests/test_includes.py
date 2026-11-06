@@ -76,7 +76,7 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
         ('#include "missing.h"', 'cannot load quoted include'),
         ('#include ""', 'quoted name'), ('#include <x.h>', 'cannot load angle include'),
 
-        ('#include "common.h" extra', 'exactly one include name'),
+        ('#include "common.h" extra', 'expected end of include'),
         (r'#include "a\b.h"', 'backslashes'), ('#include u8"common.h"', 'quoted name'),
     ]:
         source.write_text(directive+'\nint main(void) { return 0; }\n')
