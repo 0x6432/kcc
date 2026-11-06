@@ -20,6 +20,10 @@ enum type_kind {
 	type_kind_ulong,
 	type_kind_long_long,
 	type_kind_ulong_long,
+	type_kind_bitint32,
+	type_kind_ubitint32,
+	type_kind_bitint64,
+	type_kind_ubitint64,
 	type_kind_bool,
 	type_kind_float,
 	type_kind_double,
@@ -162,6 +166,8 @@ extern const struct type type_long;
 extern const struct type type_ulong;
 extern const struct type type_long_long;
 extern const struct type type_ulong_long;
+extern const struct type type_bitint32, type_ubitint32, type_bitint64, type_ubitint64;
+bool type_is_bitint(const struct type *type);
 bool type_is_integer(const struct type *type);
 /* Includes a fixed enum compatible with bool. */
 bool type_is_boolean(const struct type *type);

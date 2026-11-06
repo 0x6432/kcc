@@ -19,6 +19,16 @@ const struct type type_long = { .kind = type_kind_long };
 const struct type type_ulong = { .kind = type_kind_ulong };
 const struct type type_long_long = { .kind = type_kind_long_long };
 const struct type type_ulong_long = { .kind = type_kind_ulong_long };
+const struct type type_bitint32 = { .kind = type_kind_bitint32 };
+const struct type type_ubitint32 = { .kind = type_kind_ubitint32 };
+const struct type type_bitint64 = { .kind = type_kind_bitint64 };
+const struct type type_ubitint64 = { .kind = type_kind_ubitint64 };
+
+bool type_is_bitint(const struct type *type)
+{
+	return type->kind == type_kind_bitint32 || type->kind == type_kind_ubitint32 ||
+		type->kind == type_kind_bitint64 || type->kind == type_kind_ubitint64;
+}
 
 struct integer_properties {
 	enum type_kind kind;
@@ -32,17 +42,21 @@ struct integer_properties {
 static const struct integer_properties integer_properties[] = {
 	/* Bool has eight storage bits but only the values 0 and 1. */
 	{ type_kind_bool, 8, 0, true, &type_bool },
-	{ type_kind_char, 8, 1, false, &type_uchar },
-	{ type_kind_schar, 8, 1, false, &type_uchar },
-	{ type_kind_uchar, 8, 1, true, &type_uchar },
-	{ type_kind_short, 16, 2, false, &type_ushort },
-	{ type_kind_ushort, 16, 2, true, &type_ushort },
-	{ type_kind_int, 32, 3, false, &type_uint },
-	{ type_kind_uint, 32, 3, true, &type_uint },
-	{ type_kind_long, 64, 4, false, &type_ulong },
-	{ type_kind_ulong, 64, 4, true, &type_ulong },
-	{ type_kind_long_long, 64, 5, false, &type_ulong_long },
-	{ type_kind_ulong_long, 64, 5, true, &type_ulong_long },
+	{ type_kind_bitint32, 32, 5, false, &type_ubitint32 },
+	{ type_kind_ubitint32, 32, 5, true, &type_ubitint32 },
+	{ type_kind_bitint64, 64, 7, false, &type_ubitint64 },
+	{ type_kind_ubitint64, 64, 7, true, &type_ubitint64 },
+	{ type_kind_char, 8, 2, false, &type_uchar },
+	{ type_kind_schar, 8, 2, false, &type_uchar },
+	{ type_kind_uchar, 8, 2, true, &type_uchar },
+	{ type_kind_short, 16, 4, false, &type_ushort },
+	{ type_kind_ushort, 16, 4, true, &type_ushort },
+	{ type_kind_int, 32, 6, false, &type_uint },
+	{ type_kind_uint, 32, 6, true, &type_uint },
+	{ type_kind_long, 64, 8, false, &type_ulong },
+	{ type_kind_ulong, 64, 8, true, &type_ulong },
+	{ type_kind_long_long, 64, 10, false, &type_ulong_long },
+	{ type_kind_ulong_long, 64, 10, true, &type_ulong_long },
 };
 
 bool type_is_integer(const struct type *type)
@@ -198,6 +212,8 @@ const struct type *type_integer_promotion(const struct type *type)
 		const struct type *underlying = ((const struct enum_type *)type)->definition->underlying;
 		return type_integer_promotion(underlying ? underlying : &type_int);
 	}
+	if (type_is_bitint(type))
+		return type;
 	if (type_integer_width(type) < 32)
 		return &type_int;
 	return type;
@@ -772,6 +788,25 @@ const struct record_member *type_record_find_member(const struct type *type,
 	return member;
 }
 
+/* Bit-precise scalar calling conventions are not yet verified. Reject records
+ * containing them even for MEMORY-class calls; pointers do not contain their
+ * referents by value. Bound the type walk for deeply shared union trees. */
+static bool aggregate_has_unverified_bitint(const struct type *type, unsigned depth,
+	size_t *budget)
+{
+	if (depth > 128 || !*budget) return true;
+	--*budget;
+	if (type_is_bitint(type)) return true;
+	if (type->kind == type_kind_array)
+		return aggregate_has_unverified_bitint(((const struct array_type *)type)->element, depth + 1, budget);
+	if (type_is_record(type)) {
+		const struct record_definition *record = type_record_definition(type);
+		for (const struct record_member *member = record->members; member; member = member->next)
+			if (aggregate_has_unverified_bitint(member->type, depth + 1, budget)) return true;
+	}
+	return false;
+}
+
 /* Classify only actual subobjects, never padding. Union alternatives merge at
  * their real offsets. The caller bounds the walk to a <=16-byte object. */
 static bool classify_aggregate_part(const struct type *type, uint64_t offset,
@@ -814,6 +849,8 @@ bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
 	uint64_t size = type_object_size(type);
 	unsigned alignment = type_object_alignment(type);
 	if (!size || size > type_max_abi_record_size || alignment > 8) return false;
+	size_t bitint_budget = 65536;
+	if (aggregate_has_unverified_bitint(type, 0, &bitint_budget)) return false;
 	abi->size = (unsigned)size;
 	abi->alignment = alignment;
 	if (size > 16) return true; /* QBE opaque MEMORY type. */

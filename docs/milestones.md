@@ -49,8 +49,8 @@ conformance is not claimed.
 | M23f | C23 enum underlying types and enumeration rules | Range, compatibility and ABI tests | planned |
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | in progress (M23g1 bounded maybe_unused declaration prefixes; other attributes/placements remain) |
 | M23h | constexpr objects, expanded record compatibility/redefinitions and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
-| M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | in progress (direct bounded _BitInt sizeof/alignof/alignas layout queries; semantic types and objects remain unsupported) |
-| M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (internal <=64-bit primitives only; no source value arithmetic, backend or ABI support) |
+| M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | in progress (32/64-bit semantic types and objects; direct layout queries through 64 bits) |
+| M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (32/64-bit source arithmetic and conversion; by-value function and variadic ABI rejected) |
 | M24c | Atomic types/load/store | Memory model, alignment, target code inspection | in progress (bounded integer, bool, enum, floating and pointer loads/stores via libatomic; aggregate atomics and validation remain) |
 | M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | in progress (bounded integer and pointer RMW, exchange/compare-exchange, fences and partial header; operations and validation remain) |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |

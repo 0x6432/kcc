@@ -900,7 +900,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		underlying = resolve_type_syntax(sema, syntax->underlying);
 		if (!underlying)
 			return NULL;
-		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum) {
+		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum || type_is_bitint(underlying)) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
 				"fixed enum underlying type must be a non-enum integer");
 			return NULL;
@@ -1207,8 +1207,7 @@ static bool supported_atomic_type(const struct type *type)
 		(type->kind == type_kind_enum && type_is_complete_object(type));
 }
 
-/* No semantic integer type escapes this path.  All other uses go through
- * resolve_type_syntax and are rejected, including aliases and derived types. */
+/* Direct queries retain the wider layout-only width range. */
 static struct ast_bitint_type_syntax *direct_bitint_query(struct ast_type_syntax *syntax,
 	unsigned *qualifiers)
 {
@@ -1260,9 +1259,22 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
-	case type_syntax_bitint:
-		diagnostic_error(sema->diagnostics, syntax->location, "_BitInt is supported only in direct sizeof and alignof type queries or alignas");
-		return NULL;
+	case type_syntax_bitint: {
+		struct ast_bitint_type_syntax *node = (struct ast_bitint_type_syntax *)syntax;
+		unsigned size, alignment;
+		struct constant_result width;
+		if (!bitint_query_layout(sema, node, 0, &size, &alignment))
+			return NULL;
+		width = evaluate_integer_constant(node->width);
+		if (width.bits != 32 && width.bits != 64) {
+			diagnostic_error(sema->diagnostics, syntax->location,
+				"_BitInt value types support only widths 32 and 64; other widths are supported only in direct sizeof and alignof type queries or alignas");
+			return NULL;
+		}
+		syntax->type = width.bits == 32 ? (node->is_unsigned ? &type_ubitint32 : &type_bitint32) :
+			(node->is_unsigned ? &type_ubitint64 : &type_bitint64);
+		break;
+	}
 	case type_syntax_enum:
 		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)syntax, false);
 	case type_syntax_record:
@@ -1691,6 +1703,10 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 
 	if (!return_type || !sema_parameter_names(sema, function->parameters))
 		return NULL;
+	if (type_is_bitint(return_type)) {
+		diagnostic_error(sema->diagnostics, function->syntax.location, "_BitInt function return ABI is not supported yet");
+		return NULL;
+	}
 	if (!type_is_scalar(return_type) && !type_is_record(return_type) && return_type->kind != type_kind_void) {
 		diagnostic_error(sema->diagnostics, function->syntax.location,
 			"function return type must be void or an implemented scalar type");
@@ -1743,6 +1759,10 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 			goto done;
 		}
 		parameter->type = adjust_parameter_type(sema, declared, parameter->location);
+		if (parameter->type && type_is_bitint(parameter->type)) {
+			diagnostic_error(sema->diagnostics, parameter->location, "_BitInt parameter ABI is not supported yet");
+			goto done;
+		}
 		if (!parameter->type)
 			goto done;
 		if (parameter->type_syntax->kind == type_syntax_array) {
@@ -2627,6 +2647,9 @@ static bool sema_expression(struct sema *sema,
 				if (!convert_expression(sema, &argument->value, parameter->type))
 					return false;
 				parameter = parameter->next;
+			} else if (type_is_bitint(argument->value->type)) {
+				diagnostic_error(sema->diagnostics, argument->value->location, "_BitInt variadic ABI is not supported yet");
+				return false;
 			} else if (type_is_floating(argument->value->type)) {
 				if (!convert_expression(sema, &argument->value, &type_double))
 					return false;

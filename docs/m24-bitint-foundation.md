@@ -1,40 +1,45 @@
-# M24: bounded `_BitInt` layout-query slice
+# M24: bounded `_BitInt` values and layout
 
 On the Linux x86-64 LP64 target, direct type names in `sizeof`, `alignof` /
 `_Alignof`, and `alignas` / `_Alignas` accept `_BitInt(N)` and `signed` or
-`unsigned _BitInt(N)`. `N` must be a checked integer constant expression:
-2–64 for signed, 1–64 for unsigned. Signedness may occur before or after the
-specifier. `const` and `volatile` are accepted; atomic and restrict types are
-not. The query's size and alignment in bytes are both 1 for widths 1–8, 2 for
-9–16, 4 for 17–32, and 8 for 33–64. The ordinary `sizeof`/`alignof` result is
-`unsigned long`. The width expression can itself contain supported constant
-expressions and layout queries. No width is silently truncated.
+`unsigned _BitInt(N)`. `N` must be an integer constant expression: 2–64 for
+signed, 1–64 for unsigned. The size and alignment in bytes are both 1 for
+widths 1–8, 2 for 9–16, 4 for 17–32, and 8 for 33–64. The query result is
+`unsigned long`. Direct queries also accept `const` and `volatile`, but not
+atomic or restrict types. Widths outside the range are rejected.
 
-The syntax is intentionally limited to the **direct** queried type: aliases,
-`typeof` wrappers, pointer/array/function-derived types and compound literals
-are not accepted. The semantic type system does not yet represent bit-precise
-types. In particular, the layout query is not a standard integer type alias:
-no `_BitInt` object, typedef, record member, cast, expression, `_Generic`
-association, parameter, return, variadic use or other ABI exposure is accepted.
-Values, type identity/compatibility, promotions, mixed conversions, arithmetic,
-initializers, storage and function ABI remain unimplemented. `wb`/`WB` literals
-and evaluated preprocessor uses remain rejected. Widths beyond 64 are rejected;
-no wider runtime library or backend support is implied. The target layout is an
-implementation choice; this checkpoint does not claim host interoperability for
-objects or calls.
+## Value slice
 
-`src/bitint.c` also retains independent internal arithmetic building blocks:
-distinct `(width, signedness)` descriptors; minimal `wb` width selection;
-bit-precise-only promotion/common-type rules; checked operations, comparisons,
-shifts and conversions on canonical low-width bits. These helpers are not yet
-integrated into expression semantics. The layout helper validates the same
-width limits and does not imply support for value representation or ABI.
+Only widths **32 and 64** have semantic types and values, both signed and
+unsigned. They are distinct from each other and from all standard integer
+types. Typedefs, qualifications, `typeof`, generic associations, pointers,
+arrays, ordinary record members, automatic and static objects, compound
+literals, casts, initialization, assignment, integer and floating conversion,
+operators and constant expressions use these types. Their rank is below the
+standard integer type of the same width and above types of smaller width;
+ordinary bit-precise values are not integer-promoted. Mixed arithmetic follows
+the usual arithmetic conversions. The value representation, scalar loads,
+stores and arithmetic reuse the existing 32- and 64-bit QBE paths, including
+unsigned modulo arithmetic and two's-complement signed conversion behavior.
+Normal C signed-overflow and invalid-shift rules still apply. The target object
+layout for these widths is 4/4 and 8/8 bytes respectively.
 
-`tests/test_bitint_layout.py` covers every accepted width and sign, all layout
-transitions, ICE constraints, direct query forms and the rejected boundaries;
-when `QBE` is set it links and runs a query-only program. It compares the layout
-table with the native compiler when that compiler supports `_BitInt` on Linux
-x86-64; this is a layout oracle, not a value or call ABI test. `tests/test_bitint.c`
-checks the helper and internal arithmetic; `tests/test_bitint_rejection.py`
-checks remaining source and literal rejection. These focused checks are not a
-substitute for full suites, fuzzing, or a host `_BitInt` ABI oracle.
+Other widths remain **layout-query only**: declarations, aliases, derived
+types and value expressions involving them are diagnosed, not lowered as a
+standard integer. Bit-precise by-value parameters, return types, variadic
+arguments and `va_arg` are rejected; pointer parameters are supported by the
+existing pointer ABI. Aggregate calls or returns containing bit-precise members
+by value are also rejected pending ABI validation. Bit-precise bit-fields, fixed enum underlying types,
+atomic bit-precise objects and `wb`/`WB` literals remain unsupported. Existing
+aggregate-by-value and other compiler restrictions also apply. No host call or
+object interoperability is claimed by this checkpoint; widths above 64 remain
+unsupported. This is not a full C23 `_BitInt` implementation.
+
+`src/bitint.c` also retains independent internal arithmetic building blocks
+for all validated widths through 64; they are not a source-value implementation
+for the layout-only widths. `tests/test_bitint_values.py` runs 32/64 value and
+rejection tests through QBE; `tests/test_bitint_layout.py` covers the entire
+layout-only range and can compare with a native compiler if available.
+`tests/test_bitint.c` checks the independent arithmetic helpers. These focused
+checks are not a substitute for full conformance tests, fuzzing or a host ABI
+oracle.
