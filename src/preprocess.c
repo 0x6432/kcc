@@ -1404,7 +1404,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef _Atomic int atomic_int;\ntypedef _Atomic unsigned int atomic_uint;\n"
 			"typedef _Atomic long atomic_long;\ntypedef _Atomic unsigned long atomic_ulong;\n"
 			"typedef _Atomic long long atomic_llong;\ntypedef _Atomic unsigned long long atomic_ullong;\n"
-			"typedef atomic_int atomic_wchar_t; typedef atomic_ushort atomic_char16_t; typedef atomic_uint atomic_char32_t;\n"
+			"typedef atomic_int atomic_wchar_t; typedef atomic_uchar atomic_char8_t;\n"
+			"typedef atomic_ushort atomic_char16_t; typedef atomic_uint atomic_char32_t;\n"
 			"typedef atomic_schar atomic_int_least8_t; typedef atomic_uchar atomic_uint_least8_t;\n"
 			"typedef atomic_short atomic_int_least16_t; typedef atomic_ushort atomic_uint_least16_t;\n"
 			"typedef atomic_int atomic_int_least32_t; typedef atomic_uint atomic_uint_least32_t;\n"
@@ -1418,7 +1419,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef atomic_long atomic_intmax_t; typedef atomic_ulong atomic_uintmax_t;\n";
 		static const char stdatomic_header_tail[] =
 			"#define ATOMIC_BOOL_LOCK_FREE 2\n#define ATOMIC_CHAR_LOCK_FREE 2\n"
-			"#define ATOMIC_CHAR16_T_LOCK_FREE 2\n#define ATOMIC_CHAR32_T_LOCK_FREE 2\n"
+			"#define ATOMIC_CHAR8_T_LOCK_FREE 2\n#define ATOMIC_CHAR16_T_LOCK_FREE 2\n#define ATOMIC_CHAR32_T_LOCK_FREE 2\n"
 			"#define ATOMIC_WCHAR_T_LOCK_FREE 2\n#define ATOMIC_SHORT_LOCK_FREE 2\n"
 			"#define ATOMIC_INT_LOCK_FREE 2\n#define ATOMIC_LONG_LOCK_FREE 2\n"
 			"#define ATOMIC_LLONG_LOCK_FREE 2\n#define ATOMIC_POINTER_LOCK_FREE 2\n"
