@@ -25,6 +25,18 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         cases.append((f"({a} - {b}) * {c}", (a - b) * c))
     programs = [(f"int main(void) {{ return {expression}; }}\n", value)
                 for expression, value in cases]
+    # These formerly unsupported floating tokens and macro expansions are now
+    # valid; check their generated results against the host when QBE is set.
+    programs += [
+        ("int main(void) { return 1e+2; }", 100),
+        ("int main(void) { return 0x1p-1; }", 0),
+        ("int main(void) { return .5; }", 0),
+        ("#define C(a,b) a##b\nint main(void) { return C(1,.5); }", 1),
+        ("#define V(...) __VA_ARGS__\nint main(void) { return V(12.5); }", 12),
+        ("#define ID(x) x\nint main(void) { return ID(12.5); }", 12),
+        ("#define F() 12.5\nint main(void) { return F(); }", 12),
+        ("#define VALUE 12.5\nint main(void) { return VALUE; }", 12),
+    ]
     programs += [
         # Former initialized-global rejection: definitions after a function
         # are now supported, including uses through a prior extern declaration.
@@ -660,8 +672,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         "int main(void) { return 1??/\n+2; }\n",
     ]
     invalid += [
-        "int main(void) { return 1e+2; }", "int main(void) { return 0x1p-1; }",
-        "int main(void) { return .5; }", "int main(void) { return 1'g; }",
+        "int main(void) { return 1'g; }",
         "int main(void) { return 'xy'; }", "int main(void) { return u'xy'; }",
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
         "%:define X(x) 3\nint main(void) { return X; }",
@@ -694,7 +705,6 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         assert not result.stdout, (text, result.stdout)
     diagnostic_cases = [
         ("#define C(a,b) a##b\nint main(void) { return C(x,+); }", ":2:25: error: token pasting must produce exactly one preprocessing token"),
-        ("#define C(a,b) a##b\nint main(void) { return C(1,.5); }", ":2:25: error: floating conversions between different types"),
         ("#define C(a,b) a##b\nint main(void) { return C(miss,ing); }", ":2:25: error:"),
         ("#define V(x,...) #__VA_OPT__(x)\nint main(void) { return V(7,1); }", ":2:25: error: unsupported pointer conversion"),
         ("#define OUT(x,...) V(x,__VA_ARGS__)\n#define V(x,...) #__VA_OPT__(x)\nint main(void) { return OUT(7,1); }", ":3:25: error: unsupported pointer conversion"),
@@ -705,22 +715,18 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
         ("#define S(...) #__VA_OPT__(#1)\nint main(void) { return 0; }", "expected a macro parameter after stringizing"),
         ("#define V(...) __VA_ARGS__\nint main(void) { return V(missing); }", ":2:25: error:"),
         ("#define V(...) __VA_OPT__(missing)\nint main(void) { return V(1); }", ":2:25: error:"),
-        ("#define V(...) __VA_ARGS__\nint main(void) { return V(12.5); }", ":2:25: error: floating conversions between different types"),
         ("#define V(x,y,...) x\nint main(void) { return V(); }", "macro argument count"),
         ("#define V(...) __VA_OPT__(__VA_OPT__(1))\nint main(void) { return 0; }", "nested __VA_OPT__"),
         ("#define V(...) __VA_OPT__ 1\nint main(void) { return 0; }", "expected '(' after __VA_OPT__"),
         ("#define ID(x) x\nint main(void) { return ID(missing); }", ":2:25: error:"),
-        ("#define ID(x) x\nint main(void) { return ID(12.5); }", ":2:25: error: floating conversions between different types"),
         ("#define F(a,b) a+b\nint main(void) { return F(1); }", "macro argument count"),
         ("#define F(x,x) x\nint main(void) { return 0; }", "duplicate macro parameter"),
 
-        ("#define F() 12.5\nint main(void) { return F(); }", ":2:25: error: floating conversions between different types"),
         ("#define NAME() main\nint NAME()(int x) { return x; }", ":2:5: error:"),
         ("#define F() 7\nint main(void) { return F(1); }", "requires no arguments"),
         ("#define F() 7\nint main(void) { return F(", "unterminated function-like"),
         ("#define F() 7\nint main(void) { return F(\n#undef F\n); }", "directives during macro invocation"),
 
-        ("#define VALUE 12.5\nint main(void) { return VALUE; }", ":2:25: error: floating conversions between different types"),
         ("#define A B\n#define B missing\nint main(void) { return A; }", ":3:25: error:"),
         ("#define NAME main\nint NAME(int x) { return x; }", ":2:5: error:"),
         ("#define X(...,x) 1\nint main(void) { return 0; }", "expected ')' after variadic ellipsis"),
