@@ -42,15 +42,19 @@ the added regression cases and generated-program runtime remain untested.
 ## Conditional static floating initializers
 
 Floating static initializers now support conditional expressions whose condition
-is an integer constant expression and whose two converted arms are both in the
+is a supported arithmetic constant and whose two converted arms are both in the
 existing finite floating-constant subset. The selected value retains its target
 float/double bits and can also initialize an integer through the existing checked
 conversion. This deliberately requires both arms to be foldable, even when one
-is not evaluated; floating conditions, broader arithmetic constant expressions,
-and general short-circuit form analysis remain unsupported.
+is not evaluated. Conditions can be integer constant expressions, supported
+finite floating expressions, a logical negation of a supported floating
+expression, or a
+comparison of supported floating expressions. Broader arithmetic constant
+expressions and general short-circuit form analysis remain unsupported.
 
 The compiler build and focused positive and negative compilation/IL checks were
-run; one initializer example was also lowered by pinned QBE 1.2 and assembled.
+run; integer- and floating-conditioned examples were also lowered by pinned
+QBE 1.2 and assembled.
 Added regression fixtures, generated-program runtime, ABI and fuzzing remain
 unrun; this does not complete M20 or imply conformance.
 

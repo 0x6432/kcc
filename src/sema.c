@@ -3329,6 +3329,71 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
+/* These initializer-only conditions are deliberately separate from integer
+ * constant expressions, so floating comparisons never become array bounds. */
+static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits);
+
+static bool static_floating_number(const struct ast_expression *expression, double *number)
+{
+	uint64_t bits;
+	if (!static_floating_literal_bits(expression, &bits))
+		return false;
+	if (expression->type->kind == type_kind_float) {
+		uint32_t raw = (uint32_t)bits;
+		float single;
+		memcpy(&single, &raw, sizeof(single));
+		*number = single;
+	} else {
+		memcpy(number, &bits, sizeof(*number));
+	}
+	return isfinite(*number);
+}
+
+static bool static_floating_condition(const struct ast_expression *expression, bool *truth)
+{
+	if (type_is_floating(expression->type)) {
+		double number;
+		if (!static_floating_number(expression, &number))
+			return false;
+		*truth = number != 0.0;
+		return true;
+	}
+	if (!type_is_integer(expression->type))
+		return false;
+	struct constant_result integer = evaluate_integer_constant(expression);
+	if (integer.status == constant_value) {
+		*truth = integer.bits != 0;
+		return true;
+	}
+	if (expression->kind == expression_unary) {
+		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
+		if (unary->operation == unary_not && type_is_floating(unary->operand->type)) {
+			double number;
+			if (!static_floating_number(unary->operand, &number))
+				return false;
+			*truth = number == 0.0;
+			return true;
+		}
+	}
+	if (expression->kind == expression_binary) {
+		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
+		double left, right;
+		if (!type_is_floating(binary->left->type) || !type_is_floating(binary->right->type) ||
+			!static_floating_number(binary->left, &left) || !static_floating_number(binary->right, &right))
+			return false;
+		switch (binary->operation) {
+		case binary_equal: *truth = left == right; return true;
+		case binary_not_equal: *truth = left != right; return true;
+		case binary_less: *truth = left < right; return true;
+		case binary_less_equal: *truth = left <= right; return true;
+		case binary_greater: *truth = left > right; return true;
+		case binary_greater_equal: *truth = left >= right; return true;
+		default: return false;
+		}
+	}
+	return false;
+}
+
 /* Static constants use the host's target-matching binary32/binary64 format,
  * as does literal parsing. Non-finite arithmetic results are refused. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)
@@ -3351,16 +3416,16 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 	}
 	if (expression->kind == expression_conditional) {
 		const struct ast_conditional_expression *conditional = (const struct ast_conditional_expression *)expression;
-		struct constant_result condition = evaluate_integer_constant(conditional->condition);
+		bool condition;
 		uint64_t then_bits, else_bits;
 
 		/* This bounded evaluator requires both branches to be supported finite
 		 * constants. It does not claim all C arithmetic-constant forms. */
-		if (condition.status != constant_value ||
+		if (!static_floating_condition(conditional->condition, &condition) ||
 			!static_floating_literal_bits(conditional->then_value, &then_bits) ||
 			!static_floating_literal_bits(conditional->else_value, &else_bits))
 			return false;
-		*bits = condition.bits ? then_bits : else_bits;
+		*bits = condition ? then_bits : else_bits;
 		return true;
 	}
 	if (expression->kind == expression_binary) {
