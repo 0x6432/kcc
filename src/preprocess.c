@@ -2840,9 +2840,9 @@ static bool finish_include(struct preprocessor *preprocessor)
 static bool read_expanded_token(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error);
 
-/* Bounded _Pragma: expand one ordinary string operand, destringize only \\
- * and \" as required, and process its tokens using the directive handler.
- * Isolated directive/argument cursors remain explicitly unsupported. */
+/* Bounded _Pragma: expand one ordinary or wide string operand, destringize
+ * only \\ and \" as required, then use the directive handler. Direct
+ * isolated directive cursors and nested operators remain unsupported. */
 static bool read_pragma_operator(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor, struct rescan_token operator, struct token *error)
 {
@@ -2851,8 +2851,9 @@ static bool read_pragma_operator(struct preprocessor *preprocessor,
 	struct pp_lexer saved;
 	struct pp_token marker = operator.token;
 	const unsigned char *text;
-	size_t used = 0;
-	if (cursor != &preprocessor->cursor || preprocessor->pragma_operator_depth) {
+	size_t used = 0, quote = 0;
+	if ((cursor != &preprocessor->cursor && !preprocessor->prescan_depth) ||
+		preprocessor->pragma_operator_depth) {
 		*error = stop_preprocessing(preprocessor, operator.token,
 			"nested or isolated _Pragma is not supported yet");
 		return false;
@@ -2868,7 +2869,10 @@ static bool read_pragma_operator(struct preprocessor *preprocessor,
 		!literal.token.location.source)
 		goto malformed;
 	text = literal.token.location.source->data + literal.token.location.offset;
-	if (text[0] != '"' || text[literal.token.length - 1] != '"')
+	if (text[0] == 'L')
+		quote = 1;
+	if (quote + 1 >= literal.token.length || text[quote] != '"' ||
+		text[literal.token.length - 1] != '"')
 		goto malformed;
 	if (!read_expanded_token(preprocessor, cursor, &right, error))
 		goto failed;
@@ -2878,7 +2882,7 @@ static bool read_pragma_operator(struct preprocessor *preprocessor,
 	spelling = allocate_spelling(preprocessor, literal.token.length - 1, operator.token, error);
 	if (!spelling)
 		return false;
-	for (size_t i = 1; i + 1 < literal.token.length; i++) {
+	for (size_t i = quote + 1; i + 1 < literal.token.length; i++) {
 		if (text[i] == '\\' && i + 2 < literal.token.length &&
 			(text[i + 1] == '\\' || text[i + 1] == '"'))
 			i++;
@@ -2895,7 +2899,7 @@ static bool read_pragma_operator(struct preprocessor *preprocessor,
 	return ok;
 malformed:
 	*error = stop_preprocessing(preprocessor, operator.token,
-		"_Pragma requires one ordinary string literal in parentheses");
+		"_Pragma requires one ordinary or L-prefixed string literal in parentheses");
 failed:
 	preprocessor->pragma_operator_depth--;
 	return false;
