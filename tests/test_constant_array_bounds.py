@@ -72,7 +72,7 @@ constraints = [
     ('int f(void) { int a[1ULL<<63]; return 0; }', 'storage limit'),
     ('int f(void) { int a[1?-1:0U]; return 0; }', 'storage limit'),
     ('int f(void) { int a[18446744073709551615ULL]; return 0; }', 'storage limit'),
-    ('int f(int n,int a[n]);', 'variable-length arrays'),
+    ('int f(int n,int a[n]) { return 0; }', 'variable-length arrays'),
     ('int f(int n,int (*p)[n]);', 'variable-length arrays'),
     ('int f(int a[sizeof a]);', 'undeclared identifier'),
     ('int f(void) { int a[sizeof a]; return 0; }', 'undeclared identifier'),

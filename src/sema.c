@@ -93,6 +93,7 @@ struct sema {
 	size_t local_count;
 	uint64_t local_storage;
 	struct ast_type_syntax *vla_candidate;
+	struct ast_type_syntax *prototype_vla_candidate;
 	struct ast_local_declaration *vla_local;
 	struct function_symbol *functions;
 	struct external_object_symbol *external_objects;
@@ -1121,6 +1122,20 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			if (!sema_expression(sema, &array->bound, true))
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
+			/* In prototype scope an outer nonconstant bound denotes an
+			 * unspecified VLA; it is analyzed, never evaluated at runtime,
+			 * and immediately adjusted to a pointer. */
+			if (result.status == constant_not_constant && syntax == sema->prototype_vla_candidate &&
+				type_is_integer(array->bound->type)) {
+				type = type_new_incomplete_array(sema->arena, element);
+				if (!type) {
+					diagnostic_error(sema->diagnostics, syntax->location,
+						"out of memory creating prototype array type");
+					return NULL;
+				}
+				syntax->type = &type->type;
+				break;
+			}
 			if (result.status == constant_not_constant && syntax == sema->vla_candidate &&
 				type_is_integer(array->bound->type)) {
 				type = type_new_incomplete_array(sema->arena, element);
@@ -1212,6 +1227,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	sema->prototype_depth++;
 	for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
 		const struct type *declared;
+		struct ast_type_syntax *saved_candidate = sema->prototype_vla_candidate;
 
 		if (parameter->type_syntax->kind == type_syntax_array &&
 			((struct ast_array_type_syntax *)parameter->type_syntax)->parameter_star &&
@@ -1220,7 +1236,10 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 				"[*] array parameter requires function prototype scope");
 			goto done;
 		}
+		sema->prototype_vla_candidate = function != sema->definition_syntax &&
+			parameter->type_syntax->kind == type_syntax_array ? parameter->type_syntax : NULL;
 		declared = resolve_type_syntax(sema, parameter->type_syntax);
+		sema->prototype_vla_candidate = saved_candidate;
 		if (!declared)
 			goto done;
 		if (declared->kind == type_kind_void) {

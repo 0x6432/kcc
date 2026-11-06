@@ -93,7 +93,7 @@ c23_constraints = [
 constraints += [('int f(register int x,int a[sizeof(&x)]);','cannot take the address'),
                 ('int f(int x); int f(register int x) { return sizeof(&x); }','cannot take the address')]
 subset_errors = [
-    ('int f(register int n,int a[n]);', 'variable-length arrays'),
+    ('int f(register int n,int a[n]) { return 0; }', 'variable-length arrays'),
     ('int f(register int a[static]);', 'error:'),
     ('int f(register int a[const 2]) { a=0; return 0; }', 'error:'),
 ]
