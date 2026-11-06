@@ -2527,7 +2527,7 @@ static void test_constant_bound_tree(void)
 	assert(size->size == 4 && size->operand->kind == expression_name);
 	name = (struct ast_name_expression *)size->operand;
 	assert(name->declaration->type == &type_int && !name->declaration->next_local);
-	assert(name->declaration != function->declaration->parameters->local);
+	assert(name->declaration == function->declaration->parameters->local);
 	assert(!name->declaration->initializer);
 	callback = (struct ast_function_type_syntax *)
 		((struct ast_pointer_type_syntax *)parameter->next->type_syntax)->referent;
@@ -4151,8 +4151,8 @@ static void test_parameter_typedef_shadowing_tree(void)
 	assert(alias->type == &type_long);
 	assert(first_query->syntax.type == &type_int && last_query->syntax.type == &type_int);
 	assert(nested_query->syntax.type == &type_char && body_query->syntax.type == &type_int);
-	/* Prototype queries capture type-only objects, not definition spill locals. */
-	assert(captured->declaration && captured->declaration != parameter->local);
+	/* Definition declarator queries share the eventual parameter spill binding. */
+	assert(captured->declaration && captured->declaration == parameter->local);
 	assert(captured->declaration->type == &type_int && !captured->declaration->next_local);
 	assert(((struct ast_name_expression *)last_query->operand)->declaration == captured->declaration);
 	assert(inner_captured->declaration != captured->declaration);
@@ -4845,7 +4845,9 @@ static void test_register_parameter_tree(void)
 	query = (struct ast_typeof_expression_syntax *)callback->next->type_syntax;
 	captured = (struct ast_name_expression *)query->operand;
 	assert(captured->declaration->is_register && captured->declaration->type == &type_int);
-	assert(captured->declaration != parameter->local && !captured->declaration->next_local);
+	/* Definition parameter bindings are reused so bound expressions see the
+	 * same declaration that receives the runtime parameter slot. */
+	assert(captured->declaration == parameter->local && !captured->declaration->next_local);
 	assert(parameter->local->is_register && parameter->local->slot == 0);
 	assert(!callback->local->is_register && !callback->next->local->is_register);
 	assert(nested->locals == callback->next->local && nested->locals->slot == 2);
