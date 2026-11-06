@@ -34,7 +34,7 @@ int (*f(int x))[sizeof x]. Discard the prototype scope before function-body
 bindings are installed.
 No runtime expression from these type-only bindings can reach QBE: only fixed
 ICE bounds are retained and sizeof operands are already opaque. Typedef names,
-Nested [*] and general variable bounds in definitions remain unsupported; a direct earlier integer-parameter bound is supported. Outermost prototype [*] and variable integer bounds, and fixed static/qualified parameter brackets, are now supported; see m13-qualified-array-parameters.md.
+Nested [*] and general variable bounds in definitions remain unsupported; pure integer expressions over earlier integer parameters are supported. Outermost prototype [*] and variable integer bounds, and fixed static/qualified parameter brackets, are now supported; see m13-qualified-array-parameters.md.
 
 Tests: all integer/boolean/character kinds; expressions/conditional/short-circuit
 bounds; sizeof/alignof, macros, known/unknown composites; fixed multidimensional

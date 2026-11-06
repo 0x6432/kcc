@@ -1123,7 +1123,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
 			/* Prototype bounds are analyzed without runtime evaluation.
-			 * The definition subset also admits a pure parameter read, whose
+			 * The definition subset also admits pure integer expressions, whose
 			 * value need not be retained after pointer adjustment. */
 			if (result.status == constant_not_constant && syntax == sema->prototype_vla_candidate &&
 				type_is_integer(array->bound->type)) {
@@ -1206,6 +1206,44 @@ static bool bind_prototype_parameter(struct sema *sema, const struct ast_paramet
 	return true;
 }
 
+/* This bounded set is side-effect-free for defined programs. Parameters are
+ * ordinary non-atomic objects, and only integer operators/literals are used.
+ * The result of an outer array parameter bound is discarded on adjustment. */
+static bool pure_definition_bound(struct sema *sema, const struct ast_expression *expression)
+{
+	switch (expression->kind) {
+	case expression_integer:
+	case expression_character:
+	case expression_boolean:
+		return true;
+	case expression_name: {
+		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
+		struct ast_local_declaration *prior = find_in_scope(sema->scope, name->name);
+		if (!prior)
+			prior = find_file_enumerator(sema, name->name);
+		return prior && prior->type && type_is_integer(prior->type) &&
+			!(prior->type->qualifiers & type_qualifier_atomic);
+	}
+	case expression_unary:
+		return pure_definition_bound(sema, ((const struct ast_unary_expression *)expression)->operand);
+	case expression_binary: {
+		const struct ast_binary_expression *node = (const struct ast_binary_expression *)expression;
+		return pure_definition_bound(sema, node->left) && pure_definition_bound(sema, node->right);
+	}
+	case expression_logical: {
+		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
+		return pure_definition_bound(sema, node->left) && pure_definition_bound(sema, node->right);
+	}
+	case expression_conditional: {
+		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+		return pure_definition_bound(sema, node->condition) &&
+			pure_definition_bound(sema, node->then_value) && pure_definition_bound(sema, node->else_value);
+	}
+	default:
+		return false;
+	}
+}
+
 static const struct type *resolve_function_syntax(struct sema *sema,
 	struct ast_function_type_syntax *function)
 {
@@ -1238,18 +1276,12 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		}
 		sema->prototype_vla_candidate = function != sema->definition_syntax &&
 			parameter->type_syntax->kind == type_syntax_array ? parameter->type_syntax : NULL;
-		/* A definition may also use a direct read of an earlier non-atomic
-		 * integer parameter as its outer bound. The adjusted pointer does not
-		 * retain that bound; this pure read has no observable effect. */
+		/* Pure outer definition bounds have no observable effects; after
+		 * adjustment their values need not be retained. */
 		if (function == sema->definition_syntax && parameter->type_syntax->kind == type_syntax_array) {
 			struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)parameter->type_syntax;
-			if (array->bound && array->bound->kind == expression_name) {
-				struct ast_name_expression *name = (struct ast_name_expression *)array->bound;
-				struct ast_local_declaration *prior = find_in_scope(sema->scope, name->name);
-				if (prior && !prior->enum_constant && prior->type && type_is_integer(prior->type) &&
-					!(prior->type->qualifiers & type_qualifier_atomic))
-					sema->prototype_vla_candidate = parameter->type_syntax;
-			}
+			if (array->bound && pure_definition_bound(sema, array->bound))
+				sema->prototype_vla_candidate = parameter->type_syntax;
 		}
 		declared = resolve_type_syntax(sema, parameter->type_syntax);
 		sema->prototype_vla_candidate = saved_candidate;
