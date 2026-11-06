@@ -65,8 +65,9 @@ suite remains unrun.
   evaluating each argument once after conversion to double. Long double,
   other classifications and many math interfaces remain unsupported; link
   math functions with `-lm`.
-- `tgmath.h` provides the listed unary real functions, plus `atan2`, `pow` and
-  `fmod`, as generic macros for float, double and integer arguments. All-float
+- `tgmath.h` provides bounded unary real functions, `atan2`, `pow`, `fmod`,
+  `hypot`, `copysign`, `fdim`, `fmax`, `fmin`, `remainder`, `nextafter` and
+  `fma` as generic macros for float, double and integer arguments. All-float
   arguments select the `f` variant; any double or integer selects the double
   variant. Arguments are evaluated once. Other generic functions, complex and
   long-double generic math are not provided.
