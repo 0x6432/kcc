@@ -58,7 +58,8 @@ or 1. The implementation extends constant folding, static initialization,
 scalar conversion and updates to recognize bool-compatible enums. Enum underlying types remain rejected.
 
 Semantic and optional host/QBE runtime fixtures were added but not run. The
-compiler build succeeded. This is not enum conformance, a tested checkpoint,
+compiler build succeeded; one focused boolean enum source later compiled
+successfully. This is not enum conformance, a tested checkpoint,
 or approval of M18 or M17. Further integration, ABI and regression testing
 remain necessary.
 

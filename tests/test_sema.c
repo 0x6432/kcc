@@ -6526,6 +6526,10 @@ static void test_ordinary_enums(void)
 		"_Static_assert(AFTER==4294967296ULL && INSIDE==8 && sizeof(UMAX)==8, \"widen\");",
 		"enum S { MIN=-2147483648LL, AGAIN=MIN+1, LARGE=2147483648LL }; "
 		"_Static_assert(MIN==-2147483648LL && AGAIN==-2147483647 && sizeof(MIN)==8, \"signed\");",
+		"enum U { ZERO=0, MAX=18446744073709551615ULL }; "
+		"_Static_assert(sizeof(MAX)==8 && MAX==18446744073709551615ULL && ZERO==0, \"unsigned range\");",
+		"enum U { HIGH=9223372036854775808ULL, NEXT }; "
+		"_Static_assert(NEXT==9223372036854775809ULL, \"unsigned successor\");",
 		"enum F : unsigned short; enum F x; "
 		"_Static_assert(sizeof(enum F)==2, \"complete forward\"); "
 		"enum F : unsigned short { A=65534, B, C=(unsigned short)(B+1) }; "
@@ -6562,7 +6566,9 @@ static void test_ordinary_enums(void)
 		"int f(void) { enum E { A }; enum E; return A; }",
 		"struct E { int x; }; enum E;",
 		"enum E { A }; const enum E;",
-		"enum E { A=18446744073709551615ULL };",
+		"enum E { A=18446744073709551615ULL, B };",
+		"enum E { A=-1, B=18446744073709551615ULL };",
+		"enum E { A=18446744073709551615ULL, B=-1 };",
 		"enum E { A=9223372036854775807LL, B };",
 		"enum E { A=-2147483647-2 };", "enum E { A=1/0 };",
 		"int x; enum E { A=x };", "enum E { A=B, B=1 };",

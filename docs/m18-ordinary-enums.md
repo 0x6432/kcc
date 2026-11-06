@@ -54,3 +54,15 @@ The compiler was built and one focused wide-enum source compiled successfully.
 The added fixture suite and optional QBE runtime coverage have not been run;
 full regression, native ABI and fuzzing remain pending. This does not approve M17 or complete M18. The preceding int-range
 description is historical.
+
+## Full 64-bit unsigned ordinary enum values
+
+The target-compatible type selection now chooses unsigned long if a
+nonnegative enumerator exceeds LONG_MAX. Values up to ULONG_MAX are accepted;
+if such a value is combined with any negative enumerator, no implemented
+standard integer type represents the complete range and the declaration is
+rejected. The previous signed-long-only limit is superseded. Same-signedness
+implicit successor overflow beyond 64 bits remains rejected. Fixtures were
+updated but have not been run; the compiler was built and one focused unsigned
+64-bit enum source compiled successfully. This is still not a
+complete C23 enum or cross-toolchain ABI claim.

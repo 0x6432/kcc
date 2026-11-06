@@ -1,4 +1,4 @@
-"""Wide ordinary enum behavior: target-specific signed-long bounded slice."""
+"""Wide ordinary enum behavior: target-specific 64-bit bounded slice."""
 import os
 from pathlib import Path
 import subprocess
@@ -14,11 +14,15 @@ program = '''enum Wide {
 };
 _Static_assert(U_SIZE==4 && sizeof(U)==8 && NEXT==2147483648LL, "types");
 _Static_assert(NEG==-2147483649LL, "sign extension");
+enum Full { ZERO=0, TOP=18446744073709551615ULL };
+_Static_assert(sizeof(TOP)==8 && TOP==18446744073709551615ULL, "unsigned max");
 enum Wide x=NEXT;
 int main(void) { return x==2147483648LL && U==NEXT && NEG<0 ? 42 : 1; }
 '''
 invalid = [
-    'enum E { A=18446744073709551615ULL };',
+    'enum E { A=18446744073709551615ULL, B };',
+    'enum E { A=-1, B=18446744073709551615ULL };',
+    'enum E { A=18446744073709551615ULL, B=-1 };',
     'enum E { A=9223372036854775807LL, B };',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-wide-enum-') as directory:

@@ -629,6 +629,30 @@ static bool enum_value_bits(struct constant_result value, const struct type *tar
 	return true;
 }
 
+/* Our LP64 ordinary-enum policy uses signed long where possible and
+ * unsigned long for larger nonnegative values. Reject a mixture for which
+ * neither target integer type can represent every enumerator. */
+static bool track_ordinary_enum_value(struct constant_result value,
+	bool *has_negative, bool *requires_unsigned_long)
+{
+	uint64_t ignored;
+	unsigned width = type_integer_width(value.type);
+	bool negative = !type_is_unsigned(value.type) &&
+		(value.bits & (UINT64_C(1) << (width - 1)));
+
+	if (negative) {
+		if (*requires_unsigned_long)
+			return false;
+		*has_negative = true;
+	}
+	if (!enum_value_bits(value, &type_long, &ignored)) {
+		if (*has_negative || !enum_value_bits(value, &type_ulong, &ignored))
+			return false;
+		*requires_unsigned_long = true;
+	}
+	return true;
+}
+
 /* Fixed enum tags are complete as soon as their underlying type is parsed;
  * a later matching definition shares that identity rather than replacing it. */
 static const struct type *resolve_enum_syntax(struct sema *sema,
@@ -643,6 +667,8 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 	const struct type *previous_type = NULL;
 	bool have_previous = false;
 	bool all_fit_int = true;
+	bool has_negative = false;
+	bool requires_unsigned_long = false;
 
 	if (syntax->syntax.type)
 		return syntax->syntax.type;
@@ -734,7 +760,6 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		}
 		if (item->value) {
 			struct constant_result result;
-			uint64_t checked;
 			if (!sema_expression(sema, &item->value, true)) return NULL;
 			result = evaluate_integer_constant(item->value);
 			if (result.status != constant_value) {
@@ -744,9 +769,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			if (definition->fixed) {
 				if (!enum_value_bits(result, underlying, &bits)) goto range;
 			} else {
-				/* This slice chooses int or signed long as the completed
-				 * compatible type, so every value must fit signed long. */
-				if (!enum_value_bits(result, &type_long, &checked)) goto range;
+				if (!track_ordinary_enum_value(result, &has_negative, &requires_unsigned_long)) goto range;
 				if (enum_value_bits(result, &type_int, &bits)) {
 					constant_type = &type_int;
 				} else {
@@ -778,7 +801,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			bits = (bits + 1) & mask;
 			prior.type = constant_type;
 			prior.bits = bits;
-			if (!enum_value_bits(prior, &type_long, &checked)) goto range;
+			if (!track_ordinary_enum_value(prior, &has_negative, &requires_unsigned_long)) goto range;
 			if (!enum_value_bits(prior, &type_int, &checked)) all_fit_int = false;
 		}
 		previous = bits;
@@ -810,12 +833,12 @@ range:
 	if (!definition->fixed && !all_fit_int) {
 		/* The final member type is the completed enum, not the
 		 * temporary type in force inside the enumerator list. */
-		definition->underlying = &type_long;
+		definition->underlying = requires_unsigned_long ? &type_ulong : &type_long;
 		for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next) {
 			struct ast_local_declaration *constant = item->binding;
 			struct constant_result result = { .type = constant->type, .bits = constant->enum_bits };
 			uint64_t converted;
-			if (!enum_value_bits(result, &type_long, &converted)) goto oom;
+			if (!enum_value_bits(result, definition->underlying, &converted)) goto oom;
 			constant->enum_bits = converted;
 			constant->type = &type->type;
 		}
