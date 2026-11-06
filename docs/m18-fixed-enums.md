@@ -9,7 +9,8 @@ ordinary enum implementation. It is not a tested checkpoint.
   ABI width and promotions follow the chosen underlying integer type.
 - `enum E : unsigned short;` declares a complete fixed enum immediately. A
   matching later definition repeats the underlying type and shares the nominal
-  identity; scope shadowing and mismatched/repeated definitions are checked.
+  identity; scope shadowing and mismatched definitions are checked. Matching
+  same-scope definitions may repeat their members with the same values.
   A fixed enum specifier without an enumerator list is restricted to a
   standalone tag declaration; use `enum E value;` for an object.
 - Fixed enum constants have the nominal enum type, including during their

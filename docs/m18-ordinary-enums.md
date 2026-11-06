@@ -47,8 +47,7 @@ use the preceding value's promoted type or widen with the same signedness.
 Expressions already checked during the definition retain their earlier types.
 Unsigned values above LONG_MAX and successor overflow beyond 64 bits are
 conservatively rejected, even if another implementation could accept them.
-Same-enum redefinition and cross-translation-unit compatibility remain
-unsupported; this is not the full C23 enum model or an ABI conformance claim.
+Cross-translation-unit compatibility remains unsupported; this is not the full C23 enum model or an ABI conformance claim.
 
 The compiler was built and one focused wide-enum source compiled successfully.
 The added fixture suite and optional QBE runtime coverage have not been run;
@@ -66,3 +65,16 @@ implicit successor overflow beyond 64 bits remains rejected. Fixtures were
 updated but have not been run; the compiler was built and one focused unsigned
 64-bit enum source compiled successfully. This is still not a
 complete C23 enum or cross-toolchain ABI claim.
+
+## Same-scope enum redefinitions
+
+A subsequent definition of the same tagged enum in the same scope may repeat
+exactly the same member names and values, in any order. It reuses the existing
+enumerator bindings and their completed types; explicit expressions may refer
+to them. Duplicate, missing, new or value-changing members, nested repeated
+definitions, and incompatible fixed underlying types are rejected. Fixed and
+ordinary enums use the same bounded member matching; this does not implement
+C23 cross-scope or cross-translation-unit structural compatibility. Semantic
+and runtime fixtures were added but not run. The compiler build succeeded and
+one focused source with ordinary, wide, and fixed redefinitions compiled;
+regression, ABI interop and fuzz verification remain outstanding.

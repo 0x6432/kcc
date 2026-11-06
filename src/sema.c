@@ -45,6 +45,7 @@ struct tag_binding {
 	struct token name;
 	struct record_type *type;
 	struct enum_type *enum_type;
+	struct ast_enum_type_syntax *enum_definition;
 	struct tag_binding *next;
 };
 
@@ -653,6 +654,60 @@ static bool track_ordinary_enum_value(struct constant_result value,
 	return true;
 }
 
+/* Repeated C23 enum definitions must name the same members with the same
+ * values. Reuse existing ordinary-name bindings, whose completed types are
+ * already the types in force during the repeated definition. */
+static bool check_enum_redefinition(struct sema *sema, struct ast_enum_type_syntax *syntax,
+	struct ast_enum_type_syntax *original, const struct type *underlying)
+{
+	struct ast_local_declaration *previous = NULL;
+	size_t expected = 0, count = 0;
+	unsigned width = type_integer_width(underlying);
+	uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+	uint64_t maximum = type_is_boolean(underlying) ? 1 : type_is_unsigned(underlying) ? mask : mask >> 1;
+
+	if (!original)
+		return false;
+	for (struct ast_enumerator *item = original->enumerators; item; item = item->next)
+		expected++;
+	for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next) {
+		struct ast_enumerator *old;
+		uint64_t bits;
+		for (old = original->enumerators; old && !same_name(old->name, item->name); old = old->next)
+			;
+		if (!old || !old->binding) goto mismatch;
+		for (struct ast_enumerator *earlier = syntax->enumerators; earlier != item; earlier = earlier->next)
+			if (earlier->binding == old->binding) goto mismatch;
+		if (item->value) {
+			struct constant_result result;
+			if (!sema_expression(sema, &item->value, true)) return false;
+			result = evaluate_integer_constant(item->value);
+			if (result.status != constant_value) {
+				diagnostic_error(sema->diagnostics, result.location, result.message);
+				return false;
+			}
+			if (!enum_value_bits(result, underlying, &bits)) goto mismatch;
+		} else if (!previous) {
+			bits = 0;
+		} else {
+			/* A successor at the completed representation's maximum
+			 * cannot match any member in this same representation. */
+			if (previous->enum_bits == maximum) goto mismatch;
+			bits = (previous->enum_bits + 1) & mask;
+		}
+		if (bits != old->binding->enum_bits) goto mismatch;
+		item->binding = old->binding;
+		previous = old->binding;
+		count++;
+	}
+	if (count == expected)
+		return true;
+mismatch:
+	diagnostic_error(sema->diagnostics, syntax->syntax.location,
+		"enum redeclaration must have the same enumerator names and values");
+	return false;
+}
+
 /* Fixed enum tags are complete as soon as their underlying type is parsed;
  * a later matching definition shares that identity rather than replacing it. */
 static const struct type *resolve_enum_syntax(struct sema *sema,
@@ -699,8 +754,8 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			diagnostic_error(sema->diagnostics, syntax->syntax.location, "conflicting enum underlying type");
 			return NULL;
 		}
-		if (syntax->has_definition && (definition->defined || definition->defining)) {
-			diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of enum tag");
+		if (syntax->has_definition && definition->defining) {
+			diagnostic_error(sema->diagnostics, syntax->syntax.location, "nested definition of enum tag");
 			return NULL;
 		}
 		if (syntax->has_definition && definition->fixed && !syntax->underlying) {
@@ -711,6 +766,15 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		if (!syntax->has_definition)
 			return syntax->syntax.type = &type->type;
 		underlying = definition->underlying ? definition->underlying : &type_int;
+		if (syntax->has_definition && definition->defined) {
+			bool success;
+			definition->defining = true;
+			success = check_enum_redefinition(sema, syntax, tag->enum_definition, underlying);
+			definition->defining = false;
+			if (!success)
+				return NULL;
+			return syntax->syntax.type = &type->type;
+		}
 	} else {
 		if (!syntax->has_definition && !syntax->underlying) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
@@ -846,6 +910,8 @@ range:
 	definition->complete = true;
 	definition->defined = true;
 	definition->defining = false;
+	if (tag)
+		tag->enum_definition = syntax;
 	return &type->type;
 oom:
 	diagnostic_error(sema->diagnostics, syntax->syntax.location, "out of memory creating enum type");

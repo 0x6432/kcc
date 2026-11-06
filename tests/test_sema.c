@@ -6518,6 +6518,13 @@ static void test_ordinary_enums(void)
 		"int f(void) { enum E { D=9 } x=D; { enum E y=x; return y; } }",
 		"enum E { A=0 }; enum E f(enum E x) { return x; } "
 		"int main(void) { enum E e=A; e++; return f(e); }",
+		"enum E { A=1, B=2 }; enum E { B=2, A=A }; "
+		"int f(void) { enum E x=A; return x+B; }",
+		"enum F : bool { NO=0, YES=1 }; enum F : bool { NO, YES }; "
+		"_Static_assert(YES==1 && sizeof(YES)==1, \"fixed redeclaration\");",
+		"enum E { A=2147483648LL, B=-1 }; enum E { B=-1, A=2147483648LL }; "
+		"_Static_assert(sizeof(A)==8 && B==-1, \"wide redeclaration\");",
+		"int f(void) { enum E { A=1 }; enum E { A=1 }; return A; }",
 		"enum Wide { A=2147483648U, BEFORE=sizeof(A), MAX=2147483647, NEXT, "
 		"NEG=-2147483649LL }; _Static_assert(BEFORE==4 && sizeof(A)==8 && "
 		"NEXT==2147483648LL && NEG==-2147483649LL, \"wide enum\"); "
@@ -6576,6 +6583,11 @@ static void test_ordinary_enums(void)
 		"int A; enum E { A=1 };", "typedef int A; enum E { A=1 };",
 		"enum E { A }; typedef int A;", "enum E { A }; struct E { int x; };",
 		"struct E { int x; }; enum E { A };", "enum E { A }; enum E { B };",
+		"enum E { A=1, B=2 }; enum E { A=1, B=3 };",
+		"enum E { A=1, B=2 }; enum E { A=1 };",
+		"enum E { A=1 }; enum E { A=1, A=1 };",
+		"enum E { A=1 }; enum E { A=1, B=2 };",
+		"enum F : bool { A=1 }; enum F : bool { A=1, B };",
 		"enum E { A }; int main(void) { int A; enum { A=2 }; return 0; }",
 		"enum A { X }; enum B { Y }; enum A *p; enum B *q; int f(void) { p=q; return 0; }",
 		"enum A { X }; enum B { Y }; extern int value; extern enum A value; extern enum B value;",

@@ -12,6 +12,8 @@ program = '''enum Wide {
     U=2147483648U, U_SIZE=sizeof(U),
     MAX=2147483647, NEXT, NEG=-2147483649LL
 };
+enum Wide { NEG=-2147483649LL, NEXT=2147483648LL, MAX=2147483647,
+            U_SIZE=4, U=2147483648U };
 _Static_assert(U_SIZE==4 && sizeof(U)==8 && NEXT==2147483648LL, "types");
 _Static_assert(NEG==-2147483649LL, "sign extension");
 enum Full { ZERO=0, TOP=18446744073709551615ULL };
