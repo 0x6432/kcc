@@ -3497,6 +3497,33 @@ static bool is_static_floating_boolean(const struct ast_expression *expression)
 	return false;
 }
 
+/* Integer-valued arithmetic conditionals can use a floating condition without
+ * becoming integer constant expressions. Require both converted integer arms
+ * to be strict ICEs so this bounded initializer-only path never broadens ICEs. */
+static bool is_static_float_conditioned_integer(const struct ast_expression *expression)
+{
+	if (expression->kind != expression_conditional || !type_is_integer(expression->type))
+		return false;
+	const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+	return type_is_floating(node->condition->type) || is_static_floating_boolean(node->condition);
+}
+
+static bool static_float_conditioned_integer(const struct ast_expression *expression,
+	struct constant_result *result)
+{
+	if (!is_static_float_conditioned_integer(expression))
+		return false;
+	const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+	struct constant_result then_value = evaluate_integer_constant(node->then_value);
+	struct constant_result else_value = evaluate_integer_constant(node->else_value);
+	bool condition;
+	if (then_value.status != constant_value || else_value.status != constant_value ||
+		!static_floating_condition(node->condition, &condition))
+		return false;
+	*result = condition ? then_value : else_value;
+	return true;
+}
+
 /* Static constants use the host's target-matching binary32/binary64 format,
  * as does literal parsing. Non-finite arithmetic results are refused. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits)
@@ -3619,10 +3646,12 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 
 			if (value.status != constant_value) {
 				bool truth;
-				if (!is_static_floating_boolean(operand) || !static_floating_condition(operand, &truth))
+				if (is_static_floating_boolean(operand) && static_floating_condition(operand, &truth)) {
+					value.type = operand->type;
+					value.bits = truth;
+				} else if (!static_float_conditioned_integer(operand, &value)) {
 					return false;
-				value.type = operand->type;
-				value.bits = truth;
+				}
 			}
 			width = type_integer_width(value.type);
 			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
@@ -3759,6 +3788,29 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		return static_floating_to_integer(source, converted->type, value, diagnostics);
 	if (is_static_float_cast(source) && type_is_integer(converted->type))
 		return static_float_cast_to_integer(source, converted->type, value, diagnostics);
+	if (is_static_float_conditioned_integer(source) && type_is_integer(converted->type)) {
+		struct constant_result result;
+		unsigned width, target_width;
+		uint64_t bits;
+		if (!static_float_conditioned_integer(source, &result)) {
+			diagnostic_error(diagnostics, source->location,
+				"static initializer requires supported finite condition and constant arms");
+			return false;
+		}
+		bits = result.bits;
+		width = type_integer_width(result.type);
+		target_width = type_integer_width(converted->type);
+		if (type_is_boolean(converted->type))
+			bits = bits != 0;
+		else {
+			if (!type_is_unsigned(result.type) && width < 64 && (bits & (UINT64_C(1) << (width - 1))))
+				bits |= ~((UINT64_C(1) << width) - 1);
+			if (target_width < 64)
+				bits &= (UINT64_C(1) << target_width) - 1;
+		}
+		*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = bits };
+		return true;
+	}
 	if (is_static_floating_boolean(source) && type_is_integer(converted->type)) {
 		bool truth;
 		if (!static_floating_condition(source, &truth)) {
@@ -5762,7 +5814,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (!sema_expression(sema, initializer, true))
 		goto rollback;
 	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer) ||
-		is_static_floating_boolean(*initializer)) && type_is_integer(type)) {
+		is_static_floating_boolean(*initializer) || is_static_float_conditioned_integer(*initializer)) &&
+		type_is_integer(type)) {
 		struct ast_expression *source_expression = *initializer;
 		target = unqualified_type(sema, type, name.location);
 		if (!target || !convert_expression(sema, initializer, target) ||

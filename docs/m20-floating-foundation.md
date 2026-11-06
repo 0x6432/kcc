@@ -98,3 +98,18 @@ The compiler rebuilt; eight values were checked in emitted IL, lowered by pinned
 QBE 1.2 and assembled. Seven invalid or unsupported focused examples were
 rejected. Regression, generated-program runtime, ABI and fuzz checks remain
 pending.
+
+## Floating-conditioned integer initializers
+
+An integer-valued conditional with a supported finite floating condition and
+integer-constant-expression arms can initialize static integer, boolean, or
+floating objects and aggregate elements. Both arms must fold even if one is not
+selected. Usual arithmetic conversions on the arms and the destination conversion
+are retained. This is initializer-only support; it does not make these
+expressions integer constant expressions or cover arbitrary arithmetic around
+them.
+
+The compiler rebuilt. Six focused scalar/aggregate values were inspected in
+emitted IL, lowered with pinned QBE 1.2, and assembled; seven invalid or
+unsupported examples were rejected. Regression, runtime, ABI, sanitizer and
+fuzz checks remain pending; this does not complete M20.
