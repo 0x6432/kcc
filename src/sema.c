@@ -1123,8 +1123,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
 			/* Prototype bounds are analyzed without runtime evaluation.
-			 * The definition subset also admits pure integer expressions, whose
-			 * value need not be retained after pointer adjustment. */
+			 * The definition subset can retain side effects for entry-time code;
+			 * the bound value is not retained after pointer adjustment. */
 			if (result.status == constant_not_constant && syntax == sema->prototype_vla_candidate &&
 				type_is_integer(array->bound->type)) {
 				type = type_new_incomplete_array(sema->arena, element);
@@ -1179,7 +1179,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
  * A parameter's name enters scope only after its whole declarator is resolved.
  * Written register provenance restricts addresses, but never enters its type.
  */
-static bool bind_prototype_parameter(struct sema *sema, const struct ast_parameter *parameter)
+static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *parameter)
 {
 	struct ast_local_declaration *local;
 	struct binding *binding;
@@ -1201,15 +1201,17 @@ static bool bind_prototype_parameter(struct sema *sema, const struct ast_paramet
 	local->type_syntax = parameter->type_syntax;
 	local->type = parameter->type;
 	local->is_register = parameter->is_register;
+	parameter->prototype_local = local;
 	*binding = (struct binding) { .declaration = local, .next = sema->scope->bindings };
 	sema->scope->bindings = binding;
 	return true;
 }
 
-/* This bounded set is side-effect-free for defined programs. Parameters are
- * ordinary non-atomic objects, and only integer operators/literals are used.
- * The result of an outer array parameter bound is discarded on adjustment. */
-static bool pure_definition_bound(struct sema *sema, const struct ast_expression *expression)
+/* Bound expressions can use earlier non-atomic integer parameters and
+ * enumerators. Restrict writes to named parameter objects; calls, indirection,
+ * compound literals and other expression kinds remain outside this subset. */
+static bool definition_bound(struct sema *sema, const struct ast_expression *expression,
+	bool *effect)
 {
 	switch (expression->kind) {
 	case expression_integer:
@@ -1225,19 +1227,45 @@ static bool pure_definition_bound(struct sema *sema, const struct ast_expression
 			!(prior->type->qualifiers & type_qualifier_atomic);
 	}
 	case expression_unary:
-		return pure_definition_bound(sema, ((const struct ast_unary_expression *)expression)->operand);
+		return definition_bound(sema, ((const struct ast_unary_expression *)expression)->operand, effect);
 	case expression_binary: {
 		const struct ast_binary_expression *node = (const struct ast_binary_expression *)expression;
-		return pure_definition_bound(sema, node->left) && pure_definition_bound(sema, node->right);
+		return definition_bound(sema, node->left, effect) && definition_bound(sema, node->right, effect);
 	}
 	case expression_logical: {
 		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
-		return pure_definition_bound(sema, node->left) && pure_definition_bound(sema, node->right);
+		return definition_bound(sema, node->left, effect) && definition_bound(sema, node->right, effect);
 	}
 	case expression_conditional: {
 		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
-		return pure_definition_bound(sema, node->condition) &&
-			pure_definition_bound(sema, node->then_value) && pure_definition_bound(sema, node->else_value);
+		return definition_bound(sema, node->condition, effect) &&
+			definition_bound(sema, node->then_value, effect) && definition_bound(sema, node->else_value, effect);
+	}
+	case expression_comma: {
+		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
+		return definition_bound(sema, node->left, effect) && definition_bound(sema, node->right, effect);
+	}
+	case expression_postfix_update:
+	case expression_prefix_update: {
+		const struct ast_expression *operand = expression->kind == expression_postfix_update ?
+			((const struct ast_postfix_update_expression *)expression)->operand :
+			((const struct ast_prefix_update_expression *)expression)->operand;
+		*effect = true;
+		return operand->kind == expression_name && definition_bound(sema, operand, effect);
+	}
+	case expression_assignment:
+	case expression_compound_assignment: {
+		const struct ast_expression *left, *right;
+		if (expression->kind == expression_assignment) {
+			const struct ast_assignment_expression *node = (const struct ast_assignment_expression *)expression;
+			left = node->left; right = node->right;
+		} else {
+			const struct ast_compound_assignment_expression *node = (const struct ast_compound_assignment_expression *)expression;
+			left = node->left; right = node->right;
+		}
+		*effect = true;
+		return left->kind == expression_name && definition_bound(sema, left, effect) &&
+			definition_bound(sema, right, effect);
 	}
 	default:
 		return false;
@@ -1276,12 +1304,15 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		}
 		sema->prototype_vla_candidate = function != sema->definition_syntax &&
 			parameter->type_syntax->kind == type_syntax_array ? parameter->type_syntax : NULL;
-		/* Pure outer definition bounds have no observable effects; after
-		 * adjustment their values need not be retained. */
+		/* Outer definition bounds need not retain their value, but any
+		 * supported side effects must be emitted in the function prologue. */
 		if (function == sema->definition_syntax && parameter->type_syntax->kind == type_syntax_array) {
 			struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)parameter->type_syntax;
-			if (array->bound && pure_definition_bound(sema, array->bound))
+			bool effect = false;
+			if (array->bound && definition_bound(sema, array->bound, &effect)) {
 				sema->prototype_vla_candidate = parameter->type_syntax;
+				array->evaluate_parameter_bound = effect;
+			}
 		}
 		declared = resolve_type_syntax(sema, parameter->type_syntax);
 		sema->prototype_vla_candidate = saved_candidate;
@@ -4762,15 +4793,10 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 		/* Unnamed C23 parameters remain in the ABI, without a source binding. */
 		if (!parameter->has_name)
 			continue;
-		parameter->local = ast_new_local(sema->arena, parameter->location,
-			parameter->name, NULL);
-		if (!parameter->local) {
-			diagnostic_error(sema->diagnostics, parameter->location,
-				"out of memory creating parameter local");
-			goto done;
-		}
-		parameter->local->type_syntax = parameter->type_syntax;
-		parameter->local->is_register = parameter->is_register;
+		/* Bounds already reference this prototype binding. Give that exact
+		 * declaration its real slot rather than creating an unrelated one. */
+		parameter->local = parameter->prototype_local;
+		assert(parameter->local);
 		if (!bind_local(sema, parameter->local, parameter->type))
 			goto done;
 	}

@@ -1628,6 +1628,15 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 				qbe_store_size(parameter->type), parameter_index, parameter->local->slot);
 		parameter_index++;
 	}
+	/* Parameters have been spilled before any bound can read or update them. */
+	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
+		parameter = parameter->next) {
+		if (parameter->type_syntax->kind == type_syntax_array) {
+			const struct ast_array_type_syntax *array = (const struct ast_array_type_syntax *)parameter->type_syntax;
+			if (array->evaluate_parameter_bound)
+				(void)codegen_expression(&codegen, array->bound);
+		}
+	}
 	if (!codegen_block_items(&codegen, function->body->items)) {
 		if (function->return_type->kind == type_kind_void)
 			emit(&codegen, "\tret\n");

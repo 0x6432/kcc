@@ -650,6 +650,7 @@ struct ast_array_type_syntax {
 	unsigned parameter_qualifiers; /* Qualifiers on the adjusted pointer. */
 	bool parameter_static; /* Caller guarantees at least bound elements. */
 	bool parameter_star; /* Unspecified VLA bound in prototype scope. */
+	bool evaluate_parameter_bound; /* Runtime definition-bound side effects. */
 };
 
 struct ast_function_type_syntax {
@@ -993,6 +994,7 @@ struct ast_parameter {
 	bool is_register; /* Written storage, not part of the adjusted function type. */
 	bool is_void_marker; /* Checked sole unnamed void, not an ABI parameter. */
 	struct ast_local_declaration *local; /* NULL for prototypes and unnamed parameters. */
+	struct ast_local_declaration *prototype_local; /* Reused by definitions. */
 	struct ast_parameter *next;
 };
 
