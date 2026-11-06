@@ -1,4 +1,4 @@
-"""Bounded C23 maybe_unused and fallthrough subset; unknown semantics must not disappear."""
+"""Bounded known and ignored unknown C23 attributes."""
 import os
 import subprocess
 import tempfile
@@ -8,6 +8,9 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('[[vendor::unknown(1, {2, [3]}), unknown, maybe_unused]] int x=42; int main(void){return x;}',
+     'int x=42; int main(void){return x;}'),
+    ('[[unknown]] [[vendor::nodiscard("message")]] int x;', 'int x;'),
     ('[[maybe_unused]] int x=42; int main(void){return x;}',
      'int x=42; int main(void){return x;}'),
     ('[[maybe_unused]] static int f(int x){return x+1;} int main(void){return f(41);}',
@@ -32,11 +35,9 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
-    ('[[nodiscard]] int f(void);', 'unsupported or unknown attribute'),
+    ('[[nodiscard]] int f(void);', 'unsupported standard attribute'),
     ('[[fallthrough]] int x;', 'fallthrough is only supported'),
-    ('[[deprecated("reason")]] int x;', 'unsupported or unknown attribute'),
-    ('[[vendor::unknown]] int x;', 'unsupported or unknown attribute'),
-    ('[[unknown]] int x;', 'unsupported or unknown attribute'),
+    ('[[deprecated("reason")]] int x;', 'unsupported standard attribute'),
     ('[[maybe_unused(1)]] int x;', 'take no arguments'),
     ('[[maybe_unused] int x;', "expected ']]'"),
     ('[[maybe_unused]] struct S;', 'tag-only'),
@@ -46,8 +47,9 @@ invalid = [
     ('[[maybe_unused]] ;', 'only on declarations'),
     ('int f(void){[[fallthrough]]; return 0;}', 'within a switch'),
     ('int f(int x){switch(x){case 0: [[fallthrough]]; return 0;} return 1;}', 'immediately followed'),
-    ('[[maybe_unused, unknown]] int x;', 'unsupported or unknown attribute'),
-    ('[[maybe_unused]] [[nodiscard]] int f(void);', 'unsupported or unknown attribute'),
+    ('[[maybe_unused]] [[nodiscard]] int f(void);', 'unsupported standard attribute'),
+    ('[[unknown([)])]] int x;', 'mismatched attribute argument delimiter'),
+    ('[[vendor::]] int x;', 'expected scoped attribute identifier'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
     path = Path(directory) / 'input.c'

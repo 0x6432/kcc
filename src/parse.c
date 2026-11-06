@@ -60,9 +60,9 @@ static bool expect_token(struct parser *parser, enum token_kind kind,
 	return true;
 }
 
-/* Recognize only attributes whose behavior this compiler implements. Unknown
- * attributes are rejected rather than silently dropping potentially important
- * semantics. Limit total lists and tokens per sequence, including empty lists. */
+/* Supported attributes retain their semantics. Unrecognized names and scoped
+ * vendor attributes are ignored after validating a bounded balanced argument
+ * sequence. Known standard attributes not yet implemented are still rejected. */
 struct parsed_attributes {
 	bool present;
 	bool maybe_unused;
@@ -76,6 +76,41 @@ static bool token_spells(struct token token, const char *name, size_t length)
 			name, length) == 0;
 }
 
+static bool skip_unknown_attribute_arguments(struct parser *parser, unsigned *count)
+{
+	enum token_kind stack[64];
+	unsigned depth = 1;
+	stack[0] = token_right_paren;
+	preprocess_next(parser->preprocessor); /* opening parenthesis */
+	while (depth) {
+		struct token token = preprocess_next(parser->preprocessor);
+		if (++*count > 256) {
+			diagnostic_error(parser->diagnostics, token.location, "attribute limit exceeded (256)");
+			return false;
+		}
+		if (token.kind == token_eof || token.kind == token_invalid) {
+			if (token.kind != token_invalid)
+				diagnostic_error(parser->diagnostics, token.location, "unterminated attribute arguments");
+			return false;
+		}
+		if (token.kind == token_left_paren || token.kind == token_left_bracket || token.kind == token_left_brace) {
+			if (depth == 64) {
+				diagnostic_error(parser->diagnostics, token.location, "attribute nesting limit exceeded (64)");
+				return false;
+			}
+			stack[depth++] = token.kind == token_left_paren ? token_right_paren :
+				token.kind == token_left_bracket ? token_right_bracket : token_right_brace;
+		} else if (token.kind == token_right_paren || token.kind == token_right_bracket || token.kind == token_right_brace) {
+			if (token.kind != stack[depth - 1]) {
+				diagnostic_error(parser->diagnostics, token.location, "mismatched attribute argument delimiter");
+				return false;
+			}
+			depth--;
+		}
+	}
+	return true;
+}
+
 static bool parse_attributes(struct parser *parser, struct parsed_attributes *attributes)
 {
 	unsigned count = 0;
@@ -86,6 +121,7 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 		if (!expect_token(parser, token_left_bracket, "expected second '[' in attribute", NULL))
 			return false;
 		for (;;) {
+			bool scoped = false, known = false;
 			token = preprocess_peek(parser->preprocessor);
 			if (token.kind == token_right_bracket)
 				break;
@@ -93,29 +129,49 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 				diagnostic_error(parser->diagnostics, token.location, "attribute limit exceeded (256)");
 				return false;
 			}
-			if (token_spells(token, "maybe_unused", 12)) {
+			if (token.kind != token_identifier) {
+				diagnostic_error(parser->diagnostics, token.location, "expected attribute identifier");
+				return false;
+			}
+			preprocess_next(parser->preprocessor);
+			if (preprocess_peek(parser->preprocessor).kind == token_scope) {
+				preprocess_next(parser->preprocessor);
+				if (!expect_token(parser, token_identifier, "expected scoped attribute identifier", NULL))
+					return false;
+				scoped = true;
+			}
+			if (!scoped && token_spells(token, "maybe_unused", 12)) {
 				attributes->maybe_unused = true;
-			} else if (token_spells(token, "fallthrough", 11)) {
+				known = true;
+			} else if (!scoped && token_spells(token, "fallthrough", 11)) {
 				if (attributes->fallthrough) {
 					diagnostic_error(parser->diagnostics, token.location,
 						"multiple fallthrough attributes are not supported");
 					return false;
 				}
 				attributes->fallthrough = true;
-			} else {
-				diagnostic_error(parser->diagnostics, token.location,
-					"unsupported or unknown attribute (only maybe_unused and fallthrough are supported)");
+				known = true;
+			} else if (!scoped && (token_spells(token, "nodiscard", 9) ||
+				token_spells(token, "deprecated", 10) || token_spells(token, "noreturn", 8) ||
+				token_spells(token, "unsequenced", 11) || token_spells(token, "reproducible", 12))) {
+				diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute");
 				return false;
 			}
-			preprocess_next(parser->preprocessor);
+			if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
+				if (known) {
+					diagnostic_error(parser->diagnostics, token.location, "supported attributes take no arguments");
+					return false;
+				}
+				if (!skip_unknown_attribute_arguments(parser, &count))
+					return false;
+			}
 			token = preprocess_peek(parser->preprocessor);
 			if (token.kind == token_comma) {
 				preprocess_next(parser->preprocessor);
 				continue;
 			}
 			if (token.kind != token_right_bracket) {
-				diagnostic_error(parser->diagnostics, token.location,
-					"supported attributes take no arguments; expected ',' or ']]'");
+				diagnostic_error(parser->diagnostics, token.location, "expected ',' or ']]' after attribute");
 				return false;
 			}
 			break;

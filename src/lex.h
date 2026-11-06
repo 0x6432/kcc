@@ -72,6 +72,7 @@ enum token_kind {
 	token_comma,
 	token_question,
 	token_colon,
+	token_scope,
 	token_increment,
 	token_decrement,
 	token_plus_equal,

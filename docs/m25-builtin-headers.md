@@ -71,8 +71,8 @@ suite remains unrun.
   retains its documented C-locale assumption.
 - `wchar.h` supplies glibc-compatible `wchar_t`, `wint_t`, `mbstate_t`, wide
   string and memory operations, and basic multibyte conversion declarations.
-  Wide I/O and other interfaces are omitted; wide string literals are still
-  unsupported. The declarations require compatible libc.
+  Wide I/O and other interfaces are omitted; bounded wide string literals are
+  described in `m23-utf8-strings.md`. The declarations require compatible libc.
 - `wctype.h` declares wide classification and case-conversion functions and
   glibc-compatible classification and transformation descriptor types.
 - `uchar.h` supplies the C23 character typedefs, glibc-compatible `mbstate_t`,

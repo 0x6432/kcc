@@ -8,10 +8,16 @@ warnings are emitted, so the attribute does not change generated code.
 
 `[[fallthrough]];` is accepted in a compound statement within a switch when the
 next block item is a case or default label. Other placements are rejected.
-Other attributes, argument lists, attributes on anonymous members, unnamed
-parameters and static assertions are rejected. Parsing remains limited to 256
+Unrecognized attributes, including scoped vendor names, are ignored in these
+supported positions. Their optional argument lists must contain balanced
+parentheses, brackets and braces and are limited to 64 nesting levels and 256
+items/tokens per sequence. Argument tokens must be supported language tokens;
+this is not yet a general preprocessing-token attribute parser. Known standard
+attributes other than `maybe_unused` and `fallthrough` are still rejected;
+arguments for those two attributes are rejected. Attributes on anonymous
+members, unnamed parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
-handling, and unknown attributes are diagnosed rather than ignored. Expanded
+handling, including placement and token-grammar coverage. Expanded
 placements have been built but have not been regression-tested yet.
 
 `__has_c_attribute` is recognized in preprocessing conditions, accepts an
