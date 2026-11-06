@@ -44,3 +44,9 @@ is the bound times element size. Nonpositive bounds or types over the existing
 1 MiB type-size limit call `abort`; no array storage is allocated. An enclosing
 unevaluated context does not execute the bound. More general VM type-names are
 still unsupported. This path has not been runtime-tested.
+
+`sizeof` and `alignof` also accept pointer type-names pointing through pointer
+and qualifier layers to one outer variable-bound array with fixed-size elements.
+The result is the pointer layout; this implementation chooses not to evaluate
+the bound in those queries. General pointer-to-VLA declarations and runtime
+pointer arithmetic are still unsupported. This path has not been runtime-tested.

@@ -988,7 +988,20 @@ static const struct type *resolve_unevaluated_type_syntax(struct sema *sema,
 	return type;
 }
 
-/* An outer VLA bound in an alignment type-name is checked but never
+/* Find one array reached through pointer/qualifier syntax. Runtime inner
+ * array dimensions are still outside the supported type representation. */
+static struct ast_type_syntax *query_array_syntax(struct ast_type_syntax *syntax)
+{
+	while (syntax->kind == type_syntax_pointer || syntax->kind == type_syntax_qualified) {
+		if (syntax->kind == type_syntax_pointer)
+			syntax = ((struct ast_pointer_type_syntax *)syntax)->referent;
+		else
+			syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	}
+	return syntax->kind == type_syntax_array ? syntax : NULL;
+}
+
+/* A VLA bound in an alignment or pointer-size type-name is checked but never
  * evaluated. Keep incomplete array types distinguishable from this case. */
 static const struct type *resolve_alignment_type_syntax(struct sema *sema,
 	struct ast_type_syntax *syntax)
@@ -996,7 +1009,7 @@ static const struct type *resolve_alignment_type_syntax(struct sema *sema,
 	struct ast_type_syntax *saved = sema->alignment_vla_candidate;
 	const struct type *type;
 
-	sema->alignment_vla_candidate = syntax->kind == type_syntax_array ? syntax : NULL;
+	sema->alignment_vla_candidate = query_array_syntax(syntax);
 	type = resolve_unevaluated_type_syntax(sema, syntax);
 	sema->alignment_vla_candidate = saved;
 	return type;
@@ -2635,7 +2648,9 @@ static bool sema_expression(struct sema *sema,
 		if (!node->is_offsetof && node->type_syntax->kind == type_syntax_array) {
 			sema->sizeof_vla_candidate = node->type_syntax;
 			type = resolve_type_syntax(sema, node->type_syntax);
-		} else
+		} else if (!node->is_offsetof)
+			type = resolve_alignment_type_syntax(sema, node->type_syntax);
+		else
 			type = resolve_unevaluated_type_syntax(sema, node->type_syntax);
 		sema->sizeof_vla_candidate = saved_candidate;
 		if (!type)
