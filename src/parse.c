@@ -1263,11 +1263,6 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			struct ast_record_type_syntax *nested = record_specifier_base(base);
 			struct token name = { 0 };
 
-			if (head.alignments) {
-				diagnostic_error(parser->diagnostics, beginning.location,
-					"alignment on an anonymous member is not supported yet");
-				return false;
-			}
 			if (attributes) {
 				diagnostic_error(parser->diagnostics, beginning.location,
 					"attributes on anonymous members are not supported");
@@ -1282,7 +1277,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name, true, NULL))
+			if (!append_record_member(parser, record, &tail, base, name, true, head.alignments))
 				return false;
 			continue;
 		}

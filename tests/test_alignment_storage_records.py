@@ -32,6 +32,12 @@ accepted = [
     ('int x; int f(void) { extern alignas(16) int x; return x; } alignas(16) int x=3;', 'data $x = align 16'),
     ('struct S { char c; alignas(16) int x,y; }; static_assert(sizeof(struct S)==48); static_assert(alignof(struct S)==16);', ''),
     ('union U { char c; _Alignas(16) int x; }; static_assert(sizeof(union U)==16); static_assert(alignof(union U)==16);', ''),
+    ('struct S { char c; alignas(16) struct { int x; }; char d; }; static_assert(sizeof(struct S)==32); static_assert(alignof(struct S)==16);', ''),
+    ('struct S { char c; struct { int x; } alignas(16); }; static_assert(sizeof(struct S)==32); static_assert(alignof(struct S)==16);', ''),
+    ('union U { char c; alignas(16) struct { int x; }; }; static_assert(sizeof(union U)==16); static_assert(alignof(union U)==16);', ''),
+    ('struct S { char c; alignas(0) struct { int x; }; }; static_assert(sizeof(struct S)==8); static_assert(alignof(struct S)==4);', ''),
+    ('struct S { char c; alignas(16) union { int x; char y; }; }; struct S a[2];', 'data $a = align 16'),
+    ('struct S { char c; struct { enum { N=16 } x; } alignas(N); }; static_assert(sizeof(struct S)==32);', ''),
     ('struct S { char c; alignas(16) int x; }; struct T { char q; struct S a[2]; }; static_assert(sizeof(struct T)==80); static_assert(alignof(struct T)==16);', ''),
     ('struct S { alignas(16) int x; }; struct S a[2];', 'data $a = align 16'),
 ]
@@ -47,12 +53,16 @@ rejected = [
     ('typedef int F(void); alignas(16) F f;', 'object type'),
     ('struct S { alignas(2) int x; };', 'weaken'),
     ('struct S { alignas(3) char x; };', 'supported alignments'),
-    ('struct S { alignas(16) struct { int x; }; };', 'anonymous member'),
+    ('struct S { alignas(2) struct { int x; }; };', 'weaken'),
+    ('struct S { alignas(3) struct { int x; }; };', 'supported alignments'),
+    ('struct S { alignas(16) struct T; };', 'anonymous record definition'),
+    ('struct S { alignas(N) struct { enum { N=16 } x; }; };', 'undeclared'),
     ('struct S { alignas(sizeof(struct T)) struct T { int n; } x; };', 'complete'),
     ('struct S { int alignas(2) x; };', 'weaken'),
 ]
 runtime = '''int aligned(void *p, int n); int check_record(void *p);
 struct S { char c; int alignas(16) x; char d; };
+struct A { char c; _Alignas(16) union { int x; char y; }; char d; };
 int alignas(16) global=7;
 thread_local alignas(16) int tls=9;
 struct S obj;
@@ -61,7 +71,10 @@ int main(void) {
     static thread_local alignas(16) int local_tls=4;
     alignas(16) int a=1,b=2;
     struct S s; s.c=3; s.x=7; s.d=5;
+    struct A anon; anon.c=3; anon.x=7; anon.d=5;
     if (sizeof(struct S)!=32 || alignof(struct S)!=16 || !check_record(&s)) return 1;
+    if (sizeof(struct A)!=32 || alignof(struct A)!=16 || !aligned(&anon.x,16) ||
+        (char *)&anon.x-(char *)&anon!=16 || anon.x!=7 || anon.d!=5) return 4;
     if (!aligned(&global,16) || !aligned(&tls,16) || !aligned(&local_static,16) ||
         !aligned(&local_tls,16) || !aligned(&a,16) || !aligned(&b,16) || !aligned(&obj,16)) return 2;
     if (global!=7 || tls!=9 || local_static!=3 || local_tls!=4 || a+b!=3) return 3;

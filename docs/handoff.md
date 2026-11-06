@@ -1,6 +1,6 @@
 # Current handoff — M17 validation recovery
 
-## Current implementation lane (through 1539fdb)
+## Current implementation lane
 
 This section supersedes stale forward-looking implementation statements below;
 the remainder is historical evidence for earlier, exact commits. Recent work
@@ -10,6 +10,17 @@ documentation for boundaries. Notable remaining work includes aggregate-by-value
 ABI, bit-fields, source `_BitInt`, `long double`, complete preprocessing and
 attributes, and a complete hosted C library. The internal bit-precise arithmetic
 helpers do **not** enable `_BitInt` source programs.
+
+The current work branch is `development`, per the revised user instruction.
+Earlier feature-branch-only instructions and the old development pin below
+are historical, not the current branching policy. Merge feature branches
+without losing their unique changes; delete a branch only after its history
+has been integrated and pushed.
+
+An M18 increment supports bounded alignment on anonymous struct/union members;
+see `m18-declaration-alignment.md`. The compiler build and focused compile/IL
+checks succeeded, with a focused host GCC layout comparison. The regression
+fixtures and generated-program runtime checks have not been run.
 
 Builds and selected compile/IL checks have run during this lane, together with a
 few host-only helper smoke checks. Newly added regression suites, fuzzing,
@@ -92,7 +103,7 @@ inspection from unchanged-file structural integrity. None of these component
 observations alone approves a new final commit: every full exact-SHA release
 gate must run after this tracked repair and its handoff update.
 
-## Recovered validation protocol
+## Historical recovered validation protocol
 
 - Use only `feature/m17-initializers`. Never modify or merge `development`,
   pinned at `5ad608a7b557f1fd3f077fc73d04796561375deb`.
@@ -130,7 +141,7 @@ Fresh exact two-original compiler protocol observations are in coordination
 These paths describe evidence locations, not gate passes.
 Credentials are external/private and must never enter repository content/config.
 
-## Copy-ready next-agent prompt
+## Historical copy-ready next-agent prompt
 
 Continue KCC on feature/m17-initializers. Read this current section, then
 `/data/kcc-m17-coordination/CURRENT-HANDOFF.md` and its original handoff, followed

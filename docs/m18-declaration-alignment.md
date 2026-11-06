@@ -18,10 +18,10 @@ alignment is known; an unknown-bound array with complete element type has a
 known alignment. Object alignment is storage metadata, not a type qualifier.
 QBE local slots use alloc4/8/16 and static/TLS data use the effective alignment.
 
-For named members, the request affects struct offsets, union/struct alignment,
+For record members, the request affects struct offsets, union/struct alignment,
 tail padding, aggregate size and array stride. Nested record layouts retain
-these properties. Anonymous aligned members, bit-fields, and flexible members
-remain unsupported. Cross-scope C23 structural compatibility and common-initial-
+these properties. Bit-fields remain unsupported; flexible members are subject
+to the bounded flexible-array implementation. Cross-scope C23 structural compatibility and common-initial-
 sequence interactions remain separate work (see WG14 issue 1041).
 
 For linkage, a canonical object stores its nonzero request; definitions and
@@ -36,7 +36,7 @@ Across translation units kcc cannot verify matching declarations; callers must
 supply consistent alignment themselves.
 
 Still unsupported: alignment on typedefs, parameters, register objects,
-functions, anonymous members, or
+functions, or
 requests above 16. Alignment on inferred automatic objects is supported.
 These are implementation limits, not claims that all such programs violate C. No broader C23 alignment conformance is claimed.
 
@@ -72,3 +72,20 @@ existing placement/storage limits remain in force. New fixtures cover
 source-order dependencies, typedef shadowing, record layout, and rejection of
 forward use. The compiler build succeeded and three focused source-order examples compiled.
 The new fixture suites, runtime, ABI and fuzzing have not been run. This does not complete or approve M18.
+
+## Anonymous record member alignment
+
+Alignment specifiers on supported untagged anonymous struct and union members
+use the same evaluation, natural-alignment checks and record layout machinery
+as named members. This affects the anonymous container's offset and the
+enclosing record's alignment, size and array stride, without changing the
+member type or the rules for promoted member names. The existing limits of
+0, 1, 2, 4, 8 and 16 remain; tagged declarations without a member declarator
+and attributes on anonymous members remain outside this supported syntax.
+
+The compiler build and focused positive/negative compilation checks succeeded.
+A focused host GCC syntax/layout comparison succeeded with C23 spellings mapped
+to their older underscore forms. Regression fixtures were added but not run;
+QBE runtime, ABI, sanitizer, fuzz and full regression checks remain outstanding.
+This is an implementation increment, not M18 completion, M17 approval, or a
+full C23 conformance claim.
