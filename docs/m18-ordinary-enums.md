@@ -34,3 +34,23 @@ fuzz were run for this checkpoint. The compiler was built for implementation.
 Full regression, QBE/host interop, sanitizers, bounded fuzz and exact-source CI
 are required before claiming a tested checkpoint. No conclusion about M17
 approval follows from this change.
+
+## Wider signed-long ordinary enums
+
+This checkpoint extends ordinary enums beyond int, within a target-LP64 slice.
+All values must fit signed 64-bit long; an all-int-range enumeration retains
+int compatibility and int member types, while an enumeration with any value
+outside int uses signed long as its compatible type and the completed enum as
+its member type. During the enumerator list, explicit values fitting int use
+int, other explicit values retain the expression type, and implicit successors
+use the preceding value's promoted type or widen with the same signedness.
+Expressions already checked during the definition retain their earlier types.
+Unsigned values above LONG_MAX and successor overflow beyond 64 bits are
+conservatively rejected, even if another implementation could accept them.
+Same-enum redefinition and cross-translation-unit compatibility remain
+unsupported; this is not the full C23 enum model or an ABI conformance claim.
+
+The compiler was built and one focused wide-enum source compiled successfully.
+The added fixture suite and optional QBE runtime coverage have not been run;
+full regression, native ABI and fuzzing remain pending. This does not approve M17 or complete M18. The preceding int-range
+description is historical.

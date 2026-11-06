@@ -6518,6 +6518,14 @@ static void test_ordinary_enums(void)
 		"int f(void) { enum E { D=9 } x=D; { enum E y=x; return y; } }",
 		"enum E { A=0 }; enum E f(enum E x) { return x; } "
 		"int main(void) { enum E e=A; e++; return f(e); }",
+		"enum Wide { A=2147483648U, BEFORE=sizeof(A), MAX=2147483647, NEXT, "
+		"NEG=-2147483649LL }; _Static_assert(BEFORE==4 && sizeof(A)==8 && "
+		"NEXT==2147483648LL && NEG==-2147483649LL, \"wide enum\"); "
+		"enum Wide x=NEXT; int f(void) { return x==2147483648LL; }",
+		"enum U { UMAX=4294967295U, AFTER, INSIDE=sizeof(AFTER) }; "
+		"_Static_assert(AFTER==4294967296ULL && INSIDE==8 && sizeof(UMAX)==8, \"widen\");",
+		"enum S { MIN=-2147483648LL, AGAIN=MIN+1, LARGE=2147483648LL }; "
+		"_Static_assert(MIN==-2147483648LL && AGAIN==-2147483647 && sizeof(MIN)==8, \"signed\");",
 		"enum F : unsigned short; enum F x; "
 		"_Static_assert(sizeof(enum F)==2, \"complete forward\"); "
 		"enum F : unsigned short { A=65534, B, C=(unsigned short)(B+1) }; "
@@ -6554,7 +6562,8 @@ static void test_ordinary_enums(void)
 		"int f(void) { enum E { A }; enum E; return A; }",
 		"struct E { int x; }; enum E;",
 		"enum E { A }; const enum E;",
-		"enum E { A=2147483648LL };", "enum E { A=2147483647, B };",
+		"enum E { A=18446744073709551615ULL };",
+		"enum E { A=9223372036854775807LL, B };",
 		"enum E { A=-2147483647-2 };", "enum E { A=1/0 };",
 		"int x; enum E { A=x };", "enum E { A=B, B=1 };",
 		"enum E { A=1, A=2 };", "enum E { A=1 }; int A;",

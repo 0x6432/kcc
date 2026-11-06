@@ -640,7 +640,9 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 	struct enum_definition *definition;
 	struct enum_type *type;
 	uint64_t previous = 0;
+	const struct type *previous_type = NULL;
 	bool have_previous = false;
+	bool all_fit_int = true;
 
 	if (syntax->syntax.type)
 		return syntax->syntax.type;
@@ -719,6 +721,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		struct ast_local_declaration *constant;
 		struct binding *binding;
 		struct typedef_binding *alias = find_typedef_binding(sema, item->name);
+		const struct type *constant_type = definition->fixed ? &type->type : &type_int;
 		uint64_t bits;
 		unsigned width = type_integer_width(underlying);
 		uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
@@ -731,28 +734,64 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		}
 		if (item->value) {
 			struct constant_result result;
+			uint64_t checked;
 			if (!sema_expression(sema, &item->value, true)) return NULL;
 			result = evaluate_integer_constant(item->value);
 			if (result.status != constant_value) {
 				diagnostic_error(sema->diagnostics, result.location, result.message);
 				return NULL;
 			}
-			if (!enum_value_bits(result, underlying, &bits)) goto range;
+			if (definition->fixed) {
+				if (!enum_value_bits(result, underlying, &bits)) goto range;
+			} else {
+				/* This slice chooses int or signed long as the completed
+				 * compatible type, so every value must fit signed long. */
+				if (!enum_value_bits(result, &type_long, &checked)) goto range;
+				if (enum_value_bits(result, &type_int, &bits)) {
+					constant_type = &type_int;
+				} else {
+					constant_type = result.type;
+					bits = result.bits;
+					all_fit_int = false;
+				}
+			}
 		} else if (!have_previous) {
 			bits = 0;
-		} else {
+		} else if (definition->fixed) {
 			if (previous == maximum) goto range;
 			bits = (previous + 1) & mask;
+		} else {
+			struct constant_result prior = { .type = previous_type, .bits = previous };
+			uint64_t checked;
+			constant_type = type_integer_promotion(previous_type);
+			width = type_integer_width(constant_type);
+			mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+			maximum = type_is_unsigned(constant_type) ? mask : mask >> 1;
+			if (!enum_value_bits(prior, constant_type, &bits)) goto range;
+			if (bits == maximum) {
+				/* Same-signedness widening; no 128-bit source type yet. */
+				if (width == 64) goto range;
+				constant_type = type_is_unsigned(constant_type) ? &type_ulong : &type_long;
+				width = 64;
+				mask = UINT64_MAX;
+			}
+			bits = (bits + 1) & mask;
+			prior.type = constant_type;
+			prior.bits = bits;
+			if (!enum_value_bits(prior, &type_long, &checked)) goto range;
+			if (!enum_value_bits(prior, &type_int, &checked)) all_fit_int = false;
 		}
 		previous = bits;
+		previous_type = constant_type;
 		have_previous = true;
 		constant = ast_new_local(sema->arena, item->name.location, item->name, NULL);
 		binding = arena_alloc(sema->arena, sizeof(*binding));
 		if (!constant || !binding) goto oom;
+		item->binding = constant;
 		constant->enum_constant = true;
 		constant->enum_bits = bits;
-		constant->type = definition->fixed ? &type->type : &type_int;
-		if (!definition->fixed)
+		constant->type = constant_type;
+		if (constant_type == &type_int)
 			constant->enum_value = bits & (UINT64_C(1) << 31) ?
 				-1 - (int64_t)(UINT32_MAX - bits) : (int64_t)bits;
 		if (sema->scope) {
@@ -767,6 +806,19 @@ range:
 		diagnostic_error(sema->diagnostics, item->name.location,
 			"enumerator value is outside the supported underlying type range");
 		return NULL;
+	}
+	if (!definition->fixed && !all_fit_int) {
+		/* The final member type is the completed enum, not the
+		 * temporary type in force inside the enumerator list. */
+		definition->underlying = &type_long;
+		for (struct ast_enumerator *item = syntax->enumerators; item; item = item->next) {
+			struct ast_local_declaration *constant = item->binding;
+			struct constant_result result = { .type = constant->type, .bits = constant->enum_bits };
+			uint64_t converted;
+			if (!enum_value_bits(result, &type_long, &converted)) goto oom;
+			constant->enum_bits = converted;
+			constant->type = &type->type;
+		}
 	}
 	definition->complete = true;
 	definition->defined = true;
@@ -2035,7 +2087,7 @@ static bool sema_expression(struct sema *sema,
 		if (!node->declaration)
 			node->declaration = find_file_enumerator(sema, node->name);
 		if (node->declaration && node->declaration->enum_constant &&
-			node->declaration->type->kind == type_kind_enum) {
+			node->declaration->type != &type_int) {
 			struct ast_enum_constant_expression *constant = arena_alloc(sema->arena, sizeof(*constant));
 			if (!constant) {
 				diagnostic_error(sema->diagnostics, expression->location, "out of memory creating enum constant");

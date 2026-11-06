@@ -553,6 +553,7 @@ struct ast_type_syntax {
 struct ast_enumerator {
 	struct token name;
 	struct ast_expression *value;
+	struct ast_local_declaration *binding; /* Semantic binding, after declaration. */
 	struct ast_enumerator *next;
 };
 
