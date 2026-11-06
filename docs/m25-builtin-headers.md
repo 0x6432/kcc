@@ -35,17 +35,12 @@ suite remains unrun.
 - `assert.h` responds to `NDEBUG` at each inclusion, evaluates its condition
   once when enabled, and calls glibc's `__assert_fail` on failure with source
   and function information. It requires a compatible libc.
-- `stdatomic.h` exposes `atomic_int`, `atomic_uint`, `ATOMIC_VAR_INIT`,
-  `atomic_init`, `atomic_is_lock_free`, `atomic_load`, `atomic_store`, `atomic_exchange`, `atomic_flag`
-  test-and-set and clear,
-  strong and weak compare-exchange, and `atomic_fetch_add/sub/and/or/xor`,
-  with explicit-order variants of load, store, exchange, compare-exchange
-  and fetch operations, for the compiler's bounded
-  atomic int/unsigned-int subset. Initialization uses a sequentially consistent
-  store; load and store use sequential consistency and require `-latomic`.
-  Thread and signal fences use out-of-line libatomic functions. Volatile atomic
-  objects, other atomic types,
-  other fetch operations are not provided.
+- `stdatomic.h` supplies bounded atomic integer, boolean, pointer and enum
+  operations, plus float/double load, store, exchange and compare-exchange;
+  supported operations, typedefs, lock-free assumptions and remaining limits
+  are documented in `m24c-atomic-subset.md`. Explicit-order forms and the
+  out-of-line fences require a compatible libatomic. These additions have been
+  built and smoke-checked, but their runtime and concurrency suites are unrun.
 - `stdlib.h` and `string.h` declare a bounded set of common allocation,
   conversion, sorting, memory and string functions with x86-64 libc-compatible
   signatures. They omit many standard interfaces and require a compatible

@@ -51,10 +51,10 @@ conformance is not claimed.
 | M23h | constexpr objects, expanded record compatibility/redefinitions and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
 | M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | in progress (bounded internal width/arithmetic foundation only; all source _BitInt types rejected pending type/layout integration) |
 | M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (internal <=64-bit primitives only; no source, backend or ABI support) |
-| M24c | Atomic types/load/store | Memory model, alignment, target code inspection | planned |
-| M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | planned |
+| M24c | Atomic types/load/store | Memory model, alignment, target code inspection | in progress (bounded integer, bool, enum, floating and pointer loads/stores via libatomic; aggregate atomics and validation remain) |
+| M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | in progress (bounded integer and pointer RMW, exchange/compare-exchange, fences and partial header; operations and validation remain) |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |
-| M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (single outermost automatic integer-element VLA subset; broader VM types remain unsupported) |
+| M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (bounded automatic outer VLAs, loop/switch/goto scope checks and empty initialization; broader VM types remain unsupported) |
 | M24g | long double, floating environment and remaining backend gaps | Correct target representation and runtime/ABI tests | planned |
 | M25a | Predefined macros and translation/environment audit | Standard clause matrix and implementation-defined docs | planned |
 | M25b | Compiler-provided headers and runtime helpers | Header compile tests and link resolution | planned |

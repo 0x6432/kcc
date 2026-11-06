@@ -111,3 +111,8 @@ arithmetic are rejected. These paths have not been runtime- or concurrency-teste
 The fallback header also declares atomic character, least/fast-width, pointer-
 sized, size, difference and maximum-width integer typedefs using this target’s
 integer types. This does not make the fallback header a complete hosted library.
+
+The fallback header reports the standard integer/pointer `ATOMIC_*_LOCK_FREE`
+macros as 2 for naturally aligned target objects, relying on the x86-64
+libatomic implementation. A local libatomic query reported lock-free for
+aligned sizes 1, 2, 4 and 8; other libraries and concurrency remain untested.

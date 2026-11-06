@@ -10,6 +10,7 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    '#include <stdatomic.h>\nstatic_assert(ATOMIC_BOOL_LOCK_FREE==2 && ATOMIC_CHAR_LOCK_FREE==2 && ATOMIC_CHAR16_T_LOCK_FREE==2 && ATOMIC_CHAR32_T_LOCK_FREE==2 && ATOMIC_WCHAR_T_LOCK_FREE==2 && ATOMIC_SHORT_LOCK_FREE==2 && ATOMIC_INT_LOCK_FREE==2 && ATOMIC_LONG_LOCK_FREE==2 && ATOMIC_LLONG_LOCK_FREE==2 && ATOMIC_POINTER_LOCK_FREE==2); int main(void) { return 42; }',
     '#include <stdatomic.h>\n#include <stdint.h>\n#include <stddef.h>\nstatic_assert(sizeof(atomic_int_least8_t)==sizeof(int_least8_t)); static_assert(sizeof(atomic_uint_fast32_t)==sizeof(uint_fast32_t)); static_assert(sizeof(atomic_size_t)==sizeof(size_t)); int main(void) { atomic_intptr_t x=40; return atomic_fetch_add(&x,2)==40 && atomic_load(&x)==42 ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void) { _Atomic(float) x=1.0F; float old=atomic_exchange(&x,42.0F); return old==1.0F && atomic_load(&x)==42.0F ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void) { _Atomic(double) x=1.0; double expected=1.0; if(!atomic_compare_exchange_strong(&x,&expected,42.0)) return 1; return (int)atomic_load(&x); }',

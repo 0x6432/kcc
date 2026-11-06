@@ -1228,6 +1228,11 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef atomic_ulong atomic_size_t; typedef atomic_long atomic_ptrdiff_t;\n"
 			"typedef atomic_long atomic_intmax_t; typedef atomic_ulong atomic_uintmax_t;\n";
 		static const char stdatomic_header_tail[] =
+			"#define ATOMIC_BOOL_LOCK_FREE 2\n#define ATOMIC_CHAR_LOCK_FREE 2\n"
+			"#define ATOMIC_CHAR16_T_LOCK_FREE 2\n#define ATOMIC_CHAR32_T_LOCK_FREE 2\n"
+			"#define ATOMIC_WCHAR_T_LOCK_FREE 2\n#define ATOMIC_SHORT_LOCK_FREE 2\n"
+			"#define ATOMIC_INT_LOCK_FREE 2\n#define ATOMIC_LONG_LOCK_FREE 2\n"
+			"#define ATOMIC_LLONG_LOCK_FREE 2\n#define ATOMIC_POINTER_LOCK_FREE 2\n"
 			"typedef _Atomic unsigned int atomic_flag;\n"
 			"typedef enum { memory_order_relaxed=0, memory_order_consume=1, memory_order_acquire=2,"
 			" memory_order_release=3, memory_order_acq_rel=4, memory_order_seq_cst=5 } memory_order;\n"
