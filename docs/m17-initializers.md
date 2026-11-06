@@ -75,8 +75,9 @@ constant-object semantics and receive an explicit dependency diagnostic. C23
 expanded record compatibility/redefinition rules remain M23h. Floating/complex,
 _BitInt, VLA, atomics, bit-fields/flexible arrays and by-value aggregate ABI still
 belong to their listed milestones. Explicit integer-pointer casts are supported at runtime using the target LP64
-representation; nonzero numeric pointer constants and pointer-to-integer
-relocations remain unsupported in static initializers.
+representation; direct integer-constant casts can initialize static pointers.
+Pointer arithmetic on those values and pointer-to-integer relocations remain
+unsupported in static initializers.
 Optional broader arithmetic constant forms (for example skipped ordinary calls
 outside strict arithmetic-constant operand shape) are not claimed as mandatory
 C constraints or native agreement. Undefined behavior and native extensions are

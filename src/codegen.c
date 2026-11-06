@@ -1874,7 +1874,7 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 					emit(&data_codegen, "z %ju }\n", (uintmax_t)size);
 					break;
 				case static_data_integer:
-					assert(type_is_integer(object->type));
+					assert(type_is_integer(object->type) || object->type->kind == type_kind_pointer);
 					emit(&data_codegen, "%s %ju }\n", encoding,
 						(uintmax_t)object->initializer_value.integer_bits);
 					break;

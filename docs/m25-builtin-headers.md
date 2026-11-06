@@ -81,8 +81,8 @@ suite remains unrun.
   2.34 does not.
 - `signal.h` provides Linux x86-64 signal numbers, `sig_atomic_t`, `SIG_DFL`,
   `SIG_IGN`, `SIG_ERR`, and declarations for `signal` and `raise`. The signal
-  sentinel expressions use the target's integer/function-pointer mapping;
-  nonzero static pointer initializers remain unsupported. `stdint.h` also
+  sentinel expressions use the target's integer/function-pointer mapping,
+  including direct static initialization. `stdint.h` also
   supplies `SIG_ATOMIC_MIN` and `SIG_ATOMIC_MAX`. These declarations depend on
   compatible libc. **The compiler does not support `volatile`**, so typical
   signal-handler communication via `volatile sig_atomic_t` is not yet supported;

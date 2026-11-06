@@ -3476,6 +3476,29 @@ static bool static_float_cast_to_integer(const struct ast_expression *source,
 
 /* The source is checked before conversion so narrowing cannot hide invalid
  * evaluated arithmetic. Both queries are pure: no lowered node is re-sema'd. */
+/* A direct integer ICE cast to a pointer denotes an absolute target value.
+ * Do not treat pointer-derived integers or arithmetic on these values as
+ * constant addresses, and do not widen the null-pointer-constant rules. */
+static bool static_numeric_pointer(const struct ast_expression *source, uint64_t *bits)
+{
+	const struct ast_expression *operand;
+	struct constant_result value;
+	unsigned width;
+	if (source->kind != expression_cast || source->type->kind != type_kind_pointer)
+		return false;
+	operand = ((const struct ast_cast_expression *)source)->operand;
+	if (!type_is_integer(operand->type))
+		return false;
+	value = evaluate_integer_constant(operand);
+	if (value.status != constant_value || !value.bits)
+		return false;
+	width = type_integer_width(value.type);
+	*bits = value.bits;
+	if (!type_is_unsigned(value.type) && width < 64 && (*bits & (UINT64_C(1) << (width - 1))))
+		*bits |= ~((UINT64_C(1) << width) - 1);
+	return true;
+}
+
 bool sema_validate_static_initializer(const struct ast_expression *source,
 	const struct ast_expression *converted, struct static_data_value *value,
 	struct diagnostics *diagnostics)
@@ -3498,6 +3521,11 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		(source->type->kind == type_kind_pointer || source->type->kind == type_kind_nullptr))
 		return static_boolean_initializer(source, value, diagnostics);
 	if (converted->type->kind == type_kind_pointer || converted->type->kind == type_kind_nullptr) {
+		uint64_t numeric_bits;
+		if (converted->type->kind == type_kind_pointer && static_numeric_pointer(source, &numeric_bits)) {
+			*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = numeric_bits };
+			return true;
+		}
 		struct null_initializer_result null = evaluate_null_initializer(source);
 		struct address_initializer_result address;
 		if (null.status == constant_invalid) {
@@ -5362,6 +5390,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct constant_result value;
 	struct address_initializer_result address_value;
 	bool is_address = false;
+	bool is_numeric_pointer = false;
+	uint64_t numeric_pointer_bits = 0;
 	bool is_boolean_address = false;
 	struct static_data_value boolean_value = { 0 };
 	bool has_initializer = syntax || *initializer;
@@ -5471,11 +5501,13 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (type->kind == type_kind_pointer || type->kind == type_kind_nullptr) {
 		struct null_initializer_result null_value = evaluate_null_initializer(*initializer);
 
-		if (null_value.status == constant_invalid) {
+		is_numeric_pointer = type->kind == type_kind_pointer &&
+			static_numeric_pointer(*initializer, &numeric_pointer_bits);
+		if (null_value.status == constant_invalid && !is_numeric_pointer) {
 			diagnostic_error(sema->diagnostics, null_value.location, null_value.message);
 			goto rollback;
 		}
-		if (null_value.status != constant_value) {
+		if (null_value.status != constant_value && !is_numeric_pointer) {
 			address_value = evaluate_address_initializer(*initializer);
 			if (address_value.status != constant_value) {
 				diagnostic_error(sema->diagnostics, address_value.location, address_value.message);
@@ -5501,7 +5533,11 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	if (!target || !convert_expression(sema, initializer, target))
 		goto rollback;
 	if (type->kind == type_kind_pointer || type->kind == type_kind_nullptr) {
-		if (is_address) {
+		if (is_numeric_pointer) {
+			symbol->initializer_value = (struct static_data_value) {
+				.kind = static_data_integer, .integer_bits = numeric_pointer_bits,
+			};
+		} else if (is_address) {
 			/* Assignment conversion remains authoritative, but its ordinary
 			 * void-pointer rule cannot widen this bounded static-data proof.
 			 * Check the final type against the captured direct origin too.

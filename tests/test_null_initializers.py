@@ -188,7 +188,6 @@ DEFERRED = [
     'typeof(nullptr) other; int *cell=other;',
     'int *cell=cell;',
     'void *cell=cell;',
-    'int *cell=(int *)1;',
     'int *cell=(int *)(_Bool)nullptr;',
     'int *cell=(int *)(long)(void *)0;',
     'int *cell=(int *)(typeof(nullptr))(0,nullptr);',
@@ -374,7 +373,7 @@ def main():
                 message = 'file-scope pointer initializer requires a supported null or direct address constant expression'
                 if text in DUPLICATES:
                     message = 'multiple initialized definitions of object'
-                elif text in ('int *cell=(int *)1;', 'int *cell=(int *)(_Bool)nullptr;',
+                elif text in ('int *cell=(int *)(_Bool)nullptr;',
                               'int *cell=(int *)(long)(void *)0;'):
                     message = 'integer source is not a null pointer constant'
                 elif text == 'long cell=(long)(int *)0;':

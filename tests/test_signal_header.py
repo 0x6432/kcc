@@ -16,9 +16,12 @@ with tempfile.TemporaryDirectory(prefix='kcc-signal-') as directory:
 #include <stdint.h>
 static_assert(sizeof(sig_atomic_t)==4 && SIG_ATOMIC_MIN == (-2147483647-1));
 static_assert(SIG_ATOMIC_MAX == 2147483647);
+void (*initial_ignore)(int) = SIG_IGN;
+void (*initial_error)(int) = SIG_ERR;
 void handler(int signum) { (void)signum; }
 int main(void) {
-  __kcc_sighandler_t previous=signal(SIGINT,SIG_IGN);
+  __kcc_sighandler_t previous=signal(SIGINT,initial_ignore);
+  if (initial_error!=SIG_ERR) return 4;
   if (previous==SIG_ERR) return 1;
   if (raise(SIGINT)!=0) return 2;
   if (signal(SIGINT,previous)==SIG_ERR) return 3;
