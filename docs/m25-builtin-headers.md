@@ -74,6 +74,11 @@ Source provenance, not a filename, determines which budget is charged.
   dispatch to float or double helpers, and link through `build/libkccrt.a`.
   The helpers rely on a matching IEEE host and are built without fast-math or
   LTO; they do not add full floating-environment semantics to the compiler.
+  C23 `roundeven`, `fromfp`/`ufromfp` and `fromfpx`/`ufromfpx`,
+  `canonicalize`, `totalorder`/`totalordermag`, and NaN payload functions are
+  declared for float and double, with glibc rounding-mode constants. These
+  functions require glibc libm 2.31 or newer and have not been runtime-tested.
+  `tgmath.h` adds generic `roundeven` and the four conversion families.
   Long double and many other math interfaces remain unsupported; link math
   functions with `-lm`. A host-only helper smoke check covered a quiet NaN and ordinary comparison;
   generated-program runtime behavior has not been tested.

@@ -209,7 +209,26 @@ int main(void) {
         subprocess.run([host, str(asm), "-lm", "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
     source.write_text(r'''
+#include <math.h>
+static_assert(FP_INT_UPWARD==0 && FP_INT_TONEAREST==4);
+int f(float x, double y) {
+  float a; double b;
+  return (int)(roundevenf(x)+roundeven(y)+fromfpf(x,FP_INT_DOWNWARD,32)+
+    ufromfp(y,FP_INT_TOWARDZERO,32)+fromfpx(y,FP_INT_UPWARD,32)+
+    ufromfpxf(x,FP_INT_TONEAREST,32)+getpayloadf(&x)+getpayload(&y))+
+    canonicalizef(&a,&x)+canonicalize(&b,&y)+totalorderf(&a,&x)+
+    totalorder(&b,&y)+totalordermagf(&a,&x)+totalordermag(&b,&y)+
+    setpayloadf(&a,1.0f)+setpayload(&b,1.0)+setpayloadsigf(&a,1.0f)+setpayloadsig(&b,1.0);
+}
+''')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    for symbol in ('roundevenf', 'roundeven', 'fromfpf', 'ufromfp', 'fromfpx', 'ufromfpxf', 'totalorderf', 'canonicalize', 'setpayloadsig'):
+        assert '$' + symbol in result.stdout, symbol
+    source.write_text(r'''
 #include <tgmath.h>
+static_assert(sizeof(roundeven(4.0f))==sizeof(float));
+static_assert(sizeof(roundeven(4))==sizeof(double));
 static_assert(sizeof(sqrt(4.0f))==sizeof(float));
 static_assert(sizeof(sqrt(4.0))==sizeof(double));
 static_assert(sizeof(sqrt(4))==sizeof(double));
