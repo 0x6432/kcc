@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h`, `signal.h` and `stdalign.h`, in addition
+`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h`, `signal.h`, `fenv.h` and `stdalign.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence. Compiler-owned fallback source objects can
 define implementation-reserved guard and compatibility macros; ordinary user
@@ -93,6 +93,12 @@ suite remains unrun.
   separately linked `libkccrt.a`; see `m14-volatile-scalars.md`. The header does
   not make arbitrary asynchronous communication safe. Focused compile checks
   only; signal behavior has not been runtime-tested.
+- `fenv.h` supplies x86-64 glibc-compatible opaque environment and mode
+  storage, exception and rounding macros, and floating-environment function
+  declarations. Link with `-lm`; C23 mode/exception functions require a
+  compatible glibc. The compiler does not implement floating-environment access
+  semantics or promise arithmetic observes a changed rounding mode; this header
+  only exposes library calls. No floating-environment runtime test has run.
 - `stdbit.h` supplies the C23 leading/trailing counts, first-bit positions,
   zero/one counts, single-bit predicate, bit width, floor and ceiling for the
   five ordinary unsigned integer types, with `_Generic` dispatch evaluating

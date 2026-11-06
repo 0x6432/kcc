@@ -1116,6 +1116,23 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define pow(x,y) _Generic((x),float:_Generic((y),float:powf,default:pow),default:pow)((x),(y))\n"
 			"#define fmod(x,y) _Generic((x),float:_Generic((y),float:fmodf,default:fmod),default:fmod)((x),(y))\n"
 			"#endif\n";
+		static const char fenv_header[] =
+			"#ifndef __KCC_FENV_H\n#define __KCC_FENV_H 1\n"
+			"typedef unsigned short fexcept_t;\n"
+			"typedef struct { unsigned int __opaque[8]; } fenv_t;\n"
+			"typedef struct { unsigned int __opaque[2]; } femode_t;\n"
+			"#define FE_INVALID 1\n#define FE_DIVBYZERO 4\n#define FE_OVERFLOW 8\n"
+			"#define FE_UNDERFLOW 16\n#define FE_INEXACT 32\n"
+			"#define FE_ALL_EXCEPT (FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW|FE_INEXACT)\n"
+			"#define FE_TONEAREST 0\n#define FE_DOWNWARD 1024\n#define FE_UPWARD 2048\n#define FE_TOWARDZERO 3072\n"
+			"#define FE_DFL_ENV ((const fenv_t *)-1L)\n#define FE_DFL_MODE ((const femode_t *)-1L)\n"
+			"int feclearexcept(int); int fegetexceptflag(fexcept_t *,int);\n"
+			"int feraiseexcept(int); int fesetexcept(int); int fesetexceptflag(const fexcept_t *,int);\n"
+			"int fetestexcept(int); int fetestexceptflag(const fexcept_t *,int);\n"
+			"int fegetround(void); int fesetround(int); int fegetenv(fenv_t *);\n"
+			"int feholdexcept(fenv_t *); int fesetenv(const fenv_t *); int feupdateenv(const fenv_t *);\n"
+			"int fegetmode(femode_t *); int fesetmode(const femode_t *);\n"
+			"#endif\n";
 		static const char ctype_header[] =
 			"#ifndef __KCC_CTYPE_H\n#define __KCC_CTYPE_H 1\n"
 			"int isalnum(int); int isalpha(int); int isblank(int); int iscntrl(int);\n"
@@ -1501,7 +1518,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "stdalign.h") == 0) {
+		if (strcmp(name->path, "fenv.h") == 0) {
+			header = fenv_header;
+			source_name = "<kcc/fenv.h>";
+		} else if (strcmp(name->path, "stdalign.h") == 0) {
 			header = stdalign_header;
 			source_name = "<kcc/stdalign.h>";
 		} else if (strcmp(name->path, "signal.h") == 0) {
