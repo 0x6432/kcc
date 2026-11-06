@@ -22,6 +22,10 @@ typedef const float CF;
 double global_float=1.5;
 float global_negzero=-0.0f;
 float global_subnormal=0x1p-149f;
+float global_tiny=0x1p-150f;
+float global_tiny_above=0x1.000002p-150f;
+double global_tiny_double=0x1p-1075;
+double global_tiny_double_above=0x1.0000000000001p-1075;
 double global_subnormal_double=0x1p-1074;
 float global_narrow=42.0;
 double global_widen=42.0f;
@@ -70,7 +74,7 @@ float pass(float (*)(float,float),float,float);
 double widen(float); float narrow(double); double mixed(float,int); long to_long(double); _Bool as_bool(double);
 float update(float *); int compound_int(int);
 extern double global_float; extern float global_negzero;
-extern float global_subnormal; extern double global_subnormal_double;
+extern float global_subnormal, global_tiny, global_tiny_above; extern double global_subnormal_double, global_tiny_double, global_tiny_double_above;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 extern float global_arithmetic, global_choice; extern double global_mixed, global_choice_mixed; extern int global_choice_int;
 extern signed char low_char; extern short low_short; extern int low_int;
@@ -89,6 +93,8 @@ int main(void) {
  if (to_long(-3.5)!=-3 || as_bool(0.0) || !as_bool(1.0)) return 7;
  { float x=1.0f; if (update(&x)!=4.5f || x!=3.5f || compound_int(1)!=2) return 8; }
  if (low_char!=-128 || low_short!=-32768 || low_int!=(-2147483647-1)) return 15;
+ if (global_tiny!=0.0f || global_tiny_double!=0.0 ||
+     global_tiny_above!=0x1p-149f || global_tiny_double_above!=0x1p-1074) return 12;
  if (global_float!=1.5 || !signbit(global_negzero) || global_holder.x!=-2.5 || global_holder.y!=3.0f) return 9;
  if (global_subnormal!=0x1p-149f || global_subnormal_double!=0x1p-1074) return 13;
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
@@ -117,7 +123,7 @@ reject = [
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
  'signed char too_low=-129.0;', 'short too_low=-32769.0;',
  'float f(void){return 1.0L;}',
- 'float f(void){return 1e9999f;}', 'float f(void){return 1e-9999f;}',
+ 'float f(void){return 1e9999f;}',
  'float f(void){return 1.0e1\'f;}', 'double x=1.0/0.0;',
  'int x[1.0];', '#if 1.0\nint x;\n#endif\n',
  'int x=2147483648.0;', 'unsigned x=-1.0;', 'int x=1.0/0.0;',
