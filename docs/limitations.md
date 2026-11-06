@@ -2,10 +2,11 @@
 
 The development branch includes bounded initializers, enums, alignment,
 float/double, scalar variadics, flexible arrays, VLAs, atomics and partial
-standard headers. Aggregate-by-value calls, general bit-fields, broader C23 language
-features and a complete library remain unsupported. Recent integrated changes
-have been built but not fully tested; M17 approval and C23 conformance are not
-claimed. Read feature-specific documents for current boundaries; earlier
+standard headers. Aggregate calls and returns have a bounded SysV implementation
+(`m21-aggregate-abi.md`); general aggregate ABI, general bit-fields, broader C23
+language features and a complete library remain incomplete. Recent integrated
+changes have been built but not fully tested; M17 approval and C23 conformance
+are not claimed. Read feature-specific documents for current boundaries; earlier
 entries below are historical. Named full-width int bit-fields are supported as
 described in `m22-bit-fields.md`.
 

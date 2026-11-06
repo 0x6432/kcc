@@ -19,12 +19,27 @@ flexible-member addresses bounded by the record's own size; see `m22-flexible-ar
 Deprecated enum definitions now warn on subsequent direct named enum type
 references, and bounded nodiscard warnings cover discarded comma operands,
 with limitations in `m23g-extended-attributes.md`. See each feature's
-documentation for boundaries. Notable remaining work includes aggregate-by-value
-ABI, general bit-fields (the full-width subset is in `m22-bit-fields.md`),
+documentation for boundaries. Aggregate calls and returns have a bounded SysV
+implementation; see `m21-aggregate-abi.md`. Notable remaining work includes the
+rest of aggregate ABI, general bit-fields (the full-width subset is in `m22-bit-fields.md`),
 `_BitInt` values and types, `long double`, complete preprocessing and attributes,
 and a complete hosted C library. Direct `_BitInt` layout queries are supported
 in a bounded slice; see `m24-bitint-foundation.md`. The internal bit-precise
 arithmetic helpers do **not** enable `_BitInt` value programs.
+
+## Validation batch (2026-11-06)
+
+At source checkpoint `3a135e5`, the QBE 1.2 runtime batch passed its initial
+CLI, preprocessor, AST, floating, compiler, variadic, header and conditional
+checks before an obsolete include-diagnostic expectation stopped `make test`.
+A separately run tail batch passed 113 of 131 scripts and failed 18. Failures
+include expectations overtaken by floating, VLA, wide-string and atomic work,
+changed diagnostic wording, and an unavailable exact pthread companion; each
+still requires triage rather than being counted as a pass. The M17 frozen
+runtime harnesses completed but reported explicit host capability gaps and
+semantic discrepancies; these are not native agreements or M17 approval. The
+later aggregate ABI and build changes received separate focused checks, not a
+complete integrated suite.
 
 The current work branch is `development`, per the revised user instruction.
 Earlier feature-branch-only instructions and the old development pin below
