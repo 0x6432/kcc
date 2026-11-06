@@ -6,6 +6,12 @@ declarators; prefixes are accepted for named members and named parameters,
 for-declaration initializers, and labels in compound blocks. No unused-entity
 warnings are emitted, so the attribute does not change generated code.
 
+`[[deprecated]]` and `[[deprecated("message")]]` are accepted on the same
+supported declaration positions. Messages may contain adjacent ordinary
+string fragments. The compiler does not currently issue the recommended
+warnings when deprecated names are used, and does not advertise the attribute
+through `__has_c_attribute`.
+
 `[[fallthrough]];` is accepted in a compound statement within a switch when the
 next block item is a case or default label. Other placements are rejected.
 Unrecognized attributes, including scoped vendor names, are ignored in these
@@ -14,8 +20,8 @@ statements without braces. Their optional argument lists must contain balanced
 parentheses, brackets and braces and are limited to 64 nesting levels and 256
 items/tokens per sequence. Argument tokens must be supported language tokens;
 this is not yet a general preprocessing-token attribute parser. Known standard
-attributes other than `maybe_unused` and `fallthrough` are still rejected;
-arguments for those two attributes are rejected. Attributes on anonymous
+attributes other than `maybe_unused`, `deprecated` and `fallthrough` are still
+rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
 members, unnamed parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
 handling, including placement and token-grammar coverage. Expanded

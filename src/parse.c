@@ -67,6 +67,7 @@ struct parsed_attributes {
 	bool present;
 	bool maybe_unused;
 	bool fallthrough;
+	bool deprecated;
 };
 
 static bool token_spells(struct token token, const char *name, size_t length)
@@ -121,7 +122,7 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 		if (!expect_token(parser, token_left_bracket, "expected second '[' in attribute", NULL))
 			return false;
 		for (;;) {
-			bool scoped = false, known = false;
+			bool scoped = false, known = false, deprecated = false;
 			token = preprocess_peek(parser->preprocessor);
 			if (token.kind == token_right_bracket)
 				break;
@@ -151,18 +152,39 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 				}
 				attributes->fallthrough = true;
 				known = true;
+			} else if (!scoped && token_spells(token, "deprecated", 10)) {
+				attributes->deprecated = true;
+				known = deprecated = true;
 			} else if (!scoped && (token_spells(token, "nodiscard", 9) ||
-				token_spells(token, "deprecated", 10) || token_spells(token, "noreturn", 8) ||
+				token_spells(token, "noreturn", 8) ||
 				token_spells(token, "unsequenced", 11) || token_spells(token, "reproducible", 12))) {
 				diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute");
 				return false;
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
-				if (known) {
+				if (deprecated) {
+					preprocess_next(parser->preprocessor);
+					struct token message = preprocess_peek(parser->preprocessor);
+					if (message.kind != token_string || message.string_encoding != character_ordinary) {
+						diagnostic_error(parser->diagnostics, message.location,
+							"deprecated requires an ordinary string literal argument");
+						return false;
+					}
+					do {
+						if (++count > 256) {
+							diagnostic_error(parser->diagnostics, message.location, "attribute limit exceeded (256)");
+							return false;
+						}
+						preprocess_next(parser->preprocessor);
+						message = preprocess_peek(parser->preprocessor);
+					} while (message.kind == token_string && message.string_encoding == character_ordinary);
+					if (!expect_token(parser, token_right_paren, "expected ')' after deprecated message", NULL))
+						return false;
+				} else if (known) {
 					diagnostic_error(parser->diagnostics, token.location, "supported attributes take no arguments");
 					return false;
 				}
-				if (!skip_unknown_attribute_arguments(parser, &count))
+				else if (!skip_unknown_attribute_arguments(parser, &count))
 					return false;
 			}
 			token = preprocess_peek(parser->preprocessor);
@@ -3229,6 +3251,11 @@ static struct ast_statement *parse_statement(struct parser *parser)
 		if (!parse_attributes(parser, &attributes))
 			return NULL;
 		token = preprocess_peek(parser->preprocessor);
+		if (attributes.deprecated) {
+			diagnostic_error(parser->diagnostics, first.location,
+				"deprecated is supported only on declarations");
+			return NULL;
+		}
 		if (attributes.fallthrough) {
 			diagnostic_error(parser->diagnostics, first.location,
 				"fallthrough is supported only as a block item before a case label");
@@ -3790,6 +3817,11 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			if (!parse_attributes(parser, &attributes))
 				return NULL;
 			token = preprocess_peek(parser->preprocessor);
+			if (attributes.deprecated && !begins_declaration_specifier(parser, token)) {
+				diagnostic_error(parser->diagnostics, first.location,
+					"deprecated is supported only on declarations");
+				return NULL;
+			}
 			if (attributes.fallthrough) {
 				struct ast_statement *statement;
 				struct ast_statement_item *statement_item;

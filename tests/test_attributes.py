@@ -8,6 +8,8 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('[[deprecated("use " "new")]] int old(int x){return x;} int f([[deprecated]] int y){return old(y);}',
+     'int old(int x){return x;} int f(int y){return old(y);}'),
     ('int f(int x){ [[vendor::trace]] if(x) [[ignored(2)]] return 1; [[unknown]] return 0; }',
      'int f(int x){ if(x) return 1; return 0; }'),
     ('[[vendor::unknown(1, {2, [3]}), unknown, maybe_unused]] int x=42; int main(void){return x;}',
@@ -39,8 +41,10 @@ pairs = [
 invalid = [
     ('[[nodiscard]] int f(void);', 'unsupported standard attribute'),
     ('[[fallthrough]] int x;', 'fallthrough is only supported'),
-    ('[[deprecated("reason")]] int x;', 'unsupported standard attribute'),
     ('[[maybe_unused(1)]] int x;', 'take no arguments'),
+    ('[[deprecated(1)]] int x;', 'ordinary string literal argument'),
+    ('[[deprecated(u"wide")]] int x;', 'ordinary string literal argument'),
+    ('int f(void){ [[deprecated]] return 0; }', 'only on declarations'),
     ('[[maybe_unused] int x;', "expected ']]'"),
     ('[[maybe_unused]] struct S;', 'tag-only'),
     ('int f(void){ [[maybe_unused]] struct S; return 0; }', 'tag-only'),
