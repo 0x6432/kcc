@@ -336,7 +336,8 @@ static const struct record_member *codegen_bit_field(const struct ast_expression
 	if (expression->kind != expression_member)
 		return NULL;
 	const struct record_member *member = ((const struct ast_member_expression *)expression)->member;
-	return member && member->is_bit_field && member->bit_width && member->bit_width < 32 ? member : NULL;
+	return member && member->is_bit_field && member->bit_width &&
+		(member->bit_width < 32 || type_value_width(member->type) == 64) ? member : NULL;
 }
 
 static size_t codegen_field_value(struct codegen *codegen, size_t value,
@@ -371,7 +372,7 @@ static size_t codegen_field_storage_load(struct codegen *codegen, size_t address
 static size_t codegen_byte_offset(struct codegen *codegen, size_t base, uint64_t offset);
 
 /* Long-base fields use a 64-bit value and can touch five bytes even when
- * their supported width is below 32. Access exactly the occupied bytes so a
+ * their supported width is at most 32. Access exactly the occupied bytes so a
  * field at the end of an object does not read or write beyond it. */
 static size_t codegen_wide_field_load(struct codegen *codegen, size_t address,
 	const struct record_member *member)
@@ -710,7 +711,8 @@ static void codegen_initializer_plan(struct codegen *codegen,
 			continue;
 		address = codegen_byte_offset(codegen, destination, entry->offset);
 		if (entry->kind == ast_initializer_write_zero) {
-			if (entry->bit_field && entry->bit_field->bit_width < 32) {
+			if (entry->bit_field && (entry->bit_field->bit_width < 32 ||
+				type_value_width(entry->bit_field->type) == 64)) {
 				size_t zero = codegen->next_temporary++;
 				emit(codegen, "\t%%t%zu =%c copy 0\n", zero,
 					qbe_type(entry->bit_field->type));
@@ -731,7 +733,8 @@ static void codegen_initializer_plan(struct codegen *codegen,
 		} else {
 			assert(entry->kind == ast_initializer_write_expression);
 			assert(entry->bit_field || entry->length == type_object_size(entry->type));
-			if (entry->bit_field && entry->bit_field->bit_width && entry->bit_field->bit_width < 32)
+			if (entry->bit_field && entry->bit_field->bit_width &&
+				(entry->bit_field->bit_width < 32 || type_value_width(entry->bit_field->type) == 64))
 				(void)codegen_field_store(codegen, address, value, entry->bit_field);
 			else
 				emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), value, address);

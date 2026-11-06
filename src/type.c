@@ -683,7 +683,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			member->bit_width > 16) ||
 			((member->type->kind == type_kind_long || member->type->kind == type_kind_ulong ||
 			member->type->kind == type_kind_long_long || member->type->kind == type_kind_ulong_long) &&
-			member->bit_width > 31) ||
+			member->bit_width > 32) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))

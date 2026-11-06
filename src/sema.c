@@ -353,7 +353,8 @@ static const struct record_member *narrow_field_value(const struct ast_expressio
 		default:
 			if (is_bit_field_expression(expression)) {
 				const struct record_member *member = ((const struct ast_member_expression *)expression)->member;
-				if (member->bit_width && member->bit_width < 32)
+				if (member->bit_width && (member->bit_width < 32 ||
+					(member->bit_width == 32 && type_value_width(member->type) == 64)))
 					return member;
 			}
 			return NULL;
@@ -363,7 +364,10 @@ static const struct record_member *narrow_field_value(const struct ast_expressio
 
 static const struct type *expression_integer_promotion(const struct ast_expression *expression)
 {
-	return narrow_field_value(expression) ? &type_int : type_integer_promotion(expression->type);
+	const struct record_member *field = narrow_field_value(expression);
+	if (field)
+		return field->bit_width == 32 && type_is_unsigned(field->type) ? &type_uint : &type_int;
+	return type_integer_promotion(expression->type);
 }
 
 /* Restrict may qualify a pointer to an object (including void), or an
@@ -657,7 +661,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 					width.bits > 16) ||
 				((type->kind == type_kind_long || type->kind == type_kind_ulong ||
 					type->kind == type_kind_long_long || type->kind == type_kind_ulong_long) &&
-					width.bits > 31) ||
+					width.bits > 32) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");

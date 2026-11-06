@@ -7,11 +7,13 @@ from test_bit_fields import ROOT, HOST, KCC, object_file, run
 DECL = r'''
 struct S { unsigned p:7; signed long a:31; unsigned long long b:29; char end; };
 struct Barrier { unsigned a:3; unsigned long :0; unsigned b:4; char end; };
-extern struct S global; extern struct Barrier barrier; extern int calls;
+struct Edge { unsigned p:7; signed long s:32; unsigned long long u:32; char end; };
+extern struct S global; extern struct Barrier barrier; extern struct Edge edge; extern int calls;
 struct S *once(struct S *p); struct S change(struct S x); int inspect(void);
 '''
 OWNER = DECL + r'''
-struct S global={99,-123456789,400000000,77}; struct Barrier barrier={5,9,10}; int calls;
+struct S global={99,-123456789,400000000,77}; struct Barrier barrier={5,9,10};
+struct Edge edge={97,-2147483647L,4294967295ULL,9}; int calls;
 struct S *once(struct S *p){calls++;return p;}
 int inspect(void){return global.p==99 && global.a==-123456789 && global.b==400000000 && global.end==77;}
 struct S change(struct S x){x.a+=10; x.b-=9; return x;}
@@ -29,13 +31,19 @@ int main(void){
  if((global.b=0x180000001ULL)!=1 || global.b!=1 || global.a!=-93 || global.p!=99) return 8;
  if((global.a=1073741824L)!=-1073741824L || global.a!=-1073741824L || global.b!=1) return 9;
  if(++global.a!=-1073741823L || global.a--!=-1073741823L || global.a!=-1073741824L) return 10;
+ struct Edge e={97,-2147483647L,4294967295ULL,9};
+ if(_Generic(+e.s,int:1,default:0)!=1 || _Generic(+e.u,unsigned int:1,default:0)!=1) return 11;
+ if(e.s!=-2147483647L || e.u!=4294967295ULL || e.p!=97 || e.end!=9 ||
+    edge.s!=-2147483647L || edge.u!=4294967295ULL || edge.p!=97 || edge.end!=9) return 12;
+ if(e.u++!=4294967295U || e.u!=0 || e.s!=-2147483647L || e.p!=97) return 13;
+ if((e.s+=5)!=-2147483642L || (e.u=4294967295ULL)!=4294967295ULL || e.end!=9) return 14;
  return 0;
 }
 '''
 
 def matrix(d, prefix, kinds):
     decl, owner, checks = [], [], []
-    for width in range(1,32):
+    for width in range(1,33):
         for kind, typ in kinds:
             name=f'b{prefix}_{width}_{kind}'; signed=kind.startswith('s')
             initial='-1' if signed else '0'; updated='0' if signed else '1'
@@ -54,7 +62,7 @@ def matrix(d, prefix, kinds):
 
 def matrix_unnamed(d, typ, field):
     decl, owner, checks = [], [], []
-    for width in range(1,32):
+    for width in range(1,33):
         name=f'n{typ}_{field}_{width}'
         field_type = 'unsigned long' if field == 'long' else 'unsigned long long'
         decl += [f'struct {name} {{ {typ} x; {field_type} :{width}; float y; }};',
@@ -83,13 +91,13 @@ def main():
             for field in ('long','llong'): matrix_unnamed(d,typ,field)
         (d/'formerly-unsupported.c').write_text('struct S { unsigned long x:3; }; struct S s; int main(void){return (struct S){.x=2}.x!=2;}')
         object_file(d/'formerly-unsupported.c',d/'formerly-unsupported.o','kcc'); run([HOST,d/'formerly-unsupported.o','-o',d/'formerly-unsupported']); run([d/'formerly-unsupported'])
-        for source in ['struct S { long x:32; };', 'struct S { unsigned long long x:64; };',
-                       'struct S { long :32; int x; };', 'struct S { long x:0; };',
+        for source in ['struct S { long x:33; };', 'struct S { unsigned long long x:64; };',
+                       'struct S { long :33; int x; };', 'struct S { long x:0; };',
                        'struct S { volatile long x:1; };',
                        'struct S { long :0; int x; }; struct S f(struct S x){return x;}']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
-    print('long-base bit-fields 1–31: four host/KCC combinations and 868 named and 124 unnamed by-value layouts in both directions passed')
+    print('long-base bit-fields 1–32: four host/KCC combinations and 896 named and 128 unnamed by-value layouts in both directions passed')
 
 if __name__=='__main__': main()
