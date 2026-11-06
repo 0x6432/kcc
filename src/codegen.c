@@ -556,7 +556,8 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	address = codegen_address(codegen, node->left);
 	if (node->left->type->qualifiers & type_qualifier_atomic) {
 		const char *atomic_op;
-		bool wide = type_value_width(node->left->type) == 64;
+		unsigned width = (unsigned)type_object_size(node->left->type);
+		bool wide = width == 8;
 
 		switch (node->operation) {
 		case binary_add: atomic_op = "add"; break;
@@ -574,9 +575,9 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		}
 		value = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c call $__atomic_%s_fetch_%u(l %%t%zu, %c %%t%zu, w 5)\n",
-			value, wide ? 'l' : 'w', atomic_op, wide ? 8u : 4u,
+			value, wide ? 'l' : 'w', atomic_op, width,
 			address, wide ? 'l' : 'w', right);
-		return value;
+		return codegen_canonicalize(codegen, value, node->left->type);
 	}
 	left = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", left, qbe_type(node->left->type),
@@ -610,13 +611,16 @@ static struct update_values codegen_update(struct codegen *codegen,
 	uint64_t step = element_size ? element_size : 1;
 
 	if (operand->type->qualifiers & type_qualifier_atomic) {
-		bool wide = type_value_width(operand->type) == 64;
+		unsigned width = (unsigned)type_object_size(operand->type);
+		bool wide = width == 8;
 
 		emit(codegen, "\t%%t%zu =%c call $__atomic_fetch_%s_%u(l %%t%zu, %c %ju, w 5)\n",
 			previous, wide ? 'l' : 'w', operation == update_increment ? "add" : "sub",
-			wide ? 8u : 4u, address, wide ? 'l' : 'w', (uintmax_t)step);
+			width, address, wide ? 'l' : 'w', (uintmax_t)step);
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %ju\n", value, wide ? 'l' : 'w',
 			operation == update_increment ? "add" : "sub", previous, (uintmax_t)step);
+		previous = codegen_canonicalize(codegen, previous, operand->type);
+		value = codegen_canonicalize(codegen, value, operand->type);
 		return (struct update_values) { .previous = previous, .current = value };
 	}
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
@@ -771,8 +775,8 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_atomic_fetch: {
 		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
 		const struct type *referent = ((const struct pointer_type *)node->object->type)->referent;
-		bool wide = type_value_width(referent) == 64;
-		unsigned width = wide ? 8u : 4u;
+		unsigned width = (unsigned)type_object_size(referent);
+		bool wide = width == 8;
 		char value_type = wide ? 'l' : 'w';
 		size_t object = codegen_expression(codegen, node->object);
 		size_t expected = node->expected ? codegen_expression(codegen, node->expected) : 0;
@@ -813,7 +817,7 @@ static size_t codegen_expression(struct codegen *codegen,
 				emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w %%t%zu)\n", temporary, value_type, width, object, order);
 			else
 				emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n", temporary, value_type, width, object);
-			return temporary;
+			return codegen_canonicalize(codegen, temporary, referent);
 		}
 		if (node->operation == ast_atomic_store) {
 			if (node->order)
@@ -838,7 +842,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		else
 			emit(codegen, "\t%%t%zu =%c call $__atomic_%s_%u(l %%t%zu, %c %%t%zu, w 5)\n",
 				temporary, value_type, operation, width, object, value_type, argument);
-		return temporary;
+		return codegen_canonicalize(codegen, temporary, referent);
 	}
 	case expression_va: {
 		const struct ast_va_expression *node = (const struct ast_va_expression *)expression;
@@ -1036,10 +1040,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		if (node->operand->type->qualifiers & type_qualifier_atomic) {
 			/* libatomic's ABI memory order 5 is __ATOMIC_SEQ_CST. */
-			bool wide = type_value_width(node->operand->type) == 64;
+			unsigned width = (unsigned)type_object_size(node->operand->type);
+			bool wide = width == 8;
 			emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n",
-				temporary, wide ? 'l' : 'w', wide ? 8u : 4u, address);
-			return temporary;
+				temporary, wide ? 'l' : 'w', width, address);
+			return codegen_canonicalize(codegen, temporary, node->operand->type);
 		}
 		if (type_is_record(expression->type)) {
 			/* Captures live in entry-allocated slots, never loop allocations.
@@ -1076,9 +1081,10 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t address = codegen_address(codegen, node->left);
 
 		if (node->left->type->qualifiers & type_qualifier_atomic) {
-			bool wide = type_value_width(node->left->type) == 64;
+			unsigned width = (unsigned)type_object_size(node->left->type);
+			bool wide = width == 8;
 			emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n",
-				wide ? 8u : 4u, address, wide ? 'l' : 'w', value);
+				width, address, wide ? 'l' : 'w', value);
 		}
 		else if (type_is_record(node->left->type))
 			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));

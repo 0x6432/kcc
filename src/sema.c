@@ -989,7 +989,9 @@ static const struct type *resolve_unevaluated_type_syntax(struct sema *sema,
 /* Only target types with implemented libatomic ABI paths are accepted. */
 static bool supported_atomic_type(const struct type *type)
 {
-	return type->kind == type_kind_int || type->kind == type_kind_uint ||
+	return type->kind == type_kind_char || type->kind == type_kind_schar ||
+		type->kind == type_kind_uchar || type->kind == type_kind_short ||
+		type->kind == type_kind_ushort || type->kind == type_kind_int || type->kind == type_kind_uint ||
 		type->kind == type_kind_long || type->kind == type_kind_ulong ||
 		type->kind == type_kind_long_long || type->kind == type_kind_ulong_long ||
 		type->kind == type_kind_pointer;

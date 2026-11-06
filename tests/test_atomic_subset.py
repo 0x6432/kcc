@@ -10,6 +10,9 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    '#include <stdatomic.h>\nint main(void) { atomic_schar x=-2; int old=atomic_fetch_add(&x,1); int next=++x; return old==-2 && next==0 && atomic_load(&x)==0 ? 42 : 1; }',
+    '#include <stdatomic.h>\nint main(void) { atomic_ushort x=65535; unsigned short old=atomic_exchange(&x,40); x+=2; return old==65535 && x==42 ? 42 : 1; }',
+    '#include <stdatomic.h>\nint main(void) { atomic_short x=-1; short expected=-1; if(!atomic_compare_exchange_strong(&x,&expected,42)) return 1; return atomic_load(&x); }',
     '#include <stdatomic.h>\nint main(void) { atomic_long x=4294967296L; long old=atomic_fetch_add(&x,41); ++x; return old==4294967296L && atomic_load(&x)==4294967338L ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void) { atomic_ullong x=40; unsigned long long expected=40; if(!atomic_compare_exchange_strong(&x,&expected,41)) return 1; return ++x; }',
     'int main(void) { _Atomic long x=40; x+=2; return x; }',
@@ -47,7 +50,7 @@ negative = [
     'int f(void) { _Atomic(void *) p=0; p++; return 0; }',
     'int f(void) { int x[2]; _Atomic(int *) p=x; p&=1; return 0; }',
     'struct S { _Atomic(int *) p; };',
-    '_Atomic short x;', '_Atomic _Bool x;',
+    '_Atomic _Bool x;',
     '_Atomic void x;', '_Atomic(int[2]) x;',
     '_Atomic(const int) x;', '_Atomic(_Atomic(int)) x;',
     'struct S { _Atomic int x; };', 'struct S { _Atomic int x[2]; };',
@@ -83,6 +86,9 @@ with tempfile.TemporaryDirectory(prefix='kcc-atomics-') as tmp:
     for text in negative:
         compile_kcc(text, False)
 
+    narrow_output = compile_kcc('#include <stdatomic.h>\nint f(atomic_schar *p,atomic_ushort *q) { (*p)++; *q=42; return atomic_load(p)+atomic_fetch_add(q,1); }')
+    assert '$__atomic_fetch_add_1' in narrow_output and '$__atomic_store_2' in narrow_output and '$__atomic_fetch_add_2' in narrow_output
+    assert 'extsb' in narrow_output and 'extuh' in narrow_output
     wide_output = compile_kcc('#include <stdatomic.h>\nlong f(atomic_long *p,long x) { *p=x; return atomic_fetch_add(p,1); }')
     assert '$__atomic_store_8' in wide_output and '$__atomic_fetch_add_8' in wide_output
     pointer_output = compile_kcc('int *f(_Atomic(int *) *p) { return *p; } void g(_Atomic(int *) *p,int *q) { *p=q; }')
