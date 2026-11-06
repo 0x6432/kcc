@@ -12,12 +12,16 @@ with tempfile.TemporaryDirectory(prefix='kcc-math-') as directory:
     source = path / 'test.c'
     source.write_text(r'''
 #include <tgmath.h>
+#include <stdlib.h>
 static_assert(_Generic(fma(1.0f,2.0f,3.0f),float:1,default:0));
 static_assert(_Generic(fma(1.0f,2,3.0f),double:1,default:0));
 static_assert(_Generic(hypot(1.0f,2.0f),float:1,default:0));
 static_assert(_Generic(hypot(1.0f,2.0),double:1,default:0));
 int main(void) {
   float x=2.0f;
+  float tiny=strtof("1.40129846e-45",nullptr);
+  if (fpclassify(tiny)!=FP_SUBNORMAL || !issubnormal(tiny) || !isnormal(x)) return 4;
+  if (!iszero(0.0f) || issignaling(x)) return 5;
   if (fma(x++,3.0f,1.0f)!=7.0f || x!=3.0f) return 1;
   if (hypot(3.0,4.0)!=5.0 || exp2(3)!=8.0) return 2;
   if (fmax(1.0f,2.0f)!=2.0f || copysign(3.0,-1.0)!=-3.0) return 3;

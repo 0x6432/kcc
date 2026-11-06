@@ -67,8 +67,10 @@ Source provenance, not a filename, determines which budget is charged.
   a small selection of Linux error constants; other error codes are not provided.
 - `math.h` declares a subset of float/double math functions and uses glibc
   classification functions for `isfinite`, `isinf`, `isnan` and `signbit`,
-  evaluating each argument once after conversion to double. Long double,
-  other classifications and many math interfaces remain unsupported; link
+  evaluating each argument once after conversion to double. `fpclassify`,
+  `isnormal`, `issubnormal`, `iszero` and `issignaling` dispatch float and
+  double to glibc helpers, preserving float subnormal classification. Long
+  double, other classifications and many math interfaces remain unsupported; link
   math functions with `-lm`.
 - `tgmath.h` provides bounded unary real functions, `atan2`, `pow`, `fmod`,
   `hypot`, `copysign`, `fdim`, `fmax`, `fmin`, `remainder`, `nextafter` and
