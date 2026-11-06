@@ -148,6 +148,17 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
                      'void g(void){ f(); (void)f(); }')
     assert result.returncode == 0, result.stderr
     assert result.stderr.count('warning: discarded result of function returning nodiscard enum') == 1, result.stderr
+    for source, direct, enum_count in [
+        ('[[nodiscard]] int f(void); int g(void){return (f(), 1);}', 1, 0),
+        ('[[nodiscard]] int f(void); void g(void){(f(), f()), f();}', 3, 0),
+        ('[[nodiscard]] int f(void); void g(void){(void)f(), (void)f();}', 0, 0),
+        ('[[nodiscard]] int f(void); int g(void){return sizeof((f(), 1));}', 0, 0),
+        ('enum [[nodiscard]] E { A }; enum E f(void); int g(void){return (f(), 1);}', 0, 1),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.count('warning: discarded result of nodiscard function') == direct, result.stderr
+        assert result.stderr.count('warning: discarded result of function returning nodiscard enum') == enum_count, result.stderr
     for source, count in [
         ('enum E { A [[deprecated("old")]]=1, B=A }; int f(void){return A+B;}', 2),
         ('enum E : unsigned long { A [[__deprecated__]]=1 }; unsigned long f(void){return A;}', 1),

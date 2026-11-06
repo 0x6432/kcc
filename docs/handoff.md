@@ -17,7 +17,8 @@ names promoted through anonymous members, allow trailing static assertions,
 support named flexible-array structures in unions, and form conservative static
 zero-position flexible-member addresses; see `m22-flexible-arrays.md`.
 Deprecated enum definitions now warn on subsequent direct named enum type
-references, with limitations in `m23g-extended-attributes.md`. See each feature's
+references, and bounded nodiscard warnings cover discarded comma operands,
+with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Notable remaining work includes aggregate-by-value
 ABI, bit-fields, source `_BitInt`, `long double`, complete preprocessing and
 attributes, and a complete hosted C library. The internal bit-precise arithmetic

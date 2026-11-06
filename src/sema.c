@@ -2067,6 +2067,39 @@ static struct function_symbol *visible_file_function(struct sema *sema, struct t
 	return symbol && symbol->file_type ? symbol : NULL;
 }
 
+/* Capture the visible declaration before sema lowers a call's name into a
+ * function designator. The rightmost operand of a discarded comma expression
+ * is itself discarded; earlier operands are handled by sema's comma case. */
+static struct ast_call_expression *discarded_call(struct ast_expression *expression)
+{
+	while (expression->kind == expression_comma)
+		expression = ((struct ast_comma_expression *)expression)->right;
+	return expression->kind == expression_call ? (struct ast_call_expression *)expression : NULL;
+}
+
+static bool discarded_call_nodiscard(struct sema *sema, const struct ast_call_expression *call)
+{
+	if (!call || call->callee->kind != expression_name)
+		return false;
+	struct ast_name_expression *name = (struct ast_name_expression *)call->callee;
+	struct ast_local_declaration *local = find_local(sema, name->name);
+	struct function_symbol *function = local ? local->function_symbol : visible_file_function(sema, name->name);
+	return function && ((local && local->is_nodiscard) || function->file_nodiscard);
+}
+
+static void warn_discarded_call(struct sema *sema, const struct ast_call_expression *call, bool marked)
+{
+	if (!call || sema->unevaluated)
+		return;
+	if (call->expression.type->kind == type_kind_enum &&
+		((const struct enum_type *)call->expression.type)->definition->is_nodiscard)
+		diagnostic_warning(sema->diagnostics, call->expression.location,
+			"discarded result of function returning nodiscard enum");
+	else if (marked && call->expression.type->kind != type_kind_void)
+		diagnostic_warning(sema->diagnostics, call->expression.location,
+			"discarded result of nodiscard function");
+}
+
 static bool has_register_root(const struct ast_expression *expression)
 {
 	while (expression->kind == expression_member) {
@@ -3054,10 +3087,13 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_comma: {
 		struct ast_comma_expression *node = (struct ast_comma_expression *)expression;
+		struct ast_call_expression *call = discarded_call(node->left);
+		bool marked = discarded_call_nodiscard(sema, call);
 		unsigned depth;
 
 		if (!sema_expression(sema, &node->left, true) || !sema_expression(sema, &node->right, true))
 			return false;
+		warn_discarded_call(sema, call, marked);
 		result_type = node->right->type;
 		depth = node->left->depth > node->right->depth ? node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
@@ -5166,31 +5202,11 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	case statement_expression: {
 		struct ast_expression_statement *node =
 			(struct ast_expression_statement *)statement;
-		bool warn_nodiscard = false;
-		bool standalone_call = node->value->kind == expression_call;
-		/* Function-attribute provenance is tracked only for direct calls.
-		 * Enum return-type attributes also apply to indirect calls below. */
-		if (node->value->kind == expression_call) {
-			struct ast_call_expression *call = (struct ast_call_expression *)node->value;
-			if (call->callee->kind == expression_name) {
-				struct ast_name_expression *name = (struct ast_name_expression *)call->callee;
-				struct ast_local_declaration *local = find_local(sema, name->name);
-				struct function_symbol *function = local ? local->function_symbol :
-					visible_file_function(sema, name->name);
-				warn_nodiscard = function && ((local && local->is_nodiscard) || function->file_nodiscard);
-			}
-		}
+		struct ast_call_expression *call = discarded_call(node->value);
+		bool marked = discarded_call_nodiscard(sema, call);
 		if (!sema_expression(sema, &node->value, true))
 			return false;
-		if (standalone_call && node->value->type->kind == type_kind_enum &&
-			((const struct enum_type *)node->value->type)->definition->is_nodiscard) {
-			diagnostic_warning(sema->diagnostics, node->value->location,
-				"discarded result of function returning nodiscard enum");
-			return true;
-		}
-		if (warn_nodiscard && node->value->type->kind != type_kind_void)
-			diagnostic_warning(sema->diagnostics, node->value->location,
-				"discarded result of nodiscard function");
+		warn_discarded_call(sema, call, marked);
 		return true;
 	}
 	case statement_empty:

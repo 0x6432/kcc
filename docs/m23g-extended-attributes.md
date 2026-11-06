@@ -32,8 +32,11 @@ declarator suffixes. Adjacent ordinary strings are accepted as a message. The
 compiler warns for a stand-alone direct call that discards the result of a
 visible nodiscard function. It also accepts `nodiscard` on an enum definition
 and warns for a stand-alone call returning that enum, including an indirect
-call. It does not warn for indirect calls to a nodiscard function, nested discarded
-expressions or all declaration-redeclaration scopes. `(void)` casts suppress this
+call. It also warns on discarded direct calls in comma operands, including the
+rightmost call when the entire comma expression is discarded. Unevaluated
+contexts and explicit void casts suppress these diagnostics. It does not warn for
+indirect calls to a nodiscard function, other nested discarded expressions,
+or all declaration-redeclaration scopes. `(void)` casts suppress this
 limited warning. It does not advertise partial support through `__has_c_attribute`. Typedef- and `typeof`-derived
 function identifiers are resolved semantically; objects, record definitions
 and other unsupported placements are currently rejected. The flag is retained
@@ -66,3 +69,8 @@ Focused development check: the compiler rebuilt and five direct-use, fixed-forwa
 redefinition, shadowing, and fixed tag-only examples compiled with the expected
 warning counts and lowered through pinned QBE 1.2. The added regression fixtures
 have not been run as a suite; no generated program was executed for this change.
+
+Comma-warning development check: the compiler rebuilt and ten focused direct,
+indirect-enum, nested, scoped and suppression examples produced the expected
+warning counts and lowered through pinned QBE 1.2. Added regression fixtures
+and generated-program execution remain pending.
