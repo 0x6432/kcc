@@ -166,3 +166,16 @@ The compiler rebuilt; eight values were inspected in IL, lowered through
 pinned QBE 1.2 and assembled; six invalid or unsupported examples were
 rejected. Regression fixtures, generated-program runtime, ABI, sanitizer
 and fuzz checks remain unrun. M17 remains unapproved.
+
+## Address-selection boundary
+
+The initializer-only integer address evaluator is used only when the expression
+contains a pointer/nullptr operand or pointer difference; it does not broaden
+unrelated integer or floating conditional initializers to accept arbitrary
+skipped loads. Address-containing conditionals retain the existing permissive
+selection behavior, including for skipped branches, so this is a conservative
+implementation boundary rather than a complete form classification. Four
+focused pre-existing nonconstant arithmetic cases were rejected; the focused
+address-derived scalar, floating and pointer examples still compiled and their
+previous IL and assembler checks were repeated. The compiler rebuilt; the
+regression suites and generated-program runtime remain unrun.

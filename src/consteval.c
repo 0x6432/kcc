@@ -372,9 +372,49 @@ struct constant_result check_integer_constant_form(const struct ast_expression *
 	return evaluate(expression, false, false);
 }
 
+/* Keep initializer-only address selection separate from ordinary arithmetic
+ * constant folding. In particular, the permissive skipped-address rule must
+ * not make unrelated integer or floating conditionals accept arbitrary loads. */
+static bool contains_address_operand(const struct ast_expression *expression)
+{
+	if (expression->type->kind == type_kind_pointer || expression->type->kind == type_kind_nullptr ||
+		expression->kind == expression_pointer_difference)
+		return true;
+	switch (expression->kind) {
+	case expression_unary:
+		return contains_address_operand(((const struct ast_unary_expression *)expression)->operand);
+	case expression_binary: {
+		const struct ast_binary_expression *node = (const struct ast_binary_expression *)expression;
+		return contains_address_operand(node->left) || contains_address_operand(node->right);
+	}
+	case expression_logical: {
+		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
+		return contains_address_operand(node->left) || contains_address_operand(node->right);
+	}
+	case expression_conditional: {
+		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+		return contains_address_operand(node->condition) || contains_address_operand(node->then_value) ||
+			contains_address_operand(node->else_value);
+	}
+	case expression_cast:
+		return contains_address_operand(((const struct ast_cast_expression *)expression)->operand);
+	case expression_conversion:
+		return contains_address_operand(((const struct ast_conversion_expression *)expression)->operand);
+	case expression_comma: {
+		const struct ast_comma_expression *node = (const struct ast_comma_expression *)expression;
+		return contains_address_operand(node->left) || contains_address_operand(node->right);
+	}
+	default:
+		return false;
+	}
+}
+
 struct constant_result evaluate_integer_initializer(const struct ast_expression *expression)
 {
 	assert(expression && expression->type && type_is_integer(expression->type));
+	if (!contains_address_operand(expression))
+		return constant_failure(expression, constant_not_constant,
+			"initializer is not an address-dependent expression");
 	return evaluate(expression, true, true);
 }
 
