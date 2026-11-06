@@ -147,3 +147,8 @@ Source provenance, not a filename, determines which budget is charged.
 
 These are partial target-specific headers, not a complete hosted C library.
 Regression coverage has been added but not run.
+The fallback `stdio.h` also supplies an x86-64 glibc-shaped `fpos_t` and
+`fgetpos`/`fsetpos` declarations. The fallback `stdlib.h` exposes `system` and
+implements the locale-dependent `MB_CUR_MAX` through glibc's
+`__ctype_get_mb_cur_max`. These require a compatible libc; only layout and
+focused compilation checks have run, not file-position or locale runtime tests.

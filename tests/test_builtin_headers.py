@@ -76,6 +76,20 @@ void *f(void *p,FILE *stream) {
 """)
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
+    source.write_text(r"""
+#include <stdio.h>
+#include <stdlib.h>
+static_assert(sizeof(fpos_t)==16 && alignof(fpos_t)==8);
+int f(FILE *fp) {
+    fpos_t p;
+    int status=fgetpos(fp,&p);
+    return status+fsetpos(fp,&p)+(int)MB_CUR_MAX+system(0);
+}
+""")
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    for symbol in ('fgetpos', 'fsetpos', '__ctype_get_mb_cur_max', 'system'):
+        assert '$' + symbol in result.stdout, symbol
     (path / "present.h").write_text("#define PRESENT 1\n")
     (path / "defined.h").write_text("/* header named like a conditional operator */\n")
     (path / "__VA_ARGS__.h").write_text("/* header named like a variadic token */\n")
