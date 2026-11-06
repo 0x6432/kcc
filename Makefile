@@ -14,13 +14,19 @@ HEADERS = $(wildcard src/*.h)
 
 .PHONY: all test test-codegen clean fuzz-lex fuzz-compile
 
-all: build/kcc
+all: build/kcc build/libkccrt.a
 
 build:
 	mkdir -p build
 
 build/kcc: src/main.c $(COMPILER_SOURCES) $(HEADERS) | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) src/main.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+
+build/volatile.o: runtime/volatile.c | build
+	$(CC) $(CFLAGS) -fno-strict-aliasing -fno-lto -c $< -o $@
+
+build/libkccrt.a: build/volatile.o
+	ar rcs $@ $<
 
 build/test_support: tests/test_support.c src/source.c src/arena.c src/diagnostic.c src/source.h src/arena.h src/diagnostic.h | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_support.c src/source.c src/arena.c src/diagnostic.c $(LDFLAGS) $(LDLIBS) -o $@
@@ -55,7 +61,7 @@ fuzz-compile: build/fuzz_compile
 
 test-codegen: export QBE := $(QBE)
 test-codegen: export KCC_SOURCE := $(CURDIR)
-test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
+test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
 	./build/test_static_array_ast
 	./build/test_integer_initializer_ast
 	./build/test_null_initializer_ast
@@ -115,6 +121,7 @@ test-codegen: build/kcc build/pp_oracle build/consteval_oracle build/test_static
 	QBE="$(QBE)" python3 tests/test_stdbit.py
 	QBE="$(QBE)" python3 tests/test_integer_pointer_casts.py
 	QBE="$(QBE)" python3 tests/test_signal_header.py
+	QBE="$(QBE)" python3 tests/test_volatile.py
 	QBE="$(QBE)" python3 tests/test_string_concatenation.py
 	QBE="$(QBE)" python3 tests/test_array_parameters.py
 	QBE="$(QBE)" python3 tests/test_qualified_array_parameters.py
@@ -233,7 +240,7 @@ build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
 
 test: export QBE := $(QBE)
 test: export KCC_SOURCE := $(CURDIR)
-test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
+test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
 	python3 tests/test_cli.py
 	./build/test_support
 	./build/test_source
@@ -303,6 +310,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/test_support build/test_
 	python3 tests/test_stdbit.py
 	python3 tests/test_integer_pointer_casts.py
 	python3 tests/test_signal_header.py
+	python3 tests/test_volatile.py
 	python3 tests/test_string_concatenation.py
 	python3 tests/test_array_parameters.py
 	python3 tests/test_qualified_array_parameters.py

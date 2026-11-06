@@ -46,6 +46,7 @@ enum type_qualifier {
 	/* Syntax-only marker: _Atomic(type-name) rejects a qualified operand. */
 	type_qualifier_atomic_specifier = 1u << 2,
 	type_qualifier_restrict = 1u << 3,
+	type_qualifier_volatile = 1u << 4,
 };
 
 struct type {

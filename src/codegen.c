@@ -124,6 +124,26 @@ static size_t atomic_from_bits(struct codegen *codegen, size_t bits, const struc
 	return codegen_canonicalize(codegen, bits, type);
 }
 
+/* QBE has no volatile access marker. Calls into the separately compiled
+ * runtime preserve an observable scalar access across backend optimization. */
+static size_t codegen_volatile_load(struct codegen *codegen, size_t address, const struct type *type)
+{
+	unsigned width = (unsigned)type_object_size(type);
+	size_t bits = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c call $__kcc_volatile_load_%u(l %%t%zu)\n",
+		bits, width == 8 ? 'l' : 'w', width, address);
+	return atomic_from_bits(codegen, bits, type);
+}
+
+static void codegen_volatile_store(struct codegen *codegen, size_t address, size_t value,
+	const struct type *type)
+{
+	unsigned width = (unsigned)type_object_size(type);
+	size_t bits = atomic_to_bits(codegen, value, type);
+	emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, %c %%t%zu)\n",
+		width, address, width == 8 ? 'l' : 'w', bits);
+}
+
 static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
 {
 	bool unsigned_operands;
@@ -602,9 +622,13 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 			address, wide ? 'l' : 'w', right);
 		return codegen_canonicalize(codegen, value, node->left->type);
 	}
-	left = codegen->next_temporary++;
-	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", left, qbe_type(node->left->type),
-		qbe_load_instruction(node->left->type), address);
+	if (node->left->type->qualifiers & type_qualifier_volatile)
+		left = codegen_volatile_load(codegen, address, node->left->type);
+	else {
+		left = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", left, qbe_type(node->left->type),
+			qbe_load_instruction(node->left->type), address);
+	}
 	left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
 	value = codegen->next_temporary++;
 	if (node->element_size)
@@ -614,7 +638,10 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", value, qbe_type(node->calculation_type),
 		instruction, left, right);
 	value = codegen_convert_value(codegen, value, node->calculation_type, node->expression.type);
-	emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
+	if (node->left->type->qualifiers & type_qualifier_volatile)
+		codegen_volatile_store(codegen, address, value, node->left->type);
+	else
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
 	return value;
 }
 
@@ -646,8 +673,11 @@ static struct update_values codegen_update(struct codegen *codegen,
 		value = codegen_canonicalize(codegen, value, operand->type);
 		return (struct update_values) { .previous = previous, .current = value };
 	}
-	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
-		qbe_load_instruction(operand->type), address);
+	if (operand->type->qualifiers & type_qualifier_volatile)
+		previous = codegen_volatile_load(codegen, address, operand->type);
+	else
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
+			qbe_load_instruction(operand->type), address);
 	if (type_is_floating(calculation_type))
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %s\n", value, qbe_type(calculation_type),
 			operation == update_increment ? "add" : "sub", previous,
@@ -660,7 +690,10 @@ static struct update_values codegen_update(struct codegen *codegen,
 		value = codegen_truth_value(codegen, value, calculation_type);
 	else
 		value = codegen_canonicalize(codegen, value, operand->type);
-	emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(operand->type), value, address);
+	if (operand->type->qualifiers & type_qualifier_volatile)
+		codegen_volatile_store(codegen, address, value, operand->type);
+	else
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(operand->type), value, address);
 	return (struct update_values) { .previous = previous, .current = value };
 }
 
@@ -1090,6 +1123,8 @@ static size_t codegen_expression(struct codegen *codegen,
 				temporary, wide ? 'l' : 'w', width, address);
 			return atomic_from_bits(codegen, temporary, node->operand->type);
 		}
+		if (node->operand->type->qualifiers & type_qualifier_volatile)
+			return codegen_volatile_load(codegen, address, node->operand->type);
 		if (type_is_record(expression->type)) {
 			/* Captures live in entry-allocated slots, never loop allocations.
 			 * Later writes to the original cannot rewrite this value. */
@@ -1131,6 +1166,8 @@ static size_t codegen_expression(struct codegen *codegen,
 			emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n",
 				width, address, wide ? 'l' : 'w', bits);
 		}
+		else if (node->left->type->qualifiers & type_qualifier_volatile)
+			codegen_volatile_store(codegen, address, value, node->left->type);
 		else if (type_is_record(node->left->type))
 			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
 		else
@@ -1383,6 +1420,10 @@ static void codegen_local_initializer(struct codegen *codegen,
 
 			emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
 			codegen_record_copy(codegen, value, address, type_object_size(local->type));
+		} else if (local->type->qualifiers & type_qualifier_volatile) {
+			size_t address = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
+			codegen_volatile_store(codegen, address, value, local->type);
 		} else
 			emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(local->type), value, local->slot);
 	}
@@ -1714,7 +1755,12 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 		parameter = parameter->next) {
 		if (parameter->is_void_marker)
 			continue;
-		if (parameter->local)
+		if (parameter->local && (parameter->type->qualifiers & type_qualifier_volatile)) {
+			size_t address = codegen.next_temporary++, value = codegen.next_temporary++;
+			emit(&codegen, "\t%%t%zu =l copy %%v%zu\n", address, parameter->local->slot);
+			emit(&codegen, "\t%%t%zu =%c copy %%p%zu\n", value, qbe_type(parameter->type), parameter_index);
+			codegen_volatile_store(&codegen, address, value, parameter->type);
+		} else if (parameter->local)
 			emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
 				qbe_store_size(parameter->type), parameter_index, parameter->local->slot);
 		parameter_index++;

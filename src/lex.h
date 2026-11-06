@@ -31,6 +31,7 @@ enum token_kind {
 	token_generic,
 	token_void,
 	token_const,
+	token_volatile,
 	token_restrict,
 	token_atomic,
 	token_typedef,

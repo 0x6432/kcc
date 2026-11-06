@@ -572,6 +572,11 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				"atomic record members are not supported");
 			goto done;
 		}
+		if (element->qualifiers & type_qualifier_volatile) {
+			diagnostic_error(sema->diagnostics, member->type_syntax->location,
+				"volatile record members are not supported");
+			goto done;
+		}
 		if (type_is_record(element)) {
 			struct record_state *child = record_state(sema, element);
 			if (type_record_definition(element)->has_flexible_array) {
@@ -1075,6 +1080,16 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "unsupported atomic type");
 			return NULL;
 		}
+		if (((qualified->qualifiers | base->qualifiers) & type_qualifier_volatile) &&
+			((qualified->qualifiers | base->qualifiers) & type_qualifier_atomic)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "volatile atomic types are not supported yet");
+			return NULL;
+		}
+		if ((qualified->qualifiers & type_qualifier_volatile) &&
+			(type_is_record(base) || base->kind == type_kind_array)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "volatile aggregate types are not supported yet");
+			return NULL;
+		}
 		if ((qualified->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(base)) {
 			diagnostic_error(sema->diagnostics, syntax->location,
 				"restrict requires a pointer to an object type");
@@ -1160,6 +1175,10 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!element)
 			return NULL;
+		if (element->qualifiers & type_qualifier_volatile) {
+			diagnostic_error(sema->diagnostics, syntax->location, "volatile array elements are not supported yet");
+			return NULL;
+		}
 		if (!type_is_complete_object(element)) {
 			diagnostic_error(sema->diagnostics, syntax->location, "array element type must be complete");
 			return NULL;
@@ -1351,7 +1370,7 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 		}
 		if (!type || !(type_is_scalar(type) || type_is_record(type)))
 			return false;
-		if (type->qualifiers & type_qualifier_atomic)
+		if (type->qualifiers & (type_qualifier_atomic | type_qualifier_volatile))
 			*effect = true;
 		return true;
 	}
@@ -4209,6 +4228,11 @@ static struct ast_initializer_plan *sema_initializer(struct sema *sema,
 	const struct type *type, const struct ast_initializer *syntax, bool is_static, unsigned *expression_depth)
 {
 	struct initializer_builder builder = { .sema = sema, .is_static = is_static };
+	if (!is_static && (type->qualifiers & type_qualifier_volatile)) {
+		diagnostic_error(sema->diagnostics, syntax->location,
+			"braced automatic volatile initialization is not supported yet");
+		return NULL;
+	}
 	struct initializer_path path = { .components = { { .type = type } } };
 	bool incomplete = type->kind == type_kind_array && !((const struct array_type *)type)->count;
 	if ((!incomplete && !type_is_complete_object(type)) ||
@@ -4356,6 +4380,11 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if ((syntax->qualifiers & type_qualifier_atomic) &&
 		!supported_atomic_type(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "unsupported atomic type");
+		return false;
+	}
+	if ((syntax->qualifiers & type_qualifier_volatile) &&
+		(type_is_record(type) || ((syntax->qualifiers | type->qualifiers) & type_qualifier_atomic))) {
+		diagnostic_error(sema->diagnostics, local->name.location, "unsupported inferred volatile type");
 		return false;
 	}
 	if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {

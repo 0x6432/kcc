@@ -89,10 +89,10 @@ suite remains unrun.
   sentinel expressions use the target's integer/function-pointer mapping,
   including direct static initialization. `stdint.h` also
   supplies `SIG_ATOMIC_MIN` and `SIG_ATOMIC_MAX`. These declarations depend on
-  compatible libc. **The compiler does not support `volatile`**, so typical
-  signal-handler communication via `volatile sig_atomic_t` is not yet supported;
-  the header does not make asynchronous communication safe. Focused compile
-  checks only; signal behavior has not been runtime-tested.
+  compatible libc. Bounded `volatile sig_atomic_t` accesses now require the
+  separately linked `libkccrt.a`; see `m14-volatile-scalars.md`. The header does
+  not make arbitrary asynchronous communication safe. Focused compile checks
+  only; signal behavior has not been runtime-tested.
 - `stdbit.h` supplies the C23 leading/trailing counts, first-bit positions,
   zero/one counts, single-bit predicate, bit width, floor and ceiling for the
   five ordinary unsigned integer types, with `_Generic` dispatch evaluating
