@@ -1337,8 +1337,8 @@ static void codegen_local_initializer(struct codegen *codegen,
 	}
 }
 
-/* Eligible VLAs are allocated at most once per invocation and share a runtime
- * budget, not reclaimed until return. Invalid bounds terminate before allocation. */
+/* Each execution allocates from a cumulative runtime budget; storage is not
+ * reclaimed until return. Invalid bounds terminate before allocation. */
 static void codegen_vla(struct codegen *codegen, const struct ast_local_declaration *local)
 {
 	const struct array_type *array = (const struct array_type *)local->type;

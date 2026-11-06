@@ -4312,6 +4312,16 @@ static bool check_object_alignment(struct sema *sema, const struct type *type,
 	return true;
 }
 
+/* Switch dispatch can enter the scope past a VLA declaration. Keep rejecting
+ * VLAs under a switch until VM-scope jump constraints are modeled. */
+static bool inside_switch(const struct sema *sema)
+{
+	for (const struct control_context *context = sema->control; context; context = context->parent)
+		if (context->statement->kind == statement_switch)
+			return true;
+	return false;
+}
+
 static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
@@ -4341,10 +4351,9 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 			return false;
 		local->alignment = local->alignments->alignment;
 	}
-	/* Outside loop/switch bodies these declarations execute at most once
-	 * without goto; switch dispatch could otherwise bypass initialization.
-	 * A for initializer is visited before its control context is installed. */
-	if (sema->function && sema->scope && !sema->control &&
+	/* Loop declarations allocate each time control reaches them; the runtime
+	 * budget is cumulative. Switch entry and goto remain restricted. */
+	if (sema->function && sema->scope && !inside_switch(sema) &&
 		local->type_syntax->kind == type_syntax_array && !local->is_static &&
 		!local->is_extern && !local->is_thread_local && !local->is_register)
 		sema->vla_candidate = local->type_syntax;

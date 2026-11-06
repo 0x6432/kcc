@@ -10,6 +10,9 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=3, sum=0; while(n) { int a[n]; a[n-1]=n; sum+=a[n-1]; n--; } return sum==6 ? 42 : 1; }',
+    'int main(void) { int n=2, sum=0; for(int i=0;i<3;i++) { int a[n+i]; a[n+i-1]=i; sum+=sizeof a+a[n+i-1]; } return sum==39 ? 42 : 1; }',
+    'int main(void) { int n=2; do { int a[n]; a[0]=n; n=a[0]-1; } while(n); return 42; }',
     'int main(void) { int n=3; int a[n++]; a[2]=42; if(n!=4 || sizeof a!=12) return 1; n=7; if(sizeof a!=12) return 2; return a[2]; }',
     'int main(void) { int n=3; auto unsigned char a[(n=2)]; a[1]=42; if(n!=2 || sizeof a!=2) return 1; return a[1]; }',
     'int main(void) { int n=1; long a[(n++,2)]; a[1]=42; if(n!=2 || sizeof a!=16) return 1; return a[1]; }',
@@ -31,7 +34,6 @@ valid = [
     'int main(void) { int n=3; int a[n++]; a[2]=42; return n==4 && sizeof *(&a)==12 && sizeof *(&*(&a))==12 ? a[2] : 1; }',
 ]
 rejected = [
-    ('int f(int n) { while(n) { int a[n]; n--; } return 0; }', 'variable-length arrays'),
     ('int f(int n) { switch(n) { case 1: { int a[n]; return sizeof a; } } return 0; }', 'variable-length arrays'),
     ('int f(int n) { int a[n]={0}; return 0; }', 'must be uninitialized'),
     ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
@@ -53,6 +55,7 @@ traps = [
     'int main(void) { unsigned long n=18446744073709551615UL; char a[n]; return 42; }',
     'int main(void) { int n=262144; int a[n]; return 42; }',
     'int main(void) { int n=140000; int a[n]; int b[n]; return 42; }',
+    'int main(void) { for(int i=0;i<300000;i++) { int n=1; int a[n]; a[0]=i; } return 42; }',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc vla ') as tmp:
     tmp = Path(tmp)
