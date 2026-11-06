@@ -986,6 +986,15 @@ static const struct type *resolve_unevaluated_type_syntax(struct sema *sema,
 	return type;
 }
 
+/* Only target types with implemented libatomic ABI paths are accepted. */
+static bool supported_atomic_type(const struct type *type)
+{
+	return type->kind == type_kind_int || type->kind == type_kind_uint ||
+		type->kind == type_kind_long || type->kind == type_kind_ulong ||
+		type->kind == type_kind_long_long || type->kind == type_kind_ulong_long ||
+		type->kind == type_kind_pointer;
+}
+
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
 {
@@ -1022,8 +1031,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		}
 		if ((qualified->qualifiers & type_qualifier_atomic) &&
-			base->kind != type_kind_int && base->kind != type_kind_uint && base->kind != type_kind_pointer) {
-			diagnostic_error(sema->diagnostics, syntax->location, "atomic subset supports only int, unsigned int, and pointer types");
+			!supported_atomic_type(base)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "unsupported atomic type");
 			return NULL;
 		}
 		if ((qualified->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(base)) {
@@ -2047,8 +2056,7 @@ static bool sema_expression(struct sema *sema,
 		if (!(referent->qualifiers & type_qualifier_atomic) ||
 			(node->operation != ast_atomic_load && node->operation != ast_atomic_is_lock_free &&
 				(referent->qualifiers & type_qualifier_const)) ||
-			(referent->kind != type_kind_int && referent->kind != type_kind_uint &&
-				referent->kind != type_kind_pointer) ||
+			!supported_atomic_type(referent) ||
 			(referent->kind != type_kind_pointer && node->argument &&
 				!type_is_integer(node->argument->type)) ||
 			(referent->kind == type_kind_pointer &&
@@ -4216,8 +4224,8 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		return false;
 	}
 	if ((syntax->qualifiers & type_qualifier_atomic) &&
-		type->kind != type_kind_int && type->kind != type_kind_uint && type->kind != type_kind_pointer) {
-		diagnostic_error(sema->diagnostics, local->name.location, "atomic subset supports only int, unsigned int, and pointer types");
+		!supported_atomic_type(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location, "unsupported atomic type");
 		return false;
 	}
 	if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {

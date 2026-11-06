@@ -1209,6 +1209,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		static const char stdatomic_header[] =
 			"#ifndef __KCC_STDATOMIC_H\n#define __KCC_STDATOMIC_H 1\n"
 			"typedef _Atomic int atomic_int;\ntypedef _Atomic unsigned int atomic_uint;\n"
+			"typedef _Atomic long atomic_long;\ntypedef _Atomic unsigned long atomic_ulong;\n"
+			"typedef _Atomic long long atomic_llong;\ntypedef _Atomic unsigned long long atomic_ullong;\n"
 			"typedef _Atomic unsigned int atomic_flag;\n"
 			"typedef enum { memory_order_relaxed=0, memory_order_consume=1, memory_order_acquire=2,"
 			" memory_order_release=3, memory_order_acq_rel=4, memory_order_seq_cst=5 } memory_order;\n"

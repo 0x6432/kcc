@@ -6,9 +6,9 @@ priority over compile-time performance.
 
 ## M24c atomic subset
 
-On x86-64 SysV, `_Atomic int` and `_Atomic unsigned int` support ordinary
-sequentially consistent loads, stores and selected read-modify-write operations
-via libatomic. Link generated assembly with `-latomic`. Other atomic operations
+On x86-64 SysV, atomic `int`, `long`, `long long` (signed and unsigned), and
+pointer objects support ordinary sequentially consistent loads, stores and
+selected read-modify-write operations via libatomic. Link generated assembly with `-latomic`. Other atomic operations
 and atomic record members remain unsupported. See `docs/m24c-atomic-subset.md`
 for the safety boundary and pending validation.
 
