@@ -19,10 +19,17 @@ supported positions and before ordinary statements, including controlled
 statements without braces. Their optional argument lists must contain balanced
 parentheses, brackets and braces and are limited to 64 nesting levels and 256
 items/tokens per sequence. Argument tokens must be supported language tokens;
-this is not yet a general preprocessing-token attribute parser. The `noreturn` attribute is additionally accepted as a file- or block-scope prefix or declarator suffix on
+this is not yet a general preprocessing-token attribute parser. `[[nodiscard]]` and `[[nodiscard("message")]]` are accepted on direct function
+identifier declarations, at file and block scope, as declaration prefixes or
+declarator suffixes. Adjacent ordinary strings are accepted as a message. The
+compiler does not issue the recommended discarded-result warning or advertise
+this partial support through `__has_c_attribute`. Typedef-derived functions,
+record/enum declarations and other placements are currently rejected.
+
+The `noreturn` attribute is additionally accepted as a file- or block-scope prefix or declarator suffix on
 function identifier declarations; its other placements are rejected. Known
-standard attributes other than `maybe_unused`, `deprecated`, `fallthrough` and
-this bounded `noreturn` are still rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
+standard attributes other than `maybe_unused`, `deprecated`, `fallthrough`,
+this bounded `nodiscard` and `noreturn` are still rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
 members, unnamed parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
 handling, including placement and token-grammar coverage. Expanded

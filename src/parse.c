@@ -35,6 +35,7 @@ struct parser {
 	bool in_function;
 	bool declaration_attributes;
 	bool declaration_noreturn;
+	bool declaration_nodiscard;
 	bool builtin_declaration;
 	unsigned parameter_nesting;
 	size_t record_declarations;
@@ -71,6 +72,7 @@ struct parsed_attributes {
 	bool fallthrough;
 	bool deprecated;
 	bool noreturn;
+	bool nodiscard;
 };
 
 static bool token_spells(struct token token, const char *name, size_t length)
@@ -125,7 +127,7 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 		if (!expect_token(parser, token_left_bracket, "expected second '[' in attribute", NULL))
 			return false;
 		for (;;) {
-			bool scoped = false, known = false, deprecated = false;
+			bool scoped = false, known = false, message_argument = false, deprecated = false;
 			token = preprocess_peek(parser->preprocessor);
 			if (token.kind == token_right_bracket)
 				break;
@@ -157,22 +159,26 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 				known = true;
 			} else if (!scoped && token_spells(token, "deprecated", 10)) {
 				attributes->deprecated = true;
-				known = deprecated = true;
+				known = message_argument = deprecated = true;
 			} else if (!scoped && token_spells(token, "noreturn", 8)) {
 				attributes->noreturn = true;
 				known = true;
-			} else if (!scoped && (token_spells(token, "nodiscard", 9) ||
-				token_spells(token, "unsequenced", 11) || token_spells(token, "reproducible", 12))) {
+			} else if (!scoped && token_spells(token, "nodiscard", 9)) {
+				attributes->nodiscard = true;
+				known = message_argument = true;
+			} else if (!scoped && (token_spells(token, "unsequenced", 11) ||
+				token_spells(token, "reproducible", 12))) {
 				diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute");
 				return false;
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
-				if (deprecated) {
+				if (message_argument) {
 					preprocess_next(parser->preprocessor);
 					struct token message = preprocess_peek(parser->preprocessor);
 					if (message.kind != token_string || message.string_encoding != character_ordinary) {
 						diagnostic_error(parser->diagnostics, message.location,
-							"deprecated requires an ordinary string literal argument");
+							deprecated ? "deprecated requires an ordinary string literal argument" :
+							"nodiscard requires an ordinary string literal argument");
 						return false;
 					}
 					do {
@@ -183,7 +189,8 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 						preprocess_next(parser->preprocessor);
 						message = preprocess_peek(parser->preprocessor);
 					} while (message.kind == token_string && message.string_encoding == character_ordinary);
-					if (!expect_token(parser, token_right_paren, "expected ')' after deprecated message", NULL))
+					if (!expect_token(parser, token_right_paren, deprecated ? "expected ')' after deprecated message" :
+						"expected ')' after nodiscard message", NULL))
 						return false;
 				} else if (known) {
 					diagnostic_error(parser->diagnostics, token.location, "supported attributes take no arguments");
@@ -221,6 +228,11 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 
 	if (!parse_attributes(parser, &attributes))
 		return false;
+	if (attributes.nodiscard) {
+		diagnostic_error(parser->diagnostics, location.location,
+			"nodiscard is only supported on direct function declarations");
+		return false;
+	}
 	if (attributes.noreturn) {
 		diagnostic_error(parser->diagnostics, location.location,
 			"noreturn attribute is only supported on function identifier declarations");
@@ -235,9 +247,10 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 	return true;
 }
 
-/* After an ordinary declarator, noreturn applies to that declarator only;
- * semantic analysis verifies it actually declares a function identifier. */
-static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn)
+/* After an ordinary declarator, function attributes apply to that declarator
+ * only. Noreturn is checked semantically; nodiscard currently requires
+ * direct function syntax and has no discarded-value warning implementation. */
+static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
@@ -249,6 +262,7 @@ static bool parse_function_declarator_attributes(struct parser *parser, bool *no
 		return false;
 	}
 	*noreturn = attributes.noreturn;
+	*nodiscard = attributes.nodiscard;
 	return true;
 }
 
@@ -3283,6 +3297,11 @@ static struct ast_statement *parse_statement(struct parser *parser)
 		if (!parse_attributes(parser, &attributes))
 			return NULL;
 		token = preprocess_peek(parser->preprocessor);
+		if (attributes.nodiscard) {
+			diagnostic_error(parser->diagnostics, first.location,
+				"nodiscard is only supported on direct function declarations");
+			return NULL;
+		}
 		if (attributes.noreturn) {
 			diagnostic_error(parser->diagnostics, first.location,
 				"noreturn attribute is only supported on function identifier declarations");
@@ -3449,9 +3468,9 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
-	if (parser->declaration_noreturn && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+	if ((parser->declaration_noreturn || parser->declaration_nodiscard) && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 		diagnostic_error(parser->diagnostics, beginning.location,
-			"noreturn attribute requires a function identifier declaration");
+			"function attribute requires a direct function declaration");
 		return NULL;
 	}
 	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
@@ -3536,7 +3555,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct ast_expression *initializer = NULL;
 		struct ast_initializer *initializer_syntax = NULL;
 		struct ast_local_declaration *node;
-		bool declarator_noreturn;
+		bool declarator_noreturn, declarator_nodiscard;
 
 		if (!count_block_item(parser, head.inferred_name.kind == token_identifier ?
 			head.inferred_name.location : preprocess_peek(parser->preprocessor).location))
@@ -3547,7 +3566,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				name = head.inferred_name;
 			else if (!parse_inferred_identifier(parser, &name))
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
 				return NULL;
 			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
 				diagnostic_error(parser->diagnostics, name.location,
@@ -3558,8 +3577,13 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 			if (!type_syntax)
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
 				return NULL;
+		}
+		if ((parser->declaration_nodiscard || declarator_nodiscard) && type_syntax->kind != type_syntax_function) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"nodiscard is only supported on direct function declarations");
+			return NULL;
 		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
 			diagnostic_error(parser->diagnostics, name.location,
@@ -3705,9 +3729,9 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 
 	if (!base)
 		return NULL;
-	if (parser->declaration_noreturn) {
+	if (parser->declaration_noreturn || parser->declaration_nodiscard) {
 		diagnostic_error(parser->diagnostics, keyword.location,
-			"noreturn attribute requires a function identifier declaration");
+			"function attribute requires a function identifier declaration");
 		return NULL;
 	}
 	for (;;) {
@@ -3860,7 +3884,14 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			if (!parse_attributes(parser, &attributes))
 				return NULL;
 			token = preprocess_peek(parser->preprocessor);
-			if (attributes.noreturn && !begins_declaration_specifier(parser, token)) {
+			if (attributes.nodiscard && (!begins_declaration_specifier(parser, token) ||
+				(token.kind == token_identifier && preprocess_peek_second(parser->preprocessor).kind == token_colon))) {
+				diagnostic_error(parser->diagnostics, first.location,
+					"nodiscard is only supported on direct function declarations");
+				return NULL;
+			}
+			if (attributes.noreturn && (!begins_declaration_specifier(parser, token) ||
+				(token.kind == token_identifier && preprocess_peek_second(parser->preprocessor).kind == token_colon))) {
 				diagnostic_error(parser->diagnostics, first.location,
 					"noreturn attribute requires a function identifier declaration");
 				return NULL;
@@ -3916,9 +3947,11 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			return NULL;
 		parser->declaration_attributes = attributes.present;
 		parser->declaration_noreturn = attributes.noreturn;
+		parser->declaration_nodiscard = attributes.nodiscard;
 		item = parse_block_item(parser);
 		parser->declaration_attributes = false;
 		parser->declaration_noreturn = false;
+		parser->declaration_nodiscard = false;
 		if (!item)
 			return NULL;
 		*tail = item;
@@ -4199,7 +4232,7 @@ done:
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn,
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard,
 	struct ast_alignment_group *alignments)
 {
 	struct ast_external_declaration *items = NULL;
@@ -4210,7 +4243,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		struct token name;
 		struct ast_type_syntax *type_syntax;
 		struct ast_external_declaration *item;
-		bool declarator_noreturn;
+		bool declarator_noreturn, declarator_nodiscard;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4221,8 +4254,13 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 		if (!type_syntax)
 			return NULL;
-		if (!parse_function_declarator_attributes(parser, &declarator_noreturn))
+		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
 			return NULL;
+		if ((is_nodiscard || declarator_nodiscard) && type_syntax->kind != type_syntax_function) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"nodiscard is only supported on direct function declarations");
+			return NULL;
+		}
 		/* Its scope starts after the complete declarator, before an
 		 * initializer or a later declarator in the same declaration.
 		 */
@@ -4344,9 +4382,9 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
 		return NULL;
 	}
-	if (parsed.noreturn && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+	if ((parsed.noreturn || parsed.nodiscard) && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 		diagnostic_error(parser->diagnostics, attribute_location.location,
-			"noreturn attribute requires a function identifier declaration");
+			"function attribute requires a direct function declaration");
 		return NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
@@ -4409,9 +4447,9 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 		return node ? &node->external : NULL;
 	}
 	if (head.keyword.kind == token_typedef) {
-		if (parsed.noreturn) {
+		if (parsed.noreturn || parsed.nodiscard) {
 			diagnostic_error(parser->diagnostics, attribute_location.location,
-				"noreturn attribute requires a function identifier declaration");
+				"function attribute requires a function identifier declaration");
 			return NULL;
 		}
 		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
@@ -4419,7 +4457,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
 		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
-		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, head.alignments);
+		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, head.alignments);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

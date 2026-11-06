@@ -8,6 +8,11 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('[[nodiscard]] int f(void){return 42;}', 'int f(void){return 42;}'),
+    ('[[nodiscard("use " "result")]] int f(void);', 'int f(void);'),
+    ('int f(void) [[nodiscard]];', 'int f(void);'),
+    ('int f(void){[[nodiscard]] int g(void); return g();}', 'int f(void){int g(void); return g();}'),
+    ('int f(void){int g(void) [[nodiscard]]; return g();}', 'int f(void){int g(void); return g();}'),
     ('void stop(void) [[noreturn]]; void other(void);',
      '_Noreturn void stop(void); void other(void);'),
     ('void f(void){void stop(void) [[noreturn]]; stop();}',
@@ -53,7 +58,7 @@ pairs = [
 invalid = [
     ('[[noreturn]] int x;', 'requires a function declaration'),
     ('[[noreturn]] typedef void F(void);', 'requires a function identifier'),
-    ('[[noreturn]] enum E { X };', 'requires a function identifier'),
+    ('[[noreturn]] enum E { X };', 'requires a direct function declaration'),
     ('[[noreturn(1)]] void f(void);', 'take no arguments'),
     ('int x [[noreturn]];', 'requires a function declaration'),
     ('void (*p)(void) [[noreturn]];', 'requires a function declaration'),
@@ -61,7 +66,15 @@ invalid = [
     ('void f(void){ [[noreturn]] int x; }', 'requires a function declaration'),
     ('void f(void){ [[noreturn]] typedef int T; }', 'requires a function identifier'),
     ('void f(void){ [[noreturn]] return; }', 'requires a function identifier'),
-    ('[[nodiscard]] int f(void);', 'unsupported standard attribute'),
+    ('[[unsequenced]] int f(void);', 'unsupported standard attribute'),
+    ('[[nodiscard]] int x;', 'direct function declarations'),
+    ('int x [[nodiscard]];', 'direct function declarations'),
+    ('[[nodiscard(1)]] int f(void);', 'ordinary string literal argument'),
+    ('[[nodiscard(u"wide")]] int f(void);', 'ordinary string literal argument'),
+    ('typedef int F(void); [[nodiscard]] F f;', 'direct function declarations'),
+    ('void f(void){ [[nodiscard]] return; }', 'direct function declarations'),
+    ('typedef int T; void f(void){ [[nodiscard]] T: return; }', 'direct function declarations'),
+    ('typedef int T; void f(void){ [[noreturn]] T: return; }', 'requires a function identifier'),
     ('[[fallthrough]] int x;', 'fallthrough is only supported'),
     ('[[maybe_unused(1)]] int x;', 'take no arguments'),
     ('[[deprecated(1)]] int x;', 'ordinary string literal argument'),
@@ -75,7 +88,7 @@ invalid = [
     ('[[maybe_unused]] ;', 'only on declarations'),
     ('int f(void){[[fallthrough]]; return 0;}', 'within a switch'),
     ('int f(int x){switch(x){case 0: [[fallthrough]]; return 0;} return 1;}', 'immediately followed'),
-    ('[[maybe_unused]] [[nodiscard]] int f(void);', 'unsupported standard attribute'),
+    ('[[maybe_unused]] [[unsequenced]] int f(void);', 'unsupported standard attribute'),
     ('[[unknown([)])]] int x;', 'mismatched attribute argument delimiter'),
     ('[[vendor::]] int x;', 'expected scoped attribute identifier'),
 ]
