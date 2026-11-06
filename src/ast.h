@@ -217,6 +217,7 @@ enum ast_compound_literal_storage {
 struct ast_compound_literal_expression {
 	struct ast_expression expression;
 	struct ast_type_syntax *type_syntax;
+	struct ast_alignment_group *alignments;
 	struct ast_initializer *initializer_syntax;
 	struct ast_initializer_plan *initializer_plan;
 	bool file_scope;

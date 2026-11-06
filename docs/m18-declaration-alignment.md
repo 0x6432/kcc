@@ -104,3 +104,17 @@ alignment specifier. Requests above 16 remain unsupported.
 The compiler build and focused accept/reject and emitted-IL checks succeeded.
 Regression fixtures, generated-program runtime, ABI, sanitizer and fuzz checks
 were not run. This does not complete or approve M18.
+
+## Compound literal alignment
+
+The type-name portion of a compound literal may carry the supported alignment
+specifiers. The request is checked against the literal object's natural
+alignment, and is carried to automatic slots and static/thread data. It does
+not change the literal's type or size. Register compound literals cannot carry
+an alignment specifier. A cast or `sizeof` type-name without a compound literal
+initializer continues to reject the specifier. Existing storage-class, type,
+initializer and maximum-alignment restrictions still apply.
+
+The compiler build and focused positive, negative and emitted-IL checks
+succeeded. New fixtures and QBE runtime, ABI, sanitizers, fuzz and full
+regression remain unrun; no M18 or M17 approval is implied.

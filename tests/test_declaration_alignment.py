@@ -37,6 +37,11 @@ accepted = [
     ('int f(alignas(16) int x[3]) { return x[0]; }', 'alloc16 8'),
     ('int f(alignas(16) int); int f(int x) { return x; }', 'alloc4 4'),
     ('int f(enum { N=16 } a, alignas(N) int b) { return a+b; }', 'alloc16 4'),
+    ('int f(void) { return (alignas(16) int){3}; }', 'alloc16 4'),
+    ('int f(void) { return (alignas(16) int[]){1,2}[1]; }', 'alloc16 8'),
+    ('int *p=&(alignas(16) int){3};', 'align 16'),
+    ('int f(void) { return (static alignas(16) int){3}; }', 'align 16'),
+    ('int f(void) { return sizeof (alignas(16) int){3}; }', ''),
     ('int f(void) { ' + 'alignas(0) '*32 + 'int x; return 0; }', 'alloc4 4'),
 ]
 rejected = [
@@ -60,6 +65,10 @@ rejected = [
     ('int f(alignas(16) register int x);', 'typedef or register'),
     ('int f(alignas(16) void);', 'parameter cannot have void type'),
     ('int f(alignas(3) int x);', 'supported alignments'),
+    ('int f(void) { return (alignas(2) int){3}; }', 'weaken'),
+    ('int f(void) { return (alignas(16) int)3; }', 'requires a compound literal initializer'),
+    ('int f(void) { return sizeof(alignas(16) int); }', 'requires a compound literal initializer'),
+    ('int f(void) { return (register alignas(16) int){3}; }', 'register object'),
     ('int f(void) { alignas(16) int g(void); return 0; }', 'object type'),
     ('int f(void) { alignas(2) auto x=1; return 0; }', 'weaken'),
     ('int f(void) { alignas(32) auto x=1; return 0; }', 'supported alignments'),
@@ -76,6 +85,8 @@ int main(void) {
     if (!aligned(&x,16) || !aligned(a,16) || !aligned(&b,8) || !aligned(&inferred,16)) return 1;
     if (sizeof x!=4 || sizeof a!=3 || x!=3 || a[2]!=3 || b!=4 || inferred!=5) return 2;
     if (!parameter_aligned(7)) return 3;
+    if (!aligned(&(alignas(16) int){7},16) ||
+        !aligned(&(static alignas(16) int){7},16)) return 4;
     return 42;
 }'''
 with tempfile.TemporaryDirectory(prefix='kcc-align-') as directory:

@@ -347,6 +347,7 @@ enum declarator_context {
 	declarator_parameter,
 	declarator_member,
 	declarator_cast,
+	declarator_literal,
 };
 
 /* Preserve storage spellings and an inferred name consumed during disambiguation. */
@@ -404,7 +405,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			struct token beginning_type;
 
 			if (!head || (context != declarator_local && context != declarator_external &&
-				context != declarator_member && context != declarator_parameter)) {
+				context != declarator_member && context != declarator_parameter &&
+				context != declarator_literal)) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"alignment specifier is not permitted in this context");
 				return NULL;
@@ -451,7 +453,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		if (token.kind == token_inline || token.kind == token_noreturn) {
-			if (!head || context == declarator_parameter || context == declarator_member || head->keyword.kind == token_typedef) {
+			if (!head || context == declarator_parameter || context == declarator_member ||
+				context == declarator_literal || head->keyword.kind == token_typedef) {
 				diagnostic_error(parser->diagnostics, token.location,
 					token.kind == token_inline ?
 					"inline is not permitted in a type name, typedef, or parameter declaration" :
@@ -465,7 +468,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		if (token.kind == token_thread_local) {
-			if (!head || context == declarator_parameter || context == declarator_member) {
+			if (!head || context == declarator_parameter || context == declarator_member ||
+				context == declarator_literal) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"thread_local is not permitted in a type name or parameter declaration");
 				return NULL;
@@ -487,7 +491,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			token.kind == token_extern || token.kind == token_static || token.kind == token_auto) {
 			struct token *slot;
 
-			if (!head || context == declarator_member || (context == declarator_parameter && token.kind != token_register)) {
+			if (!head || context == declarator_member || context == declarator_literal ||
+				(context == declarator_parameter && token.kind != token_register)) {
 				const char *message = "register storage is not supported in this context";
 
 				if (token.kind == token_typedef)
@@ -2246,6 +2251,8 @@ static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 	struct declaration_head *storage)
 {
 	struct token beginning;
+	struct declaration_head type_head = { 0 };
+	struct ast_type_syntax *base;
 
 	for (;;) {
 		struct token token = preprocess_peek(parser->preprocessor);
@@ -2269,7 +2276,16 @@ static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 		diagnostic_error(parser->diagnostics, storage->keyword.location, "thread_local cannot combine with register");
 		return NULL;
 	}
-	return parse_type_name(parser, &beginning, NULL, NULL, declarator_cast);
+	base = parse_declaration_specifiers(parser, &beginning, &type_head, declarator_literal);
+	if (!base)
+		return NULL;
+	storage->alignments = type_head.alignments;
+	if (storage->alignments && storage->keyword.kind == token_register) {
+		diagnostic_error(parser->diagnostics, beginning.location,
+			"alignment specifier is not permitted on a register object");
+		return NULL;
+	}
+	return parse_derived_type(parser, base, NULL, NULL, declarator_cast);
 }
 
 static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
@@ -2301,6 +2317,7 @@ static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
 	node->is_static = storage.keyword.kind == token_static;
 	node->is_register = storage.keyword.kind == token_register;
 	node->is_thread_local = storage.thread_keyword.kind == token_thread_local;
+	node->alignments = storage.alignments;
 	node->object_id = object_id;
 	return parse_postfix_suffix(parser, &node->expression);
 }
@@ -2336,6 +2353,11 @@ static struct ast_expression *parse_parenthesized_or_cast(struct parser *parser)
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_brace)
 		return parse_compound_literal_tail(parser, opening.location, type_syntax, storage);
+	if (storage.alignments) {
+		diagnostic_error(parser->diagnostics, opening.location,
+			"alignment specifier in a type name requires a compound literal initializer");
+		return NULL;
+	}
 	if (literal_storage_present(storage)) {
 		diagnostic_error(parser->diagnostics, opening.location, "storage class requires a compound literal initializer");
 		return NULL;
@@ -2387,6 +2409,11 @@ static struct ast_expression *parse_sizeof_expression(struct parser *parser)
 				if (!node)
 					allocation_error(parser, keyword.location);
 				return node ? &node->expression : NULL;
+			}
+			if (storage.alignments) {
+				diagnostic_error(parser->diagnostics, opening.location,
+					"alignment specifier in a type name requires a compound literal initializer");
+				return NULL;
 			}
 			if (literal_storage_present(storage)) {
 				diagnostic_error(parser->diagnostics, opening.location, "storage class requires a compound literal initializer");

@@ -5836,8 +5836,13 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 	 * including on optimized/sanitized builds. */
 	memcpy(&publication->saved, node, sizeof(*node));
 	sema->literal_publications = publication;
+	if (node->alignments && !sema_alignment_group(sema, node->alignments))
+		goto failure;
 	type = resolve_type_syntax(sema, node->type_syntax);
 	if (!type)
+		goto failure;
+	if (node->alignments && !check_object_alignment(sema, type,
+		node->alignments->alignment, node->expression.location))
 		goto failure;
 	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, &initializer_depth);
 	if (!plan)
@@ -5873,6 +5878,7 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 			goto allocation_failure;
 		local->type_syntax = node->type_syntax;
 		local->is_register = node->is_register;
+		local->alignment = node->alignments ? node->alignments->alignment : 0;
 		/* Backend initializes at the expression evaluation site. Keeping this
 		 * synthetic slot's initializer empty prevents eager declaration stores. */
 		if (!complete_local_storage(sema, local, plan->type))
@@ -5888,6 +5894,7 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 	symbol = register_external_object(sema, name, plan->type, NULL, true, false, node->is_thread_local);
 	if (!symbol)
 		goto failure;
+	symbol->alignment = node->alignments ? node->alignments->alignment : 0;
 	symbol->is_block_static = true;
 	symbol->initializer_plan = plan;
 	symbol->definition = &definition->external;
