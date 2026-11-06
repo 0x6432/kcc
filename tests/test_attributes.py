@@ -8,6 +8,9 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('typedef int F(void); [[nodiscard]] F f;', 'typedef int F(void); F f;'),
+    ('typedef int F(void); F f [[nodiscard]];', 'typedef int F(void); F f;'),
+    ('typedef int F(void); void g(void){[[nodiscard]] F f; f();}', 'typedef int F(void); void g(void){F f; f();}'),
     ('[[nodiscard]] int f(void){return 42;}', 'int f(void){return 42;}'),
     ('[[nodiscard("use " "result")]] int f(void);', 'int f(void);'),
     ('int f(void) [[nodiscard]];', 'int f(void);'),
@@ -67,13 +70,13 @@ invalid = [
     ('void f(void){ [[noreturn]] typedef int T; }', 'requires a function identifier'),
     ('void f(void){ [[noreturn]] return; }', 'requires a function identifier'),
     ('[[unsequenced]] int f(void);', 'unsupported standard attribute'),
-    ('[[nodiscard]] int x;', 'direct function declarations'),
-    ('int x [[nodiscard]];', 'direct function declarations'),
+    ('[[nodiscard]] int x;', 'nodiscard requires a function declaration'),
+    ('int x [[nodiscard]];', 'nodiscard requires a function declaration'),
     ('[[nodiscard(1)]] int f(void);', 'ordinary string literal argument'),
     ('[[nodiscard(u"wide")]] int f(void);', 'ordinary string literal argument'),
-    ('typedef int F(void); [[nodiscard]] F f;', 'direct function declarations'),
-    ('void f(void){ [[nodiscard]] return; }', 'direct function declarations'),
-    ('typedef int T; void f(void){ [[nodiscard]] T: return; }', 'direct function declarations'),
+    ('typedef int T; [[nodiscard]] T x;', 'nodiscard requires a function declaration'),
+    ('void f(void){ [[nodiscard]] return; }', 'function identifier declarations'),
+    ('typedef int T; void f(void){ [[nodiscard]] T: return; }', 'function identifier declarations'),
     ('typedef int T; void f(void){ [[noreturn]] T: return; }', 'requires a function identifier'),
     ('[[fallthrough]] int x;', 'fallthrough is only supported'),
     ('[[maybe_unused(1)]] int x;', 'take no arguments'),

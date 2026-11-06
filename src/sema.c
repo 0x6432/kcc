@@ -4481,6 +4481,10 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 {
 	const struct type *type;
 
+	if (local->is_nodiscard && local->type_syntax->kind == type_syntax_inferred) {
+		diagnostic_error(sema->diagnostics, local->name.location, "nodiscard requires a function declaration");
+		return false;
+	}
 	if ((local->is_inline || local->is_noreturn) && local->type_syntax->kind == type_syntax_inferred) {
 		diagnostic_error(sema->diagnostics, local->name.location, local->is_inline ?
 			"inline requires a function declaration" : "_Noreturn requires a function declaration");
@@ -4516,6 +4520,10 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	sema->vla_candidate = NULL;
 	if (!type)
 		return false;
+	if (local->is_nodiscard && type->kind != type_kind_function) {
+		diagnostic_error(sema->diagnostics, local->name.location, "nodiscard requires a function declaration");
+		return false;
+	}
 	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
 		if ((local->initializer_syntax &&
 			(local->initializer_syntax->kind != ast_initializer_list || local->initializer_syntax->entries)) ||
@@ -5890,6 +5898,10 @@ static bool sema_external_object_declaration(struct sema *sema,
 	type = resolve_type_syntax(sema, declaration->type_syntax);
 	if (!type || !check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
+	if (declaration->is_nodiscard) {
+		diagnostic_error(sema->diagnostics, declaration->name.location, "nodiscard requires a function declaration");
+		return false;
+	}
 	if (declaration->is_inline || declaration->is_noreturn) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, declaration->is_inline ?
 			"inline requires a function declaration" : "_Noreturn requires a function declaration");
@@ -5923,6 +5935,10 @@ static bool sema_external_type_declaration(struct sema *sema,
 	if (!check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
 	if (type->kind != type_kind_function) {
+		if (declaration->is_nodiscard) {
+			diagnostic_error(sema->diagnostics, declaration->name.location, "nodiscard requires a function declaration");
+			return false;
+		}
 		if (declaration->is_inline || declaration->is_noreturn) {
 			diagnostic_error(sema->diagnostics, declaration->name.location, declaration->is_inline ?
 				"inline requires a function declaration" : "_Noreturn requires a function declaration");

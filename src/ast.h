@@ -890,6 +890,7 @@ struct ast_local_declaration {
 	bool is_static;
 	bool is_inline;
 	bool is_noreturn;
+	bool is_nodiscard;
 	bool is_thread_local;
 	struct external_object_symbol *object_symbol;
 	struct function_symbol *function_symbol;
@@ -954,6 +955,7 @@ struct ast_external_object_declaration {
 	bool is_extern;
 	bool is_inline;
 	bool is_noreturn;
+	bool is_nodiscard;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the object type. */
 	struct ast_type_syntax *type_syntax;
@@ -972,6 +974,7 @@ struct ast_external_type_declaration {
 	struct external_object_symbol *object_symbol;
 	bool is_inline;
 	bool is_noreturn;
+	bool is_nodiscard;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_type_syntax *type_syntax;
@@ -1008,6 +1011,7 @@ struct ast_function_declaration {
 	bool is_extern;
 	bool is_inline;
 	bool is_noreturn;
+	bool is_nodiscard;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_function_type_syntax *type_syntax;

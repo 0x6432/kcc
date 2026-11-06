@@ -230,7 +230,7 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 		return false;
 	if (attributes.nodiscard) {
 		diagnostic_error(parser->diagnostics, location.location,
-			"nodiscard is only supported on direct function declarations");
+			"nodiscard is only supported on function identifier declarations");
 		return false;
 	}
 	if (attributes.noreturn) {
@@ -248,8 +248,7 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 }
 
 /* After an ordinary declarator, function attributes apply to that declarator
- * only. Noreturn is checked semantically; nodiscard currently requires
- * direct function syntax and has no discarded-value warning implementation. */
+ * only. Semantic analysis checks the resolved identifier type. */
 static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard)
 {
 	struct parsed_attributes attributes;
@@ -3299,7 +3298,7 @@ static struct ast_statement *parse_statement(struct parser *parser)
 		token = preprocess_peek(parser->preprocessor);
 		if (attributes.nodiscard) {
 			diagnostic_error(parser->diagnostics, first.location,
-				"nodiscard is only supported on direct function declarations");
+				"nodiscard is only supported on function identifier declarations");
 			return NULL;
 		}
 		if (attributes.noreturn) {
@@ -3580,11 +3579,6 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
 				return NULL;
 		}
-		if ((parser->declaration_nodiscard || declarator_nodiscard) && type_syntax->kind != type_syntax_function) {
-			diagnostic_error(parser->diagnostics, name.location,
-				"nodiscard is only supported on direct function declarations");
-			return NULL;
-		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
 			diagnostic_error(parser->diagnostics, name.location,
 				"auto storage requires an object type");
@@ -3610,6 +3604,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		node->is_inline = head.inline_keyword.kind == token_inline;
 		node->is_noreturn = head.noreturn_keyword.kind == token_noreturn ||
 			parser->declaration_noreturn || declarator_noreturn;
+		node->is_nodiscard = parser->declaration_nodiscard || declarator_nodiscard;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
 		node->is_extern = head.keyword.kind == token_extern;
@@ -3887,7 +3882,7 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			if (attributes.nodiscard && (!begins_declaration_specifier(parser, token) ||
 				(token.kind == token_identifier && preprocess_peek_second(parser->preprocessor).kind == token_colon))) {
 				diagnostic_error(parser->diagnostics, first.location,
-					"nodiscard is only supported on direct function declarations");
+					"nodiscard is only supported on function identifier declarations");
 				return NULL;
 			}
 			if (attributes.noreturn && (!begins_declaration_specifier(parser, token) ||
@@ -4080,7 +4075,7 @@ static bool parse_external_initializer(struct parser *parser,
 /* object-declaration-tail ::= declarator [ "=" initializer ] */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard)
 {
 	struct ast_external_object_declaration *declaration;
 	struct ast_expression *initializer = NULL;
@@ -4095,6 +4090,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
 	else {
 		declaration->is_inline = is_inline;
 		declaration->is_noreturn = is_noreturn;
+		declaration->is_nodiscard = is_nodiscard;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->initializer = initializer;
@@ -4108,7 +4104,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard)
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
@@ -4119,7 +4115,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name)
-		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn);
+		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn, is_nodiscard);
 	if (!parse_external_initializer(parser, &initializer, &initializer_syntax))
 		return NULL;
 	declaration = ast_new_external_type_declaration(parser->arena,
@@ -4129,6 +4125,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 	else {
 		declaration->is_inline = is_inline;
 		declaration->is_noreturn = is_noreturn;
+		declaration->is_nodiscard = is_nodiscard;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->is_extern = is_extern;
@@ -4256,18 +4253,13 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			return NULL;
 		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
 			return NULL;
-		if ((is_nodiscard || declarator_nodiscard) && type_syntax->kind != type_syntax_function) {
-			diagnostic_error(parser->diagnostics, name.location,
-				"nodiscard is only supported on direct function declarations");
-			return NULL;
-		}
 		/* Its scope starts after the complete declarator, before an
 		 * initializer or a later declarator in the same declaration.
 		 */
 		if (!publish_parser_name(parser, name, parser_name_object))
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn || declarator_noreturn);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn || declarator_noreturn, is_nodiscard || declarator_nodiscard);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -4284,6 +4276,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			declaration->is_extern = is_extern;
 			declaration->is_inline = is_inline;
 			declaration->is_noreturn = is_noreturn || declarator_noreturn;
+			declaration->is_nodiscard = is_nodiscard || declarator_nodiscard;
 			declaration->is_thread_local = is_thread_local;
 			declaration->is_static = is_static;
 			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;

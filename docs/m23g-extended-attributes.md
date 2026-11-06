@@ -19,12 +19,14 @@ supported positions and before ordinary statements, including controlled
 statements without braces. Their optional argument lists must contain balanced
 parentheses, brackets and braces and are limited to 64 nesting levels and 256
 items/tokens per sequence. Argument tokens must be supported language tokens;
-this is not yet a general preprocessing-token attribute parser. `[[nodiscard]]` and `[[nodiscard("message")]]` are accepted on direct function
+this is not yet a general preprocessing-token attribute parser. `[[nodiscard]]` and `[[nodiscard("message")]]` are accepted on function
 identifier declarations, at file and block scope, as declaration prefixes or
 declarator suffixes. Adjacent ordinary strings are accepted as a message. The
 compiler does not issue the recommended discarded-result warning or advertise
-this partial support through `__has_c_attribute`. Typedef-derived functions,
-record/enum declarations and other placements are currently rejected.
+this partial support through `__has_c_attribute`. Typedef- and `typeof`-derived
+function identifiers are resolved semantically; objects, record/enum
+declarations and other placements are currently rejected. The flag is retained
+on declaration nodes for future warning support.
 
 The `noreturn` attribute is additionally accepted as a file- or block-scope prefix or declarator suffix on
 function identifier declarations; its other placements are rejected. Known
