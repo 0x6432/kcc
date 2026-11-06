@@ -31,7 +31,10 @@ bits. Narrow `unsigned int` fields promote to `int` in integer-promotion
 contexts, including arithmetic, shifts, conditional operands and variadic calls.
 Within existing initializer limits, static and automatic, positional and
 designated initializers, scalar braces, record copies and pointer-based host
-interop are supported. Aggregate-by-value ABI remains unsupported.
+interop are supported. Bounded aggregate calls and returns are also available;
+see `m21-aggregate-abi.md`. The aggregate classifier currently rejects some
+otherwise-supported layouts, including unaligned byte-start fields in small
+records, rather than guessing their ABI.
 
 Taking a field's address, applying `sizeof`, `typeof` or `typeof_unqual`
 directly to it, and using it in an `offsetof` designator are rejected. Const

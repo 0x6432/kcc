@@ -18,8 +18,10 @@ array members, unrepresentable/empty ABI eightbytes, unsupported types and
 unaligned scalar fields are refused rather than passed as pointers. Aggregate
 arguments after an ellipsis and `va_arg` of aggregate type remain unsupported.
 Fixed aggregate parameters of a variadic function are supported alongside the
-existing scalar variadic subset. Bit-fields, packing, vectors, `long double`,
-complex types and aggregate atomics are not added by this slice.
+existing scalar variadic subset. Supported named int bit-fields are documented
+in `m22-bit-fields.md`; some byte-start field layouts are conservatively
+rejected by the small-record ABI classifier. General bit-field packing, vectors,
+`long double`, complex types and aggregate atomics are not added by this slice.
 
 ## Lowering and resource policy
 
