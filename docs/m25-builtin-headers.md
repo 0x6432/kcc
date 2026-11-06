@@ -46,10 +46,12 @@ suite remains unrun.
 - `stdlib.h` and `string.h` declare a bounded set of common allocation,
   conversion, sorting, memory and string functions with x86-64 libc-compatible
   signatures, including C23 `strdup`, `strndup` and `memset_explicit` declarations.
-  They omit other interfaces and require a compatible linked libc; they do not
-  provide implementations. In particular, the development glibc 2.34 does not
-  export `memset_explicit`, which needs a newer compatible libc or another
-  implementation.
+  They omit other interfaces and generally require a compatible linked libc.
+  The runtime archive provides a separate `memset_explicit` fallback using
+  volatile byte stores; link `build/libkccrt.a` after generated objects. It
+  must be compiled without LTO. It does not erase register copies, swap, or
+  other copies of the data. Other standard interfaces are not supplied by that
+  archive; generated-program runtime checks remain unrun.
 - `stdio.h` exposes an opaque glibc `FILE` and common stream, file, formatted
   input/output and positioning declarations, including `va_list` variants and
   buffering controls. It omits other standard stdio interfaces and relies on glibc and the
