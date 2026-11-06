@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h`, `signal.h`, `fenv.h`, `threads.h` and `stdalign.h`, in addition
+`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h`, `signal.h`, `fenv.h`, `threads.h`, `stdckdint.h` and `stdalign.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence. Compiler-owned fallback source objects can
 define implementation-reserved guard and compatibility macros; ordinary user
@@ -93,6 +93,15 @@ suite remains unrun.
   separately linked `libkccrt.a`; see `m14-volatile-scalars.md`. The header does
   not make arbitrary asynchronous communication safe. Focused compile checks
   only; signal behavior has not been runtime-tested.
+- `stdckdint.h` supplies `ckd_add`, `ckd_sub` and `ckd_mul` for the ten ordinary
+  signed/unsigned integer types, with single evaluation and wrapped result bits.
+  Link `build/libkccrt.a` after the generated object. The helper depends on the
+  host compiler's unsigned 128-bit arithmetic and the target's LP64 layout.
+  Plain `char`, `_Bool`, qualified result objects and noninteger operands are
+  rejected; enum and character typedef restrictions cannot all be distinguished
+  by this `_Generic` implementation. Bit-precise types are not supported.
+  Compiler-output and host-helper smoke checks do not replace runtime or
+  cross-compiler conformance tests.
 - `threads.h` declares the C thread, mutex, condition, once and thread-specific
   storage functions using bounded x86-64 glibc ABI-compatible opaque layouts.
   Link with `-pthread` and use a compatible glibc with C thread symbols. Thread

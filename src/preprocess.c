@@ -1116,6 +1116,16 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define pow(x,y) _Generic((x),float:_Generic((y),float:powf,default:pow),default:pow)((x),(y))\n"
 			"#define fmod(x,y) _Generic((x),float:_Generic((y),float:fmodf,default:fmod),default:fmod)((x),(y))\n"
 			"#endif\n";
+		static const char stdckdint_header[] =
+			"#ifndef __KCC_STDCKDINT_H\n#define __KCC_STDCKDINT_H 1\n"
+			"bool __kcc_ckd(void *,unsigned int,unsigned long,unsigned int,unsigned long,unsigned int,unsigned int);\n"
+			"#define __KCC_CKD_KIND(p) _Generic((p), signed char *:264, unsigned char *:8, short *:272, unsigned short *:16, int *:288, unsigned int *:32, long *:320, unsigned long *:64, long long *:320, unsigned long long *:64)\n"
+			"#define __KCC_CKD_SIGN(x) _Generic((x), signed char:1, unsigned char:0, short:1, unsigned short:0, int:1, unsigned int:0, long:1, unsigned long:0, long long:1, unsigned long long:0)\n"
+			"#define __KCC_CKD(op,r,a,b) __kcc_ckd((r),__KCC_CKD_KIND(r),(unsigned long)(a),__KCC_CKD_SIGN(a),(unsigned long)(b),__KCC_CKD_SIGN(b),(op))\n"
+			"#define ckd_add(r,a,b) __KCC_CKD(0,r,a,b)\n"
+			"#define ckd_sub(r,a,b) __KCC_CKD(1,r,a,b)\n"
+			"#define ckd_mul(r,a,b) __KCC_CKD(2,r,a,b)\n"
+			"#endif\n";
 		static const char threads_header[] =
 			"#ifndef __KCC_THREADS_H\n#define __KCC_THREADS_H 1\n#include <time.h>\n"
 			"typedef unsigned long thrd_t; typedef unsigned int tss_t;\n"
@@ -1537,7 +1547,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "threads.h") == 0) {
+		if (strcmp(name->path, "stdckdint.h") == 0) {
+			header = stdckdint_header;
+			source_name = "<kcc/stdckdint.h>";
+		} else if (strcmp(name->path, "threads.h") == 0) {
 			header = threads_header;
 			source_name = "<kcc/threads.h>";
 		} else if (strcmp(name->path, "fenv.h") == 0) {
