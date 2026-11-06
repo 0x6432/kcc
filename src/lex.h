@@ -186,6 +186,7 @@ struct token {
 	unsigned integer_base;
 	unsigned integer_long_suffix;
 	bool integer_unsigned_suffix;
+	bool integer_bit_precise_suffix;
 };
 
 enum pp_token_kind {

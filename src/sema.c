@@ -2818,8 +2818,25 @@ static bool sema_expression(struct sema *sema,
 		struct ast_integer_expression *node =
 			(struct ast_integer_expression *)expression;
 
-		result_type = type_integer_literal(node->value, node->base ? node->base : 10,
-			node->unsigned_suffix, node->long_suffix);
+		if (node->bit_precise_suffix) {
+			struct bitint_type literal_type;
+			if (bitint_literal_type(node->value, node->unsigned_suffix, &literal_type) != bitint_ok ||
+				(literal_type.width != 8 && literal_type.width != 16 &&
+				literal_type.width != 32 && literal_type.width != 64)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"bit-precise integer literals are not supported yet for this required width");
+				return false;
+			}
+			result_type = literal_type.width == 8 ?
+				(node->unsigned_suffix ? &type_ubitint8 : &type_bitint8) :
+				literal_type.width == 16 ?
+				(node->unsigned_suffix ? &type_ubitint16 : &type_bitint16) :
+				literal_type.width == 32 ?
+				(node->unsigned_suffix ? &type_ubitint32 : &type_bitint32) :
+				(node->unsigned_suffix ? &type_ubitint64 : &type_bitint64);
+		} else
+			result_type = type_integer_literal(node->value, node->base ? node->base : 10,
+				node->unsigned_suffix, node->long_suffix);
 		if (!result_type) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"literal does not fit an implemented integer type");

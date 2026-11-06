@@ -345,8 +345,7 @@ static void check_bit_precise_diagnostic(const char *text)
 	assert(fclose(stream) == 0);
 }
 
-/* Recognition is spelling-only: language tokens and #if reject these until
- * bit-precise integer types are supported. */
+/* Language tokens preserve the suffix; #if still rejects bit-precise literals. */
 static void test_bit_precise_integer_spellings(void)
 {
 	const char *bases[] = { "42", "052", "0x2a", "0B101010", "4'2", "0x2'a" };
@@ -360,6 +359,7 @@ static void test_bit_precise_integer_spellings(void)
 	const char *bad_tokens[] = { "1wB", "1Wb", "1wbwb", "1uwbu",
 		"1lwb", "1wbL", "1wbx", "1wb1" };
 	const enum token_kind invalid[] = { token_invalid };
+	const enum token_kind integer[] = { token_integer };
 	const enum token_kind rejected_condition[] = { token_invalid, token_int };
 	const unsigned char bounded[] = { '4', '2', 'U', 'W', 'B', 'x' };
 	const unsigned char embedded_nul[] = { '4', '2', 'w', 'b', 0 };
@@ -375,7 +375,7 @@ static void test_bit_precise_integer_spellings(void)
 			assert(spelling.value == 42 && spelling.bit_precise_suffix);
 			assert(spelling.unsigned_suffix == unsign && spelling.long_suffix == 0);
 			assert(spelling.base == (i == 1 ? 8u : i == 2 || i == 5 ? 16u : i == 3 ? 2u : 10u));
-			check_tokens(text, invalid, 1, 1);
+			check_tokens(text, integer, 1, 0);
 			assert(snprintf(text, sizeof(text), "#if %s%s\nint", bases[i], suffixes[j]) > 0);
 			check_tokens(text, rejected_condition, 2, 1);
 		}
@@ -399,12 +399,15 @@ static void test_bit_precise_integer_spellings(void)
 	assert(!parse_integer_spelling((const unsigned char *)"0xffffffffffffffffWB", 20, &spelling));
 	assert(spelling.value == UINT64_MAX && spelling.base == 16 && spelling.bit_precise_suffix);
 
-	/* Macro expansion and token pasting must not bypass either rejection. */
-	check_tokens("#define B 1wb\nB", invalid, 1, 1);
-	check_tokens("#define JOIN(a,b) a##b\nJOIN(1,WB)", invalid, 1, 1);
+	/* Macro expansion and token pasting preserve the suffix; #if still rejects. */
+	check_tokens("#define B 1wb\nB", integer, 1, 0);
+	check_tokens("#define JOIN(a,b) a##b\nJOIN(1,WB)", integer, 1, 0);
 	check_tokens("#define B 1UWB\n#if B\nint", rejected_condition, 2, 1);
 	check_tokens("#define JOIN(a,b) a##b\n#if JOIN(1,wb)\nint", rejected_condition, 2, 1);
-	check_bit_precise_diagnostic("1wb");
+	{
+		const enum token_kind integer[] = { token_integer };
+		check_tokens("1wb", integer, 1, 0);
+	}
 	check_bit_precise_diagnostic("#if 1UWB\n");
 	check_bit_precise_diagnostic("#if 0 && 1wb\n");
 	{

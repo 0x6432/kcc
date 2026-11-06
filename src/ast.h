@@ -281,6 +281,7 @@ struct ast_integer_expression {
 	unsigned base;
 	unsigned long_suffix;
 	bool unsigned_suffix;
+	bool bit_precise_suffix;
 	bool floating_special; /* Header-provided IEEE constant, not a C floating literal. */
 };
 

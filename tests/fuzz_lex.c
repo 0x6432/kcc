@@ -123,6 +123,7 @@ static void assert_same_language_token(struct token left, struct token right)
 	assert(left.integer_base == right.integer_base);
 	assert(left.integer_long_suffix == right.integer_long_suffix);
 	assert(left.integer_unsigned_suffix == right.integer_unsigned_suffix);
+	assert(left.integer_bit_precise_suffix == right.integer_bit_precise_suffix);
 }
 
 static void fuzz_integer_spelling(const unsigned char *data, size_t size)

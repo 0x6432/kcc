@@ -981,14 +981,12 @@ static struct token convert_number(struct token token, struct diagnostics *diagn
 		snprintf(message, sizeof(message), "unsupported numeric literal: %s", error);
 		return invalid_language_token(token, diagnostics, message);
 	}
-	if (spelling.bit_precise_suffix)
-		return invalid_language_token(token, diagnostics,
-			"bit-precise integer literals are not supported yet");
 	token.kind = token_integer;
 	token.integer = spelling.value;
 	token.integer_base = spelling.base;
 	token.integer_long_suffix = spelling.long_suffix;
 	token.integer_unsigned_suffix = spelling.unsigned_suffix;
+	token.integer_bit_precise_suffix = spelling.bit_precise_suffix;
 	return token;
 }
 

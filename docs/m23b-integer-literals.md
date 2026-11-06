@@ -17,8 +17,13 @@ preprocessor conditions use the existing intmax/uintmax model. Both paths use
 the same spelling decoder. Integer typing and diagnostics remain subject to the
 compiler's existing target model and supported types.
 
-This is not full M23b or C23 literal support: bit-precise `wb`/`WB` suffixes and
-`_BitInt` are unsupported, as are floating constants and their separators. The
+Bit-precise `wb`/`WB` literals now work in expressions only when their exact
+minimum C23 width is 8, 16, 32 or 64, corresponding to supported semantic
+`_BitInt` types. Other required widths, signed values requiring more than 64
+bits, and `wb`/`WB` literals in preprocessing conditions are rejected. The
+unsigned suffix is accepted before or after `wb`/`WB`. See
+`m24-bitint-foundation.md`. Floating constants have separate bounded support
+in `m20-floating-foundation.md`. This is not full M23b or C23 literal support. The
 preprocessing lexer may legally form an invalid preprocessing number that the
 integer decoder later rejects; a trailing apostrophe can instead start a
 separate malformed character token. No change is made to token boundaries,

@@ -33,7 +33,10 @@ standard integer. Bit-precise by-value parameters, return types, variadic
 arguments and `va_arg` are rejected; pointer parameters are supported by the
 existing pointer ABI. Aggregate calls or returns containing bit-precise members
 by value are also rejected pending ABI validation. Bit-precise bit-fields, fixed
-enum underlying types, atomic bit-precise objects and `wb`/`WB` literals remain unsupported. Existing
+enum underlying types and atomic bit-precise objects remain unsupported.
+`wb`/`WB` literals are supported when their exact minimum required width is
+8, 16, 32 or 64; other widths and their use in preprocessing conditions are
+rejected. Existing
 aggregate-by-value and other compiler restrictions also apply. No host call or
 object interoperability is claimed by this checkpoint; widths above 64 remain
 unsupported. The compiler emits IL for the Linux x86-64 LP64 SysV model only;
@@ -50,3 +53,8 @@ layout-only range and can compare with a native compiler if available.
 `tests/test_bitint.c` checks the independent arithmetic helpers. These focused
 checks are not a substitute for full conformance tests, fuzzing or a host ABI
 oracle.
+
+`tests/test_bitint_literals.py` checks exact signed/unsigned literal type and
+value selection, suffix spellings, macro pasting, arithmetic and rejection
+boundaries through QBE. The available host cannot independently compile the
+C23 literal syntax, so no native C23 literal agreement is claimed.

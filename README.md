@@ -138,13 +138,14 @@ register-void subset refusal. Other storage/globals/linkage remain incomplete.
 
 M24: signed and unsigned `_BitInt(8)`, `_BitInt(16)`, `_BitInt(32)` and `_BitInt(64)` have distinct
 semantic types and bounded object/value support. Direct layout queries also
-support other widths through 64; bit-precise function value ABI and `wb`
-literals remain unsupported. See `docs/m24-bitint-foundation.md` for details.
+support other widths through 64; bit-precise function value ABI remains
+unsupported. `wb` literals work only when their exact required widths are
+8, 16, 32 or 64. See `docs/m24-bitint-foundation.md` for details.
 
 M23b: Binary integer constants and digit separators use the shared integer
 spelling decoder in runtime expressions and preprocessing conditions. Existing
-integer typing applies; bit-precise `wb` suffixes and floating constants remain
-unsupported. See `docs/m23b-integer-literals.md`.
+integer typing applies; `wb` literals have the explicitly bounded exact-width
+support described above, and remain unsupported in preprocessing conditions. See `docs/m23b-integer-literals.md`.
 
 M23E3: Inferred `auto T = ...` and `auto (T) = ...` may now hide an outer typedef
 T at block/for scope, including register inference. One demand peek disambiguates

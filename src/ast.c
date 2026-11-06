@@ -150,6 +150,7 @@ struct ast_integer_expression *ast_new_integer(struct arena *arena,
 			.base = token.integer_base,
 			.long_suffix = token.integer_long_suffix,
 			.unsigned_suffix = token.integer_unsigned_suffix,
+			.bit_precise_suffix = token.integer_bit_precise_suffix,
 			.floating_special = token.floating_special,
 		};
 	return node;
