@@ -489,7 +489,7 @@ def validate_native_constraint(cc,source,output,name,result,version=None):
 
 # These native-valid types/features are later milestones, NOT native constraints.
 LATER = [
-    ('M22 bitfield literal', 'struct S { unsigned long x:3; }; int f(void) { return (struct S){.x=2}.x; }'),
+    ('M22 bitfield literal', 'struct S { unsigned long x:33; }; int f(void) { return (struct S){.x=2}.x; }'),
 ]
 # C23 storage errors require the grammar; legacy hosts' parser failures are
 # capability gaps, not native C23 constraint agreements. Checked by KCC only.

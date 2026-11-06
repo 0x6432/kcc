@@ -1,4 +1,4 @@
-# M22: bounded int, short, char and bool bit-fields
+# M22: bounded int, short, char, bool and narrow long bit-fields
 
 ## Target and supported declarations
 
@@ -20,7 +20,10 @@ is signed on this target, and zero-width separators align to a byte. Named
 `signed short` and `unsigned short` fields accept widths 1 through 16;
 unnamed fields accept widths 0 through 16. They use two-byte allocation units
 and natural alignment, with zero-width separators aligning to a two-byte
-boundary. Structs,
+boundary. Named signed/unsigned `long` and `long long` fields accept widths
+1–31; unnamed fields accept 0–31. They use eight-byte allocation units and
+natural alignment, with zero-width separators aligning to eight-byte
+boundaries. Widths 32–64 remain unsupported for these base types. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
 retain the existing record restrictions.
 
@@ -30,7 +33,7 @@ current unit starts in the next one. Adjacent fields may start at any bit
 within a byte, share bytes, or cross byte boundaries within a unit. Ordinary
 members start at their normal alignment after the occupied bits, and union
 alternatives overlap. For example, `unsigned a:3, b:4;` shares one byte;
-`unsigned a:3, b:31;` places `b` in the next unit. These int allocation-unit rules do not apply to boolean, character or short fields. This is not
+`unsigned a:3, b:31;` places `b` in the next unit. These int allocation-unit rules do not apply to boolean, character, short or long-base fields. This is not
 general SysV bit-field coverage.
 
 ## Values, initialization and expressions
@@ -40,8 +43,8 @@ low bits; out-of-range conversion to a signed field uses the target's
 low-bit/two's-complement result. Assignment and compound-assignment values and
 prefix updates reflect the narrowed stored value; postfix updates return the
 old value. Mutations evaluate the field base once and preserve other bytes or
-bits. Narrow `unsigned int` fields promote to `int` in integer-promotion
-contexts, including arithmetic, shifts, conditional operands and variadic calls.
+bits. Narrow `unsigned int` fields and the supported long-base fields promote
+to `int` in integer-promotion contexts, including arithmetic, shifts, conditional operands and variadic calls.
 Within existing initializer limits, static and automatic, positional and
 designated initializers, scalar braces, record copies and pointer-based host
 interop are supported. Adjacent fields are merged bitwise; repeated field
@@ -63,7 +66,8 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Enum and wider integer base types, `_BitInt`, volatile and atomic fields are rejected. Known GNU
+Enum and `_BitInt` base types, long/long-long widths above 31, volatile and
+atomic fields are rejected. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
@@ -73,7 +77,12 @@ can share the legacy M22 diagnostic.
 
 ## Validation
 
-`tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
+`tests/test_long_bit_fields.py` checks 868 named long/long-long layouts and
+124 unnamed floating/mixed layouts across by-value calls in both GCC/KCC
+directions, plus static and local initialization, signed/unsigned conversions,
+updates and 64-bit-unit zero-width pointer layout. Historical unsupported-long
+fixtures now use width 33; the original narrow example has a positive runtime
+check. `tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
 `tests/test_char_bit_fields.py` checks 112 signed/unsigned layouts across
 by-value calls in both host/KCC directions. `tests/test_bool_bit_fields.py` checks boolean conversion, packing,
 initialization and cross-compiler aggregate calls. `tests/test_bit_fields.py`,

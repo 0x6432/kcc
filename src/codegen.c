@@ -368,9 +368,71 @@ static size_t codegen_field_storage_load(struct codegen *codegen, size_t address
 	return result;
 }
 
+static size_t codegen_byte_offset(struct codegen *codegen, size_t base, uint64_t offset);
+
+/* Long-base fields use a 64-bit value and can touch five bytes even when
+ * their supported width is below 32. Access exactly the occupied bytes so a
+ * field at the end of an object does not read or write beyond it. */
+static size_t codegen_wide_field_load(struct codegen *codegen, size_t address,
+	const struct record_member *member)
+{
+	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
+	size_t value = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l copy 0\n", value);
+	for (unsigned i = 0; i < bytes; i++) {
+		size_t at = codegen_byte_offset(codegen, address, i);
+		size_t byte = codegen->next_temporary++, wide = codegen->next_temporary++;
+		size_t shifted = codegen->next_temporary++, combined = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", byte, at);
+		emit(codegen, "\t%%t%zu =l extuw %%t%zu\n", wide, byte);
+		emit(codegen, "\t%%t%zu =l shl %%t%zu, %u\n", shifted, wide, 8 * i);
+		emit(codegen, "\t%%t%zu =l or %%t%zu, %%t%zu\n", combined, value, shifted);
+		value = combined;
+	}
+	unsigned left = 64 - member->bit_offset - member->bit_width;
+	unsigned right = 64 - member->bit_width;
+	size_t shifted = codegen->next_temporary++, result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l shl %%t%zu, %u\n", shifted, value, left);
+	emit(codegen, "\t%%t%zu =l %s %%t%zu, %u\n", result,
+		type_is_unsigned(member->type) ? "shr" : "sar", shifted, right);
+	return result;
+}
+
+static size_t codegen_wide_field_store(struct codegen *codegen, size_t address,
+	size_t value, const struct record_member *member)
+{
+	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
+	uint64_t mask = (UINT64_C(1) << member->bit_width) - 1;
+	size_t bits = codegen->next_temporary++, placed = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l and %%t%zu, %ju\n", bits, value, (uintmax_t)mask);
+	emit(codegen, "\t%%t%zu =l shl %%t%zu, %u\n", placed, bits, member->bit_offset);
+	uint64_t storage_mask = mask << member->bit_offset;
+	for (unsigned i = 0; i < bytes; i++) {
+		size_t at = codegen_byte_offset(codegen, address, i);
+		size_t old = codegen->next_temporary++, kept = codegen->next_temporary++;
+		size_t shifted = codegen->next_temporary++, part = codegen->next_temporary++;
+		size_t combined = codegen->next_temporary++;
+		unsigned byte_mask = (unsigned)((storage_mask >> (8 * i)) & 255);
+		emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", old, at);
+		emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", kept, old, 255 ^ byte_mask);
+		emit(codegen, "\t%%t%zu =l shr %%t%zu, %u\n", shifted, placed, 8 * i);
+		emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", part, shifted, byte_mask);
+		emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, kept, part);
+		emit(codegen, "\tstoreb %%t%zu, %%t%zu\n", combined, at);
+	}
+	unsigned shift = 64 - member->bit_width;
+	size_t shifted = codegen->next_temporary++, result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l shl %%t%zu, %u\n", shifted, bits, shift);
+	emit(codegen, "\t%%t%zu =l %s %%t%zu, %u\n", result,
+		type_is_unsigned(member->type) ? "shr" : "sar", shifted, shift);
+	return result;
+}
+
 static size_t codegen_field_load(struct codegen *codegen, size_t address,
 	const struct record_member *member)
 {
+	if (type_value_width(member->type) == 64)
+		return codegen_wide_field_load(codegen, address, member);
 	size_t value = codegen_field_storage_load(codegen, address, (member->bit_offset + member->bit_width + 7) / 8);
 	if (member->bit_offset) {
 		size_t shifted = codegen->next_temporary++;
@@ -383,6 +445,8 @@ static size_t codegen_field_load(struct codegen *codegen, size_t address,
 static size_t codegen_field_store(struct codegen *codegen, size_t address, size_t value,
 	const struct record_member *member)
 {
+	if (type_value_width(member->type) == 64)
+		return codegen_wide_field_store(codegen, address, value, member);
 	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
 	uint32_t mask = UINT32_MAX >> (32 - member->bit_width);
 	uint32_t storage_mask = mask << member->bit_offset;
@@ -648,7 +712,8 @@ static void codegen_initializer_plan(struct codegen *codegen,
 		if (entry->kind == ast_initializer_write_zero) {
 			if (entry->bit_field && entry->bit_field->bit_width < 32) {
 				size_t zero = codegen->next_temporary++;
-				emit(codegen, "\t%%t%zu =w copy 0\n", zero);
+				emit(codegen, "\t%%t%zu =%c copy 0\n", zero,
+					qbe_type(entry->bit_field->type));
 				(void)codegen_field_store(codegen, address, zero, entry->bit_field);
 			} else
 				codegen_zero_bytes(codegen, address, entry->length);
@@ -891,13 +956,19 @@ static struct update_values codegen_update(struct codegen *codegen,
 	else
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
 			qbe_load_instruction(operand->type), address);
+	size_t arithmetic = previous;
+	bool wide_field = codegen_bit_field(operand) && type_value_width(operand->type) == 64;
+	if (wide_field)
+		arithmetic = codegen_convert_value(codegen, previous, operand->type, calculation_type);
 	if (type_is_floating(calculation_type))
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %s\n", value, qbe_type(calculation_type),
-			operation == update_increment ? "add" : "sub", previous,
+			operation == update_increment ? "add" : "sub", arithmetic,
 			calculation_type->kind == type_kind_float ? "s_1.0" : "d_1.0");
 	else
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(calculation_type),
-			operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
+			operation == update_increment ? "add" : "sub", arithmetic, (unsigned long long)step);
+	if (wide_field)
+		value = codegen_convert_value(codegen, value, calculation_type, operand->type);
 	/* _Bool conversion tests the promoted value, never its low bit. */
 	if (type_is_boolean(operand->type))
 		value = codegen_truth_value(codegen, value, calculation_type);

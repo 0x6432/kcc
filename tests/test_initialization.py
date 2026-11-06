@@ -461,7 +461,7 @@ CONSTRAINTS.update({
 # Valid language forms outside the explicit M17 supported type/ABI set. These
 # compile unchanged on natives, never run, and never become native constraints.
 SUBSET={
-    'M22 bitfield': 'struct S { unsigned long x:3; }; struct S s;',
+    'M22 bitfield': 'struct S { unsigned long x:33; }; struct S s;',
 }
 # No native compilation or execution for UB/proof-boundary/resource refusals.
 # Acceptance by a native is deliberately not an oracle for these cases.

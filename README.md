@@ -23,7 +23,7 @@ the generated object; atomic and math calls can additionally require `-latomic`
 and `-lm`. See the milestone-specific documents for exact boundaries.
 
 Bounded aggregate-by-value calls and returns are supported on x86-64 SysV;
-see `docs/m21-aggregate-abi.md` for exact limits. A bounded subset of named int bit-fields
+see `docs/m21-aggregate-abi.md` for exact limits. Bounded named and unnamed int, short, char, bool and narrow long-base bit-fields
 are supported as described in `docs/m22-bit-fields.md`. Aggregate variadic
 arguments, general bit-fields, full C23 types and the complete standard library
 remain unsupported. Recent integrated changes have been built but have not been

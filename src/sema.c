@@ -644,7 +644,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if ((type->kind != type_kind_int && type->kind != type_kind_uint &&
 				type->kind != type_kind_bool && type->kind != type_kind_char &&
 				type->kind != type_kind_schar && type->kind != type_kind_uchar &&
-				type->kind != type_kind_short && type->kind != type_kind_ushort) ||
+				type->kind != type_kind_short && type->kind != type_kind_ushort &&
+				type->kind != type_kind_long && type->kind != type_kind_ulong &&
+				type->kind != type_kind_long_long && type->kind != type_kind_ulong_long) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 32 ||
@@ -653,6 +655,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 					type->kind == type_kind_uchar) && width.bits > 8) ||
 				((type->kind == type_kind_short || type->kind == type_kind_ushort) &&
 					width.bits > 16) ||
+				((type->kind == type_kind_long || type->kind == type_kind_ulong ||
+					type->kind == type_kind_long_long || type->kind == type_kind_ulong_long) &&
+					width.bits > 31) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");
