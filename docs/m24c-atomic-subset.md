@@ -63,8 +63,11 @@ exchange intrinsics, including explicit-order forms, using the corresponding
 8-byte libatomic ABI. The expected compare-exchange argument must point to a
 mutable matching non-atomic pointer. `atomic_is_lock_free` queries libatomic
 for supported four-byte integer or eight-byte pointer atomic objects, evaluating
-its pointer once. Atomic pointer fetch-add/subtract and bitwise intrinsics are
-not supported. These pointer intrinsics have not been runtime-tested.
+its pointer once. Pointer fetch-add/subtract and explicit-order variants accept
+an integer offset for a complete object referent, convert it to the target’s
+`ptrdiff_t` representation, scale it by the referent size, and return the old
+pointer. Pointer bitwise intrinsics are rejected. These pointer intrinsics have
+not been runtime-tested.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.

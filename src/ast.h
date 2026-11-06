@@ -362,6 +362,7 @@ struct ast_atomic_expression {
 	struct ast_expression *argument;
 	struct ast_expression *order;
 	struct ast_expression *failure_order;
+	uint64_t pointer_element_size; /* pointer fetch-add/subtract only */
 };
 
 struct ast_call_expression {

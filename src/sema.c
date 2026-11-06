@@ -2049,13 +2049,28 @@ static bool sema_expression(struct sema *sema,
 			(referent->kind == type_kind_pointer &&
 				node->operation != ast_atomic_load && node->operation != ast_atomic_store &&
 				node->operation != ast_atomic_exchange && node->operation != ast_atomic_compare_exchange &&
+				node->operation != ast_atomic_fetch_add && node->operation != ast_atomic_fetch_sub &&
 				node->operation != ast_atomic_is_lock_free)) {
 			diagnostic_error(sema->diagnostics, expression->location,
 				"unsupported atomic object type or operation");
 			return false;
 		}
 		result_type = unqualified_type(sema, referent, expression->location);
-		if (!result_type || (node->argument && !convert_expression(sema, &node->argument, result_type)))
+		if (!result_type)
+			return false;
+		if (referent->kind == type_kind_pointer &&
+			(node->operation == ast_atomic_fetch_add || node->operation == ast_atomic_fetch_sub)) {
+			const struct type *element = ((const struct pointer_type *)referent)->referent;
+
+			if (!type_is_complete_object(element) || !type_is_integer(node->argument->type)) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"atomic pointer fetch requires a complete object referent and integer offset");
+				return false;
+			}
+			node->pointer_element_size = type_object_size(element);
+			if (!convert_expression(sema, &node->argument, &type_long))
+				return false;
+		} else if (node->argument && !convert_expression(sema, &node->argument, result_type))
 			return false;
 		if (node->operation == ast_atomic_is_lock_free)
 			result_type = &type_bool;

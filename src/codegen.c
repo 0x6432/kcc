@@ -781,6 +781,12 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t failure_order = node->failure_order ? codegen_expression(codegen, node->failure_order) : 0;
 		const char *operation;
 
+		if (node->pointer_element_size > 1) {
+			size_t scaled = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, argument,
+				(uintmax_t)node->pointer_element_size);
+			argument = scaled;
+		}
 		if (node->operation == ast_atomic_is_lock_free) {
 			size_t result = codegen->next_temporary++;
 			temporary = codegen->next_temporary++;
