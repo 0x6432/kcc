@@ -23,7 +23,8 @@ accepted, as are strings and bounded `_Generic`, `sizeof` and `alignof` expressi
 Evaluated definition-bound strings have static storage; prototype-only strings
 are not published.
 Automatic compound literals with supported initializers receive distinct entry
-slots and are initialized when the bound is evaluated. Static/thread-local
-compound literals, nested `[*]`, nested variable bounds, `volatile`,
+slots and are initialized when the bound is evaluated; static and thread-local
+compound literals use their existing storage rules. Nested `[*]`, nested variable
+bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.

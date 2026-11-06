@@ -43,7 +43,7 @@ rejected = [
     ('int f(int n) { typedef int A[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { static int a[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { int a[2][n]; return 0; }', 'variable-length arrays'),
-    ('int f(int n, int a[((static int){1})]) { return 0; }', 'variable-length arrays'),
+    ('int f(int n, int a[sizeof(int[n])]) { return 0; }', 'variable-length arrays'),
 ]
 # Bounds fail before allocation, including a negative signed input, unsigned
 # overflow, zero and remaining-budget exhaustion. No particular signal is required.

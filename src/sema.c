@@ -1232,7 +1232,7 @@ static bool definition_bound_initializer(struct sema *sema, const struct ast_ini
 }
 
 /* Bounded parameter expressions support scalar names, pointer indirection,
- * calls, casts, updates and automatic compound literals. Memory access is
+ * calls, casts, updates and compound literals. Memory access is
  * retained in the prologue. */
 static bool definition_bound(struct sema *sema, const struct ast_expression *expression,
 	bool *effect)
@@ -1254,8 +1254,7 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 	case expression_compound_literal: {
 		const struct ast_compound_literal_expression *node = (const struct ast_compound_literal_expression *)expression;
 		*effect = true;
-		return !node->is_static && !node->is_thread_local &&
-			definition_bound_initializer(sema, node->initializer_syntax, effect);
+		return definition_bound_initializer(sema, node->initializer_syntax, effect);
 	}
 	case expression_generic: {
 		const struct ast_generic_expression *node = (const struct ast_generic_expression *)expression;
