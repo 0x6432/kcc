@@ -109,12 +109,29 @@ static void test_boundaries(void)
 	assert(bitint_convert(u3, s5, 7, &out) == bitint_ok && out == 7);
 }
 
+static void test_unary_and_shifts(void)
+{
+	struct bitint_type s5 = {5, false}, u3 = {3, true}, s64 = {64, false};
+	uint64_t out = 77;
+	assert(bitint_unary(s5, bitint_unary_minus, 16, &out) == bitint_overflow && out == 77);
+	assert(bitint_unary(s5, bitint_unary_minus, 31, &out) == bitint_ok && out == 1);
+	assert(bitint_unary(u3, bitint_unary_minus, 1, &out) == bitint_ok && out == 7);
+	assert(bitint_unary(u3, bitint_complement, 5, &out) == bitint_ok && out == 2);
+	assert(bitint_shift(s5, bitint_shift_right, 16, 2, &out) == bitint_ok && out == 28);
+	assert(bitint_shift(s64, bitint_shift_right, UINT64_C(1)<<63, 63, &out) == bitint_ok && out == UINT64_MAX);
+	assert(bitint_shift(u3, bitint_shift_left, 7, 2, &out) == bitint_ok && out == 4);
+	assert(bitint_shift(s5, bitint_shift_left, 4, 2, &out) == bitint_overflow && out == 4);
+	assert(bitint_shift(s5, bitint_shift_left, 31, 0, &out) == bitint_overflow && out == 4);
+	assert(bitint_shift(s5, bitint_shift_right, 2, 5, &out) == bitint_invalid_shift && out == 4);
+}
+
 int main(void)
 {
 	test_literal_width();
 	test_conversions();
 	test_small_signed();
 	test_boundaries();
+	test_unary_and_shifts();
 	puts("Bounded bit-precise arithmetic primitives passed");
 	return 0;
 }

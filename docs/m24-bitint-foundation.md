@@ -25,8 +25,8 @@ implementation, not a replacement for C semantic analysis or code generation:
   two's-complement choice. The API has no object storage or ABI interpretation.
 
 This is a bounded internal arithmetic model only. The parser, AST, type system,
-constant evaluator and backend do not yet use it. Expression shifts, unary
-operations, mixed standard-type conversions, arbitrary-width arithmetic,
+constant evaluator and backend do not yet use it. Expression shifts and unary operators are not connected to this API; mixed
+standard-type conversions, arbitrary-width arithmetic,
 objects, layouts, calls, returns, external linkage and ABI interoperability
 are not implemented. All source `_BitInt` widths and `wb` literals are rejected,
 including those within the model's range. No claim is made that a particular
@@ -37,3 +37,11 @@ Tests were added for width inference, bit-precise-only conversion, arithmetic,
 source rejection, suffix recognition and preprocessing. They were not run in
 this checkpoint at the user's request. `build/kcc`, `build/test_bitint` and
 `build/test_lex` compiled successfully; compilation is not a test result.
+
+The internal API also handles unary plus, negation and complement, plus checked
+left/right shifts on already-promoted bit-precise operands. Negative shift counts
+must be rejected by the caller; counts at least the operand width are rejected
+by the helper. Signed right shift uses arithmetic fill; signed negative or
+overflowing left shift and negation of signed minimum are rejected. These are
+internal foundations only, not source-language support. New cases were added to
+the test binary but not run; the compiler and test binary were built.

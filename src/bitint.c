@@ -125,6 +125,58 @@ enum bitint_status bitint_binary(struct bitint_type type, enum bitint_operation 
 	return bitint_ok;
 }
 
+enum bitint_status bitint_unary(struct bitint_type type, enum bitint_unary_operation op,
+	uint64_t value, uint64_t *out)
+{
+	uint64_t mask, result;
+	if (!bitint_type_valid(type))
+		return bitint_invalid_width;
+	mask = mask_for(type.width);
+	if (value & ~mask)
+		return bitint_invalid_value;
+	switch (op) {
+	case bitint_unary_plus: result = value; break;
+	case bitint_unary_minus:
+		if (!type.is_unsigned && value == (UINT64_C(1) << (type.width - 1)))
+			return bitint_overflow;
+		result = (UINT64_C(0) - value) & mask;
+		break;
+	case bitint_complement: result = ~value & mask; break;
+	default: return bitint_invalid_value;
+	}
+	*out = result;
+	return bitint_ok;
+}
+
+enum bitint_status bitint_shift(struct bitint_type type, enum bitint_shift_operation op,
+	uint64_t value, uint64_t count, uint64_t *out)
+{
+	uint64_t mask, result;
+	if (!bitint_type_valid(type))
+		return bitint_invalid_width;
+	mask = mask_for(type.width);
+	if (value & ~mask)
+		return bitint_invalid_value;
+	if (count >= type.width)
+		return bitint_invalid_shift;
+	switch (op) {
+	case bitint_shift_left:
+		if (!type.is_unsigned && (negative(type, value) ||
+			value > ((UINT64_C(1) << (type.width - 1)) - 1) >> count))
+			return bitint_overflow;
+		result = (value << count) & mask;
+		break;
+	case bitint_shift_right:
+		result = value >> count;
+		if (negative(type, value))
+			result |= mask ^ (mask >> count);
+		break;
+	default: return bitint_invalid_value;
+	}
+	*out = result;
+	return bitint_ok;
+}
+
 enum bitint_status bitint_compare(struct bitint_type type, uint64_t left,
 	uint64_t right, int *out)
 {

@@ -21,7 +21,11 @@ enum bitint_status {
 	bitint_invalid_value,
 	bitint_overflow,
 	bitint_division_by_zero,
+	bitint_invalid_shift,
 };
+
+enum bitint_unary_operation { bitint_unary_plus, bitint_unary_minus, bitint_complement };
+enum bitint_shift_operation { bitint_shift_left, bitint_shift_right };
 
 enum bitint_operation {
 	bitint_add, bitint_subtract, bitint_multiply, bitint_divide, bitint_remainder,
@@ -45,6 +49,14 @@ enum bitint_status bitint_common_type(struct bitint_type left, struct bitint_typ
  */
 enum bitint_status bitint_binary(struct bitint_type type, enum bitint_operation op,
 	uint64_t left, uint64_t right, uint64_t *out);
+/* Unary operands are already promoted. Shift counts must be nonnegative and
+ * are supplied as an unsigned magnitude; a count >= width is rejected.
+ * Signed right shift of negative values is arithmetic in this target model.
+ * As above, invalid inputs leave *out unchanged. */
+enum bitint_status bitint_unary(struct bitint_type type, enum bitint_unary_operation op,
+	uint64_t value, uint64_t *out);
+enum bitint_status bitint_shift(struct bitint_type type, enum bitint_shift_operation op,
+	uint64_t value, uint64_t count, uint64_t *out);
 /* Return -1/0/1 after comparing canonical same-type operands. */
 enum bitint_status bitint_compare(struct bitint_type type, uint64_t left,
 	uint64_t right, int *out);
