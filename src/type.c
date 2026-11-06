@@ -800,9 +800,10 @@ const struct record_member *type_record_find_member(const struct type *type,
 	return member;
 }
 
-/* Bit-precise scalar and unnamed-field calling conventions are not yet
- * verified. Reject containing records even for MEMORY-class calls; pointers
- * do not contain their referents by value. Bound deeply shared union trees. */
+/* Bit-precise scalar and zero-width-field calling conventions are not yet
+ * verified across host versions. Reject containing records even for
+ * MEMORY-class calls; pointers do not contain their referents by value.
+ * Bound the walk for deeply shared union trees. */
 static bool aggregate_has_unverified_members(const struct type *type, unsigned depth,
 	size_t *budget)
 {
@@ -814,7 +815,7 @@ static bool aggregate_has_unverified_members(const struct type *type, unsigned d
 	if (type_is_record(type)) {
 		const struct record_definition *record = type_record_definition(type);
 		for (const struct record_member *member = record->members; member; member = member->next)
-			if ((member->is_bit_field && !member->name.length) ||
+			if ((member->is_bit_field && !member->bit_width) ||
 				aggregate_has_unverified_members(member->type, depth + 1, budget)) return true;
 	}
 	return false;
@@ -840,12 +841,14 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 		if (!record->complete || record->has_flexible_array) return false;
 		for (const struct record_member *member = record->members; member; member = member->next) {
 			if (member->is_bit_field) {
-				/* A named int bit-field occupies only its actual bits, not an
+				/* An int bit-field occupies only its actual bits, not an
 				 * int-sized scalar at its byte offset. Allocation units do
 				 * not cross a 32-bit boundary on this target. */
 				uint64_t start = offset + member->offset;
 				uint64_t bytes = (member->bit_offset + member->bit_width + 7) / 8;
-				if (!member->name.length || !bytes || start + bytes > 16)
+				if (!member->bit_width)
+					continue; /* Zero-width barrier has no occupied bits. */
+				if (!bytes || start + bytes > 16)
 					return false;
 				for (uint64_t i = start / 8; i <= (start + bytes - 1) / 8; i++)
 					classes[i] = aggregate_abi_integer;

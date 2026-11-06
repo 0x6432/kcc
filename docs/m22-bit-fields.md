@@ -71,6 +71,7 @@ automatic initialization,
 field updates and single-evaluation bases, promotions (including variadic calls),
 layout, unions, flexible arrays, small and memory-class aggregate calls,
 `_BitInt` integration boundaries, and unsupported cases. The unnamed-field test also covers 231 layouts with separators and padding in
-both host/KCC pointer-interoperation directions; aggregates containing unnamed
-fields are conservatively rejected by value pending ABI validation. These checks do not replace
+both host/KCC pointer-interoperation directions; aggregates containing zero-width barriers remain rejected by value pending
+ABI validation; nonzero unnamed fields are supported by the bounded aggregate
+ABI. These checks do not replace
 cross-platform ABI validation, fuzzing, or full C23 conformance testing.

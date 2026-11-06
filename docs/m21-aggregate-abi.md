@@ -45,9 +45,11 @@ to the existing 256 record-temporary and 1 MiB per-function storage limits.
 The 64-byte ceiling also bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
-Records containing unnamed bit-fields are conservatively rejected by value,
-including nested and MEMORY-class records, pending ABI-specific validation.
-Pointer-based interoperation is separately supported.
+Nonzero unnamed int bit-fields contribute INTEGER classes for their occupied
+bits. Records containing zero-width barriers are conservatively rejected by
+value, including nested and MEMORY-class records: the available GCC 11 host
+passed a float/zero-width/float record differently from a classifier ignoring
+the zero-width field. Pointer-based interoperation remains supported.
 
 ## Focused validation and remaining gates
 
@@ -58,7 +60,10 @@ exhaustion and rollback, memory returns, fixed parameters of variadic functions,
 `va_start`, recursion, discarded results, tail subobjects and limits/rejections.
 `tests/test_bitfield_aggregate_abi.py` additionally exercises 448 named signed
 and unsigned field layouts by value in both host/KCC directions, plus mixed
-INTEGER/SSE, unions, nested records and register pressure. See the commit
+INTEGER/SSE, unions, nested records and register pressure.
+`tests/test_unnamed_field_aggregate_abi.py` covers 288 floating and mixed
+nonzero-unnamed-field layouts by value in both directions and exercises a union,
+a MEMORY-class record and register pressure. See the commit
 handoff for exact commands and results.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

@@ -56,7 +56,10 @@ discrepancies. The integrated focused bit-field, aggregate ABI, enum and
 8/16/32/64-bit `_BitInt` value checks passed; host `_BitInt` comparison was
 unavailable. A subsequent bounded increment supports unnamed int bit-fields
 and zero-width barriers, with 231 GCC/KCC pointer-layout combinations in both
-directions; records containing them by value remain rejected. Named bit-fields
+directions. Nonzero unnamed fields are supported in bounded by-value aggregates
+after 288 floating/mixed host interoperability cases in both directions; records
+containing zero-width barriers are still rejected by value because a float/zero-
+width/float host case disagreed with the initial classifier. Named bit-fields
 with unaligned byte offsets now have bounded aggregate-by-value classification;
 448 signed and unsigned layouts passed the GCC/KCC cross-call matrix in both
 directions. Full `make test`
