@@ -3922,7 +3922,7 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 }
 
 /* header-name = string-literal | '<' path-token+ '>'
- * The angle subset has no internal whitespace and uses only ASCII path bytes.
+ * The angle subset has no internal whitespace and uses bounded ASCII filename bytes.
  */
 static bool append_include_piece(struct preprocessor *preprocessor,
 	struct include_name *name, struct pp_token piece, size_t *length, struct token *error)
@@ -3940,7 +3940,9 @@ static bool append_include_piece(struct preprocessor *preprocessor,
 
 		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 			(c >= '0' && c <= '9') || c == '_' || c == '.' || c == '/' ||
-			c == '-' || c == '+')) {
+			c == '-' || c == '+' || c == '@' || c == '~' || c == ':' ||
+			c == '=' || c == '%' || c == '!' || c == '^' || c == '&' ||
+			c == '|' || c == '?' || c == ',' || c == ';')) {
 			diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
 				"unsupported byte in angle include name");
 			*error = invalid_token(name->invocation);

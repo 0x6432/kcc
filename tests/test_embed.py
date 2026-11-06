@@ -1,4 +1,4 @@
-""Bounded C23 embed: raw bytes, limits, searches, and rejections."""
+"""Bounded C23 embed: raw bytes, limits, searches, and rejections."""
 import os
 import subprocess
 import tempfile
@@ -13,6 +13,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
     path = Path(directory)
     (path / 'asset.bin').write_bytes(bytes([0, 10, 42, 255]))
     (path / 'empty.bin').write_bytes(b'')
+    (path / 'special@asset.bin').write_bytes(bytes([42]))
     (path / 'oversized.bin').write_bytes(bytes(4097))
     source = path / 'main.c'
     source.write_text('''
@@ -80,6 +81,9 @@ int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==
     source.write_text('#if __has_embed("asset.bin" prefix([1)))\n#endif\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode != 0 and result.stderr, 'malformed embed query must fail'
+    source.write_text('#if __has_embed(<special@asset.bin>) != __STDC_EMBED_FOUND__\n#error special asset unavailable\n#endif\nunsigned char a[] = {\n#embed <special@asset.bin>\n};\nint main(void){return a[0];}\n')
+    result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
     source.write_text('unsigned char a[] = {\n#embed <asset.bin>\n};\nint main(void){return a[2];}\n')
     result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr

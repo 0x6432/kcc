@@ -124,6 +124,10 @@ int main(void) { return 0; }
 ''')
     result = subprocess.run([str(compiler), "-I", str(path), str(source)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+    (path / 'special@header.h').write_text('#define SPECIAL_VALUE 42\n')
+    source.write_text('#if !__has_include(<special@header.h>)\n#error special header unavailable\n#endif\n#include <special@header.h>\nint main(void){return SPECIAL_VALUE;}\n')
+    result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
     source.write_text('#if __has_include("")\n#endif\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
     assert result.returncode != 0, "empty header names must be rejected"

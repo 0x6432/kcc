@@ -28,6 +28,7 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
     (second/'nested.h').write_text('#define VALUE 42\n')
     (first/'__VA_ARGS__').write_text('#define VALUE 42\n')
     (first/'space name.h').write_text('#define VALUE 42\n')
+    (first/'a@b~c:d=e%f!g^h&i|j?k,l;m.h').write_text('#define VALUE 42\n')
     (first/'sub').mkdir()
     (first/'sub'/'n-1+.h').write_text('#define VALUE 42\n')
     source, reference = app/'root.c', base/'reference.c'
@@ -44,6 +45,8 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
         ('#define Q "fallback.h"\n#include Q', [second], 42),
         ('#include "space name.h"', [first], 42),
         ('#include <sub/n-1+.h>', [first], 42),
+        ('#include <a@b~c:d=e%f!g^h&i|j?k,l;m.h>', [first], 42),
+        ('#define SPECIAL <a@b~c:d=e%f!g^h&i|j?k,l;m.h>\n#include SPECIAL', [first], 42),
         (f'#include "{first}/local.h"', [second], 42),
     ]
     for directive, directories, value in cases:
@@ -96,7 +99,7 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
     for operand, message in [('<>', 'nonempty'), ('< local.h>', 'whitespace'),
                              ('<local.h >', 'whitespace'), ('<local/**/.h>', 'whitespace'),
                              ('<local.h', "expected '>'"), ('<local.h> extra', 'exactly one'),
-                             ('<a@b>', 'unsupported byte'), ('<missing-header.h>', 'cannot load angle'),
+                             ('<a[b>', 'unsupported byte'), ('<missing-header.h>', 'cannot load angle'),
                              (f'<{first}/local.h>', 'whitespace')]:
         source.write_text(f'#include {operand}\nint main(void) {{ return 0; }}\n')
         result = run(compiler, ['-I'+str(first), source])
