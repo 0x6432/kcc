@@ -10,6 +10,8 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=2; switch(n) { case 2: { int a[n]; a[1]=42; return sizeof a==8 ? a[1] : 1; } default: return 1; } }',
+    'int main(void) { int n=2; switch(n) { case 2: { int a[n]; a[1]=42; switch(n) { case 2: return a[1]; default: return 1; } } default: return 1; } }',
     'int main(void) { int n=3, sum=0; while(n) { int a[n]; a[n-1]=n; sum+=a[n-1]; n--; } return sum==6 ? 42 : 1; }',
     'int main(void) { int n=2, sum=0; for(int i=0;i<3;i++) { int a[n+i]; a[n+i-1]=i; sum+=sizeof a+a[n+i-1]; } return sum==39 ? 42 : 1; }',
     'int main(void) { int n=2; do { int a[n]; a[0]=n; n=a[0]-1; } while(n); return 42; }',
@@ -34,7 +36,8 @@ valid = [
     'int main(void) { int n=3; int a[n++]; a[2]=42; return n==4 && sizeof *(&a)==12 && sizeof *(&*(&a))==12 ? a[2] : 1; }',
 ]
 rejected = [
-    ('int f(int n) { switch(n) { case 1: { int a[n]; return sizeof a; } } return 0; }', 'variable-length arrays'),
+    ('int f(int n) { switch(n) { int a[n]; case 1: return sizeof a; } return 0; }', 'switch label enters'),
+    ('int f(int n) { switch(n) { case 1:; int a[n]; default: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { int a[n]={0}; return 0; }', 'must be uninitialized'),
     ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
     ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto in a function'),

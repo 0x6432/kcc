@@ -1,8 +1,10 @@
 # Multiple outermost VLAs
 
 Multiple uninitialized, naturally aligned automatic VLAs can
-be declared in the outermost block or nested blocks, including loop bodies
-outside switch bodies. A loop declaration evaluates its bound and allocates on
+be declared in the outermost block or nested blocks, including loop and switch
+bodies. A case or default label is rejected if switch dispatch would enter the
+scope of a VLA declared inside that switch; a VLA enclosing a nested switch is
+allowed. A loop declaration evaluates its bound and allocates on
 every execution. Complete element types include
 pointers, floating types, records that do not contain flexible arrays, and
 fixed-size arrays, allowing a runtime outer dimension with fixed inner
@@ -16,10 +18,9 @@ after a nested block ends; storage is reclaimed on function return. This is a
 conservative implementation limit: a loop can exhaust the budget even when its
 individual VLAs have ended their lifetimes.
 
-Other restrictions of the existing outermost VLA subset remain: no VLAs in
-switch bodies, runtime inner dimensions, VLA
-initializers, explicit alignment, VM typedefs or parameters, or `typeof` of a
-VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
+Other restrictions of the existing outermost VLA subset remain: no runtime inner
+dimensions, VLA initializers, explicit alignment, general VM typedefs or
+parameters, or `typeof` of a VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
 the whole VLA remains rejected because runtime referent size is not modeled;
 `sizeof` accepts the array name or direct indirection/address pairs such as
 `sizeof *(&a)`; other VLA expressions remain unsupported. Functions

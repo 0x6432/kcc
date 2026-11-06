@@ -58,6 +58,7 @@ struct scope {
 struct control_context {
 	struct control_context *parent;
 	struct ast_statement *statement;
+	struct scope *scope; /* scope containing the controlled body */
 };
 
 struct goto_reference {
@@ -4312,16 +4313,6 @@ static bool check_object_alignment(struct sema *sema, const struct type *type,
 	return true;
 }
 
-/* Switch dispatch can enter the scope past a VLA declaration. Keep rejecting
- * VLAs under a switch until VM-scope jump constraints are modeled. */
-static bool inside_switch(const struct sema *sema)
-{
-	for (const struct control_context *context = sema->control; context; context = context->parent)
-		if (context->statement->kind == statement_switch)
-			return true;
-	return false;
-}
-
 static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *local)
 {
 	const struct type *type;
@@ -4351,9 +4342,9 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 			return false;
 		local->alignment = local->alignments->alignment;
 	}
-	/* Loop declarations allocate each time control reaches them; the runtime
-	 * budget is cumulative. Switch entry and goto remain restricted. */
-	if (sema->function && sema->scope && !inside_switch(sema) &&
+	/* Declarations allocate each time control reaches them. Goto and switch
+	 * entry are checked separately, and the runtime budget is cumulative. */
+	if (sema->function && sema->scope &&
 		local->type_syntax->kind == type_syntax_array && !local->is_static &&
 		!local->is_extern && !local->is_thread_local && !local->is_register)
 		sema->vla_candidate = local->type_syntax;
@@ -4463,7 +4454,7 @@ static bool sema_if(struct sema *sema, struct ast_if_statement *node)
 static bool sema_control_body(struct sema *sema, struct ast_statement *statement,
 	struct ast_statement *body)
 {
-	struct control_context context = { sema->control, statement };
+	struct control_context context = { sema->control, statement, sema->scope };
 	bool success;
 
 	sema->control = &context;
@@ -4645,6 +4636,24 @@ static bool reserve_switch_label(struct sema *sema, struct ast_switch_statement 
 	return true;
 }
 
+/* A switch may not dispatch into the scope of a variably modified identifier
+ * declared inside it. Existing VLAs enclosing the switch are unaffected. */
+static bool check_switch_vla_scope(struct sema *sema, struct source_location location)
+{
+	struct control_context *context = sema->control;
+	while (context && context->statement->kind != statement_switch)
+		context = context->parent;
+	assert(context);
+	for (struct scope *scope = sema->scope; scope && scope != context->scope->parent; scope = scope->parent)
+		for (struct binding *binding = scope->bindings; binding; binding = binding->next)
+			if (binding->declaration->vla_bound) {
+				diagnostic_error(sema->diagnostics, location,
+					"switch label enters the scope of a variable-length array");
+				return false;
+			}
+	return true;
+}
+
 static bool sema_case_label(struct sema *sema, struct ast_case_label *label)
 {
 	struct ast_switch_statement *owner = enclosing_switch(sema);
@@ -4654,7 +4663,8 @@ static bool sema_case_label(struct sema *sema, struct ast_case_label *label)
 		diagnostic_error(sema->diagnostics, label->location, "case requires an enclosing switch");
 		return false;
 	}
-	if (!sema_expression(sema, &label->value, true))
+	if (!check_switch_vla_scope(sema, label->location) ||
+		!sema_expression(sema, &label->value, true))
 		return false;
 	if (!type_is_integer(label->value->type)) {
 		diagnostic_error(sema->diagnostics, label->value->location, "case requires an integer constant expression");
@@ -4690,6 +4700,8 @@ static bool sema_default_label(struct sema *sema, struct ast_default_label *labe
 		diagnostic_error(sema->diagnostics, label->location, "default requires an enclosing switch");
 		return false;
 	}
+	if (!check_switch_vla_scope(sema, label->location))
+		return false;
 	if (owner->default_label) {
 		diagnostic_error(sema->diagnostics, label->location, "duplicate default label in switch");
 		return false;
