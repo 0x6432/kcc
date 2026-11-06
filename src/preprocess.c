@@ -930,6 +930,48 @@ static bool load_include_source(struct preprocessor *preprocessor,
 		return false;
 	}
 	if (builtins && !absolute) {
+		static const char stdbit_header[] =
+			"#ifndef __KCC_STDBIT_H\n"
+			"#define __KCC_STDBIT_H 1\n"
+			"#define __STDC_ENDIAN_LITTLE__ 1234\n"
+			"#define __STDC_ENDIAN_BIG__ 4321\n"
+			"#define __STDC_ENDIAN_NATIVE__ __STDC_ENDIAN_LITTLE__\n"
+			"#define __KCC_STDBIT(T,S,W) \\\n"
+			"static inline unsigned int stdc_leading_zeros_##S(T x) { unsigned int n=0; T m=(T)((T)1 << ((W)-1)); while (m && !(x&m)) { n++; m=(T)(m>>1); } return n; } \\\n"
+			"static inline unsigned int stdc_leading_ones_##S(T x) { return stdc_leading_zeros_##S((T)~x); } \\\n"
+			"static inline unsigned int stdc_trailing_zeros_##S(T x) { unsigned int n=0; while (n<(W) && !(x&1)) { n++; x=(T)(x>>1); } return n; } \\\n"
+			"static inline unsigned int stdc_trailing_ones_##S(T x) { return stdc_trailing_zeros_##S((T)~x); } \\\n"
+			"static inline unsigned int stdc_first_leading_one_##S(T x) { return x ? stdc_leading_zeros_##S(x)+1 : 0; } \\\n"
+			"static inline unsigned int stdc_first_leading_zero_##S(T x) { return stdc_first_leading_one_##S((T)~x); } \\\n"
+			"static inline unsigned int stdc_first_trailing_one_##S(T x) { return x ? stdc_trailing_zeros_##S(x)+1 : 0; } \\\n"
+			"static inline unsigned int stdc_first_trailing_zero_##S(T x) { return stdc_first_trailing_one_##S((T)~x); } \\\n"
+			"static inline unsigned int stdc_count_ones_##S(T x) { unsigned int n=0; while (x) { n+=(x&1); x=(T)(x>>1); } return n; } \\\n"
+			"static inline unsigned int stdc_count_zeros_##S(T x) { return (W)-stdc_count_ones_##S(x); } \\\n"
+			"static inline bool stdc_has_single_bit_##S(T x) { return x && !(x & (T)(x-1)); } \\\n"
+			"static inline unsigned int stdc_bit_width_##S(T x) { return (W)-stdc_leading_zeros_##S(x); } \\\n"
+			"static inline T stdc_bit_floor_##S(T x) { return x ? (T)((T)1 << (stdc_bit_width_##S(x)-1)) : (T)0; } \\\n"
+			"static inline T stdc_bit_ceil_##S(T x) { unsigned int n; if (x<=1) return (T)1; n=stdc_bit_width_##S((T)(x-1)); return n==(W) ? (T)0 : (T)((T)1 << n); }\n"
+			"__KCC_STDBIT(unsigned char,uc,8)\n"
+			"__KCC_STDBIT(unsigned short,us,16)\n"
+			"__KCC_STDBIT(unsigned int,ui,32)\n"
+			"__KCC_STDBIT(unsigned long,ul,64)\n"
+			"__KCC_STDBIT(unsigned long long,ull,64)\n";
+		static const char stdbit_header_tail[] =
+			"#define stdc_leading_zeros(x) _Generic((x), unsigned char: stdc_leading_zeros_uc, unsigned short: stdc_leading_zeros_us, unsigned int: stdc_leading_zeros_ui, unsigned long: stdc_leading_zeros_ul, unsigned long long: stdc_leading_zeros_ull)(x)\n"
+			"#define stdc_leading_ones(x) _Generic((x), unsigned char: stdc_leading_ones_uc, unsigned short: stdc_leading_ones_us, unsigned int: stdc_leading_ones_ui, unsigned long: stdc_leading_ones_ul, unsigned long long: stdc_leading_ones_ull)(x)\n"
+			"#define stdc_trailing_zeros(x) _Generic((x), unsigned char: stdc_trailing_zeros_uc, unsigned short: stdc_trailing_zeros_us, unsigned int: stdc_trailing_zeros_ui, unsigned long: stdc_trailing_zeros_ul, unsigned long long: stdc_trailing_zeros_ull)(x)\n"
+			"#define stdc_trailing_ones(x) _Generic((x), unsigned char: stdc_trailing_ones_uc, unsigned short: stdc_trailing_ones_us, unsigned int: stdc_trailing_ones_ui, unsigned long: stdc_trailing_ones_ul, unsigned long long: stdc_trailing_ones_ull)(x)\n"
+			"#define stdc_first_leading_zero(x) _Generic((x), unsigned char: stdc_first_leading_zero_uc, unsigned short: stdc_first_leading_zero_us, unsigned int: stdc_first_leading_zero_ui, unsigned long: stdc_first_leading_zero_ul, unsigned long long: stdc_first_leading_zero_ull)(x)\n"
+			"#define stdc_first_leading_one(x) _Generic((x), unsigned char: stdc_first_leading_one_uc, unsigned short: stdc_first_leading_one_us, unsigned int: stdc_first_leading_one_ui, unsigned long: stdc_first_leading_one_ul, unsigned long long: stdc_first_leading_one_ull)(x)\n"
+			"#define stdc_first_trailing_zero(x) _Generic((x), unsigned char: stdc_first_trailing_zero_uc, unsigned short: stdc_first_trailing_zero_us, unsigned int: stdc_first_trailing_zero_ui, unsigned long: stdc_first_trailing_zero_ul, unsigned long long: stdc_first_trailing_zero_ull)(x)\n"
+			"#define stdc_first_trailing_one(x) _Generic((x), unsigned char: stdc_first_trailing_one_uc, unsigned short: stdc_first_trailing_one_us, unsigned int: stdc_first_trailing_one_ui, unsigned long: stdc_first_trailing_one_ul, unsigned long long: stdc_first_trailing_one_ull)(x)\n"
+			"#define stdc_count_zeros(x) _Generic((x), unsigned char: stdc_count_zeros_uc, unsigned short: stdc_count_zeros_us, unsigned int: stdc_count_zeros_ui, unsigned long: stdc_count_zeros_ul, unsigned long long: stdc_count_zeros_ull)(x)\n"
+			"#define stdc_count_ones(x) _Generic((x), unsigned char: stdc_count_ones_uc, unsigned short: stdc_count_ones_us, unsigned int: stdc_count_ones_ui, unsigned long: stdc_count_ones_ul, unsigned long long: stdc_count_ones_ull)(x)\n"
+			"#define stdc_has_single_bit(x) _Generic((x), unsigned char: stdc_has_single_bit_uc, unsigned short: stdc_has_single_bit_us, unsigned int: stdc_has_single_bit_ui, unsigned long: stdc_has_single_bit_ul, unsigned long long: stdc_has_single_bit_ull)(x)\n"
+			"#define stdc_bit_width(x) _Generic((x), unsigned char: stdc_bit_width_uc, unsigned short: stdc_bit_width_us, unsigned int: stdc_bit_width_ui, unsigned long: stdc_bit_width_ul, unsigned long long: stdc_bit_width_ull)(x)\n"
+			"#define stdc_bit_floor(x) _Generic((x), unsigned char: stdc_bit_floor_uc, unsigned short: stdc_bit_floor_us, unsigned int: stdc_bit_floor_ui, unsigned long: stdc_bit_floor_ul, unsigned long long: stdc_bit_floor_ull)(x)\n"
+			"#define stdc_bit_ceil(x) _Generic((x), unsigned char: stdc_bit_ceil_uc, unsigned short: stdc_bit_ceil_us, unsigned int: stdc_bit_ceil_ui, unsigned long: stdc_bit_ceil_ul, unsigned long long: stdc_bit_ceil_ull)(x)\n"
+			"#endif\n";
 		static const char uchar_header[] =
 			"#ifndef __KCC_UCHAR_H\n#define __KCC_UCHAR_H 1\n"
 			"#include <stddef.h>\n"
@@ -1398,7 +1440,11 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "locale.h") == 0) {
+		if (strcmp(name->path, "stdbit.h") == 0) {
+			header = stdbit_header;
+			header_tail = stdbit_header_tail;
+			source_name = "<kcc/stdbit.h>";
+		} else if (strcmp(name->path, "locale.h") == 0) {
 			header = locale_header;
 			source_name = "<kcc/locale.h>";
 		} else if (strcmp(name->path, "wctype.h") == 0) {
