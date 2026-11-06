@@ -5,6 +5,9 @@ KCC=... QBE=... HOST_CC=cc CLANG_CC=... python3 tests/test_thread_storage.py
 Native sources are never rewritten, macro-adapted, or run when invalid. Only
 curated defined programs execute; constraint/deferred sources compile only.
 The host pthread companion declares TLS with _Thread_local, not ordinary extern.
+KCC_ALLOW_MISSING_TLS_COMPANION=1 permits a development batch to continue when
+no host supports the exact companion. Each missing runtime case is reported as a
+gap, not a pass; the default remains strict.
 AST oracle: compile test_thread_storage_ast.c with the selected source checkout's
 src/*.c excluding main.c (no Makefile modifications are needed).
 """
@@ -524,6 +527,7 @@ def main():
         supported={cc:features_for(cc,d/'probe.c',d/'probe.o') | ({'thread_local'} if keyword_support(cc,d) else set()) for cc in compilers}
         counts={cc:[0,0,0] for cc in compilers}
         kcc_count=qbe_count=refusals=0
+        companion_gaps=[]
         for case in fixtures():
             public={row[0] for rows in case.objects for row in rows if row[3]}
             required=[{name for name in public if re.search(r'\b'+re.escape(name)+r'\b',text)} for text in case.units]
@@ -561,7 +565,11 @@ def main():
             if QBE:
                 other=d/'pthread.o'
                 companion_cc=next((cc for cc in compilers if set(case.features)<=supported[cc]),None)
-                assert companion_cc, ('no compiler supports exact pthread companion',case.name)
+                if not companion_cc:
+                    assert os.environ.get('KCC_ALLOW_MISSING_TLS_COMPANION') == '1', (
+                        'no compiler supports exact pthread companion',case.name)
+                    companion_gaps.append(case.name)
+                    continue
                 producer([companion_cc,'-std=c2x','-pedantic-errors','-fno-common','-fsigned-char','-O0','-pthread','-c',host,'-o',other],other)
                 run(companion_cc,[*objects,other],d/'qbe-program'); qbe_count+=1
         for text,message in CONSTRAINTS+[(text,'thread-local object address is not a static address constant') for text in ADDRESS_CONSTRAINTS]:
@@ -583,6 +591,9 @@ def main():
         for cc,(agreements,gaps,constraints) in counts.items():
             print(f'{cc}: {agreements} unchanged ELF TLS/pthread agreements; '
                   f'{gaps} keyword/feature-unavailable (NOT agreements); {constraints} native constraints')
+        if companion_gaps:
+            print(f'Missing exact pthread companions: {len(companion_gaps)} '
+                  f'KCC/QBE runtime gaps (NOT passes): {companion_gaps}')
         if args.native_only:
             print('NATIVE-ONLY: no claim of KCC coverage')
         elif not QBE:

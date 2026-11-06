@@ -41,9 +41,11 @@ runtime harnesses completed but reported explicit host capability gaps and
 semantic discrepancies; these are not native agreements or M17 approval.
 The 17 outdated expectation failures were subsequently updated with positive
 coverage where appropriate and all 17 scripts passed against the integrated
-compiler with QBE. The remaining thread-storage script still requires an exact
-C23 pthread companion that the available host compiler cannot build; later cases
-in that script have not been validated. At `f03585a`, the frozen record,
+compiler with QBE. The thread-storage script has an opt-in development batch mode that reports
+missing exact C23 pthread companions as gaps without adapting source; strict
+default behavior remains unchanged. In that mode, all 52 KCC cases reached IL
+and ELF checks, 48 ran with exact pthread companions, and four lacked suitable
+host companions. Those four are not runtime passes or native agreements. At `f03585a`, the frozen record,
 initializer and compound-literal runtime harnesses passed with their reported
 native capability gaps and discrepancies. Aggregate ABI, narrow bit-fields and
 32/64-bit `_BitInt` received focused checks; the full integrated suite has not
