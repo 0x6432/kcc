@@ -3446,7 +3446,7 @@ static bool static_floating_to_integer(const struct ast_expression *source,
 				goto out_of_range;
 			bits = number < 0.0 ? 0 : (uint64_t)number;
 		} else {
-			if (number < -boundary || number >= boundary)
+			if ((number < -boundary && number <= -boundary - 1.0) || number >= boundary)
 				goto out_of_range;
 			bits = (uint64_t)(int64_t)number;
 		}

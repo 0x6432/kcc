@@ -22,8 +22,8 @@ Not supported: `long double`, `_Complex`, decimal floats, floating suffixes beyo
 Static integer and boolean initializers can also convert the supported finite
 floating-expression subset, including scalar globals and aggregate elements.
 The conversion truncates toward zero and diagnoses non-finite or out-of-range
-results; signed values slightly below the negative limit are conservatively
-rejected even if truncation would bring them into range. This is a static
+results. Signed values slightly below the negative limit are accepted when
+truncation toward zero makes them representable. This is a static
 initializer extension only: it does not broaden integer constant expressions
 in array bounds or case labels. Floating-to-integer casts nested inside a larger
 constant expression remain limited. The file-scope scalar gate now permits
@@ -34,3 +34,7 @@ is also accepted for static integer and boolean initializers, including when
 the result is converted again to the object type. This does not relax integer
 constant-expression rules, and arbitrary integer arithmetic containing such a
 cast remains unsupported. Regression cases were added but not run.
+
+The static floating-to-signed-integer boundary check now accounts for truncation
+toward zero below the negative limit. Focused IL and rejection checks were run;
+the added regression cases and generated-program runtime remain untested.

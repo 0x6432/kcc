@@ -28,6 +28,7 @@ double global_widen=42.0f;
 float global_integer=42;
 double global_unsigned=18446744073709551615UL;
 double global_signed=(-9223372036854775807L-1L);
+signed char low_char=-128.5; short low_short=-32768.5; int low_int=-2147483648.5;
 float global_arithmetic=1.5f+2.25f;
 double global_mixed=2.5*4-1.0;
 int static_int=4.75-10.0;
@@ -69,6 +70,7 @@ extern double global_float; extern float global_negzero;
 extern float global_subnormal; extern double global_subnormal_double;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
 extern float global_arithmetic; extern double global_mixed;
+extern signed char low_char; extern short low_short; extern int low_int;
 extern int static_int; extern unsigned int static_unsigned; extern _Bool static_bool;
 extern long static_cast; extern unsigned long static_unsigned_cast;
 struct StaticInts { int a; unsigned int b; _Bool c; }; extern struct StaticInts static_ints;
@@ -83,6 +85,7 @@ int main(void) {
  if (widen(2.25f)!=2.25 || narrow(2.25)!=2.25f || mixed(1.5f,2)!=3.5) return 6;
  if (to_long(-3.5)!=-3 || as_bool(0.0) || !as_bool(1.0)) return 7;
  { float x=1.0f; if (update(&x)!=4.5f || x!=3.5f || compound_int(1)!=2) return 8; }
+ if (low_char!=-128 || low_short!=-32768 || low_int!=(-2147483647-1)) return 15;
  if (global_float!=1.5 || !signbit(global_negzero) || global_holder.x!=-2.5 || global_holder.y!=3.0f) return 9;
  if (global_subnormal!=0x1p-149f || global_subnormal_double!=0x1p-1074) return 13;
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
@@ -107,6 +110,7 @@ hostimpl = 'float hf(float x,float y){return x+y;} double hd(double x,double y){
 reject = [
  'long double x;', 'unsigned float x;', 'double double x;', 'float long x;',
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
+ 'signed char too_low=-129.0;', 'short too_low=-32769.0;',
  'float f(void){return 1.0L;}',
  'float f(void){return 1e9999f;}', 'float f(void){return 1e-9999f;}',
  'float f(void){return 1.0e1\'f;}', 'double x=1.0/0.0;',

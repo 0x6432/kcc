@@ -92,7 +92,7 @@ static struct constant_result evaluate_float_literal_cast(const struct ast_expre
 			return constant_failure(expression, constant_invalid, "floating-to-integer constant conversion is out of range");
 		return constant_success(expression, number < 0.0 ? 0 : (uint64_t)number);
 	}
-	if (number < -boundary || number >= boundary)
+	if ((number < -boundary && number <= -boundary - 1.0) || number >= boundary)
 		return constant_failure(expression, constant_invalid, "floating-to-integer constant conversion is out of range");
 	return constant_success(expression, (uint64_t)(int64_t)number);
 }
