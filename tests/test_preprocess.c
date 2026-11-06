@@ -116,19 +116,13 @@ static void test_null_directives_in_code(void)
 
 static void test_known_and_unknown_directives(void)
 {
-	const char *names[] = {
-		"embed",
-	};
 	const struct expected_token expected[] = {
 		{ token_invalid, "#" }, { token_int, "int" }, { token_eof, "" },
 	};
-	char text[128];
 
-	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
-		assert(snprintf(text, sizeof(text), "#%s X 12u .5\nint", names[i]) > 0);
-		check_stream(text, expected, sizeof(expected) / sizeof(expected[0]), 1,
-			"preprocessing directive is not supported yet");
-	}
+	/* #embed is supported; an unexpanded identifier is not a resource name. */
+	check_stream("#embed X 12u .5\nint", expected,
+		sizeof(expected) / sizeof(expected[0]), 1, "include operand");
 	check_stream("#unknown @ .5\nint", expected, sizeof(expected) / sizeof(expected[0]),
 		1, "unknown preprocessing directive");
 	check_stream("#int\nint", expected, sizeof(expected) / sizeof(expected[0]),
