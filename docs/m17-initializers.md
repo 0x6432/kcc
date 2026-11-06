@@ -74,8 +74,9 @@ This is not full C23 conformance. constexpr compound literals require M23h
 constant-object semantics and receive an explicit dependency diagnostic. C23
 expanded record compatibility/redefinition rules remain M23h. Floating/complex,
 _BitInt, VLA, atomics, bit-fields/flexible arrays and by-value aggregate ABI still
-belong to their listed milestones. Baseline nonzero integer-pointer conversion
-language is not introduced as a shortcut for initializer address constants.
+belong to their listed milestones. Explicit integer-pointer casts are supported at runtime using the target LP64
+representation; nonzero numeric pointer constants and pointer-to-integer
+relocations remain unsupported in static initializers.
 Optional broader arithmetic constant forms (for example skipped ordinary calls
 outside strict arithmetic-constant operand shape) are not claimed as mandatory
 C constraints or native agreement. Undefined behavior and native extensions are

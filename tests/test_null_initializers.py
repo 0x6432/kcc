@@ -374,13 +374,20 @@ def main():
                 message = 'file-scope pointer initializer requires a supported null or direct address constant expression'
                 if text in DUPLICATES:
                     message = 'multiple initialized definitions of object'
-                elif text in (
-                        'int *cell=(int *)1;', 'int *cell=(int *)(_Bool)nullptr;',
-                        'int *cell=(int *)(long)(void *)0;', 'long cell=(long)(int *)0;') or (
-                        text in ARITHMETIC and '(int *)(' in text):
-                    # Ordinary sema constraints can refuse a cast before the
-                    # pure source validator sees its operand; not ICE evidence.
-                    message = 'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)'
+                elif text in ('int *cell=(int *)1;', 'int *cell=(int *)(_Bool)nullptr;',
+                              'int *cell=(int *)(long)(void *)0;'):
+                    message = 'integer source is not a null pointer constant'
+                elif text == 'long cell=(long)(int *)0;':
+                    message = 'file-scope initializer must be an integer constant expression'
+                elif text in ARITHMETIC and '(int *)(' in text:
+                    if '1/0' in text:
+                        message = 'division by zero in integer constant expression'
+                    elif '<<64' in text:
+                        message = 'invalid shift count in integer constant expression'
+                    elif '-1<<1' in text:
+                        message = 'negative left operand in constant shift'
+                    else:
+                        message = 'signed overflow in integer constant expression'
                 elif text.startswith('typeof(nullptr) cell='):
                     message = "query-derived external declarations require ';' for non-integer initializers"
                 elif text == 'int *main=0;':

@@ -70,9 +70,9 @@ constraints = [
     ('int f(void) { int (*p)(void)=(void *)(int *)0; return 0; }', 'pointer conversion'),
     ('int f(void) { int (*p)(void)=(int *)0; return 0; }', 'pointer conversion'),
     ('int f(void) { int *p=(long *)0; return 0; }', 'pointer conversion'),
-    ('int f(void) { int *p=(int *)1; return 0; }', 'pointer conversion'),
-    ('int f(int n) { return (int *)n!=0; }', 'pointer conversion'),
-    ('int f(int *p) { return (long)p; }', 'pointer conversion'),
+    ('int f(void) { int *p=(int *)1.0; return 0; }', 'floating conversions'),
+    ('int f(double n) { return (int *)n!=0; }', 'floating conversions'),
+    ('double f(int *p) { return (double)p; }', 'floating conversions'),
     ('_Static_assert((int *)0==(int *)0,"not an ICE");', 'integer constant expression'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc null constants ') as directory:
@@ -126,8 +126,7 @@ with tempfile.TemporaryDirectory(prefix='kcc null constants ') as directory:
     for text, message in constraints:
         compile_source(text, False, message)
 
-    # These violate C constraints, unlike our explicitly limited nonzero
-    # integer/pointer casts. Keep strict rejection checks separate.
+    # These violate C constraints, unlike implementation-defined integer/pointer casts. Keep strict rejection checks separate.
     for index in [0,1,2,3,4,5,10,11,12,13,24]:
         text = constraints[index][0]
         native.write_text(text+'\n')

@@ -1674,7 +1674,7 @@ static bool check_cast(struct sema *sema, const struct ast_expression *operand,
 	const struct type *source = operand->type;
 
 	/* Both explicit and assignment-like conversions admit checked null constants.
-	 * Nonconstant integer/pointer zero values remain ineligible.
+	 * Only explicit casts admit arbitrary integer/pointer conversions below.
 	 */
 	if (target->kind == type_kind_nullptr) {
 		if (is_null_pointer_source(operand))
@@ -1684,6 +1684,11 @@ static bool check_cast(struct sema *sema, const struct ast_expression *operand,
 		return false;
 	}
 	if (target->kind == type_kind_pointer && is_null_pointer_source(operand))
+		return true;
+	/* Explicit integer/pointer casts use target LP64 bit conversion. They do
+	 * not change implicit conversions or make numeric pointers static constants. */
+	if ((target->kind == type_kind_pointer && type_is_integer(source)) ||
+		(source->kind == type_kind_pointer && type_is_integer(target)))
 		return true;
 	if (source->kind == type_kind_pointer && target->kind == type_kind_pointer) {
 		const struct type *source_referent = ((const struct pointer_type *)source)->referent;

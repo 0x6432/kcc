@@ -523,9 +523,11 @@ def main():
             for text in DEFERRED:
                 owner.write_text(text+'\n')
                 message = 'file-scope pointer initializer requires a supported null or direct address constant expression'
-                if text in ('int target; int *cell=(int *)(long)&target;',
-                            'int target; long cell=(long)&target;',
-                            'int target(int); void *cell=(void *)target;'):
+                if text == 'int target; int *cell=(int *)(long)&target;':
+                    message = 'integer source is not a null pointer constant'
+                if text == 'int target; long cell=(long)&target;':
+                    message = 'file-scope initializer must be an integer constant expression'
+                if text == 'int target(int); void *cell=(void *)target;':
                     message = 'unsupported pointer conversion (incompatible pointers or integer/pointer conversion)'
                 if text == 'int *cell=(int *)0+0;':
                     message = 'pointer arithmetic on null is not a static address constant'
