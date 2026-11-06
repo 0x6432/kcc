@@ -972,6 +972,16 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define stdc_bit_floor(x) _Generic((x), unsigned char: stdc_bit_floor_uc, unsigned short: stdc_bit_floor_us, unsigned int: stdc_bit_floor_ui, unsigned long: stdc_bit_floor_ul, unsigned long long: stdc_bit_floor_ull)(x)\n"
 			"#define stdc_bit_ceil(x) _Generic((x), unsigned char: stdc_bit_ceil_uc, unsigned short: stdc_bit_ceil_us, unsigned int: stdc_bit_ceil_ui, unsigned long: stdc_bit_ceil_ul, unsigned long long: stdc_bit_ceil_ull)(x)\n"
 			"#endif\n";
+		static const char signal_header[] =
+			"#ifndef __KCC_SIGNAL_H\n#define __KCC_SIGNAL_H 1\n"
+			"typedef int sig_atomic_t; typedef void (*__kcc_sighandler_t)(int);\n"
+			"#define SIGABRT 6\n#define SIGFPE 8\n#define SIGILL 4\n"
+			"#define SIGINT 2\n#define SIGSEGV 11\n#define SIGTERM 15\n"
+			"#define SIG_DFL ((__kcc_sighandler_t)0)\n"
+			"#define SIG_IGN ((__kcc_sighandler_t)1)\n"
+			"#define SIG_ERR ((__kcc_sighandler_t)(-1))\n"
+			"__kcc_sighandler_t signal(int,__kcc_sighandler_t); int raise(int);\n"
+			"#endif\n";
 		static const char uchar_header[] =
 			"#ifndef __KCC_UCHAR_H\n#define __KCC_UCHAR_H 1\n"
 			"#include <stddef.h>\n"
@@ -1435,12 +1445,16 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define INT32_C(c) c\n#define UINT32_C(c) c ## U\n"
 			"#ifndef WCHAR_MIN\n#define WCHAR_MIN (-2147483647-1)\n#define WCHAR_MAX 2147483647\n#endif\n"
 			"#define WINT_MIN 0U\n#define WINT_MAX 4294967295U\n"
+			"#define SIG_ATOMIC_MIN (-2147483647-1)\n#define SIG_ATOMIC_MAX 2147483647\n"
 			"#define INT64_C(c) c ## L\n#define UINT64_C(c) c ## UL\n"
 			"#define INTMAX_C(c) c ## L\n#define UINTMAX_C(c) c ## UL\n"
 			"#endif\n";
 		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "stdbit.h") == 0) {
+		if (strcmp(name->path, "signal.h") == 0) {
+			header = signal_header;
+			source_name = "<kcc/signal.h>";
+		} else if (strcmp(name->path, "stdbit.h") == 0) {
 			header = stdbit_header;
 			header_tail = stdbit_header_tail;
 			source_name = "<kcc/stdbit.h>";

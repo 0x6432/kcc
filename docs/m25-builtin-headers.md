@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h` and `stdbit.h`, in addition
+`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h` and `signal.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence. Compiler-owned fallback source objects can
 define implementation-reserved guard and compatibility macros; ordinary user
@@ -79,6 +79,15 @@ suite remains unrun.
   and 8/16/32-bit conversion function declarations. The C23 8-bit conversion
   declarations require a libc exporting those symbols; the development glibc
   2.34 does not.
+- `signal.h` provides Linux x86-64 signal numbers, `sig_atomic_t`, `SIG_DFL`,
+  `SIG_IGN`, `SIG_ERR`, and declarations for `signal` and `raise`. The signal
+  sentinel expressions use the target's integer/function-pointer mapping;
+  nonzero static pointer initializers remain unsupported. `stdint.h` also
+  supplies `SIG_ATOMIC_MIN` and `SIG_ATOMIC_MAX`. These declarations depend on
+  compatible libc. **The compiler does not support `volatile`**, so typical
+  signal-handler communication via `volatile sig_atomic_t` is not yet supported;
+  the header does not make asynchronous communication safe. Focused compile
+  checks only; signal behavior has not been runtime-tested.
 - `stdbit.h` supplies the C23 leading/trailing counts, first-bit positions,
   zero/one counts, single-bit predicate, bit width, floor and ceiling for the
   five ordinary unsigned integer types, with `_Generic` dispatch evaluating
