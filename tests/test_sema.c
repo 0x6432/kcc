@@ -6535,7 +6535,11 @@ static void test_ordinary_enums(void)
 		"enum E : long { B=42 }; _Static_assert(sizeof(enum E)==8, \"shadow\"); return B; }",
 		"typedef unsigned short T; enum F : T; enum F : typeof((unsigned short)0) { A=42 }; "
 		"_Static_assert(sizeof(enum F)==2 && A==42, \"aliased underlying type\");",
-		"enum F : int object; enum F : int { A=42 }; int f(void) { object=A; return object; }",
+		"enum F : const int; enum F : int { A=42 }; enum F x=A; "
+		"_Static_assert(sizeof(x)==4, \"unqualified underlying\");",
+		"typedef const unsigned short T; enum E : T { A=42 }; "
+		"enum E x; int f(void) { x=A; return x; }",
+		"enum E : _Atomic(int); enum E : int { A=1 }; enum E x=A;",
 		"enum Flag : bool; enum Flag : _Bool { NO=0, YES=1 }; "
 		"_Static_assert(sizeof(YES)==1 && YES==1 && (enum Flag)3==1, \"bool enum\"); "
 		"enum Flag x=3; int f(void) { enum Flag y=0; y++; y++; return x+y; }",
@@ -6567,8 +6571,8 @@ static void test_ordinary_enums(void)
 		"enum E : int; enum E : long { A };", "enum E : int; enum E { A };",
 		"enum E : int { A }; enum E : int { B };",
 		"enum E : bool { A=2 };", "enum E : _Bool { A=-1 };",
-		"enum E : bool { A=1, B };", "enum E : const int { A };",
-		"typedef const int T; enum E : T { A };",
+		"enum E : bool { A=1, B };",
+		"enum E : int object;", "enum E : int *p;",
 		"typedef double T; enum E : T { A };",
 		"enum E : unsigned char { A=256 };", "enum E : unsigned char { A=-1 };",
 		"enum E : signed char { A=-129 };", "enum E : signed char { A=127, B };",

@@ -3,15 +3,15 @@
 This incremental change adds a bounded C23 fixed-underlying-enum slice to the
 ordinary enum implementation. It is not a tested checkpoint.
 
-- Unqualified integer types from bool and char through unsigned long long are
+- Integer types from bool and char through unsigned long long are
   accepted after `:`, including typedef names and `typeof`/`typeof_unqual`
   yielding those types. Target signedness, rank, size, alignment,
   ABI width and promotions follow the chosen underlying integer type.
 - `enum E : unsigned short;` declares a complete fixed enum immediately. A
   matching later definition repeats the underlying type and shares the nominal
   identity; scope shadowing and mismatched/repeated definitions are checked.
-  A declarator can follow a fixed tag without an enumerator list, for example
-  `enum E : int value;`.
+  A fixed enum specifier without an enumerator list is restricted to a
+  standalone tag declaration; use `enum E value;` for an object.
 - Fixed enum constants have the nominal enum type, including during their
   definition. Explicit ICE values must be representable; implicit successors
   must not overflow the underlying range. Unsigned explicit arithmetic may wrap
@@ -21,8 +21,9 @@ ordinary enum implementation. It is not a tested checkpoint.
   underlying integer type and composite-type identity are retained. Small
   enum constants are canonicalized to the target's signed/unsigned word form.
 
-Boundaries: qualified types and enum types as fixed underlying types are
-explicitly rejected in this slice. Fixed definitions in
+Boundaries: enum types as fixed underlying types are explicitly rejected.
+Qualifiers on an underlying integer type are discarded; atomic spellings are
+limited by the existing atomic type subset. Fixed definitions in
 parameter lists remain unsupported. A fixed forward tag's definition must
 repeat its underlying spelling; a bare tag-only redeclaration is supported
 only when an enum tag already exists in the same scope. An unknown non-fixed
@@ -55,10 +56,21 @@ underlying type. Its representation and promotion follow the existing target
 bool model. Enumerator values must be representable as 0 or 1, including
 implicit successors; ordinary scalar conversions to the enum normalize to 0
 or 1. The implementation extends constant folding, static initialization,
-scalar conversion and updates to recognize bool-compatible enums. Qualified
-and enum underlying types remain rejected.
+scalar conversion and updates to recognize bool-compatible enums. Enum underlying types remain rejected.
 
 Semantic and optional host/QBE runtime fixtures were added but not run. The
 compiler build succeeded. This is not enum conformance, a tested checkpoint,
 or approval of M18 or M17. Further integration, ABI and regression testing
 remain necessary.
+
+## Qualified underlying types and standalone syntax
+
+Qualifiers on a fixed integer underlying type are removed before comparison,
+representation and conversion, including atomic int/unsigned int types already
+supported by the atomic subset. An enum specifier with an explicit underlying
+type but no enumerator list is now rejected unless it is a standalone tag
+declaration; the former `enum E : int object;` extension was contrary to the
+C23 constraint. Positive, negative and runtime fixtures were updated but have
+not been run. The compiler build succeeded. This is not M18 completion.
+See ISO C 2024 draft N3220, 6.7.3.3 paragraphs 5–8:
+https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3220.pdf

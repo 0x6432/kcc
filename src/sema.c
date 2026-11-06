@@ -648,10 +648,16 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		underlying = resolve_type_syntax(sema, syntax->underlying);
 		if (!underlying)
 			return NULL;
-		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum || underlying->qualifiers) {
+		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
-				"fixed enum underlying type must be an unqualified non-enum integer");
+				"fixed enum underlying type must be a non-enum integer");
 			return NULL;
+		}
+		/* C23 specifies the unqualified, non-atomic version of this type. */
+		if (underlying->qualifiers) {
+			underlying = unqualified_type(sema, underlying, syntax->syntax.location);
+			if (!underlying)
+				return NULL;
 		}
 	}
 	if (tag) {

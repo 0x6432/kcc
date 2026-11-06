@@ -936,6 +936,7 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 		preprocess_next(parser->preprocessor);
 		next = preprocess_peek(parser->preprocessor);
 		if (!begins_integer_type(next.kind) && !is_typedef_name(parser, next) &&
+			next.kind != token_const && next.kind != token_atomic &&
 			next.kind != token_typeof && next.kind != token_typeof_unqual) {
 			diagnostic_error(parser->diagnostics, keyword.location,
 				"fixed enum underlying type must name an integer type");
@@ -948,6 +949,11 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
 		if (!node->tag.length) {
 			diagnostic_error(parser->diagnostics, keyword.location, "expected enum tag or definition");
+			return NULL;
+		}
+		if (node->underlying && preprocess_peek(parser->preprocessor).kind != token_semicolon) {
+			diagnostic_error(parser->diagnostics, keyword.location,
+				"fixed enum without a definition must be a standalone declaration");
 			return NULL;
 		}
 		return &node->syntax;
