@@ -3405,13 +3405,22 @@ static bool static_floating_condition(const struct ast_expression *expression, b
 	}
 	if (expression->kind == expression_unary) {
 		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
-		if (unary->operation == unary_not && type_is_floating(unary->operand->type)) {
-			double number;
-			if (!static_floating_number(unary->operand, &number))
-				return false;
-			*truth = number == 0.0;
+		bool operand;
+		if (unary->operation == unary_not && static_floating_condition(unary->operand, &operand)) {
+			*truth = !operand;
 			return true;
 		}
+	}
+	if (expression->kind == expression_logical) {
+		const struct ast_logical_expression *logical = (const struct ast_logical_expression *)expression;
+		bool left, right;
+		/* Require both sides to be within the supported finite subset, even
+		 * when C evaluation would short circuit. */
+		if (!static_floating_condition(logical->left, &left) ||
+			!static_floating_condition(logical->right, &right))
+			return false;
+		*truth = logical->operation == logical_and ? left && right : left || right;
+		return true;
 	}
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
@@ -3436,7 +3445,13 @@ static bool is_static_floating_boolean(const struct ast_expression *expression)
 {
 	if (expression->kind == expression_unary) {
 		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
-		return unary->operation == unary_not && type_is_floating(unary->operand->type);
+		return unary->operation == unary_not && (type_is_floating(unary->operand->type) ||
+			is_static_floating_boolean(unary->operand));
+	}
+	if (expression->kind == expression_logical) {
+		const struct ast_logical_expression *logical = (const struct ast_logical_expression *)expression;
+		return type_is_floating(logical->left->type) || type_is_floating(logical->right->type) ||
+			is_static_floating_boolean(logical->left) || is_static_floating_boolean(logical->right);
 	}
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;

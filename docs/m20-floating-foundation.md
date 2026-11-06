@@ -84,3 +84,17 @@ use inside arbitrary integer arithmetic or all logical constant expressions.
 The compiler build and focused compile/IL and rejection checks were run; one
 example was lowered by pinned QBE 1.2 and assembled. Regression, generated-program
 runtime, ABI and fuzz validation remain pending.
+
+## Bounded floating logical initializers
+
+Logical AND, OR and nested negation with supported finite floating operands and
+integer constant operands can initialize integer, boolean or floating static
+objects and can serve as conditions in supported floating conditional
+initializers. Both sides must independently fold even for short-circuit
+operations; this is conservative and does not extend integer constant expression
+rules. Broader arithmetic containing these results is not supported.
+
+The compiler rebuilt; eight values were checked in emitted IL, lowered by pinned
+QBE 1.2 and assembled. Seven invalid or unsupported focused examples were
+rejected. Regression, generated-program runtime, ABI and fuzz checks remain
+pending.

@@ -7,7 +7,8 @@ the remainder is historical evidence for earlier, exact commits. Recent work
 implements bounded float/double, scalar variadics, VLA, atomic and C23 subsets,
 plus partial target-specific headers and runtime helpers. Static float/double
 initializer folding includes bounded arithmetic-conditioned expressions with two
-finite supported arms, direct finite floating comparisons, and decimal/
+finite supported arms, direct finite floating comparisons, bounded logical
+expressions, and decimal/
 hexadecimal literals that round to zero;
 see `m20-floating-foundation.md`. Variadic calls and `va_arg` now include
 C23 `nullptr_t`, and `va_arg` accepts enums compatible with their promoted
