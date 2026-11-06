@@ -6,59 +6,89 @@ LDLIBS =
 FUZZ_CC = clang
 FUZZ_SECONDS = 10
 QBE = qbe
+.DEFAULT_GOAL := all
 
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
 PREPROCESS_SOURCES = $(LEX_SOURCES) src/preprocess.c src/arena.c
 COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/bitint.c src/ast.c src/type.c src/parse.c src/sema.c src/consteval.c src/codegen.c
 HEADERS = $(wildcard src/*.h)
 
-.PHONY: all test test-codegen clean fuzz-lex fuzz-compile
+.PHONY: all test test-codegen clean fuzz-lex fuzz-compile FORCE
+.DELETE_ON_ERROR:
+
+# A forced check updates each stamp only when its command-line configuration
+# changes. This avoids reusing objects or executables built with different flags.
+# Shell-quote values so flags containing spaces or quotes are recorded faithfully.
+shell_quote = '$(subst ','"'"',$(1))'
+
+FORCE:
+
+build/compile.flags: FORCE | build
+	@printf '%s\n' $(call shell_quote,$(CC)) $(call shell_quote,$(CPPFLAGS)) $(call shell_quote,$(CFLAGS)) > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
+build/fuzz.flags: FORCE | build
+	@printf '%s\n' $(call shell_quote,$(FUZZ_CC)) $(call shell_quote,$(CPPFLAGS)) > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
+build/link.flags: FORCE | build
+	@printf '%s\n' $(call shell_quote,$(CC)) $(call shell_quote,$(CPPFLAGS)) $(call shell_quote,$(CFLAGS)) $(call shell_quote,$(LDFLAGS)) $(call shell_quote,$(LDLIBS)) > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
+# Keep paths in object names distinct, and record transitive header dependencies.
+# A missing dependency file forces its object to be compiled again.
+.SECONDEXPANSION:
+build/obj/%.o: %.c build/compile.flags Makefile $$(if $$(wildcard build/obj/$$*.d),,FORCE)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
+
+-include $(wildcard build/obj/src/*.d build/obj/tests/*.d build/*.d)
 
 all: build/kcc build/libkccrt.a
 
 build:
 	mkdir -p build
 
-build/kcc: src/main.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) src/main.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/kcc: $(patsubst %.c,build/obj/%.o,src/main.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/volatile.o: runtime/volatile.c | build
-	$(CC) $(CFLAGS) -fno-strict-aliasing -fno-lto -c $< -o $@
+build/volatile.o: runtime/volatile.c build/compile.flags Makefile $(if $(wildcard build/volatile.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-strict-aliasing -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
-build/checked.o: runtime/checked.c | build
-	$(CC) $(CFLAGS) -fno-strict-aliasing -fno-lto -c $< -o $@
+build/checked.o: runtime/checked.c build/compile.flags Makefile $(if $(wildcard build/checked.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-strict-aliasing -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
-build/memset_explicit.o: runtime/memset_explicit.c | build
-	$(CC) $(CFLAGS) -fno-lto -fno-builtin -c $< -o $@
+build/memset_explicit.o: runtime/memset_explicit.c build/compile.flags Makefile $(if $(wildcard build/memset_explicit.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-lto -fno-builtin -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
-build/free_sized.o: runtime/free_sized.c | build
-	$(CC) $(CFLAGS) -fno-lto -c $< -o $@
+build/free_sized.o: runtime/free_sized.c build/compile.flags Makefile $(if $(wildcard build/free_sized.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
-build/unreachable.o: runtime/unreachable.c | build
-	$(CC) $(CFLAGS) -fno-lto -c $< -o $@
+build/unreachable.o: runtime/unreachable.c build/compile.flags Makefile $(if $(wildcard build/unreachable.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
-build/math_compare.o: runtime/math_compare.c | build
-	$(CC) $(CFLAGS) -fno-fast-math -fno-lto -c $< -o $@
+build/math_compare.o: runtime/math_compare.c build/compile.flags Makefile $(if $(wildcard build/math_compare.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-fast-math -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
 build/libkccrt.a: build/math_compare.o build/volatile.o build/checked.o build/memset_explicit.o build/free_sized.o build/unreachable.o
 	ar rcs $@ $^
 
-build/test_support: tests/test_support.c src/source.c src/arena.c src/diagnostic.c src/source.h src/arena.h src/diagnostic.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_support.c src/source.c src/arena.c src/diagnostic.c $(LDFLAGS) $(LDLIBS) -o $@
+build/test_support: $(patsubst %.c,build/obj/%.o,tests/test_support.c src/source.c src/arena.c src/diagnostic.c) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_source: tests/test_source.c src/source.c src/source.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_source.c src/source.c $(LDFLAGS) $(LDLIBS) -o $@
+build/test_source: $(patsubst %.c,build/obj/%.o,tests/test_source.c src/source.c) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_lex: tests/test_lex.c $(PREPROCESS_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_lex.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_lex: $(patsubst %.c,build/obj/%.o,tests/test_lex.c $(PREPROCESS_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_pp_lex: tests/test_pp_lex.c $(LEX_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_pp_lex.c $(LEX_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_pp_lex: $(patsubst %.c,build/obj/%.o,tests/test_pp_lex.c $(LEX_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_preprocess: tests/test_preprocess.c $(PREPROCESS_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_preprocess.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_preprocess: $(patsubst %.c,build/obj/%.o,tests/test_preprocess.c $(PREPROCESS_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/fuzz_lex: tests/fuzz_lex.c $(PREPROCESS_SOURCES) $(HEADERS) | build
+build/fuzz_lex: tests/fuzz_lex.c $(PREPROCESS_SOURCES) $(HEADERS) build/fuzz.flags Makefile | build
 	$(FUZZ_CC) $(CPPFLAGS) -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer tests/fuzz_lex.c $(PREPROCESS_SOURCES) -o $@
 
 fuzz-lex: build/fuzz_lex
@@ -66,7 +96,7 @@ fuzz-lex: build/fuzz_lex
 	cp tests/corpus/lex/* build/corpus-lex/
 	./build/fuzz_lex build/corpus-lex -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
 
-build/fuzz_compile: tests/fuzz_compile.c $(COMPILER_SOURCES) $(HEADERS) | build
+build/fuzz_compile: tests/fuzz_compile.c $(COMPILER_SOURCES) $(HEADERS) build/fuzz.flags Makefile | build
 	$(FUZZ_CC) $(CPPFLAGS) -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Werror -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer tests/fuzz_compile.c $(COMPILER_SOURCES) -o $@
 
 fuzz-compile: build/fuzz_compile
@@ -239,32 +269,32 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_static_assertions.py
 	python3 tests/test_consteval.py
 
-build/consteval_oracle: tests/consteval_oracle.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/consteval_oracle.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/consteval_oracle: $(patsubst %.c,build/obj/%.o,tests/consteval_oracle.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_bitint: tests/test_bitint.c src/bitint.c src/bitint.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_bitint.c src/bitint.c $(LDFLAGS) $(LDLIBS) -o $@
+build/test_bitint: $(patsubst %.c,build/obj/%.o,tests/test_bitint.c src/bitint.c) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_type: tests/test_type.c src/type.c src/arena.c src/type.h src/arena.h | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_type.c src/type.c src/arena.c $(LDFLAGS) $(LDLIBS) -o $@
+build/test_type: $(patsubst %.c,build/obj/%.o,tests/test_type.c src/type.c src/arena.c) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_sema: tests/test_sema.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_sema.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_sema: $(patsubst %.c,build/obj/%.o,tests/test_sema.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_static_array_ast: tests/test_static_array_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_static_array_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_static_array_ast: $(patsubst %.c,build/obj/%.o,tests/test_static_array_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_integer_initializer_ast: tests/test_integer_initializer_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_integer_initializer_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_integer_initializer_ast: $(patsubst %.c,build/obj/%.o,tests/test_integer_initializer_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_null_initializer_ast: tests/test_null_initializer_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_null_initializer_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_null_initializer_ast: $(patsubst %.c,build/obj/%.o,tests/test_null_initializer_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_direct_address_initializer_ast: tests/test_direct_address_initializer_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_direct_address_initializer_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_direct_address_initializer_ast: $(patsubst %.c,build/obj/%.o,tests/test_direct_address_initializer_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/pp_oracle: tests/pp_oracle.c $(PREPROCESS_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/pp_oracle.c $(PREPROCESS_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/pp_oracle: $(patsubst %.c,build/obj/%.o,tests/pp_oracle.c $(PREPROCESS_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
 test: export QBE := $(QBE)
 test: export KCC_SOURCE := $(CURDIR)
@@ -444,26 +474,26 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 clean:
 	rm -rf build
 
-build/test_block_storage_ast: tests/test_block_storage_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_block_storage_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_block_storage_ast: $(patsubst %.c,build/obj/%.o,tests/test_block_storage_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_thread_storage_ast: tests/test_thread_storage_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_thread_storage_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_thread_storage_ast: $(patsubst %.c,build/obj/%.o,tests/test_thread_storage_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_inline_linkage_ast: tests/test_inline_linkage_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_inline_linkage_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_inline_linkage_ast: $(patsubst %.c,build/obj/%.o,tests/test_inline_linkage_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_address_offset_ast: tests/test_address_offset_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_address_offset_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_address_offset_ast: $(patsubst %.c,build/obj/%.o,tests/test_address_offset_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_record_layout_ast: tests/test_record_layout_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_record_layout_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_record_layout_ast: $(patsubst %.c,build/obj/%.o,tests/test_record_layout_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_record_runtime_ast: tests/test_record_runtime_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_record_runtime_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_record_runtime_ast: $(patsubst %.c,build/obj/%.o,tests/test_record_runtime_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_initialization_ast: tests/test_initialization_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_initialization_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_initialization_ast: $(patsubst %.c,build/obj/%.o,tests/test_initialization_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_compound_literal_ast: tests/test_compound_literal_ast.c $(COMPILER_SOURCES) $(HEADERS) | build
-	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_compound_literal_ast.c $(COMPILER_SOURCES) $(LDFLAGS) $(LDLIBS) -o $@
+build/test_compound_literal_ast: $(patsubst %.c,build/obj/%.o,tests/test_compound_literal_ast.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
