@@ -94,3 +94,15 @@ compatibility remains limited to existing nominal-type rules.
 The compiler build and one focused parameter-scope source compiled. Semantic
 and optional QBE runtime fixtures were added but have not been run. Full
 regression, ABI interop and fuzzing remain pending.
+
+## Nested enum parameter syntax
+
+Enumerator names introduced by each parameter are now captured from the
+parser's scope delta, including enum definitions nested in type queries, record
+members and parameter array bounds. Nested callback prototype scopes are
+restored separately and their names do not leak into the enclosing parameter
+list or function body. Semantic scope capture continues to preserve only
+outer-definition enumerators. This supersedes the previous nested-form
+restriction; other type, VLA, aggregate ABI and resource limits still apply.
+The compiler build and three focused nested-scope sources compiled. Added
+fixtures and runtime, regression, ABI and fuzz suites have not been run.

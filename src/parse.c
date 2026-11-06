@@ -35,7 +35,6 @@ struct parser {
 	bool in_function;
 	bool declaration_attributes;
 	unsigned parameter_nesting;
-	bool parameter_enum_allowed;
 	size_t record_declarations;
 	size_t block_items;
 	size_t string_bytes;
@@ -951,12 +950,6 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 			return NULL;
 		}
 		return &node->syntax;
-	}
-	if (parser->parameter_nesting && (!parser->parameter_enum_allowed ||
-		parser->parameter_nesting != 1 || parser->record_nesting || parser->type_query_nesting)) {
-		diagnostic_error(parser->diagnostics, keyword.location,
-			"nested enum definitions in parameter lists are not supported yet");
-		return NULL;
 	}
 	if (parser->record_nesting == ast_max_record_nesting) {
 		diagnostic_error(parser->diagnostics, keyword.location, "enum definition nesting exceeds limit (64)");
@@ -3706,6 +3699,7 @@ static bool parse_parameters(struct parser *parser,
 	for (;;) {
 		struct token beginning;
 		struct token name = { 0 };
+		struct parser_name *prior_names = parser->names;
 		struct ast_parameter *parameter;
 		struct ast_type_syntax *type_syntax;
 		struct declaration_head head = { 0 };
@@ -3725,12 +3719,7 @@ static bool parse_parameters(struct parser *parser,
 		}
 		if (!parse_declaration_attributes(parser, &prefix_attributes))
 			return false;
-		{
-			bool saved = parser->parameter_enum_allowed;
-			parser->parameter_enum_allowed = true;
-			type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
-			parser->parameter_enum_allowed = saved;
-		}
+		type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
 		type_syntax = parse_derived_type(parser, type_syntax, &name, &has_name, declarator_parameter);
 		if (!type_syntax || !parse_declaration_attributes(parser, &suffix_attributes))
 			return false;
@@ -3751,6 +3740,17 @@ static bool parse_parameters(struct parser *parser,
 		}
 		parameter->type_syntax = type_syntax;
 		parameter->is_register = head.keyword.kind == token_register;
+		/* Nested function parameter lists restore parser names, so only
+		 * names belonging to this scope remain between these sentinels. */
+		for (struct parser_name *item = parser->names; item != prior_names; item = item->next) {
+			struct ast_parameter_scope_name *saved = arena_alloc(parser->arena, sizeof(*saved));
+			if (!saved) {
+				allocation_error(parser, beginning.location);
+				return false;
+			}
+			*saved = (struct ast_parameter_scope_name) { item->name, parameter->scope_names };
+			parameter->scope_names = saved;
+		}
 		if (has_name && !publish_parser_name(parser, name, parser_name_object))
 			return false;
 		*tail = parameter;
@@ -3900,39 +3900,6 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 	return declarations;
 }
 
-/* Parameter enum definitions in this slice occur in the declaration
- * specifier. Follow the declarator's base, but never nested function
- * parameter lists, whose prototype scope is separate. */
-static bool publish_parameter_enumerators(struct parser *parser, struct ast_type_syntax *syntax)
-{
-	while (syntax) {
-		switch (syntax->kind) {
-		case type_syntax_qualified:
-			syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
-			break;
-		case type_syntax_pointer:
-			syntax = ((struct ast_pointer_type_syntax *)syntax)->referent;
-			break;
-		case type_syntax_array:
-			syntax = ((struct ast_array_type_syntax *)syntax)->element;
-			break;
-		case type_syntax_function:
-			syntax = ((struct ast_function_type_syntax *)syntax)->return_syntax;
-			break;
-		case type_syntax_enum: {
-			struct ast_enum_type_syntax *enumeration = (struct ast_enum_type_syntax *)syntax;
-			for (struct ast_enumerator *item = enumeration->enumerators; item; item = item->next)
-				if (!publish_parser_name(parser, item->name, parser_name_object))
-					return false;
-			return true;
-		}
-		default:
-			return true;
-		}
-	}
-	return true;
-}
-
 /* function-body ::= compound-statement
  * The defining outer function's parameter and enumerator names extend into its body.
  */
@@ -3944,8 +3911,9 @@ static struct ast_compound_statement *parse_function_body(struct parser *parser,
 
 	for (struct ast_parameter *parameter = declaration->parameters; parameter;
 		parameter = parameter->next) {
-		if (!publish_parameter_enumerators(parser, parameter->type_syntax))
-			goto done;
+		for (struct ast_parameter_scope_name *name = parameter->scope_names; name; name = name->next)
+			if (!publish_parser_name(parser, name->name, parser_name_object))
+				goto done;
 		if (parameter->has_name &&
 			!publish_parser_name(parser, parameter->name, parser_name_object))
 			goto done;

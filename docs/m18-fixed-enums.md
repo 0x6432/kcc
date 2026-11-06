@@ -25,8 +25,8 @@ ordinary enum implementation. It is not a tested checkpoint.
 Boundaries: enum types as fixed underlying types are explicitly rejected.
 Qualifiers on an underlying integer type are discarded; atomic spellings are
 limited by the existing atomic type subset. Direct fixed enum definitions in
-outer parameter declaration specifiers are supported; nested forms remain
-unsupported. A fixed forward tag's definition must
+outer parameter declaration specifiers and supported nested parameter type
+syntax are supported. A fixed forward tag's definition must
 repeat its underlying type; a bare tag-only `enum E;` is rejected because it
 declares no entity, even if the tag is already visible. An unknown non-fixed
 tag cannot be introduced this way. Non-fixed enum constants remain restricted to signed int range,

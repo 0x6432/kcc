@@ -13,13 +13,17 @@ int f(enum E { VALUE=40, NEXT=VALUE+1 } x, enum E y) {
     enum E local=x;
     return VALUE+NEXT-local-y;
 }
-int main(void) { return f(19,20); }
+typedef int X;
+int g(typeof(enum Tag { X=1 }) x) { return X+x; }
+typedef int Y;
+int nested(int (*p)(enum Callback { Y } v)) { return sizeof(Y); }
+int main(void) { return f(19,20)==42 && g(1)==2 && nested(0)==4 ? 42 : 1; }
 '''
 invalid = [
     'int f(enum E { A } A);',
     'int f(int x, enum E { x=1 } y);',
     'int f(enum E { A } x); int y=A;',
-    'int f(int (*p)(enum E { A } x));',
+    'int f(int (*p)(enum E { A } x)); int outside=A;',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-enum-params-') as directory:
     directory = Path(directory)

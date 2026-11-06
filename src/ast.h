@@ -974,8 +974,15 @@ struct ast_external_type_declaration {
 	struct ast_initializer_plan *initializer_plan;
 };
 
+struct ast_parameter_scope_name {
+	struct token name;
+	struct ast_parameter_scope_name *next;
+};
+
 struct ast_parameter {
 	struct ast_type_syntax *type_syntax;
+	/* Enumerator names introduced in this parameter's prototype scope. */
+	struct ast_parameter_scope_name *scope_names;
 	const struct type *type;
 	struct source_location location;
 	struct token name;
