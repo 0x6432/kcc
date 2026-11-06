@@ -7,8 +7,7 @@ address and element type. Initializers may initialize the preceding members, not
 the flexible member itself. Whole-record copies use the fixed struct size.
 
 This subset rejects structs containing a flexible-array struct as a member or
-array element, direct flexible-array members in unions, direct flexible-array initialization,
-and static addresses of flexible-array members. These are implementation
+array element, direct flexible-array members in unions, and direct flexible-array initialization. These are implementation
 boundaries, not a complete C23 flexible-array implementation. Access must stay
 within storage actually allocated by the program. Bit-fields remain unsupported.
 The implementation has been built but has not yet been integration-tested.
@@ -37,3 +36,16 @@ The compiler build and focused layout, initializer and rejection checks were
 run; one example was lowered through pinned QBE and assembled. Generated-program
 runtime, host ABI, regression fixtures and fuzzing remain unrun. M22 is not
 complete or approved.
+
+## Static addresses of flexible members
+
+Static initializers can form the zero-position address of a flexible member,
+including array decay, `&object.member[0]`, and `&object.member`. The address
+must still be based on a proven static record subobject; thread-local bases are
+not static address constants. The proof intentionally assumes zero usable
+flexible elements even when padding or an enclosing union might provide room:
+pointer offsets beyond zero are rejected. It does not justify accessing an
+element or claim extra storage exists. The compiler rebuilt. Eight focused address/relocation examples compiled,
+lowered through pinned QBE 1.2 and assembled; five invalid or unsupported
+examples were rejected. Regression, generated-program runtime and ABI
+validation remain pending.

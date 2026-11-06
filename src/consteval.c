@@ -801,9 +801,6 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	}
 	if (proof.result.status != constant_value)
 		return proof;
-	if (member->member->is_flexible)
-		return address_failure(expression, constant_not_constant,
-			"static flexible-array addresses are not supported");
 	if (!type_is_record(record) || !type_is_complete_object(record) || !proof.element ||
 		!type_unqualified_compatible(proof.element, record))
 		return address_failure(expression, constant_not_constant,
@@ -827,16 +824,28 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	proof.start = addend;
 	proof.position = 0;
 	proof.known_extent = true;
-	proof.element = selected;
-	proof.extent = 1;
-	proof.stride = type_object_size(selected);
-	if (decay) {
+	/* A flexible array has incomplete type. Its zero-position address is
+	 * valid even if no element fits, but in that case forming a one-past
+	 * pointer is undefined. Do not infer extra storage from enclosing unions,
+	 * padding, or casts: retain a conservative zero-element domain. */
+	if (member->member->is_flexible) {
 		const struct array_type *array = (const struct array_type *)selected;
+		assert(selected->kind == type_kind_array && !array->count);
+		proof.element = decay ? array->element : NULL;
+		proof.extent = 0;
+		proof.stride = decay ? type_object_size(array->element) : 0;
+	} else {
+		proof.element = selected;
+		proof.extent = 1;
+		proof.stride = type_object_size(selected);
+		if (decay) {
+			const struct array_type *array = (const struct array_type *)selected;
 
-		assert(selected->kind == type_kind_array && array->count);
-		proof.element = array->element;
-		proof.extent = array->count;
-		proof.stride = type_object_size(array->element);
+			assert(selected->kind == type_kind_array && array->count);
+			proof.element = array->element;
+			proof.extent = array->count;
+			proof.stride = type_object_size(array->element);
+		}
 	}
 	return proof;
 }

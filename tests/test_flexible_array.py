@@ -13,6 +13,10 @@ struct Packet { int n; char tag; long items[]; };
 _Static_assert(sizeof(struct Packet)==8, "size");
 _Static_assert(alignof(struct Packet)==8, "alignment");
 struct Packet zero={1,2};
+long *start=zero.items;
+long *element_zero=&zero.items[0];
+long (*whole)[]=&zero.items;
+void *same_start=(void *)zero.items;
 struct Promoted { struct { int n; }; long items[]; static_assert(1); };
 static_assert(sizeof(struct Promoted)==8);
 static_assert(alignof(struct Promoted)==8);
@@ -62,6 +66,9 @@ invalid = [
  'struct S { int n; int a[]; }; union U { struct S s; }; union U rows[2];',
  'struct S { int n; int a[]; }; struct S x={1,2};',
  'struct S { int n; int a[]; }; struct S x={.a={1}};',
+ 'struct S { int n; int a[]; }; struct S x; int *bad=x.a+1;',
+ 'struct S { int n; int a[]; }; struct S x; int *bad=&x.a[1];',
+ 'struct S { int n; int a[]; }; thread_local struct S x; int *bad=x.a;',
  'struct S { int n; int a[]; }; int f(struct S *p){return sizeof p->a;}',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-flex-') as directory:

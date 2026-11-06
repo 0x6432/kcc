@@ -13,7 +13,8 @@ see `m20-floating-foundation.md`. Variadic calls and `va_arg` now include
 C23 `nullptr_t`, and `va_arg` accepts enums compatible with their promoted
 types; see `m21-variadic-scalars.md`. Flexible arrays also recognize prior
 names promoted through anonymous members, allow trailing static assertions,
-and support named flexible-array structures in unions; see `m22-flexible-arrays.md`.
+support named flexible-array structures in unions, and form conservative static
+zero-position flexible-member addresses; see `m22-flexible-arrays.md`.
 Deprecated enum definitions now warn on subsequent direct named enum type
 references, with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Notable remaining work includes aggregate-by-value
