@@ -82,6 +82,20 @@ static bool token_spells(struct token token, const char *name, size_t length)
 			name, length) == 0;
 }
 
+/* C23 standard attributes also have an equivalent __name__ spelling. */
+static bool standard_attribute_spells(struct token token, const char *name, size_t length)
+{
+	const unsigned char *spelling;
+	if (token_spells(token, name, length))
+		return true;
+	if (token.kind != token_identifier || token.length != length + 4)
+		return false;
+	spelling = token.spelling_location.source->data + token.spelling_location.offset;
+	return spelling[0] == '_' && spelling[1] == '_' &&
+		spelling[length + 2] == '_' && spelling[length + 3] == '_' &&
+		!memcmp(spelling + 2, name, length);
+}
+
 static bool skip_unknown_attribute_arguments(struct parser *parser, unsigned *count)
 {
 	enum token_kind stack[64];
@@ -146,10 +160,10 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 					return false;
 				scoped = true;
 			}
-			if (!scoped && token_spells(token, "maybe_unused", 12)) {
+			if (!scoped && standard_attribute_spells(token, "maybe_unused", 12)) {
 				attributes->maybe_unused = true;
 				known = true;
-			} else if (!scoped && token_spells(token, "fallthrough", 11)) {
+			} else if (!scoped && standard_attribute_spells(token, "fallthrough", 11)) {
 				if (attributes->fallthrough) {
 					diagnostic_error(parser->diagnostics, token.location,
 						"multiple fallthrough attributes are not supported");
@@ -157,17 +171,17 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 				}
 				attributes->fallthrough = true;
 				known = true;
-			} else if (!scoped && token_spells(token, "deprecated", 10)) {
+			} else if (!scoped && standard_attribute_spells(token, "deprecated", 10)) {
 				attributes->deprecated = true;
 				known = message_argument = deprecated = true;
-			} else if (!scoped && token_spells(token, "noreturn", 8)) {
+			} else if (!scoped && standard_attribute_spells(token, "noreturn", 8)) {
 				attributes->noreturn = true;
 				known = true;
-			} else if (!scoped && token_spells(token, "nodiscard", 9)) {
+			} else if (!scoped && standard_attribute_spells(token, "nodiscard", 9)) {
 				attributes->nodiscard = true;
 				known = message_argument = true;
-			} else if (!scoped && (token_spells(token, "unsequenced", 11) ||
-				token_spells(token, "reproducible", 12))) {
+			} else if (!scoped && (standard_attribute_spells(token, "unsequenced", 11) ||
+				standard_attribute_spells(token, "reproducible", 12))) {
 				diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute");
 				return false;
 			}

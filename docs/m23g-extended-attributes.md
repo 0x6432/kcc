@@ -47,6 +47,11 @@ Enum-specifier and enumerator positions accept the same bounded unknown
 attributes. `nodiscard` is supported on enum definitions but not enumerators;
 enum-reference or fixed-forward forms with an attribute after `enum` are rejected.
 Nodiscard and deprecated message text is not yet included in diagnostics.
+The supported unprefixed standard attributes also recognize their required
+double-underscore spellings, such as `[[__maybe_unused__]]` and
+`[[__nodiscard__]]`. The alternate spellings of explicitly unsupported
+standard attributes are rejected rather than ignored as unknown attributes.
+Scoped vendor attributes remain ignored under the existing bounded policy.
 
 `__has_c_attribute` is recognized in preprocessing conditions, accepts an
 identifier or scoped identifier, and currently returns zero for every

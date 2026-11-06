@@ -8,6 +8,11 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('enum [[__nodiscard__, __deprecated__]] E { A [[__maybe_unused__]]=42 }; enum E x=A;',
+     'enum [[nodiscard, deprecated]] E { A [[maybe_unused]]=42 }; enum E x=A;'),
+    ('void stop(void) [[__noreturn__]];', 'void stop(void) [[noreturn]];'),
+    ('int f(int x){switch(x){case 0: x++; [[__fallthrough__]]; case 1: return x;} return 0;}',
+     'int f(int x){switch(x){case 0: x++; [[fallthrough]]; case 1: return x;} return 0;}'),
     ('enum [[maybe_unused]] E { A [[maybe_unused]]=40, B [[deprecated("old")]]=2 }; int f(void){return A+B;}',
      'enum E { A=40, B=2 }; int f(void){return A+B;}'),
     ('enum [[vendor::hint(1, [2])]] : unsigned short { A [[unknown]]=42 }; int f(void){return A;}',
@@ -67,6 +72,9 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
+    ('[[__unsequenced__]] int f(void);', 'unsupported standard attribute'),
+    ('[[__reproducible__]] int f(void);', 'unsupported standard attribute'),
+    ('[[__maybe_unused__(1)]] int x;', 'take no arguments'),
     ('enum [[maybe_unused]] E;', 'require an enumeration definition'),
     ('enum E { A [[fallthrough]] };', 'fallthrough is only supported'),
     ('enum E { A [[maybe_unused(1)]] };', 'take no arguments'),
