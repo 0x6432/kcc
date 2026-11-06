@@ -14,11 +14,23 @@ with tempfile.TemporaryDirectory(prefix='kcc-math-') as directory:
 #include <tgmath.h>
 #include <stdlib.h>
 #include <float.h>
+static_assert(_Generic(INFINITY,float:1,default:0));
+static_assert(_Generic(NAN,float:1,default:0));
+static_assert(_Generic(HUGE_VAL,double:1,default:0));
+static_assert(_Generic(HUGE_VALF,float:1,default:0));
+static_assert(FP_ILOGB0==(-2147483647-1));
+float global_inf=INFINITY, global_nan=NAN;
+double global_inf_wide=INFINITY, global_nan_wide=NAN, global_huge=HUGE_VAL;
+_Bool global_nan_bool=NAN;
+int global_nan_not_equal=NAN!=NAN, global_inf_greater=INFINITY>1.0;
 static_assert(_Generic(fma(1.0f,2.0f,3.0f),float:1,default:0));
 static_assert(_Generic(fma(1.0f,2,3.0f),double:1,default:0));
 static_assert(_Generic(hypot(1.0f,2.0f),float:1,default:0));
 static_assert(_Generic(hypot(1.0f,2.0),double:1,default:0));
 int main(void) {
+  if (!isinf(global_inf) || !isnan(global_nan) || !isinf(global_inf_wide) ||
+      !isnan(global_nan_wide) || !isinf(global_huge) || !global_nan_bool ||
+      !global_nan_not_equal || !global_inf_greater) return 10;
   float x=2.0f;
   float tiny=FLT_TRUE_MIN;
   double double_tiny=DBL_TRUE_MIN;

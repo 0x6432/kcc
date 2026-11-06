@@ -71,6 +71,9 @@ static struct constant_result evaluate_float_literal_cast(const struct ast_expre
 	double number, boundary;
 	unsigned width = type_integer_width(expression->type);
 
+	if (((const struct ast_integer_expression *)operand)->floating_special)
+		return constant_failure(expression, constant_not_constant,
+			"header IEEE constant is not a floating literal in an integer constant expression");
 	if (!evaluated)
 		return constant_success(expression, 0);
 	if (operand->type->kind == type_kind_float) {
@@ -81,10 +84,10 @@ static struct constant_result evaluate_float_literal_cast(const struct ast_expre
 	} else {
 		memcpy(&number, &raw, sizeof(number));
 	}
-	if (!isfinite(number))
-		return constant_failure(expression, constant_invalid, "non-finite floating-to-integer constant conversion");
 	if (type_is_boolean(expression->type))
 		return constant_success(expression, number != 0.0);
+	if (!isfinite(number))
+		return constant_failure(expression, constant_invalid, "non-finite floating-to-integer constant conversion");
 	boundary = (double)(UINT64_C(1) << (width - 1));
 	if (type_is_unsigned(expression->type)) {
 		boundary *= 2.0;

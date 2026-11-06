@@ -961,6 +961,17 @@ static struct token convert_number(struct token token, struct diagnostics *diagn
 	bool hex = token.length >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X');
 	struct integer_spelling spelling;
 	const char *error;
+	/* Reserved preprocessing-number spellings used by the fallback headers.
+	 * They remain pp-numbers so #if does not silently turn them into zero. */
+	if (spelling_is(token, "0x1p+__kcc_inff") || spelling_is(token, "0x1p+__kcc_infd") ||
+		spelling_is(token, "0x1p+__kcc_nanf")) {
+		token.kind = token_floating;
+		token.floating_special = true;
+		token.floating_single = !spelling_is(token, "0x1p+__kcc_infd");
+		token.floating_bits = spelling_is(token, "0x1p+__kcc_nanf") ? UINT64_C(0x7fc00000) :
+			(token.floating_single ? UINT64_C(0x7f800000) : UINT64_C(0x7ff0000000000000));
+		return token;
+	}
 	for (size_t i = 0; i < token.length; i++)
 		if (text[i] == '.' || (hex ? (text[i] == 'p' || text[i] == 'P') : (text[i] == 'e' || text[i] == 'E')))
 			return convert_floating(token, diagnostics);

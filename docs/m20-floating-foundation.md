@@ -14,8 +14,8 @@ has not yet been tested.
 
 An integer constant expression can additionally contain a floating literal
 immediately cast to an integer type, subject to range checks. Broader
-floating-to-integer constant folding is not supported and this addition is
-untested.
+floating-to-integer folding is supported only for bounded static initializers,
+as described below; it does not broaden strict ICE rules.
 
 Not supported: `long double`, `_Complex`, decimal floats, floating suffixes beyond `f`, and general floating constant-expression evaluation beyond the subsets above. File-scope tentative objects and zero-filled aggregates use zero bytes. The preprocessor continues to require integer `#if` expressions. Aggregate ABI is outside this scope. The recently restored conversions and updates have not been integration-tested. Unsupported operations must be diagnosed rather than approximated. Host/target rounding modes and subnormal/exception behavior beyond what the host converter and QBE supply are not modeled; literal conversion uses the host rounding environment and remains target-dependent.
 
@@ -187,3 +187,12 @@ pinned QBE 1.2 and assembled; the host accepted equivalent C11 syntax. Six
 invalid or unsupported examples were rejected. Regression fixtures,
 generated-program runtime, ABI, sanitizer and fuzz checks remain unrun. M20
 and general arithmetic constant-expression coverage remain incomplete.
+
+## IEEE header constants
+
+The fallback floating headers expose IEEE float infinity and quiet NaN and a
+double infinity for the target. Static initialization supports their direct
+values, float/double precision conversion, bool conversion, comparisons and
+conditions. Non-finite arithmetic operations remain conservatively unsupported
+in static folding, as do floating-environment semantics. See
+`m25-builtin-headers.md` for syntax, exact scope and validation limits.

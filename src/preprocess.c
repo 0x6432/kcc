@@ -1097,6 +1097,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		static const char math_header[] =
 			"#ifndef __KCC_MATH_H\n#define __KCC_MATH_H 1\n"
+			"#ifndef INFINITY\n#define INFINITY 0x1p+__kcc_inff\n#endif\n"
+			"#ifndef NAN\n#define NAN 0x1p+__kcc_nanf\n#endif\n"
+			"#define HUGE_VAL 0x1p+__kcc_infd\n#define HUGE_VALF 0x1p+__kcc_inff\n"
+			"typedef float float_t; typedef double double_t;\n"
+			"#define FP_ILOGB0 (-2147483647-1)\n#define FP_ILOGBNAN (-2147483647-1)\n"
+			"#define MATH_ERRNO 1\n#define MATH_ERREXCEPT 2\n#define math_errhandling 3\n"
 			"int __finite(double); int __isinf(double); int __isnan(double); int __signbit(double);\n"
 			"#define isfinite(x) __finite(x)\n#define isinf(x) __isinf(x)\n"
 			"#define isnan(x) __isnan(x)\n#define signbit(x) __signbit(x)\n"
@@ -1599,6 +1605,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		static const char float_header[] =
 			"#ifndef __KCC_FLOAT_H\n#define __KCC_FLOAT_H 1\n"
+			"#ifndef INFINITY\n#define INFINITY 0x1p+__kcc_inff\n#endif\n"
+			"#ifndef NAN\n#define NAN 0x1p+__kcc_nanf\n#endif\n"
 			"#define FLT_RADIX 2\n#define FLT_ROUNDS 1\n#define FLT_EVAL_METHOD 0\n"
 			"#define FLT_MANT_DIG 24\n#define FLT_DIG 6\n#define FLT_DECIMAL_DIG 9\n"
 			"#define FLT_MIN_EXP (-125)\n#define FLT_MIN_10_EXP (-37)\n"

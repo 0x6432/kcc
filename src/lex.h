@@ -177,6 +177,7 @@ struct token {
 	uint64_t integer;
 	uint64_t floating_bits;
 	bool floating_single;
+	bool floating_special;
 	int64_t character;
 	enum character_encoding character_encoding;
 	size_t string_length;

@@ -3420,7 +3420,7 @@ static bool static_floating_number(const struct ast_expression *expression, doub
 	} else {
 		memcpy(number, &bits, sizeof(*number));
 	}
-	return isfinite(*number);
+	return true;
 }
 
 static bool is_static_float_conditioned_integer(const struct ast_expression *expression);
@@ -3785,7 +3785,7 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				double converted;
 				memcpy(&source, &raw, sizeof(source));
 				converted = (double)source;
-				if (!isfinite(converted))
+				if (isfinite(source) && !isfinite(converted))
 					return false;
 				memcpy(bits, &converted, sizeof(converted));
 			} else {
@@ -3794,7 +3794,7 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				uint32_t raw;
 				memcpy(&source, &source_bits, sizeof(source));
 				converted = (float)source;
-				if (!isfinite(converted))
+				if (isfinite(source) && !isfinite(converted))
 					return false;
 				memcpy(&raw, &converted, sizeof(raw));
 				*bits = raw;
@@ -3861,14 +3861,14 @@ static bool static_floating_to_integer(const struct ast_expression *source,
 	} else {
 		memcpy(&number, &raw, sizeof(number));
 	}
-	if (!isfinite(number)) {
-		if (diagnostics)
-			diagnostic_error(diagnostics, source->location, "non-finite floating-to-integer static initializer");
-		return false;
-	}
 	if (type_is_boolean(target))
 		bits = number != 0.0;
 	else {
+		if (!isfinite(number)) {
+			if (diagnostics)
+				diagnostic_error(diagnostics, source->location, "non-finite floating-to-integer static initializer");
+			return false;
+		}
 		boundary = (double)(UINT64_C(1) << (width - 1));
 		if (type_is_unsigned(target)) {
 			boundary *= 2.0;

@@ -168,3 +168,24 @@ The fallback `stdio.h` also supplies an x86-64 glibc-shaped `fpos_t` and
 implements the locale-dependent `MB_CUR_MAX` through glibc's
 `__ctype_get_mb_cur_max`. These require a compatible libc; only layout and
 focused compilation checks have run, not file-position or locale runtime tests.
+
+## IEEE constants in the fallback floating headers
+
+The fallback `float.h` and `math.h` provide `INFINITY` and `NAN` as
+float-valued IEEE infinity and quiet-NaN constants. `math.h` additionally
+provides float/double `HUGE_VALF`/`HUGE_VAL`, `float_t`/`double_t`,
+`FP_ILOGB0`/`FP_ILOGBNAN` and the glibc-target math-error macros. The
+implementation uses reserved preprocessing-number spellings for the special
+constants, so they are not accidentally accepted as zero in `#if`. Direct
+static values, precision conversions, truth conversion to bool, and supported
+comparisons retain the IEEE encodings; casts to other integer types reject
+non-finite values. These header constants are not treated as floating literals
+in strict integer constant expressions. Arithmetic on non-finite constants is
+still conservatively rejected in static folding. Long double, `HUGE_VALL`,
+floating environment semantics and a complete hosted math library remain
+unsupported. Math library behavior depends on compatible glibc and libm.
+
+The compiler rebuilt; thirteen focused values were inspected in IL, lowered
+through pinned QBE 1.2 and assembled, and seven invalid or unsupported forms
+were rejected. Added regression fixtures, generated-program runtime, ABI,
+sanitizer and fuzz checks remain unrun.

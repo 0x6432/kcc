@@ -162,6 +162,10 @@ int main(void) {
 '''
 hostimpl = 'float hf(float x,float y){return x+y;} double hd(double x,double y){return x+y;} float host_zero(void){return -0.0f;}'
 reject = [
+ '#include <math.h>\nstatic_assert((bool)NAN);',
+ '#include <math.h>\nint x=(int)INFINITY;',
+ '#include <math.h>\nfloat x=INFINITY+1.0f;',
+ '#include <float.h>\n#if INFINITY\nint x;\n#endif\n',
  'int n; int x=1.0 ? 1 : n;', 'int x=0.0 ? 1 : 1/0;',
  'double y; double x=1?2.0:(y,3.0);', 'double x=0?2.0:(1.0/0.0,3.0);',
  'static_assert(1.0 ? 1 : 0);',
