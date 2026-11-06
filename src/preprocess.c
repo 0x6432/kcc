@@ -1270,7 +1270,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"int tolower(int); int toupper(int);\n"
 			"#endif\n";
 		static const char inttypes_header[] =
-			"#ifndef __KCC_INTTYPES_H\n#define __KCC_INTTYPES_H 1\n#include <stdint.h>\n"
+			"#ifndef __KCC_INTTYPES_H\n#define __KCC_INTTYPES_H 1\n#include <stdint.h>\n#include <stddef.h>\n"
 			"#define PRId8 \"d\"\n#define PRIi8 \"i\"\n#define PRIu8 \"u\"\n#define PRIx8 \"x\"\n#define PRIX8 \"X\"\n#define PRIo8 \"o\"\n"
 			"#define PRId16 \"d\"\n#define PRIi16 \"i\"\n#define PRIu16 \"u\"\n#define PRIx16 \"x\"\n#define PRIX16 \"X\"\n#define PRIo16 \"o\"\n"
 			"#define PRId32 \"d\"\n#define PRIi32 \"i\"\n#define PRIu32 \"u\"\n#define PRIx32 \"x\"\n#define PRIX32 \"X\"\n#define PRIo32 \"o\"\n"
@@ -1400,6 +1400,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"intmax_t imaxabs(intmax_t);\n"
 			"intmax_t strtoimax(const char *,char **,int);\n"
 			"uintmax_t strtoumax(const char *,char **,int);\n"
+			"intmax_t wcstoimax(const wchar_t *,wchar_t **,int);\n"
+			"uintmax_t wcstoumax(const wchar_t *,wchar_t **,int);\n"
 			"#endif\n";
 		/* assert.h is intentionally re-evaluated on each inclusion for NDEBUG. */
 		static const char assert_header[] =
@@ -1485,6 +1487,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"long strtol(const char *,char **,int); unsigned long strtoul(const char *,char **,int);\n"
 			"long long strtoll(const char *,char **,int); unsigned long long strtoull(const char *,char **,int);\n"
 			"float strtof(const char *,char **); double strtod(const char *,char **);\n"
+			"int strfromf(char *,size_t,const char *,float); int strfromd(char *,size_t,const char *,double);\n"
 			"int rand(void); void srand(unsigned int);\n"
 			"int mblen(const char *,size_t); int mbtowc(wchar_t *,const char *,size_t);\n"
 			"int wctomb(char *,wchar_t); size_t mbstowcs(wchar_t *,const char *,size_t);\n"

@@ -86,7 +86,11 @@ Source provenance, not a filename, determines which budget is charged.
 - `ctype.h` declares the usual narrow-character classification and conversion
   functions from libc. `inttypes.h` supplies exact-width, pointer-width and
   max-width print format macros plus `imaxabs`, `strtoimax` and `strtoumax`.
-  It also supplies scanning and least/fast-width format macros for the target integer types.
+  It also supplies scanning and least/fast-width format macros for the target
+  integer types, and `wcstoimax`/`wcstoumax` declarations. `stdlib.h` declares
+  `strfromf`/`strfromd`, which require glibc 2.25 or newer; long-double
+  conversion remains unavailable. These conversion calls are compile-checked,
+  not runtime-tested.
 - `locale.h` provides standard locale categories, the x86-64 glibc `lconv`
   layout, and `setlocale`/`localeconv` declarations. Runtime locale handling
   depends on compatible libc; the compiler's own numeric literal conversion

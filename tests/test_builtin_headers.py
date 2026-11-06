@@ -90,6 +90,18 @@ int f(FILE *fp) {
     assert result.returncode == 0 and not result.stderr, result.stderr
     for symbol in ('fgetpos', 'fsetpos', '__ctype_get_mb_cur_max', 'system'):
         assert '$' + symbol in result.stdout, symbol
+    source.write_text(r"""
+#include <inttypes.h>
+#include <stdlib.h>
+int f(wchar_t *ws,char *buf) {
+    return (int)(wcstoimax(ws,0,10)+wcstoumax(ws,0,10)) +
+        strfromf(buf,32,"%.1f",1.0f)+strfromd(buf,32,"%.1f",2.0);
+}
+""")
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    for symbol in ('wcstoimax', 'wcstoumax', 'strfromf', 'strfromd'):
+        assert '$' + symbol in result.stdout, symbol
     (path / "present.h").write_text("#define PRESENT 1\n")
     (path / "defined.h").write_text("/* header named like a conditional operator */\n")
     (path / "__VA_ARGS__.h").write_text("/* header named like a variadic token */\n")
