@@ -889,8 +889,28 @@ static size_t codegen_expression(struct codegen *codegen,
 		}
 		return codegen_layout_constant(codegen, node->size);
 	}
-	case expression_sizeof_type:
-		return codegen_layout_constant(codegen, ((const struct ast_sizeof_type_expression *)expression)->size);
+	case expression_sizeof_type: {
+		const struct ast_sizeof_type_expression *node = (const struct ast_sizeof_type_expression *)expression;
+		if (node->vla_bound) {
+			size_t bound = codegen_expression(codegen, node->vla_bound);
+			size_t wide = codegen_convert_value(codegen, bound, node->vla_bound->type, &type_ulong);
+			size_t positive = codegen->next_temporary++, within = codegen->next_temporary++;
+			size_t valid = codegen->next_temporary++, size = codegen->next_temporary++;
+			size_t good = new_label(codegen), bad = new_label(codegen);
+
+			emit(codegen, "\t%%t%zu =w cnel %%t%zu, 0\n", positive, wide);
+			emit(codegen, "\t%%t%zu =w culel %%t%zu, %ju\n", within, wide,
+				(uintmax_t)(ast_max_local_storage / node->vla_element_size));
+			emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", valid, positive, within);
+			emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", valid, good, bad);
+			emit_label(codegen, bad);
+			emit(codegen, "\tcall $abort()\n\thlt\n");
+			emit_label(codegen, good);
+			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", size, wide, (uintmax_t)node->vla_element_size);
+			return size;
+		}
+		return codegen_layout_constant(codegen, node->size);
+	}
 	case expression_alignof:
 		return codegen_layout_constant(codegen, ((const struct ast_alignof_expression *)expression)->alignment);
 	case expression_comma: {

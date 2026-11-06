@@ -99,6 +99,7 @@ struct sema {
 	uint64_t local_storage;
 	struct ast_type_syntax *vla_candidate;
 	struct ast_type_syntax *alignment_vla_candidate;
+	struct ast_type_syntax *sizeof_vla_candidate;
 	struct ast_type_syntax *prototype_vla_candidate;
 	struct ast_type_syntax *definition_vla_candidate;
 	unsigned evaluated_parameter_depth;
@@ -1185,7 +1186,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 				break;
 			}
 			if (result.status == constant_not_constant &&
-				(syntax == sema->vla_candidate || syntax == sema->alignment_vla_candidate) &&
+				(syntax == sema->vla_candidate || syntax == sema->alignment_vla_candidate ||
+				 syntax == sema->sizeof_vla_candidate) &&
 				type_is_integer(array->bound->type)) {
 				type = type_new_incomplete_array(sema->arena, element);
 				if (!type) {
@@ -1285,10 +1287,19 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 	case expression_character:
 	case expression_boolean:
 	case expression_sizeof:
-	case expression_sizeof_type:
 	case expression_alignof:
-		/* This subset rejects VM sizeof operands during semantic analysis. */
 		return true;
+	case expression_sizeof_type: {
+		const struct ast_sizeof_type_expression *node = (const struct ast_sizeof_type_expression *)expression;
+		if (!node->is_offsetof && node->type_syntax->kind == type_syntax_array) {
+			const struct ast_array_type_syntax *array = (const struct ast_array_type_syntax *)node->type_syntax;
+			if (array->bound) {
+				*effect = true;
+				return definition_bound(sema, array->bound, effect);
+			}
+		}
+		return true;
+	}
 	case expression_string:
 		*effect = true; /* Keep the occurrence available for emitted code. */
 		return true;
@@ -2618,8 +2629,15 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_sizeof_type: {
 		struct ast_sizeof_type_expression *node = (struct ast_sizeof_type_expression *)expression;
-		const struct type *type = resolve_unevaluated_type_syntax(sema, node->type_syntax);
+		struct ast_type_syntax *saved_candidate = sema->sizeof_vla_candidate;
+		const struct type *type;
 
+		if (!node->is_offsetof && node->type_syntax->kind == type_syntax_array) {
+			sema->sizeof_vla_candidate = node->type_syntax;
+			type = resolve_type_syntax(sema, node->type_syntax);
+		} else
+			type = resolve_unevaluated_type_syntax(sema, node->type_syntax);
+		sema->sizeof_vla_candidate = saved_candidate;
 		if (!type)
 			return false;
 		if (node->is_offsetof) {
@@ -2679,6 +2697,13 @@ static bool sema_expression(struct sema *sema,
 				}
 			}
 			node->size = offset;
+			result_type = &type_ulong;
+			break;
+		}
+		if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
+			node->vla_bound = ((struct ast_array_type_syntax *)node->type_syntax)->bound;
+			node->vla_element_size = type_object_size(((const struct array_type *)type)->element);
+			expression->depth = node->vla_bound->depth + 1;
 			result_type = &type_ulong;
 			break;
 		}

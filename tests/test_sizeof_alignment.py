@@ -28,6 +28,9 @@ for name, size in layouts:
                     f'sizeof x!={size}UL || alignof(const {name})!={size}UL || _Alignof({name})!={size}UL) return 1; '
                     f'if(sizeof({name}[3][2])!={size*6}UL || alignof({name}[3][2])!={size}UL) return 2; return 42; }}')
 programs += [
+    'int main(void) { int n=3; unsigned long s=sizeof(int[n++]); return n==4 && s==12 ? 42 : 1; }',
+    'int main(void) { int n=2; unsigned long s=sizeof(char[n++][3]); return n==3 && s==6 ? 42 : 1; }',
+    'int main(void) { int n=2; return sizeof(sizeof(int[n++]))==8 && n==2 ? 42 : 1; }',
     'int main(void) { int n=3; _Static_assert(alignof(int[n++])==4,"align"); return n==3 ? 42 : 1; }',
     'int main(void) { int n=3; _Alignas(int[n++]) int x=42; return n==3 ? x : 1; }',
     'int main(void) { if(sizeof(void *)!=8 || alignof(int *)!=8 || sizeof(int **const)!=8) return 1; return 42; }',

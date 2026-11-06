@@ -37,3 +37,10 @@ two unknown-bound array types are combined.
 type-name with a complete fixed-size element type. Its bound is checked but
 not evaluated; the result is the element alignment. More general variably
 modified type-names remain unsupported. This path has not been runtime-tested.
+
+`sizeof` also accepts a direct outer variable-bound array type-name with a
+complete fixed-size element type. Its bound is evaluated once, and the result
+is the bound times element size. Nonpositive bounds or types over the existing
+1 MiB type-size limit call `abort`; no array storage is allocated. An enclosing
+unevaluated context does not execute the bound. More general VM type-names are
+still unsupported. This path has not been runtime-tested.

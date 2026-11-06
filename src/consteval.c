@@ -254,6 +254,8 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 			return constant_failure(expression, constant_not_constant, "sizeof variable-length array is not an integer constant expression");
 		return constant_success(expression, ((const struct ast_sizeof_expression *)expression)->size);
 	case expression_sizeof_type:
+		if (((const struct ast_sizeof_type_expression *)expression)->vla_bound)
+			return constant_failure(expression, constant_not_constant, "sizeof variable-length array is not an integer constant expression");
 		return constant_success(expression, ((const struct ast_sizeof_type_expression *)expression)->size);
 	case expression_alignof:
 		return constant_success(expression, ((const struct ast_alignof_expression *)expression)->alignment);

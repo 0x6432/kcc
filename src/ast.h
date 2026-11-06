@@ -244,6 +244,8 @@ struct ast_sizeof_type_expression {
 	struct ast_expression expression;
 	struct ast_type_syntax *type_syntax;
 	uint64_t size;
+	struct ast_expression *vla_bound;
+	uint64_t vla_element_size;
 	bool is_offsetof;
 	struct ast_offset_step *offset_steps;
 };
