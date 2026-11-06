@@ -235,6 +235,23 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 	return true;
 }
 
+/* After an ordinary declarator, noreturn applies to that declarator only;
+ * semantic analysis verifies it actually declares a function identifier. */
+static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn)
+{
+	struct parsed_attributes attributes;
+	struct token location = preprocess_peek(parser->preprocessor);
+	if (!parse_attributes(parser, &attributes))
+		return false;
+	if (attributes.fallthrough) {
+		diagnostic_error(parser->diagnostics, location.location,
+			"fallthrough is only supported on a null statement in a switch");
+		return false;
+	}
+	*noreturn = attributes.noreturn;
+	return true;
+}
+
 static void allocation_error(struct parser *parser, struct source_location location)
 {
 	diagnostic_error(parser->diagnostics, location, "out of memory building AST");
@@ -3519,6 +3536,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct ast_expression *initializer = NULL;
 		struct ast_initializer *initializer_syntax = NULL;
 		struct ast_local_declaration *node;
+		bool declarator_noreturn;
 
 		if (!count_block_item(parser, head.inferred_name.kind == token_identifier ?
 			head.inferred_name.location : preprocess_peek(parser->preprocessor).location))
@@ -3529,11 +3547,8 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				name = head.inferred_name;
 			else if (!parse_inferred_identifier(parser, &name))
 				return NULL;
-			{
-				bool attributes;
-				if (!parse_declaration_attributes(parser, &attributes))
-					return NULL;
-			}
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn))
+				return NULL;
 			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
 				diagnostic_error(parser->diagnostics, name.location,
 					"inferred auto requires an assignment initializer");
@@ -3543,11 +3558,8 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 			if (!type_syntax)
 				return NULL;
-			{
-				bool attributes;
-				if (!parse_declaration_attributes(parser, &attributes))
-					return NULL;
-			}
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn))
+				return NULL;
 		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
 			diagnostic_error(parser->diagnostics, name.location,
@@ -3572,7 +3584,8 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		node->alignments = head.alignments;
 		node->initializer_syntax = initializer_syntax;
 		node->is_inline = head.inline_keyword.kind == token_inline;
-		node->is_noreturn = head.noreturn_keyword.kind == token_noreturn || parser->declaration_noreturn;
+		node->is_noreturn = head.noreturn_keyword.kind == token_noreturn ||
+			parser->declaration_noreturn || declarator_noreturn;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
 		node->is_extern = head.keyword.kind == token_extern;
@@ -4197,6 +4210,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		struct token name;
 		struct ast_type_syntax *type_syntax;
 		struct ast_external_declaration *item;
+		bool declarator_noreturn;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4207,18 +4221,15 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 		if (!type_syntax)
 			return NULL;
-		{
-			bool attributes;
-			if (!parse_declaration_attributes(parser, &attributes))
-				return NULL;
-		}
+		if (!parse_function_declarator_attributes(parser, &declarator_noreturn))
+			return NULL;
 		/* Its scope starts after the complete declarator, before an
 		 * initializer or a later declarator in the same declaration.
 		 */
 		if (!publish_parser_name(parser, name, parser_name_object))
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn || declarator_noreturn);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -4234,7 +4245,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			}
 			declaration->is_extern = is_extern;
 			declaration->is_inline = is_inline;
-			declaration->is_noreturn = is_noreturn;
+			declaration->is_noreturn = is_noreturn || declarator_noreturn;
 			declaration->is_thread_local = is_thread_local;
 			declaration->is_static = is_static;
 			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;

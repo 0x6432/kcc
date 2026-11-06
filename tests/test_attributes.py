@@ -8,6 +8,10 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('void stop(void) [[noreturn]]; void other(void);',
+     '_Noreturn void stop(void); void other(void);'),
+    ('void f(void){void stop(void) [[noreturn]]; stop();}',
+     'void f(void){_Noreturn void stop(void); stop();}'),
     ('void f(void){[[noreturn]] void stop(void); stop();}',
      'void f(void){_Noreturn void stop(void); stop();}'),
     ('typedef void F(void); void f(void){[[noreturn]] F stop; stop();}',
@@ -51,7 +55,9 @@ invalid = [
     ('[[noreturn]] typedef void F(void);', 'requires a function identifier'),
     ('[[noreturn]] enum E { X };', 'requires a function identifier'),
     ('[[noreturn(1)]] void f(void);', 'take no arguments'),
-    ('void f(void) [[noreturn]];', 'only supported in function declaration prefixes'),
+    ('int x [[noreturn]];', 'requires a function declaration'),
+    ('void (*p)(void) [[noreturn]];', 'requires a function declaration'),
+    ('typedef int F [[noreturn]];', 'only supported in function declaration prefixes'),
     ('void f(void){ [[noreturn]] int x; }', 'requires a function declaration'),
     ('void f(void){ [[noreturn]] typedef int T; }', 'requires a function identifier'),
     ('void f(void){ [[noreturn]] return; }', 'requires a function identifier'),

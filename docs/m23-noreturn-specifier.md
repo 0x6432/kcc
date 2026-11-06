@@ -12,5 +12,7 @@ The C23 `[[noreturn]]` attribute is supported as a declaration
 prefix at file and block scope for function identifiers, including typedef-derived function declarations.
 It uses the same recorded flag and has the same code-generation limitations as
 `_Noreturn`; it is rejected on objects, typedefs and tag-only declarations.
-Declarator-suffix attribute placements remain unsupported. The
+Declarator-suffix placement is also supported on function identifiers at file
+and block scope; it applies only to that declarator. Other placements remain
+unsupported. The
 new attribute cases were added but not regression-tested.
