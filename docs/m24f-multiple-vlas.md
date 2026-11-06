@@ -1,6 +1,6 @@
 # Multiple outermost VLAs
 
-Multiple naturally aligned automatic VLAs can
+Multiple automatic VLAs can
 be declared in the outermost block or nested blocks, including loop and switch
 bodies. A case or default label is rejected if switch dispatch would enter the
 scope of a VLA declared inside that switch; a VLA enclosing a nested switch is
@@ -9,7 +9,8 @@ every execution. Complete element types include
 pointers, floating types, records that do not contain flexible arrays, and
 fixed-size arrays, allowing a runtime outer dimension with fixed inner
 dimensions. Each
-bound is evaluated once in declaration order, and `sizeof` uses the saved size
+bound is evaluated once in declaration order. Explicit alignment up to 16 bytes
+is supported when it does not weaken natural alignment; `sizeof` uses the saved size
 of the corresponding array. A C23 empty initializer `{}` zero-initializes the
 runtime-sized storage using the target’s all-zero representations; nonempty VLA
 initializers remain rejected. They share the existing 1 MiB local-storage
@@ -21,7 +22,7 @@ conservative implementation limit: a loop can exhaust the budget even when its
 individual VLAs have ended their lifetimes.
 
 Other restrictions of the existing outermost VLA subset remain: no runtime inner
-dimensions, nonempty VLA initializers, explicit alignment, general VM typedefs or
+dimensions, nonempty VLA initializers, general VM typedefs or
 parameters, or `typeof` of a VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
 the whole VLA remains rejected because runtime referent size is not modeled;
 `sizeof` accepts the array name or direct indirection/address pairs such as

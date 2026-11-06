@@ -10,6 +10,8 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=2; alignas(16) int a[n]={}; a[1]=42; return a[1]; }',
+    'int main(void) { int n=2; alignas(0) double a[n]={}; a[0]=42.0; return (int)a[0]; }',
     'int main(void) { int n=3; int a[n++]={}; return n==4 && a[0]==0 && a[2]==0 && sizeof a==12 ? 42 : 1; }',
     'int main(void) { int n=2; int *a[n]={}; return a[0]==0 && a[1]==0 ? 42 : 1; }',
     'struct S { int x; double y; }; int main(void) { int n=2; struct S a[n]={}; return a[1].x==0 && a[1].y==0.0 ? 42 : 1; }',
@@ -40,6 +42,8 @@ valid = [
     'int main(void) { int n=3; int a[n++]; a[2]=42; return n==4 && sizeof *(&a)==12 && sizeof *(&*(&a))==12 ? a[2] : 1; }',
 ]
 rejected = [
+    ('int f(int n) { alignas(1) int a[n]; return 0; }', 'cannot weaken'),
+    ('int f(int n) { alignas(32) int a[n]; return 0; }', 'supported alignments'),
     ('int f(int n) { switch(n) { int a[n]; case 1: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { switch(n) { case 1:; int a[n]; default: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { int a[n]={0}; return 0; }', 'require an empty initializer'),

@@ -4306,7 +4306,9 @@ static bool check_object_alignment(struct sema *sema, const struct type *type,
 			"aligned object requires a known natural alignment");
 		return false;
 	}
-	if (alignment < type_object_alignment(type)) {
+	const struct type *alignment_type = type_is_complete_object(type) ? type :
+		((const struct array_type *)type)->element;
+	if (alignment < type_object_alignment(alignment_type)) {
 		diagnostic_error(sema->diagnostics, location, "alignment cannot weaken the natural alignment");
 		return false;
 	}
@@ -4355,11 +4357,13 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 	if (type->kind == type_kind_array && ((const struct array_type *)type)->runtime_bound) {
 		if ((local->initializer_syntax &&
 			(local->initializer_syntax->kind != ast_initializer_list || local->initializer_syntax->entries)) ||
-			local->initializer || local->alignments || local->is_inline || local->is_noreturn) {
+			local->initializer || local->is_inline || local->is_noreturn) {
 			diagnostic_error(sema->diagnostics, local->name.location,
-				"variable-length arrays require an empty initializer and natural alignment");
+				"variable-length arrays require an empty initializer");
 			return false;
 		}
+		if (!check_object_alignment(sema, type, local->alignment, local->name.location))
+			return false;
 		if (sema->local_count == ast_max_locals) {
 			diagnostic_error(sema->diagnostics, local->name.location, "function exceeds local limit (256)");
 			return false;

@@ -1353,6 +1353,8 @@ static void codegen_vla(struct codegen *codegen, const struct ast_local_declarat
 	size_t new_remaining = codegen->next_temporary++;
 	size_t good = new_label(codegen), bad = new_label(codegen);
 	unsigned alignment = type_object_alignment(array->element);
+	if (local->alignment > alignment)
+		alignment = local->alignment;
 	if (alignment < 4)
 		alignment = 4;
 	emit(codegen, "\t%%t%zu =w cnel %%t%zu, 0\n", positive, wide);
