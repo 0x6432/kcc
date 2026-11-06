@@ -1215,6 +1215,8 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 {
 	switch (expression->kind) {
 	case expression_integer:
+	case expression_floating:
+	case expression_nullptr:
 	case expression_character:
 	case expression_boolean:
 	case expression_sizeof:
@@ -1250,7 +1252,7 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 			struct external_object_symbol *object = find_external_object(sema, name->name);
 			type = object ? object->file_type : NULL;
 		}
-		if (!type || !(type_is_integer(type) || type->kind == type_kind_pointer))
+		if (!type || !(type_is_scalar(type) || type_is_record(type)))
 			return false;
 		if (type->qualifiers & type_qualifier_atomic)
 			*effect = true;
@@ -1270,6 +1272,9 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 		*effect = true;
 		return definition_bound(sema, node->left, effect) && definition_bound(sema, node->right, effect);
 	}
+	case expression_member:
+		*effect = true;
+		return definition_bound(sema, ((const struct ast_member_expression *)expression)->operand, effect);
 	case expression_call: {
 		const struct ast_call_expression *call = (const struct ast_call_expression *)expression;
 		struct function_symbol *function;
@@ -1317,7 +1322,8 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 			((const struct ast_prefix_update_expression *)expression)->operand;
 		*effect = true;
 		return (operand->kind == expression_name || operand->kind == expression_indirection ||
-			operand->kind == expression_subscript) && definition_bound(sema, operand, effect);
+			operand->kind == expression_subscript || operand->kind == expression_member) &&
+			definition_bound(sema, operand, effect);
 	}
 	case expression_assignment:
 	case expression_compound_assignment: {
@@ -1331,7 +1337,8 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 		}
 		*effect = true;
 		return (left->kind == expression_name || left->kind == expression_indirection ||
-			left->kind == expression_subscript) && definition_bound(sema, left, effect) &&
+			left->kind == expression_subscript || left->kind == expression_member) &&
+			definition_bound(sema, left, effect) &&
 			definition_bound(sema, right, effect);
 	}
 	default:

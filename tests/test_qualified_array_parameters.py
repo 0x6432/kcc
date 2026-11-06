@@ -8,6 +8,7 @@ compiler = Path(os.environ.get('KCC', Path(__file__).resolve().parents[1] / 'bui
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 valid = [
+    'struct S { int n; }; int f(struct S *s,int a[s->n++]) { return s->n+a[0]; } int main(void) { struct S s={1}; int a[1]; a[0]=40; return f(&s,a); }',
     'int f(int n,int a[_Generic(n,int: n++,default: 1)+sizeof n]) { return n+a[0]; } int main(void) { int a[5]; a[0]=40; return f(1,a); }',
     '#include <stdatomic.h>\nint f(_Atomic int *p,int a[atomic_fetch_add(p,1)]) { return *p+a[0]; } int main(void) { _Atomic int n=1; int a[1]; a[0]=40; return f(&n,a); }',
     'int bump(int n) { return n; } int f(int *p,int (*cb)(int),int a[cb((*p)++)]) { return *p+a[0]; } int main(void) { int n=1; int a[1]; a[0]=40; return f(&n,bump,a); }',

@@ -16,7 +16,7 @@ integer outer bounds in prototypes are analyzed but not evaluated, and also
 adjust immediately to a pointer. This includes `static` bounds; no dynamic
 minimum check is emitted. A definition may use supported scalar expressions over earlier parameters,
 visible objects, enumerators and literals as its outer bound. Supported direct
-and function-pointer calls, pointer accesses, assignments, increments and atomic
+and function-pointer calls, pointer and record-member accesses, assignments, increments and atomic
 operations are evaluated in the function prologue; pure expressions are omitted
 because adjustment discards their values. Casts of supported expressions are
 accepted, as are bounded `_Generic`, `sizeof` and `alignof` expressions.
