@@ -10,6 +10,7 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=2; alignas(256) int a[n]={}; a[1]=42; return ((unsigned long)(void *)a & 255)==0 && sizeof a==8 ? a[1] : 1; }',
     'int main(void) { int n=3; register int a[n++]={}; return n==4 && sizeof a==12 ? 42 : 1; }',
     'int main(void) { int n=2; int a[n]; a[1]=42; goto done; done: return a[1]; }',
     'int main(void) { int n=2; int result=0; { int a[n]; a[1]=42; result=a[1]; goto out; } out: return result; }',
@@ -49,7 +50,7 @@ rejected = [
     ('int f(int n) { register int a[n]; int *p=a; return 0; }', 'register array-to-pointer'),
     ('int f(int n) { register int a[n]; return &a!=0; }', 'address of a register object'),
     ('int f(int n) { alignas(1) int a[n]; return 0; }', 'cannot weaken'),
-    ('int f(int n) { alignas(32) int a[n]; return 0; }', 'supported alignments'),
+    ('int f(int n) { alignas(512) int a[n]; return 0; }', 'supported alignments'),
     ('int f(int n) { switch(n) { int a[n]; case 1: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { switch(n) { case 1:; int a[n]; default: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { int a[n]={0}; return 0; }', 'require an empty initializer'),
@@ -64,6 +65,7 @@ rejected = [
 # Bounds fail before allocation, including a negative signed input, unsigned
 # overflow, zero and remaining-budget exhaustion. No particular signal is required.
 traps = [
+    'int main(void) { int n=1048400; alignas(256) char a[n]; return 42; }',
     'int main(void) { int n=0; int a[n]; return 42; }',
     'int main(void) { int n=-1; int a[n]; return 42; }',
     'int main(void) { unsigned long n=18446744073709551615UL; char a[n]; return 42; }',

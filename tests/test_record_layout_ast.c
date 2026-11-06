@@ -209,6 +209,13 @@ static void layout_boundaries(void)
  struct array_type *aligned_array=type_new_array(&a,&aligned->type,2);
  assert(aligned_array && type_object_size(&aligned_array->type)==64);
  assert(type_object_alignment(&aligned_array->type)==16);
+ member.alignment=64;
+ assert(type_record_layout(aligned->definition));
+ assert(member.offset==64 && aligned->definition->size==128);
+ assert(type_object_alignment(&aligned_array->type)==64 && type_object_size(&aligned_array->type)==256);
+ before=*aligned->definition; member.alignment=512;
+ assert(!type_record_layout(aligned->definition));
+ assert(memcmp(&before,aligned->definition,sizeof before)==0 && member.offset==64);
  arena_destroy(&a);
 }
 

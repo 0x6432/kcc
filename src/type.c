@@ -599,7 +599,7 @@ static bool checked_member_layout(const struct type *type, unsigned depth,
 	*size = type_object_size(type);
 	*alignment = type_object_alignment(type);
 	return *size && *size <= type_max_record_size && *alignment &&
-		!(*alignment & (*alignment - 1)) && *alignment <= 16;
+		!(*alignment & (*alignment - 1)) && *alignment <= type_max_alignment;
 }
 
 static bool checked_align(uint64_t value, unsigned alignment, uint64_t *result)
@@ -647,7 +647,7 @@ bool type_record_layout(struct record_definition *definition)
 			&member_size, &member_alignment))
 			return false;
 		if (member->alignment) {
-			if (member->alignment < member_alignment || member->alignment > 16 ||
+			if (member->alignment < member_alignment || member->alignment > type_max_alignment ||
 				(member->alignment & (member->alignment - 1)))
 				return false;
 			member_alignment = member->alignment;

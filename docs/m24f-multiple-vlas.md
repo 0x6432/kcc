@@ -9,7 +9,7 @@ every execution. Complete element types include
 pointers, floating types, records that do not contain flexible arrays, and
 fixed-size arrays, allowing a runtime outer dimension with fixed inner
 dimensions. Each
-bound is evaluated once in declaration order. Explicit alignment up to 16 bytes
+bound is evaluated once in declaration order. Explicit alignment up to 256 bytes
 is supported when it does not weaken natural alignment; `sizeof` uses the saved size
 of the corresponding array. A C23 empty initializer `{}` zero-initializes the
 runtime-sized storage using the target’s all-zero representations; nonempty VLA

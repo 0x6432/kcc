@@ -94,7 +94,13 @@ struct record_type {
 	struct record_definition *definition;
 };
 
-enum { type_max_record_size = 1024 * 1024 };
+enum { type_max_record_size = 1024 * 1024, type_max_alignment = 256 };
+/* QBE alloc16 returns a 16-aligned address; the worst adjustment needed
+ * to reach a larger power-of-two alignment is alignment - 16. */
+static inline unsigned type_stack_alignment_padding(unsigned alignment)
+{
+	return alignment > 16 ? alignment - 16 : 0;
+}
 bool type_is_record(const struct type *type);
 struct record_definition *type_record_definition(const struct type *type);
 struct record_type *type_new_record(struct arena *arena, bool is_union);

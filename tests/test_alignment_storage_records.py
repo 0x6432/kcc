@@ -10,6 +10,10 @@ host = os.environ.get('HOST_CC', 'cc')
 qbe = os.environ.get('QBE')
 
 accepted = [
+    ('alignas(256) int x;', 'export data $x = align 256'),
+    ('thread_local alignas(64) int x=3;', 'thread data $x = align 64'),
+    ('struct S { char c; alignas(64) int x; }; static_assert(sizeof(struct S)==128); static_assert(alignof(struct S)==64); struct S a[2];', 'data $a = align 64'),
+    ('struct S { alignas(256) int x; }; int f(void){struct S a,b; a=b; return sizeof a;}', 'alloc16 496'),
     ('alignas(16) int x;', 'export data $x = align 16'),
     ('int alignas(16) x=3;', 'export data $x = align 16'),
     ('struct S { char c; int alignas(16) x; }; static_assert(sizeof(struct S)==32);', ''),

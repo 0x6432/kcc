@@ -1,6 +1,8 @@
 # M18: declaration alignment (implementation checkpoint)
 
-This is not M18 completion or a tested/release checkpoint. Both `alignas` and
+This is not M18 completion or a tested/release checkpoint. The initial
+16-byte limit described below is superseded by the extended-alignment
+checkpoint at the end of this document. Both `alignas` and
 `_Alignas` are recognized after preprocessing. This slice supports automatic,
 static, file-scope and thread-local objects, including linked extern objects,
 and named struct/union members. A declaration list shares one specifier group;
@@ -118,3 +120,23 @@ initializer and maximum-alignment restrictions still apply.
 The compiler build and focused positive, negative and emitted-IL checks
 succeeded. New fixtures and QBE runtime, ABI, sanitizers, fuzz and full
 regression remain unrun; no M18 or M17 approval is implied.
+
+## Extended alignment through 256 bytes
+
+Power-of-two requests through 256 bytes are now supported for all previously
+supported object, member, parameter and compound-literal placements. Records
+carry their extended natural alignment through nested layout and arrays. Static
+and thread-local objects use QBE data alignment. Automatic slots, including
+record value captures, reserve extra bytes with `alloc16` and round the returned
+address up; this padding is charged to the function's bounded storage budget.
+Variable-length objects reserve and charge the padding for each allocation,
+while `sizeof` still reports only the array's actual size. Requests above 256
+remain unsupported. Existing ABI, type and placement limitations still apply.
+
+The compiler build and focused acceptance/rejection and IL checks succeeded.
+One combined extended-alignment source was lowered with the repository-pinned
+QBE 1.2 and assembled, and host compiler assertions checked one record layout.
+An older, incompatible QBE mirror rejected the TLS syntax; the pinned backend
+accepted the example. No generated program was run. Host ABI interoperability,
+regression fixtures, sanitizers and fuzzing remain unrun. This is not M18
+completion or approval.

@@ -3232,7 +3232,8 @@ static bool sema_expression(struct sema *sema,
 		if (!check_expression_depth(sema, &load->expression))
 			return false;
 		if (type_is_record(expression->type) && !sema->unevaluated && sema->function) {
-			uint64_t size = type_object_size(expression->type);
+			uint64_t size = type_object_size(expression->type) +
+				type_stack_alignment_padding(type_object_alignment(expression->type));
 			if (sema->function->record_temporary_count == ast_max_record_temporaries) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"function exceeds record value temporary limit (256)");
@@ -4349,12 +4350,16 @@ static bool complete_local_storage(struct sema *sema, struct ast_local_declarati
 		return false;
 	}
 	local->type = effective_type;
-	if (type_object_size(local->type) > ast_max_local_storage - sema->local_storage) {
+	unsigned alignment = type_object_alignment(local->type);
+	if (local->alignment > alignment)
+		alignment = local->alignment;
+	uint64_t bytes = type_object_size(local->type) + type_stack_alignment_padding(alignment);
+	if (bytes > ast_max_local_storage - sema->local_storage) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"function exceeds local object storage limit (1 MiB)");
 		return false;
 	}
-	sema->local_storage += type_object_size(local->type);
+	sema->local_storage += bytes;
 	local->slot = sema->local_count++;
 	local->next_local = sema->function->locals;
 	sema->function->locals = local;
@@ -4490,8 +4495,8 @@ static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *
 				return false;
 			}
 		}
-		if (value && (value > 16 || (value & (value - 1)))) {
-			diagnostic_error(sema->diagnostics, a->location, "supported alignments are 0, 1, 2, 4, 8 and 16");
+		if (value && (value > type_max_alignment || (value & (value - 1)))) {
+			diagnostic_error(sema->diagnostics, a->location, "supported alignments are zero or powers of two up to 256");
 			return false;
 		}
 		if (value > requested)

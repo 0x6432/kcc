@@ -23,8 +23,8 @@ independently; the deleted branch's completion or validation must not be
 attributed to them.
 
 M18 increments support bounded alignment on anonymous struct/union members,
-function parameters and compound literals;
-see `m18-declaration-alignment.md`. The compiler build and focused compile/IL
+function parameters and compound literals, and power-of-two alignment requests
+through 256 bytes across supported storage forms; see `m18-declaration-alignment.md`. The compiler build and focused compile/IL
 checks succeeded, with a focused host GCC layout comparison. The regression
 fixtures and generated-program runtime checks have not been run.
 Completed tagged enums with matching members also support bounded cross-scope
@@ -38,7 +38,9 @@ entities and broader discarded-value analysis remain unsupported. See `m23g-exte
 Builds and selected compile/IL checks have run during this lane, together with a
 few host-only helper smoke checks. Newly added regression suites, fuzzing,
 generated-program runtime and integration/ABI/concurrency validation remain
-outstanding. QBE was not available in this environment. No later-checkpoint CI
+outstanding. A disposable pinned QBE 1.2 build is available at `/tmp/kcc-pinned-qbe/qbe-1.2/qbe`;
+one focused extended-alignment IL example was lowered to assembly and assembled,
+but no generated program was run. No later-checkpoint CI
 success, M17 approval, or C23 conformance is implied. As requested for this
 implementation lane, comprehensive validation is deferred until implementation
 work is complete; historical statements below about waiting for each gate are

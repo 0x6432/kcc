@@ -10,6 +10,12 @@ host = os.environ.get('HOST_CC', 'cc')
 qbe = os.environ.get('QBE')
 
 accepted = [
+    ('int f(void) { alignas(256) char a[1048336]; return 0; }', 'alloc16 1048576'),
+    ('int f(alignas(64) int x) { return x; }', 'alloc16 52'),
+    ('int f(void) { alignas(256) int x=1; return x; }', 'alloc16 244'),
+    ('int f(void) { alignas(32) auto x=1; return x; }', 'alloc16 20'),
+    ('int f(void) { return (alignas(128) int){3}; }', 'alloc16 116'),
+    ('int *p=&(alignas(128) int){3};', 'align 128'),
     ('int f(void) { alignas(16) int x=1; return x; }', 'alloc16 4'),
     ('int f(void) { int alignas(16) x=1; return x; }', 'alloc16 4'),
     ('int f(void) { unsigned alignas(8) long _Alignas(16) int x=1; return x; }', 'alloc16 8'),
@@ -45,8 +51,9 @@ accepted = [
     ('int f(void) { ' + 'alignas(0) '*32 + 'int x; return 0; }', 'alloc4 4'),
 ]
 rejected = [
+    ('int f(void) { alignas(256) char a[1048337]; return 0; }', 'storage limit'),
     ('int f(void) { alignas(3) int x; return 0; }', 'supported alignments'),
-    ('int f(void) { alignas(32) int x; return 0; }', 'supported alignments'),
+    ('int f(void) { alignas(512) int x; return 0; }', 'supported alignments'),
     ('int f(void) { alignas(-1) int x; return 0; }', 'nonnegative'),
     ('int f(void) { alignas(2) int x; return 0; }', 'weaken'),
     ('int f(void) { int n=4; alignas(n) int x; return 0; }', 'constant expression'),
@@ -71,7 +78,7 @@ rejected = [
     ('int f(void) { return (register alignas(16) int){3}; }', 'register object'),
     ('int f(void) { alignas(16) int g(void); return 0; }', 'object type'),
     ('int f(void) { alignas(2) auto x=1; return 0; }', 'weaken'),
-    ('int f(void) { alignas(32) auto x=1; return 0; }', 'supported alignments'),
+    ('int f(void) { alignas(512) auto x=1; return 0; }', 'supported alignments'),
     ('int f(void) { ' + 'alignas(0) '*33 + 'int x; return 0; }', 'limit 32'),
 ]
 
@@ -87,6 +94,8 @@ int main(void) {
     if (!parameter_aligned(7)) return 3;
     if (!aligned(&(alignas(16) int){7},16) ||
         !aligned(&(static alignas(16) int){7},16)) return 4;
+    alignas(256) int high=7;
+    if (!aligned(&high,256) || !aligned(&(alignas(128) int){3},128)) return 5;
     return 42;
 }'''
 with tempfile.TemporaryDirectory(prefix='kcc-align-') as directory:

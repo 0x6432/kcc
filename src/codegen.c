@@ -1529,6 +1529,25 @@ static void codegen_local_initializer(struct codegen *codegen,
 	}
 }
 
+/* Align a QBE alloc16 result inside the reserved padding. `name` is a
+ * fixed compiler-generated temporary namespace (v for locals, r for record
+ * captures); it never contains user-controlled text. */
+static void codegen_fixed_slot(struct codegen *codegen, char name, size_t slot,
+	uint64_t bytes, unsigned alignment)
+{
+	if (alignment < 4)
+		alignment = 4;
+	if (alignment <= 16) {
+		emit(codegen, "\t%%%c%zu =l alloc%u %ju\n", name, slot, alignment, (uintmax_t)bytes);
+		return;
+	}
+	size_t raw = codegen->next_temporary++, biased = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l alloc16 %ju\n", raw,
+		(uintmax_t)(bytes + type_stack_alignment_padding(alignment)));
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", biased, raw, alignment - 1);
+	emit(codegen, "\t%%%c%zu =l and %%t%zu, -%u\n", name, slot, biased, alignment);
+}
+
 /* Each execution allocates from a cumulative runtime budget; storage is not
  * reclaimed until return. Invalid bounds terminate before allocation. */
 static void codegen_vla(struct codegen *codegen, const struct ast_local_declaration *local)
@@ -1549,21 +1568,39 @@ static void codegen_vla(struct codegen *codegen, const struct ast_local_declarat
 		alignment = local->alignment;
 	if (alignment < 4)
 		alignment = 4;
+	size_t charged = 0;
+	if (alignment > 16)
+		charged = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =w cnel %%t%zu, 0\n", positive, wide);
 	emit(codegen, "\t%%t%zu =w culel %%t%zu, %ju\n", within, wide, (uintmax_t)local->vla_max_count);
 	emit(codegen, "\t%%z%zu =l mul %%t%zu, %ju\n", local->slot, wide,
 		(uintmax_t)type_object_size(array->element));
+	if (alignment > 16)
+		emit(codegen, "\t%%t%zu =l add %%z%zu, %u\n", charged, local->slot,
+			type_stack_alignment_padding(alignment));
 	emit(codegen, "\t%%t%zu =l loadl %%vla_budget\n", remaining);
-	emit(codegen, "\t%%t%zu =w culel %%z%zu, %%t%zu\n", fits, local->slot, remaining);
+	if (alignment > 16)
+		emit(codegen, "\t%%t%zu =w culel %%t%zu, %%t%zu\n", fits, charged, remaining);
+	else
+		emit(codegen, "\t%%t%zu =w culel %%z%zu, %%t%zu\n", fits, local->slot, remaining);
 	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", positive_and_within, positive, within);
 	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", valid, positive_and_within, fits);
 	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", valid, good, bad);
 	emit_label(codegen, bad);
 	emit(codegen, "\tcall $abort()\n\thlt\n");
 	emit_label(codegen, good);
-	emit(codegen, "\t%%t%zu =l sub %%t%zu, %%z%zu\n", new_remaining, remaining, local->slot);
+	if (alignment > 16)
+		emit(codegen, "\t%%t%zu =l sub %%t%zu, %%t%zu\n", new_remaining, remaining, charged);
+	else
+		emit(codegen, "\t%%t%zu =l sub %%t%zu, %%z%zu\n", new_remaining, remaining, local->slot);
 	emit(codegen, "\tstorel %%t%zu, %%vla_budget\n", new_remaining);
-	emit(codegen, "\t%%v%zu =l alloc%u %%z%zu\n", local->slot, alignment, local->slot);
+	if (alignment > 16) {
+		size_t raw = codegen->next_temporary++, biased = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l alloc16 %%t%zu\n", raw, charged);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", biased, raw, alignment - 1);
+		emit(codegen, "\t%%v%zu =l and %%t%zu, -%u\n", local->slot, biased, alignment);
+	} else
+		emit(codegen, "\t%%v%zu =l alloc%u %%z%zu\n", local->slot, alignment, local->slot);
 	if (local->initializer_syntax) {
 		/* C23 empty initialization; supported x86-64 types use all-zero
 		 * representations for zero, null pointers, and aggregate padding. */
@@ -1846,19 +1883,15 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 
 		if (local->alignment > alignment)
 			alignment = local->alignment;
-		if (alignment < 4)
-			alignment = 4;
-		emit(&codegen, "\t%%v%zu =l alloc%u %ju\n", local->slot, alignment, (uintmax_t)bytes);
+		codegen_fixed_slot(&codegen, 'v', local->slot, bytes, alignment);
 		local = local->next_local;
 	}
 	for (const struct ast_load_expression *capture = function->record_temporaries; capture;
 		capture = capture->next_record_temporary) {
 		unsigned alignment = type_object_alignment(capture->expression.type);
 
-		if (alignment < 4)
-			alignment = 4;
-		emit(&codegen, "\t%%r%zu =l alloc%u %ju\n", capture->record_temporary_slot,
-			alignment, (uintmax_t)type_object_size(capture->expression.type));
+		codegen_fixed_slot(&codegen, 'r', capture->record_temporary_slot,
+			type_object_size(capture->expression.type), alignment);
 	}
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
