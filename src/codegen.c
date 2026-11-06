@@ -330,6 +330,74 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 	}
 }
 
+/* Accepted fields begin at bit zero of their addressed byte and use exact,
+ * nonoverlapping byte ranges. Preserve unused bits in the final byte. */
+static const struct record_member *codegen_bit_field(const struct ast_expression *expression)
+{
+	if (expression->kind != expression_member)
+		return NULL;
+	const struct record_member *member = ((const struct ast_member_expression *)expression)->member;
+	return member && member->is_bit_field && member->bit_width && member->bit_width < 32 ? member : NULL;
+}
+
+static size_t codegen_field_value(struct codegen *codegen, size_t value,
+	const struct record_member *member)
+{
+	unsigned shift = 32 - member->bit_width;
+	size_t shifted = codegen->next_temporary++, result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w shl %%t%zu, %u\n", shifted, value, shift);
+	emit(codegen, "\t%%t%zu =w %s %%t%zu, %u\n", result,
+		type_is_unsigned(member->type) ? "shr" : "sar", shifted, shift);
+	return result;
+}
+
+static size_t codegen_field_storage_load(struct codegen *codegen, size_t address, unsigned bytes)
+{
+	size_t value = codegen->next_temporary++;
+	if (bytes != 3) {
+		emit(codegen, "\t%%t%zu =w %s %%t%zu\n", value,
+			bytes == 1 ? "loadub" : bytes == 2 ? "loaduh" : "loadw", address);
+		return value;
+	}
+	size_t tail_address = codegen->next_temporary++, tail = codegen->next_temporary++;
+	size_t shifted = codegen->next_temporary++, result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w loaduh %%t%zu\n", value, address);
+	emit(codegen, "\t%%t%zu =l add %%t%zu, 2\n", tail_address, address);
+	emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", tail, tail_address);
+	emit(codegen, "\t%%t%zu =w shl %%t%zu, 16\n", shifted, tail);
+	emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", result, value, shifted);
+	return result;
+}
+
+static size_t codegen_field_load(struct codegen *codegen, size_t address,
+	const struct record_member *member)
+{
+	size_t value = codegen_field_storage_load(codegen, address, (member->bit_width + 7) / 8);
+	return codegen_field_value(codegen, value, member);
+}
+
+static size_t codegen_field_store(struct codegen *codegen, size_t address, size_t value,
+	const struct record_member *member)
+{
+	unsigned bytes = (member->bit_width + 7) / 8;
+	uint32_t mask = UINT32_MAX >> (32 - member->bit_width);
+	size_t old = codegen_field_storage_load(codegen, address, bytes);
+	size_t kept = codegen->next_temporary++, bits = codegen->next_temporary++;
+	size_t combined = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", kept, old, ~mask);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", bits, value, mask);
+	emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, kept, bits);
+	if (bytes == 3) {
+		size_t tail_address = codegen->next_temporary++, tail = codegen->next_temporary++;
+		emit(codegen, "\tstoreh %%t%zu, %%t%zu\n", combined, address);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, 2\n", tail_address, address);
+		emit(codegen, "\t%%t%zu =w shr %%t%zu, 16\n", tail, combined);
+		emit(codegen, "\tstoreb %%t%zu, %%t%zu\n", tail, tail_address);
+	} else
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", bytes == 1 ? 'b' : bytes == 2 ? 'h' : 'w', combined, address);
+	return codegen_field_value(codegen, bits, member);
+}
+
 /* Large QBE blits expand into proportional machine instructions. Keep IL and
  * backend resource use bounded: large record copies use a fixed-size loop,
  * without a libc helper, dynamic stack allocation, or reading past the object. */
@@ -582,8 +650,11 @@ static void codegen_initializer_plan(struct codegen *codegen,
 			codegen_record_copy(codegen, value, address, entry->length);
 		} else {
 			assert(entry->kind == ast_initializer_write_expression);
-			assert(entry->length == type_object_size(entry->type));
-			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), value, address);
+			assert(entry->bit_field || entry->length == type_object_size(entry->type));
+			if (entry->bit_field && entry->bit_field->bit_width && entry->bit_field->bit_width < 32)
+				(void)codegen_field_store(codegen, address, value, entry->bit_field);
+			else
+				emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), value, address);
 		}
 	}
 	free(captures);
@@ -743,7 +814,9 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 			address, wide ? 'l' : 'w', right);
 		return codegen_canonicalize(codegen, value, node->left->type);
 	}
-	if (node->left->type->qualifiers & type_qualifier_volatile)
+	if (codegen_bit_field(node->left))
+		left = codegen_field_load(codegen, address, codegen_bit_field(node->left));
+	else if (node->left->type->qualifiers & type_qualifier_volatile)
 		left = codegen_volatile_load(codegen, address, node->left->type);
 	else {
 		left = codegen->next_temporary++;
@@ -759,7 +832,9 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", value, qbe_type(node->calculation_type),
 		instruction, left, right);
 	value = codegen_convert_value(codegen, value, node->calculation_type, node->expression.type);
-	if (node->left->type->qualifiers & type_qualifier_volatile)
+	if (codegen_bit_field(node->left))
+		value = codegen_field_store(codegen, address, value, codegen_bit_field(node->left));
+	else if (node->left->type->qualifiers & type_qualifier_volatile)
 		codegen_volatile_store(codegen, address, value, node->left->type);
 	else
 		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
@@ -794,7 +869,9 @@ static struct update_values codegen_update(struct codegen *codegen,
 		value = codegen_canonicalize(codegen, value, operand->type);
 		return (struct update_values) { .previous = previous, .current = value };
 	}
-	if (operand->type->qualifiers & type_qualifier_volatile)
+	if (codegen_bit_field(operand))
+		previous = codegen_field_load(codegen, address, codegen_bit_field(operand));
+	else if (operand->type->qualifiers & type_qualifier_volatile)
 		previous = codegen_volatile_load(codegen, address, operand->type);
 	else
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
@@ -811,7 +888,9 @@ static struct update_values codegen_update(struct codegen *codegen,
 		value = codegen_truth_value(codegen, value, calculation_type);
 	else
 		value = codegen_canonicalize(codegen, value, operand->type);
-	if (operand->type->qualifiers & type_qualifier_volatile)
+	if (codegen_bit_field(operand))
+		value = codegen_field_store(codegen, address, value, codegen_bit_field(operand));
+	else if (operand->type->qualifiers & type_qualifier_volatile)
 		codegen_volatile_store(codegen, address, value, operand->type);
 	else
 		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(operand->type), value, address);
@@ -1246,6 +1325,8 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t address = codegen_address(codegen, node->operand);
 
 		temporary = codegen->next_temporary++;
+		if (codegen_bit_field(node->operand))
+			return codegen_field_load(codegen, address, codegen_bit_field(node->operand));
 		if (node->operand->type->qualifiers & type_qualifier_atomic) {
 			/* libatomic's ABI memory order 5 is __ATOMIC_SEQ_CST. */
 			unsigned width = (unsigned)type_object_size(node->operand->type);
@@ -1290,7 +1371,9 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t value = codegen_expression(codegen, node->right);
 		size_t address = codegen_address(codegen, node->left);
 
-		if (node->left->type->qualifiers & type_qualifier_atomic) {
+		if (codegen_bit_field(node->left))
+			value = codegen_field_store(codegen, address, value, codegen_bit_field(node->left));
+		else if (node->left->type->qualifiers & type_qualifier_atomic) {
 			unsigned width = (unsigned)type_object_size(node->left->type);
 			bool wide = width == 8;
 			size_t bits = atomic_to_bits(codegen, value, node->left->type);
@@ -1310,6 +1393,8 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		if (type_is_record(expression->type))
 			return address;
+		if (codegen_bit_field(expression))
+			return codegen_field_load(codegen, address, codegen_bit_field(expression));
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
@@ -2057,8 +2142,11 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 			assert(entry->source_offset <= 8 && entry->length <= 8 - entry->source_offset);
 			/* Byte slices preserve explicitly overridden scalar storage too;
 			 * target representation is Linux amd64 little endian. */
+			uint64_t bits = constant->bits;
+			if (entry->bit_field && entry->bit_field->bit_width && entry->bit_field->bit_width < 32)
+				bits &= UINT32_MAX >> (32 - entry->bit_field->bit_width);
 			for (size_t j = 0; j < entry->length; j++)
-				emit(codegen, "b %u, ", (unsigned)((constant->bits >>
+				emit(codegen, "b %u, ", (unsigned)((bits >>
 					(8 * (entry->source_offset + j))) & UINT64_C(255)));
 		}
 	}

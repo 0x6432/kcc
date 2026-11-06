@@ -331,6 +331,41 @@ static bool is_bit_field_expression(const struct ast_expression *expression)
 		((const struct ast_member_expression *)expression)->member->is_bit_field;
 }
 
+/* GCC's SysV bit-field values retain their width through comma, assignment
+ * and update expressions for subsequent integer promotions. A cast or an
+ * arithmetic operation, by contrast, produces an ordinary value. */
+static const struct record_member *narrow_field_value(const struct ast_expression *expression)
+{
+	for (;;) {
+		switch (expression->kind) {
+		case expression_load:
+			expression = ((const struct ast_load_expression *)expression)->operand; break;
+		case expression_comma:
+			expression = ((const struct ast_comma_expression *)expression)->right; break;
+		case expression_assignment:
+			expression = ((const struct ast_assignment_expression *)expression)->left; break;
+		case expression_compound_assignment:
+			expression = ((const struct ast_compound_assignment_expression *)expression)->left; break;
+		case expression_postfix_update:
+			expression = ((const struct ast_postfix_update_expression *)expression)->operand; break;
+		case expression_prefix_update:
+			expression = ((const struct ast_prefix_update_expression *)expression)->operand; break;
+		default:
+			if (is_bit_field_expression(expression)) {
+				const struct record_member *member = ((const struct ast_member_expression *)expression)->member;
+				if (member->bit_width && member->bit_width < 32)
+					return member;
+			}
+			return NULL;
+		}
+	}
+}
+
+static const struct type *expression_integer_promotion(const struct ast_expression *expression)
+{
+	return narrow_field_value(expression) ? &type_int : type_integer_promotion(expression->type);
+}
+
 /* Restrict may qualify a pointer to an object (including void), or an
  * array typedef whose ultimately qualified element is such a pointer. */
 static bool restrict_qualifiable(const struct type *type)
@@ -593,6 +628,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		type = resolve_type_syntax(sema, member->type_syntax);
 		if (!type)
 			goto done;
+		unsigned bit_width = 0;
 		if (member->bit_width) {
 			struct constant_result width;
 			if (member->alignments) {
@@ -603,17 +639,16 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if (!sema_expression(sema, &member->bit_width, true))
 				goto done;
 			width = evaluate_integer_constant(member->bit_width);
-			/* This subset deliberately accepts only the exact full 32-bit
-			 * allocation unit. Narrow fields need distinct layout, promotions,
-			 * read/modify/write and initializer machinery. */
+			/* The layout pass admits only fields starting at byte boundaries. */
 			if ((type->kind != type_kind_int && type->kind != type_kind_uint) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
-				width.status != constant_value || width.bits != 32) {
+				width.status != constant_value || width.bits < 1 || width.bits > 32) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");
 				goto done;
 			}
+			bit_width = (unsigned)width.bits;
 		}
 		struct ast_type_syntax *written = member->type_syntax;
 		while (written->kind == type_syntax_qualified)
@@ -694,7 +729,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		}
 		*resolved = (struct record_member) { .name = member->name, .type = type,
 			.anonymous = member->anonymous, .is_flexible = flexible,
-			.is_bit_field = member->bit_width != NULL,
+			.is_bit_field = member->bit_width != NULL, .bit_width = bit_width,
 			.alignment = member->alignments ? member->alignments->alignment : 0 };
 		*tail = resolved;
 		tail = &resolved->next;
@@ -705,7 +740,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		goto done;
 	if (!type_record_layout(definition)) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location,
-			"record must contain members and fit record layout storage limit (1 MiB)");
+			"record must contain members and fit record layout storage limit (1 MiB); unsupported bit-offset bit-field layout");
 		goto done;
 	}
 	success = true;
@@ -2052,7 +2087,7 @@ static struct ast_pointer_offset_expression *lower_pointer_offset(struct sema *s
 			"pointer offset/subscript requires one pointer and one integer operand");
 		return NULL;
 	}
-	if (!convert_expression(sema, &index, type_integer_promotion(index->type)))
+	if (!convert_expression(sema, &index, expression_integer_promotion(index)))
 		return NULL;
 	pointer = (const struct pointer_type *)base->type;
 	if (!type_is_complete_object(pointer->referent)) {
@@ -2166,7 +2201,7 @@ static const struct type *sema_update_operand(struct sema *sema,
 		*calculation_type = result_type;
 		*element_size = 0;
 	} else {
-		*calculation_type = type_integer_promotion(result_type);
+		*calculation_type = expression_integer_promotion(*operand);
 		*element_size = 0;
 	}
 	expression->depth = (*operand)->depth + 1;
@@ -2306,6 +2341,13 @@ static bool sema_expression(struct sema *sema,
 		sema->unevaluated = saved;
 		if (!ok)
 			return false;
+		/* GCC and Clang disagree on the compatible type of unpromoted
+		 * narrow fields in generic selection. Do not guess. */
+		if (narrow_field_value(node->control)) {
+			diagnostic_error(sema->diagnostics, node->control->location,
+				"generic selection of an unpromoted narrow bit-field is not supported");
+			return false;
+		}
 		for (struct ast_generic_association *item = node->associations; item; item = item->next) {
 			if (!item->syntax) {
 				if (fallback) {
@@ -2590,7 +2632,7 @@ static bool sema_expression(struct sema *sema,
 					return false;
 			} else if (type_is_integer(argument->value->type)) {
 				if (!convert_expression(sema, &argument->value,
-					type_integer_promotion(argument->value->type)))
+					expression_integer_promotion(argument->value)))
 					return false;
 			} else if (argument->value->type->kind != type_kind_pointer &&
 				argument->value->type->kind != type_kind_nullptr &&
@@ -3098,7 +3140,7 @@ static bool sema_expression(struct sema *sema,
 				return false;
 			}
 			if (!type_is_floating(node->operand->type))
-				result_type = type_integer_promotion(node->operand->type);
+				result_type = expression_integer_promotion(node->operand);
 			if (!convert_expression(sema, &node->operand, result_type))
 				return false;
 		}
@@ -3159,8 +3201,8 @@ static bool sema_expression(struct sema *sema,
 			}
 			result_type = &type_int;
 		} else {
-			if (!convert_expression(sema, &node->left, type_integer_promotion(node->left->type)) ||
-				!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+			if (!convert_expression(sema, &node->left, expression_integer_promotion(node->left)) ||
+				!convert_expression(sema, &node->right, expression_integer_promotion(node->right)))
 				return false;
 			if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
 				result_type = node->left->type;
@@ -3201,7 +3243,8 @@ static bool sema_expression(struct sema *sema,
 			result_type = a->kind == type_kind_double || b->kind == type_kind_double ?
 				&type_double : &type_float;
 		} else if (type_is_integer(a) && type_is_integer(b)) {
-			result_type = type_usual_arithmetic(a, b);
+			result_type = type_usual_arithmetic(expression_integer_promotion(node->then_value),
+				expression_integer_promotion(node->else_value));
 		} else if (type_is_record(a) && type_is_record(b) && type_unqualified_compatible(a, b)) {
 			result_type = unqualified_type(sema, a, expression->location);
 			if (!result_type)
@@ -3326,7 +3369,7 @@ static bool sema_expression(struct sema *sema,
 			}
 			node->calculation_type = result_type;
 			node->element_size = type_object_size(referent);
-			if (!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+			if (!convert_expression(sema, &node->right, expression_integer_promotion(node->right)))
 				return false;
 		} else if (type_is_floating(result_type) || type_is_floating(node->right->type)) {
 			if (node->operation != binary_add && node->operation != binary_subtract &&
@@ -3342,12 +3385,13 @@ static bool sema_expression(struct sema *sema,
 				return false;
 		} else if (node->operation == binary_shift_left || node->operation == binary_shift_right) {
 			/* Shift operands promote independently; unsigned RHS does not change left. */
-			node->calculation_type = type_integer_promotion(result_type);
+			node->calculation_type = expression_integer_promotion(node->left);
 			node->element_size = 0;
-			if (!convert_expression(sema, &node->right, type_integer_promotion(node->right->type)))
+			if (!convert_expression(sema, &node->right, expression_integer_promotion(node->right)))
 				return false;
 		} else {
-			node->calculation_type = type_usual_arithmetic(result_type, node->right->type);
+			node->calculation_type = type_usual_arithmetic(expression_integer_promotion(node->left),
+				expression_integer_promotion(node->right));
 			node->element_size = 0;
 			if (!convert_expression(sema, &node->right, node->calculation_type))
 				return false;
@@ -4735,11 +4779,18 @@ static bool initializer_value(struct initializer_builder *builder,
 	struct initializer_path *path, const struct ast_initializer *syntax, bool elision);
 
 static bool initializer_list(struct initializer_builder *builder,
-	const struct type *type, uint64_t offset, const struct ast_initializer *syntax)
+	const struct type *type, uint64_t offset, const struct record_member *member,
+	const struct ast_initializer *syntax)
 {
-	struct initializer_path path = { .components = { { .type = type, .offset = offset } } };
+	struct initializer_path path = { .components = { { .type = type, .offset = offset, .member = member } } };
 	bool available = true;
-	if (type_is_complete_object(type) && !initializer_clear(builder, type, offset, syntax))
+	if (member && member->is_bit_field && member->bit_width) {
+		if (!initializer_store(builder, &(struct ast_initializer_plan_entry) {
+			.kind = ast_initializer_write_zero, .offset = offset, .length = (member->bit_width + 7) / 8,
+			.type = type, .syntax = syntax,
+		}, syntax->location))
+			return false;
+	} else if (type_is_complete_object(type) && !initializer_clear(builder, type, offset, syntax))
 		return false;
 	/* A string in optional braces initializes the array itself, not char[0]. */
 	if (syntax->entries && !syntax->entries->next &&
@@ -4782,7 +4833,7 @@ static bool initializer_value(struct initializer_builder *builder,
 		if (++builder->nesting > ast_max_initializer_nesting)
 			return initializer_error(builder, syntax->location, "initializer nesting exceeds limit (64)");
 		if (!initializer_select_unions(builder, path, syntax) ||
-			!initializer_list(builder, object->type, object->offset, syntax))
+			!initializer_list(builder, object->type, object->offset, object->member, syntax))
 			return false;
 		builder->nesting--;
 		return true;
@@ -4808,7 +4859,10 @@ static bool initializer_value(struct initializer_builder *builder,
 		return false;
 	store.offset = object->offset;
 	store.type = object->type;
+	store.bit_field = object->member && object->member->is_bit_field ? object->member : NULL;
 	store.length = type_is_complete_object(object->type) ? type_object_size(object->type) : 0;
+	if (store.bit_field && store.bit_field->bit_width)
+		store.length = (store.bit_field->bit_width + 7) / 8;
 	if (string && initializer_string_array(object->type, (const struct ast_string_expression *)expression)) {
 		const struct ast_string_expression *literal = (const struct ast_string_expression *)expression;
 		const struct array_type *array = (const struct array_type *)object->type;
@@ -5307,7 +5361,7 @@ static bool sema_switch(struct sema *sema, struct ast_switch_statement *node)
 	}
 	if (success)
 		success = convert_expression(sema, &node->control,
-			type_integer_promotion(node->control->type));
+			expression_integer_promotion(node->control));
 	if (success)
 		success = sema_control_body(sema, &node->statement, node->body);
 	sema->scope = scope.parent;

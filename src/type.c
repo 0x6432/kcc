@@ -630,27 +630,25 @@ static bool checked_record_member_layout(const struct record_member *member,
 	return checked_member_layout(member->type, 0, size, alignment);
 }
 
-bool type_record_layout(struct record_definition *definition)
+/* The target packs int fields within 32-bit allocation units, starting at
+ * the next available bit. Fields beginning on a byte boundary have distinct
+ * byte ranges; bit-offset fields are rejected pending bit-granular plans. */
+static bool record_layout_pass(struct record_definition *definition, bool publish,
+	uint64_t *result_size, unsigned *result_alignment, size_t *result_count)
 {
-	uint64_t size = 0;
+	uint64_t bits = 0, union_size = 0;
 	unsigned alignment = 1;
 	size_t count = 0;
-
-	/* First pass is transactional: invalid input changes no published layout. */
 	for (struct record_member *member = definition->members; member; member = member->next) {
-		uint64_t member_size;
+		uint64_t member_size, offset;
 		unsigned member_alignment;
-
-		/* This representation only admits named, non-volatile full int units.
-		 * Narrow/unnamed fields cannot be laid out as ordinary members. */
 		if (++count > 1024 ||
 			(member->is_bit_field && (member->anonymous || !member->name.length ||
 			member->alignment || member->is_flexible ||
 			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint) ||
-			(member->type->qualifiers & ~type_qualifier_const))) ||
+			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 32)) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
-			!checked_record_member_layout(member,
-			&member_size, &member_alignment))
+			!checked_record_member_layout(member, &member_size, &member_alignment))
 			return false;
 		if (member->alignment) {
 			if (member->alignment < member_alignment || member->alignment > type_max_alignment ||
@@ -661,36 +659,49 @@ bool type_record_layout(struct record_definition *definition)
 		if (member_alignment > alignment)
 			alignment = member_alignment;
 		if (definition->is_union) {
-			if (member_size > size)
-				size = member_size;
-		} else {
-			if (!checked_align(size, member_alignment, &size) ||
-				member_size > UINT64_MAX - size || member_size > type_max_record_size - size)
+			offset = 0;
+			if (member_size > union_size)
+				union_size = member_size;
+		} else if (member->is_bit_field) {
+			unsigned width = member->bit_width ? member->bit_width : 32;
+			if (bits % 32 + width > 32)
+				bits = (bits + 31) & ~UINT64_C(31);
+			if (bits % 8 != 0)
 				return false;
-			size += member_size;
+			offset = bits / 8;
+			bits += width;
+		} else {
+			uint64_t byte_end = (bits + 7) / 8;
+			if (!checked_align(byte_end, member_alignment, &offset) ||
+				member_size > type_max_record_size - offset)
+				return false;
+			bits = (offset + member_size) * 8;
 		}
+		if (offset > type_max_record_size || bits > (uint64_t)type_max_record_size * 8)
+			return false;
+		if (publish)
+			member->offset = offset;
 	}
+	uint64_t size = definition->is_union ? union_size : (bits + 7) / 8;
 	if (!count || !checked_align(size, alignment, &size))
 		return false;
-	uint64_t cursor = 0;
-	for (struct record_member *member = definition->members; member; member = member->next) {
-		uint64_t member_size;
-		unsigned member_alignment;
-		bool valid = checked_record_member_layout(member, &member_size, &member_alignment);
+	*result_size = size;
+	*result_alignment = alignment;
+	*result_count = count;
+	return true;
+}
 
-		assert(valid);
-		(void)valid;
-		if (member->alignment > member_alignment)
-			member_alignment = member->alignment;
-		if (definition->is_union)
-			member->offset = 0;
-		else {
-			valid = checked_align(cursor, member_alignment, &cursor);
-			assert(valid);
-			member->offset = cursor;
-			cursor += member_size;
-		}
-	}
+bool type_record_layout(struct record_definition *definition)
+{
+	uint64_t size;
+	unsigned alignment;
+	size_t count;
+	/* The validation pass must not change the published layout on failure. */
+	if (!record_layout_pass(definition, false, &size, &alignment, &count))
+		return false;
+	bool valid = record_layout_pass(definition, true, &size, &alignment, &count);
+	assert(valid);
+	(void)valid;
 	definition->size = size;
 	definition->alignment = alignment;
 	definition->member_count = count;

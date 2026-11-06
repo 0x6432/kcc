@@ -21,7 +21,7 @@ references, and bounded nodiscard warnings cover discarded comma operands,
 with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Aggregate calls and returns have a bounded SysV
 implementation; see `m21-aggregate-abi.md`. Notable remaining work includes the
-rest of aggregate ABI, general bit-fields (the full-width subset is in `m22-bit-fields.md`),
+rest of aggregate ABI, general bit-fields (the bounded subset is in `m22-bit-fields.md`),
 `_BitInt` values and types, `long double`, complete preprocessing and attributes,
 and a complete hosted C library. Direct `_BitInt` layout queries are supported
 in a bounded slice; see `m24-bitint-foundation.md`. The internal bit-precise

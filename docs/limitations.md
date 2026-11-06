@@ -7,7 +7,7 @@ standard headers. Aggregate calls and returns have a bounded SysV implementation
 language features and a complete library remain incomplete. Recent integrated
 changes have been built but not fully tested; M17 approval and C23 conformance
 are not claimed. Read feature-specific documents for current boundaries; earlier
-entries below are historical. Named full-width int bit-fields are supported as
+entries below are historical. A bounded subset of named int bit-fields are supported as
 described in `m22-bit-fields.md`.
 
 

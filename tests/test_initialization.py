@@ -461,7 +461,7 @@ CONSTRAINTS.update({
 # Valid language forms outside the explicit M17 supported type/ABI set. These
 # compile unchanged on natives, never run, and never become native constraints.
 SUBSET={
-    'M22 bitfield': 'struct S { unsigned int x:3; }; struct S s;',
+    'M22 bitfield': 'struct S { unsigned short x:3; }; struct S s;',
 }
 # No native compilation or execution for UB/proof-boundary/resource refusals.
 # Acceptance by a native is deliberately not an oracle for these cases.
@@ -555,7 +555,7 @@ KCC_REFUSALS={'excess array': (1, 16, 'excess elements in initializer'),
                                  51,
                                  'unsupported pointer conversion (incompatible pointers or integer/pointer '
                                  'conversion)'),
- 'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
+ 'M22 bitfield': (1, 28, 'bit-fields are not supported yet (M22)'),
  'array beyond onepast': (1, 59, 'static pointer offset is outside its captured object bounds'),
  'null arithmetic': (1,45,'pointer arithmetic on null is not a static address constant'),
  'no fabricated short subobject': (1,

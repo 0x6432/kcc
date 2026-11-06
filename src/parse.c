@@ -155,9 +155,21 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 			}
 			preprocess_next(parser->preprocessor);
 			if (preprocess_peek(parser->preprocessor).kind == token_scope) {
+				struct token scoped_name;
 				preprocess_next(parser->preprocessor);
-				if (!expect_token(parser, token_identifier, "expected scoped attribute identifier", NULL))
+				if (!expect_token(parser, token_identifier, "expected scoped attribute identifier", &scoped_name))
 					return false;
+				/* These known vendor attributes affect layout; silently ignoring
+				 * them would make even otherwise supported fields ABI-unsafe. */
+				if ((token_spells(token, "gnu", 3) || token_spells(token, "__gnu__", 7)) &&
+					(standard_attribute_spells(scoped_name, "packed", 6) ||
+					 standard_attribute_spells(scoped_name, "aligned", 7) ||
+					 standard_attribute_spells(scoped_name, "ms_struct", 9) ||
+					 standard_attribute_spells(scoped_name, "scalar_storage_order", 20))) {
+					diagnostic_error(parser->diagnostics, scoped_name.location,
+						"layout-altering GNU attribute is not supported");
+					return false;
+				}
 				scoped = true;
 			}
 			if (!scoped && standard_attribute_spells(token, "maybe_unused", 12)) {

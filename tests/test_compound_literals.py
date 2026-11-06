@@ -489,7 +489,7 @@ def validate_native_constraint(cc,source,output,name,result,version=None):
 
 # These native-valid types/features are later milestones, NOT native constraints.
 LATER = [
-    ('M22 bitfield literal', 'struct S { unsigned x:3; }; int f(void) { return (struct S){.x=2}.x; }'),
+    ('M22 bitfield literal', 'struct S { unsigned short x:3; }; int f(void) { return (struct S){.x=2}.x; }'),
 ]
 # C23 storage errors require the grammar; legacy hosts' parser failures are
 # capability gaps, not native C23 constraint agreements. Checked by KCC only.
@@ -540,7 +540,7 @@ KCC_REFUSALS = {'const literal assignment': (1, 23, 'assignment requires a modif
  'file unevaluated static literal content': (1, 43, 'static initializer must be a constant expression'),
  'constexpr literal M23h dependency': (1, 23, 'constexpr compound literals require M23h constant-object support'),
  'M20 floating literal': (1, 1, 'expected integer type specifier'),
- 'M22 bitfield literal': (1, 22, 'bit-fields are not supported yet (M22)')}
+ 'M22 bitfield literal': (1, 28, 'bit-fields are not supported yet (M22)')}
 
 
 def validate_kcc_refusal(source,name,result):

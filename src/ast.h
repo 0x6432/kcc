@@ -188,6 +188,7 @@ struct ast_initializer_plan_entry {
 	uint64_t size; /* Reserved extent mirror; length is authoritative. */
 	uint64_t source_offset;
 	const struct type *type;
+	const struct record_member *bit_field;
 	enum ast_initializer_write_kind kind;
 	struct ast_expression *expression;
 	const unsigned char *bytes;

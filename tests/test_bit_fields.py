@@ -77,7 +77,7 @@ int main(void) {
 '''
 # Diagnostics are not claimed to distinguish invalid C from valid-but-unsupported C.
 REJECT = {
-    'narrow': ('struct S { unsigned x:31; };', 'bit-fields are not supported yet'),
+    'shared-unit': ('struct S { unsigned x:3, y:4; };', 'unsupported bit-offset bit-field layout'),
     'too-wide': ('struct S { unsigned x:33; };', 'bit-fields are not supported yet'),
     'zero-named': ('struct S { int x:0; };', 'bit-fields are not supported yet'),
     'negative': ('struct S { int x:-1; };', 'bit-fields are not supported yet'),
