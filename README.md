@@ -145,7 +145,7 @@ unsupported. `wb` literals work only when their exact required widths are
 M23b: Binary integer constants and digit separators use the shared integer
 spelling decoder in runtime expressions and preprocessing conditions. Existing
 integer typing applies; `wb` literals have the explicitly bounded exact-width
-support described above, and remain unsupported in preprocessing conditions. See `docs/m23b-integer-literals.md`.
+support described above. Preprocessing conditions accept `wb`/`WB` using the 64-bit intmax/uintmax model. See `docs/m23b-integer-literals.md`.
 
 M23E3: Inferred `auto T = ...` and `auto (T) = ...` may now hide an outer typedef
 T at block/for scope, including register inference. One demand peek disambiguates

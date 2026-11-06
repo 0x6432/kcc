@@ -35,8 +35,9 @@ existing pointer ABI. Aggregate calls or returns containing bit-precise members
 by value are also rejected pending ABI validation. Bit-precise bit-fields, fixed
 enum underlying types and atomic bit-precise objects remain unsupported.
 `wb`/`WB` literals are supported when their exact minimum required width is
-8, 16, 32 or 64; other widths and their use in preprocessing conditions are
-rejected. Existing
+8, 16, 32 or 64 in ordinary expressions; other widths there are rejected.
+Preprocessing expressions use the separate 64-bit intmax/uintmax model and
+accept other minimal widths within that range. Existing
 aggregate-by-value and other compiler restrictions also apply. No host call or
 object interoperability is claimed by this checkpoint; widths above 64 remain
 unsupported. The compiler emits IL for the Linux x86-64 LP64 SysV model only;

@@ -3272,17 +3272,18 @@ static struct condition_value parse_condition_integer(struct condition_parser *p
 		condition_error(parser, token, error);
 		return signed_condition(0);
 	}
-	if (spelling.bit_precise_suffix) {
-		condition_error(parser, token, "bit-precise integer literals are not supported yet");
-		return signed_condition(0);
-	}
-	if (!spelling.unsigned_suffix && spelling.base == 10 && spelling.value > INT64_MAX) {
+	/* In preprocessing, signed/unsigned integer types use intmax_t/uintmax_t
+	 * representations. Unlike ordinary nondecimal constants, a wb literal
+	 * without U is always signed; it cannot fall back to unsigned. */
+	if (!spelling.unsigned_suffix && (spelling.base == 10 || spelling.bit_precise_suffix) &&
+		spelling.value > INT64_MAX) {
 		condition_error(parser, token, "conditional integer exceeds signed 64-bit range");
 		return signed_condition(0);
 	}
 	return (struct condition_value) {
 		.bits = spelling.value,
-		.unsigned_type = spelling.unsigned_suffix || (spelling.base != 10 && spelling.value > INT64_MAX),
+		.unsigned_type = spelling.unsigned_suffix ||
+			(!spelling.bit_precise_suffix && spelling.base != 10 && spelling.value > INT64_MAX),
 	};
 }
 

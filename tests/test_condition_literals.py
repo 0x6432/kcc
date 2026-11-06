@@ -61,7 +61,11 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-int-') as directory:
         ('0x', 'expected digits'), ('0b', 'expected digits'), ('08', 'invalid digit'),
         ('0b2', 'invalid digit'), ('0x1g', 'unsupported integer suffix'),
         ('42lL', 'unsupported integer suffix'), ('42Ll', 'unsupported integer suffix'),
-        ('42LLL', 'unsupported integer suffix'), ('1wb', 'bit-precise integer literals are not supported yet'),
+        ('42LLL', 'unsupported integer suffix'),
+        ('9223372036854775808wb', 'exceeds signed 64-bit'),
+        ('0x8000000000000000WB', 'exceeds signed 64-bit'),
+        ('18446744073709551616uwb', 'exceeds 64-bit'),
+        ('1wB', 'unsupported integer suffix'), ('1uwbu', 'unsupported integer suffix'),
         ('18446744073709551616', 'exceeds 64-bit'), ('0x1ffffffffffffffff', 'exceeds 64-bit'),
         ("0x'1", 'invalid separator'), ("0b1'2", 'invalid separator'),
         ('9223372036854775808', 'exceeds signed 64-bit'),
@@ -69,6 +73,26 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-int-') as directory:
         source.write_text(f'#if {literal}\n#endif\nint main(void) {{ return 0; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, (literal, result.stderr)
+    # Bit-precise suffixes use intmax_t/uintmax_t representations in #if,
+    # independently of the narrower runtime types currently supported.
+    wb_cases = [
+        ('0wb == 0 && 1WB == 1 && 3wb + 1wb == 4', True),
+        ('-0x3wb < 0 && 0x7fffffffffffffffWB > 0', True),
+        ('-1uwb == 0xffffffffffffffffUWB', True),
+        ('~0wbu == 18446744073709551615uwb', True),
+        ("0b1'010wb == 10 && 0xffWB == 255 && 077wbu == 63", True),
+        ('1wb > 2wb', False),
+        ('1wb < -1uwb', True),
+        ('0 && 0wb', False),
+    ]
+    for text, selected in wb_cases:
+        expected = '42' if selected else '0'
+        source.write_text(f'#if {text}\n42\n#else\n0\n#endif\n')
+        result = subprocess.run([str(oracle), '--pp', str(source)], capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and not result.stderr and result.stdout == f'pp-number:{expected}\n', (text, result.stderr, result.stdout)
+    source.write_text('#define JOIN(a,b) a##b\n#if JOIN(1,wb) != 1\n#error paste\n#elif JOIN(3,uwb) + 1 == 4\n42\n#else\n#error elif\n#endif\n')
+    result = subprocess.run([str(oracle), '--pp', str(source)], capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0 and not result.stderr and result.stdout == 'pp-number:42\n', (result.stderr, result.stdout)
     # Macro expansion and phase-two line splicing must preserve C23 spellings
     # in #if as well as in ordinary language tokens.
     for ending in ('\n', '\r\n', '\r'):
@@ -100,5 +124,6 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-int-') as directory:
                 subprocess.run([host, '-std=c2x', str(source), '-o', str(executable)], check=True, timeout=10)
                 assert subprocess.run([str(executable)], timeout=5).returncode == 42
 print(f'Conditional literals passed ({len(examples)} host/model agreements; '
-      f'{len(separators)} C23 cases, {legacy} legacy-host nonagreements; {host})'
+      f'{len(separators)} separator cases, {legacy} legacy-host nonagreements; {host}); '
+      f'{len(wb_cases)+1} wb model checks (no native C23 oracle)'
       + ('; QBE/runtime passed' if qbe else ''))

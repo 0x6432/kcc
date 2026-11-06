@@ -72,8 +72,17 @@ unsigned by-value layouts checked in both host/KCC directions. Short bit-fields
 now support 1–16 bits; 480 signed/unsigned by-value layouts were checked in
 both host/KCC directions. Historical short-field unsupported fixtures were
 retargeted to the still-unsupported long type and their diagnostics updated.
-Full `make test`
-remains blocked by the exact C23 pthread host-companion limitation.
+At `767aefc`, `KCC_ALLOW_MISSING_TLS_COMPANION=1 make -j2 test` completed
+successfully with QBE 1.2 in gap-aware mode; this is not a strict release-gate
+pass. Four TLS cases lacked exact C23 host companions and were not run. The
+frozen initializer and compound-literal suites also retained their reported
+host capability gaps and semantic discrepancies, which are not agreements or
+M17 approval. Strict `make test` remains blocked by the missing companions.
+At `1c354ce`, focused lexer, preprocessor, semantic, conditional-literal,
+bit-precise literal/value/layout/rejection and enum-successor checks passed;
+the full batch above predates that commit. No native C23 `_BitInt` comparison
+or recent fuzzing is claimed. A later preprocessing increment adds `wb`/`WB`
+conditions using the intmax/uintmax model; see `m23b-integer-literals.md`.
 
 The current work branch is `development`, per the revised user instruction.
 Earlier feature-branch-only instructions and the old development pin below

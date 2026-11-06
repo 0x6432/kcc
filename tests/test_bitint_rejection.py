@@ -14,7 +14,6 @@ with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
         ('struct S { _BitInt(7) x; };\n', 'only widths 8, 16, 32 and 64'),
         ('int main(void) { return 1wb; }\n', 'bit-precise integer literals are not supported yet'),
         ('int main(void) { return 1UWB; }\n', 'bit-precise integer literals are not supported yet'),
-        ('#if 0 && 0wb\n#endif\nint main(void) { return 0; }\n', 'bit-precise integer literals are not supported yet'),
         ('#define T _BitInt\nT(7) value;\n', 'only widths 8, 16, 32 and 64'),
     ]
     for text, message in cases:

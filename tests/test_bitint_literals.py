@@ -46,7 +46,7 @@ def main():
             r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             if r.returncode==0 or r.stdout or 'bit-precise integer literals are not supported yet for this required width' not in r.stderr:
                 raise AssertionError((literal,r.returncode,r.stderr,r.stdout))
-        for source, diagnostic in [('#if 64wb\n#endif\nint main(void){return 0;}', 'bit-precise integer literals are not supported yet'), ('int f(int, ...); int g(void){return f(1,128uwb);}', 'variadic ABI')]:
+        for source, diagnostic in [('int f(int, ...); int g(void){return f(1,128uwb);}', 'variadic ABI')]:
             (d/'reject.c').write_text(source)
             r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr:

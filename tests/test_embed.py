@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
 #if __has_embed("missing.bin") != __STDC_EMBED_NOT_FOUND__ || __has_embed("oversized.bin") != __STDC_EMBED_NOT_FOUND__
 #error unavailable resource was reported usable
 #endif
-#if __has_embed("asset.bin" __limit__(0)) != __STDC_EMBED_EMPTY__ || __has_embed("oversized.bin" limit(2+1)) != __STDC_EMBED_FOUND__
+#if __has_embed("asset.bin" __limit__(0)) != __STDC_EMBED_EMPTY__ || __has_embed("oversized.bin" limit(2wb+1uwb)) != __STDC_EMBED_FOUND__
 #error limited resource query failed
 #endif
 #if __has_embed("asset.bin" prefix(7,) suffix(,8)) != __STDC_EMBED_FOUND__ || __has_embed("empty.bin" if_empty(9)) != __STDC_EMBED_EMPTY__
@@ -43,7 +43,7 @@ unsigned char a[] = {
 unsigned char b[] = { 42
 #embed "empty.bin"
 };
-#define LIMIT_COUNT (1+2)
+#define LIMIT_COUNT (1wb+2uwb)
 unsigned char c[] = {
 #embed RESOURCE limit(LIMIT_COUNT)
 };

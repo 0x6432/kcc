@@ -19,8 +19,11 @@ compiler's existing target model and supported types.
 
 Bit-precise `wb`/`WB` literals now work in expressions only when their exact
 minimum C23 width is 8, 16, 32 or 64, corresponding to supported semantic
-`_BitInt` types. Other required widths, signed values requiring more than 64
-bits, and `wb`/`WB` literals in preprocessing conditions are rejected. The
+`_BitInt` types. Other required widths and signed values requiring more than 64
+bits remain rejected in ordinary expressions. Preprocessing conditions and
+`#embed` limits accept `wb`/`WB` using the 64-bit intmax/uintmax model,
+including literals with other minimum widths; signed suffixes exceeding
+`INT64_MAX` and all values exceeding `UINT64_MAX` are rejected. The
 unsigned suffix is accepted before or after `wb`/`WB`. See
 `m24-bitint-foundation.md`. Floating constants have separate bounded support
 in `m20-floating-foundation.md`. This is not full M23b or C23 literal support. The
@@ -39,3 +42,11 @@ could not execute kcc output because QBE is unavailable. `make test` passed its
 CLI, unit, macro and AST stages, then stopped at `tests/test_compile.py` because
 QBE was not installed; the remaining full-suite and QBE/runtime checks are not
 claimed. Fuzzing was not run (Clang/libFuzzer is unavailable).
+
+## Later validation
+
+The conditional suffix increment was checked against the C23 draft's
+preprocessing integer representation rules, with focused model checks for
+signedness, limits, macro pasting, `#elif` and embed limits. The available
+GCC 11 host cannot compare `wb`/`WB` syntax; no native C23 agreement is
+claimed. Ordinary expression support is still limited as described above.
