@@ -430,6 +430,30 @@ static bool check_promoted_names(struct sema *sema, const struct record_definiti
 	return true;
 }
 
+/* Anonymous members promote their nested named members into the enclosing
+ * record for the flexible-array "more than one named member" constraint. */
+static bool record_has_named_member(const struct record_definition *definition)
+{
+	for (const struct record_member *member = definition->members; member; member = member->next) {
+		if (member->anonymous) {
+			if (record_has_named_member(type_record_definition(member->type)))
+				return true;
+		} else if (member->name.length) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* A trailing static assertion is a declaration, not a record member. */
+static bool following_record_member(const struct ast_record_member_declaration *member)
+{
+	for (member = member->next; member; member = member->next)
+		if (!member->static_assertion)
+			return true;
+	return false;
+}
+
 static const struct type *resolve_record_syntax(struct sema *sema,
 	struct ast_record_type_syntax *syntax, bool standalone)
 {
@@ -543,10 +567,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			!((const struct array_type *)type)->count &&
 			!((const struct array_type *)type)->runtime_bound;
 		if (flexible) {
-			bool previous_named = false;
-			for (const struct record_member *prior = definition->members; prior; prior = prior->next)
-				previous_named |= !prior->anonymous && prior->name.length;
-			if (definition->is_union || member->anonymous || member->next || !previous_named) {
+			if (definition->is_union || member->anonymous || following_record_member(member) ||
+				!record_has_named_member(definition)) {
 				diagnostic_error(sema->diagnostics, member->type_syntax->location,
 					"flexible array requires a final named member of a nonempty struct");
 				goto done;
