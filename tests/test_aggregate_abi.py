@@ -56,6 +56,7 @@ def main():
             ('struct S { float a; };', 'x.a=1.5f;', 'y.a==3.5f', 'x.a+=2.0f;'),
             ('struct S { double a; double b; };', 'x.a=1.5; x.b=9.0;', 'y.a==3.5 && y.b==9.0', 'x.a+=2.0;'),
             ('struct S { double a; int b; };', 'x.a=1.5; x.b=9;', 'y.a==3.5 && y.b==9', 'x.a+=2.0;'),
+            ('struct S { unsigned int a:32; int b:32; double d; };', 'x.a=40; x.b=-2; x.d=1.5;', 'y.a==42 && y.b==-2 && y.d==1.5', 'x.a+=2;'),
             ('struct S { int a; double b; };', 'x.a=40; x.b=1.5;', 'y.a==42 && y.b==1.5', 'x.a+=2;'),
             ('struct S { float a[3]; };', 'x.a[0]=1.5f; x.a[1]=2.5f; x.a[2]=3.5f;', 'y.a[0]==3.5f && y.a[1]==2.5f && y.a[2]==3.5f', 'x.a[0]+=2.0f;'),
             ('union S { double a; long b; };', 'x.b=40;', 'y.b==42', 'x.b+=2;'),
