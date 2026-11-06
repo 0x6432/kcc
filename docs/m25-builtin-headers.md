@@ -10,7 +10,10 @@ define implementation-reserved guard and compatibility macros; ordinary user
 sources cannot acquire that permission by using a similar filename. Predefined
 operators and built-in location/clock/embed macros remain protected. A focused
 compile covering several guarded headers passed after this fix; the full header
-suite remains unrun.
+suite remains unrun. Trusted fallback-header declarations and new function
+symbols use separate bounded budgets of 1,024 declarations and 512 functions;
+user sources retain their existing 512-declaration and 256-function limits.
+Source provenance, not a filename, determines which budget is charged.
 
 - `stdbool.h` defines `__bool_true_false_are_defined`; `bool`, `true` and
   `false` are C23 keywords.
@@ -123,8 +126,7 @@ suite remains unrun.
   five ordinary unsigned integer types, with `_Generic` dispatch evaluating
   arguments once. Endianness macros describe the little-endian target. The
   functions are static inline implementations, not external libc symbols;
-  including the header currently consumes 70 of the compiler's 256 function
-  slots. Extended unsigned and bit-precise types are not supported; the header
+  including the header consumes 70 compiler-header function slots. Extended unsigned and bit-precise types are not supported; the header
   version macro is not advertised. An unrepresentable bit ceiling yields zero,
   though programs cannot rely on that value for the standard's undefined case.
   Only a focused compile/IL check has been run; runtime coverage is pending.

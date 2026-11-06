@@ -34,6 +34,7 @@ struct parser {
 	size_t compound_literals;
 	bool in_function;
 	bool declaration_attributes;
+	bool builtin_declaration;
 	unsigned parameter_nesting;
 	size_t record_declarations;
 	size_t block_items;
@@ -4081,6 +4082,7 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				parser->builtin_declaration ? "translation unit exceeds built-in declaration limit (1024)" :
 				"translation unit exceeds declaration limit (512)");
 			return NULL;
 		}
@@ -4167,6 +4169,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
+				parser->builtin_declaration ? "translation unit exceeds built-in declaration limit (1024)" :
 				"translation unit exceeds declaration limit (512)");
 			return NULL;
 		}
@@ -4370,24 +4373,30 @@ struct ast_translation_unit *parse_translation_unit(struct preprocessor *preproc
 	struct ast_external_declaration *declarations = NULL;
 	struct ast_external_declaration **tail = &declarations;
 	struct ast_translation_unit *unit;
-	size_t count = 0;
+	size_t count = 0, builtin_count = 0;
 
 	do {
 		struct ast_external_declaration *declaration;
+		struct token first = preprocess_peek(preprocessor);
+		bool builtin = first.location.source && first.location.source->compiler_builtin;
+		size_t *used = builtin ? &builtin_count : &count;
+		size_t limit = builtin ? ast_max_builtin_external_declarations : ast_max_external_declarations;
 
-		if (count == ast_max_external_declarations) {
-			diagnostic_error(diagnostics, preprocess_peek(preprocessor).location,
+		if (*used == limit) {
+			diagnostic_error(diagnostics, first.location, builtin ?
+				"translation unit exceeds built-in declaration limit (1024)" :
 				"translation unit exceeds declaration limit (512)");
 			return NULL;
 		}
-		declaration = parse_external_declaration(&parser, ast_max_external_declarations - count);
+		parser.builtin_declaration = builtin;
+		declaration = parse_external_declaration(&parser, limit - *used);
 		if (!declaration)
 			return NULL;
 		/* Each concrete typedef/function declarator contributes one external item. */
 		while (declaration) {
 			*tail = declaration;
 			tail = &declaration->next;
-			count++;
+			(*used)++;
 			declaration = declaration->next;
 		}
 	} while (preprocess_peek(preprocessor).kind != token_eof);

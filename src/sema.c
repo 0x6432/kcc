@@ -113,6 +113,7 @@ struct sema {
 	struct typedef_binding *typedefs;
 	struct typedef_type_shape *typedef_shapes;
 	size_t function_count;
+	size_t builtin_function_count;
 	size_t string_count;
 	struct ast_string_expression **string_tail;
 	struct ast_external_declaration **static_tail;
@@ -5221,8 +5222,12 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	}
 
 	if (!symbol) {
-		if (sema->function_count == ast_max_functions) {
-			diagnostic_error(sema->diagnostics, name.location,
+		bool builtin = name.location.source && name.location.source->compiler_builtin;
+		size_t *used = builtin ? &sema->builtin_function_count : &sema->function_count;
+		size_t limit = builtin ? ast_max_builtin_functions : ast_max_functions;
+		if (*used == limit) {
+			diagnostic_error(sema->diagnostics, name.location, builtin ?
+				"translation unit exceeds built-in function limit (512)" :
 				"translation unit exceeds function limit (256)");
 			return NULL;
 		}
@@ -5239,7 +5244,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 			.next = sema->functions,
 		};
 		sema->functions = symbol;
-		sema->function_count++;
+		(*used)++;
 	}
 	if (definition && symbol->definition) {
 		diagnostic_error(sema->diagnostics, name.location,
