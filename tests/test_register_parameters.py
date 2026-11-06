@@ -26,6 +26,7 @@ for index in range(5):
     programs.append('int f('+' '.join(specs)+' x) { return x==18446744073709551615ULL?42:1; } '
                     'int main(void) { return f(18446744073709551615ULL); }')
 programs += [
+    'int f(register int n,int a[sizeof(int[n])]) { return n+a[0]; } int main(void) { int a[8]; a[0]=40; return f(2,a); }',
     'int f(register int x) { x+=2; ++x; x--; return x; } int main(void) { return f(40); }',
     'int f(register int); int f(int x) { int *p=&x; *p+=2; return x; } int main(void) { return f(40); }',
     'int f(int); int f(register int x) { x+=2; return x; } int main(void) { return f(40); }',
@@ -93,7 +94,6 @@ c23_constraints = [
 constraints += [('int f(register int x,int a[sizeof(&x)]);','cannot take the address'),
                 ('int f(int x); int f(register int x) { return sizeof(&x); }','cannot take the address')]
 subset_errors = [
-    ('int f(register int n,int a[sizeof(int[n])]) { return 0; }', 'variable-length arrays'),
     ('int f(register int a[static]);', 'error:'),
     ('int f(register int a[const 2]) { a=0; return 0; }', 'error:'),
 ]

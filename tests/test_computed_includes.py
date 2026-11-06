@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='kcc computed includes ') as directory:
                 subprocess.run([host, '-std=c2x', str(source), '-o', str(executable)], capture_output=True, check=True, timeout=10)
                 assert subprocess.run([str(executable)], timeout=5).returncode == 42
     for operand, message in [('E', 'quoted name'), ('V()', 'quoted name'), ('R', 'quoted name'),
-                             ('TARGET TARGET', 'exactly one'), ('S(missing.h)', 'root.c:2:10: error: cannot load')]:
+                             ('TARGET TARGET', 'expected end of include or supported embed operand'), ('S(missing.h)', 'root.c:2:10: error: cannot load')]:
         source.write_text('#include "../defs/macros.h"\n'+f'#include {operand}\nint main(void) {{ return 0; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr

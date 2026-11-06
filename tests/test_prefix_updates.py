@@ -27,6 +27,7 @@ for name in integers:
                     '++p; ++p; if(++p!=a+3) return 2; if(--p!=a+2) return 3; '
                     'if(sizeof(++p)!=8 || p!=a+2) return 4; return 42; }')
 programs += [
+    'int main(void) { int x=1; int a[++x]; if(x!=2 || sizeof a!=2*sizeof(int)) return 1; return 42; }',
     'int main(void) { _Bool b=0; if(--b!=1 || b!=1 || ++b!=1 || b!=1) return 1; '
     'if(--b!=0 || b!=0 || ++b!=1 || b!=1) return 2; '
     'if(sizeof(++b)!=1 || sizeof(--b)!=1 || b!=1) return 3; return 42; }',
@@ -106,9 +107,6 @@ with tempfile.TemporaryDirectory(prefix='kcc prefix updates ') as directory:
         result = subprocess.run([host,'-std=c2x','-pedantic-errors','-fsyntax-only',str(native)],
                                 capture_output=True,text=True,timeout=10)
         assert result.returncode != 0, text
-    # VLA syntax is valid C23, but runtime bounds remain an implementation
-    # limit. Do not mislabel this as a native constraint rejection.
-    compile_source('int f(void) { int x=1; int a[++x]; return 0; }',False,'integer constant expression')
     # nullptr is not a real or pointer type, even though it is scalar. Legacy
     # native hosts lack the keyword, so this is not native constraint evidence.
     compile_source('int f(void) { ++nullptr; return 0; }',False,'modifiable')
@@ -135,5 +133,5 @@ with tempfile.TemporaryDirectory(prefix='kcc prefix updates ') as directory:
         compile_source('int f(void) { int x=0; return ++'+'* &'*count+'x; }',valid,'depth')
 
 print(f'Prefix updates passed: {len(programs)} strict native original programs, {len(constraints)} native constraint rejections, '
-      f'nullptr constraint, VLA subset limit, compile-only null update, exact depth, once-only addresses; {host}'
+      f'nullptr constraint, VLA bound side effects, compile-only null update, exact depth, once-only addresses; {host}'
       + ('; QBE/runtime and 24 mixed-stack narrow-return ABI arrangements passed' if qbe else ''))

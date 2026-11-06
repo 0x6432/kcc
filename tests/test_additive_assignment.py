@@ -47,6 +47,7 @@ for name in integers:
     programs.append(f'int main(void) {{ int a[3]; int *p=a+1; {name} n={offset}; '
                     f'if((p+=n)!={index} || (p-=n)!=a+1 || p!=a+1) return 1; return 42; }}')
 programs += [
+    'int main(void) { int x=1; int a[x+=1]; if(x!=2 || sizeof a!=2*sizeof(int)) return 1; return 42; }',
     'int main(void) { _Bool b=0; if((b+=2)!=1 || b!=1) return 1; '
     'if((b+=1)!=1 || b!=1 || (b-=1)!=0 || b!=0) return 2; '
     'if((b-=2)!=1 || b!=1 || (b+=4294967295U)!=0 || b!=0) return 3; '
@@ -95,9 +96,9 @@ constraints = [
     ('int f(void) { void *p=0; p+=1; return 0; }','complete object'),
     ('int f(void) { int (*p)(void)=0; p-=1; return 0; }','complete object'),
     ('int f(void) { int (*p)[]=0; p+=1; return 0; }','complete object'),
-    ('int f(void) { int x=0; int *p=0; x+=p; return 0; }','integer right'),
-    ('int f(void) { int *p=0; p-=p; return 0; }','integer right'),
-    ('void v(void); int f(void) { int x=0; x+=v(); return 0; }','integer right'),
+    ('int f(void) { int x=0; int *p=0; x+=p; return 0; }','arithmetic right'),
+    ('int f(void) { int *p=0; p-=p; return 0; }','arithmetic right'),
+    ('void v(void); int f(void) { int x=0; x+=v(); return 0; }','arithmetic right'),
     ('int f(void) { const int x=0; return sizeof(x+=1); }','modifiable'),
     ('int f(void) { int x=0; _Static_assert((x+=1),"not ICE"); return 0; }','integer constant expression'),
     ('int f(void) { int x=0; return &(x+=1)!=0; }','lvalue'),
@@ -137,12 +138,10 @@ with tempfile.TemporaryDirectory(prefix='kcc additive assignment ') as directory
         result = subprocess.run([host,'-std=c2x','-pedantic-errors','-fsyntax-only',str(native)],
                                 capture_output=True,text=True,timeout=10)
         assert result.returncode != 0,text
-    # Valid VLA syntax is our runtime-bound subset limit, not a C constraint.
-    compile_source('int f(void) { int x=1; int a[x+=1]; return 0; }',False,'integer constant expression')
     # Legacy native hosts do not know nullptr: not counted as native evidence.
     compile_source('int f(void) { nullptr+=1; return 0; }',False,'modifiable')
-    compile_source('int f(void) { int x=0; x+=nullptr; return 0; }',False,'integer right')
-    compile_source('int f(void) { int *p=0; p-=nullptr; return 0; }',False,'integer right')
+    compile_source('int f(void) { int x=0; x+=nullptr; return 0; }',False,'arithmetic right')
+    compile_source('int f(void) { int *p=0; p-=nullptr; return 0; }',False,'arithmetic right')
     # Constraint-valid, execution undefined: compile only.
     compile_source('int *f(void) { int *p=0; return p+=1; }')
 
@@ -170,5 +169,5 @@ with tempfile.TemporaryDirectory(prefix='kcc additive assignment ') as directory
         compile_source('int f(void) { int x=0; return ('+'* &'*count+'x)+=1; }',valid,'depth')
 
 print(f'Additive assignments passed: {len(programs)} strict native original programs, {len(constraints)} native constraint rejections, '
-      f'nullptr constraints, VLA subset limit, compile-only null update, exact depth, once-only operands; {host}'
+      f'nullptr constraints, VLA bound side effects, compile-only null update, exact depth, once-only operands; {host}'
       + ('; QBE/runtime and 48 mixed-stack narrow/pointer-return ABI arrangements passed' if qbe else ''))

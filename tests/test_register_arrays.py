@@ -17,6 +17,7 @@ for name in integers:
     programs += [f'int main(void) {{ register {name} a[2]; return sizeof(a)==2*sizeof({name})?42:1; }}',
                  f'typedef {name} A[2][3]; int main(void) {{ A register a,b; return sizeof(a)==6*sizeof({name}) && sizeof(b)==sizeof(a)?42:1; }}']
 programs += [
+    'int main(void) { int n=2; register int a[n++]; return n==3 && sizeof a==2*sizeof(int) ? 42 : 1; }',
     'int main(void) { register const int a[2][3]; return sizeof(a)==24?42:1; }',
     'int main(void) { register int a[2],x=42,b[3]; return sizeof(a)==8 && sizeof(b)==12?x:1; }',
     'int main(void) { int a[2]; a[1]=42; { register long a[3]; if(sizeof(a)!=24) return 1; } return a[1]; }',
@@ -60,7 +61,6 @@ decay_refusals = [
     'int main(void) { register int a[2]; int *p=1?a:0; return 0; }',
 ]
 subset_errors = [
-    ('int f(int n) { register int a[n]; return 0; }', 'variable-length arrays'),
     ('int main(void) { register int a[]; return 0; }', 'must be complete'),
     ('int main(void) { register int a[2]=0; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
 ]

@@ -42,6 +42,7 @@ programs += [
     'int main(void) { bool x=false; if((x=256)!=true) return 1; x=0; if(x!=false) return 1; return 42; }',
     'int main(void) { bool x=(bool)(1ULL<<63); if(!x || (bool)(unsigned char)256) return 1; return 42; }',
     'int main(void) { for(bool b=true;b;b=false) return 42; return 1; }',
+    'int main(void) { bool n=true; bool a[n]; a[0]=true; return sizeof a==1 && a[0] ? 42 : 1; }',
     '#define FLAG bool\n#define YES true\n#define CAT(a,b) a##b\nint main(void) { FLAG x=YES; return (x!=CAT(fal,se))+41; }',
 ]
 # Compatibility macros would alter defined/undef semantics. Only native hosts
@@ -67,7 +68,6 @@ constraints = [
     ('int main(void) { true=false; return 0; }', 'modifiable'),
     ('int main(void) { bool *p=&true; return 0; }', 'lvalue'),
     ('int main(void) { bool *p=true; return 0; }', 'pointer conversion'),
-    ('int main(void) { bool n=true; bool a[n]; return 0; }', 'integer constant expression'),
     ('int main(void) { bool x=; return 0; }', 'expected'),
     ('int main(void) { int true; return 0; }', 'expected'),
     ('int main(void) { int false; return 0; }', 'expected'),

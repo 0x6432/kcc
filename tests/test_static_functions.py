@@ -25,6 +25,7 @@ for index in range(5):
     specs.insert(index,'static')
     programs.append(' '.join(specs)+' f(void) { return 18446744073709551615ULL; } int main(void) { return f()==18446744073709551615ULL?42:1; }')
 programs += [
+    'static int calls; static int f(void) { calls++; return 3; } int main(void) { int n=sizeof(int[1?2:f()]); return n==8 && calls==0 ? 42 : 1; }',
     'static int f(int); extern int f(int); int f(int x) { return x; } int main(void) { return f(42); }',
     'static int f(int); int f(int); static int f(int x) { return x; } static int f(int); int main(void) { return f(42); }',
     'static int f(void); extern int f(void); int f(void) { return 42; } int main(void) { return f(); }',
@@ -103,7 +104,6 @@ subset_errors = [
     ('typedef int T; int main(void) { static auto T=42; return 0; }','static or extern auto inference is not supported yet'),
     ('static int main(void) { return 42; }','static main'),
     ('int f(int a[static]);','error:'),
-    ('static int f(void); int main(void) { return sizeof(int[1?2:f()]); }','array bound must be an integer constant expression'),
 ]
 ub_refusals = [
     'int f(void); static int f(void);',
@@ -119,6 +119,8 @@ missing_uses = ['return f();', 'int (*p)(void)=f; return 42;',
                 'sizeof(&f); return f();',
                 'sizeof(sizeof(&f)); return f();']
 missing_programs = ['static int f(void); int main(void) { '+use+' }' for use in missing_uses]
+# A function call in the bound makes this a VLA type; sizeof is not an ICE.
+missing_programs.append('static int f(void); int main(void) { return sizeof(int[1?2:f()]); }')
 c23_missing_programs = [
     'static int f(void); int main(void) { typeof(f) *p; return f(); }',
     'static int f(void); typeof(f) g; int main(void) { return f(); }',

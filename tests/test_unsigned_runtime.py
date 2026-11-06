@@ -30,6 +30,7 @@ for _ in range(12):
 programs = [f'int main(void) {{ unsigned x={expression}; if(x=={value}U) return 42; return 1; }}'
             for expression, value in expressions]
 programs += [
+    'int main(void) { if((unsigned)1.5!=1U) return 1; return 42.5; }',
     'int main(void) { unsigned x=-1; int y=x; if(y==-1) return 42; return 1; }',
     'unsigned f(unsigned x) { return x+1; } int main(void) { return f(41); }',
     'int f(unsigned x) { return x; } int main(void) { if(f(0xffffffff)==-1) return 42; return 1; }',
@@ -65,7 +66,6 @@ with tempfile.TemporaryDirectory(prefix='kcc unsigned runtime ') as directory:
         ('int main(void) { unsigned unsigned x; return 0; }', 'conflicting integer type'),
         ('int main(void) { unsigned x=missing; return 0; }', 'undeclared'),
         ('unsigned f(unsigned x) { int x; return 0; }', 'redeclaration'),
-        ('int main(void) { return 1.5; }', 'floating conversions between different types'),
         ('int main(void) { return 1U + '+'+ '*126+'1; }', 'typed expression exceeds depth'),
         ('int main(void) { return '+'~'*127+'1U; }', 'typed expression exceeds depth'),
     ]

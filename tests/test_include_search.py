@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
         assert result.returncode == 1 and not result.stdout and 'error:' in result.stderr
     for operand, message in [('<>', 'nonempty'), ('< local.h>', 'whitespace'),
                              ('<local.h >', 'whitespace'), ('<local/**/.h>', 'whitespace'),
-                             ('<local.h', "expected '>'"), ('<local.h> extra', 'exactly one'),
+                             ('<local.h', "expected '>'"), ('<local.h> extra', 'expected end of include or supported embed operand'),
                              ('<a[b>', 'unsupported byte'), ('<missing-header.h>', 'cannot load angle'),
                              (f'<{first}/local.h>', 'whitespace')]:
         source.write_text(f'#include {operand}\nint main(void) {{ return 0; }}\n')

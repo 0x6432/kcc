@@ -54,6 +54,7 @@ for op,initial,right,expected in operations:
                     f'if(sizeof(*locate(&x,&l){op}amount(&r))!=4 || l!=1 || r!=1) return 2; '
                     f'if(0 && (x{op}{right})) return 3; if(!(1 || (x{op}{right})) || x!={expected}) return 4; return 42; }}')
 programs += [
+    'int main(void) { int x=1; int a[x*=2]; if(x!=2 || sizeof a!=2*sizeof(int)) return 1; return 42; }',
     'int main(void) { int x=84,y=4; if((x/=y*=2)!=10 || x!=10 || y!=8) return 1; '
     'x=1; y=2; if((x<<=y+=1)!=8 || x!=8 || y!=3) return 2; '
     'x=40; if((1?x|=2:(x&=0))!=42 || x!=42) return 3; '
@@ -67,13 +68,13 @@ constraints = []
 for op,_,_,_ in operations:
     constraints += [
         (f'int f(void) {{ int *p=0; p{op}1; return 0; }}','pointer left'),
-        (f'int f(void) {{ int x=0; int *p=0; x{op}p; return 0; }}','integer right'),
+        (f'int f(void) {{ int x=0; int *p=0; x{op}p; return 0; }}', 'arithmetic right'),
         (f'int f(void) {{ const int x=1; x{op}1; return 0; }}','modifiable'),
         (f'int f(void) {{ int x=1; (x=1){op}1; return 0; }}','modifiable'),
         (f'int f(void) {{ int x=1; _Static_assert((x{op}1),"not ICE"); return 0; }}','integer constant expression'),
     ]
 constraints += [
-    ('void v(void); int f(void) { int x=0; x*=v(); return 0; }','integer right'),
+    ('void v(void); int f(void) { int x=0; x*=v(); return 0; }','arithmetic right'),
     ('int f(void) { int x=0; return sizeof((const int)x>>=1); }','modifiable'),
     ('int f(void) { int x=0; return &(x*=1)!=0; }','lvalue'),
 ]
@@ -112,8 +113,7 @@ with tempfile.TemporaryDirectory(prefix='kcc integer compound ') as directory:
         result = subprocess.run([host,'-std=c2x','-pedantic-errors','-fsyntax-only',str(native)],
                                 capture_output=True,text=True,timeout=10)
         assert result.returncode != 0,text
-    compile_source('int f(void) { int x=1; int a[x*=2]; return 0; }',False,'integer constant expression')
-    compile_source('int f(void) { int x=1; x*=nullptr; return 0; }',False,'integer right')
+    compile_source('int f(void) { int x=1; x*=nullptr; return 0; }',False,'arithmetic right')
     compile_source('int f(void) { nullptr>>=1; return 0; }',False,'modifiable')
     # Runtime-invalid operations are only compiled. Never execute them.
     for operation in ['/=0','%=0','<<=-1','>>=32','*=2147483647']:
@@ -140,5 +140,5 @@ with tempfile.TemporaryDirectory(prefix='kcc integer compound ') as directory:
         compile_source('int f(void) { int x=1; return ('+'* &'*count+'x)*=2; }',valid,'depth')
 
 print(f'Integer compound assignments passed: {len(programs)} strict native original programs, {len(constraints)} native constraint rejections, '
-      f'nullptr constraints, VLA subset limit, compile-only invalid arithmetic, exact depth, once-only operands; {host}'
+      f'nullptr constraints, VLA bound side effects, compile-only invalid arithmetic, exact depth, once-only operands; {host}'
       + ('; QBE/runtime and 48 mixed-stack narrow-result/wide-count ABI arrangements passed' if qbe else ''))

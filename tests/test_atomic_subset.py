@@ -46,6 +46,7 @@ positive = [
     'int main(void) { _Atomic int x=42; return sizeof(x)==4 && alignof(_Atomic(int))==4 ? x : 1; }',
     'int main(void) { _Atomic int x=1; return sizeof(x=2)==4 && x==1 ? 42 : 1; }',
     'int main(void) { auto _Atomic x=42; return x; }',
+    'int main(void) { auto _Atomic x=(long)40; _Atomic long *p=&x; *p+=2; return x==42 ? 42 : 1; }',
     'int main(void) { _Atomic int x=0; int y=(x=42); return x==y ? y : 1; }',
     'int main(void) { _Atomic int x=42; typeof_unqual(x) y=x; return y; }',
     'int main(void) { _Atomic int x=40; int a=x++; int b=++x; return a==40 && b==42 && x==42 ? 42 : 1; }',
@@ -77,7 +78,6 @@ negative = [
     'int main(void) { _Atomic int x=1; x+=2.0; return x; }',
     'int main(void) { const _Atomic int x=1; return ++x; }',
     'int main(void) { const _Atomic int x=1; x=2; return x; }',
-    'int main(void) { auto _Atomic x=(long)1; return 0; }',
     'typedef int A[2]; _Atomic A x;',
     'int main(void) { return sizeof(' + '_Atomic(' * 65 + 'int' + ')' * 65 + '); }',
 ]

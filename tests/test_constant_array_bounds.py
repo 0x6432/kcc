@@ -25,6 +25,7 @@ integers = ['_Bool', 'char', 'signed char', 'unsigned char', 'short', 'unsigned 
 programs = [f'int main(void) {{ {name} a[1+1]; a[0]=0; a[1]=1; '
             f'static_assert(sizeof a==2*sizeof({name})); if(a[1]!=1) return 1; return 42; }}' for name in integers]
 programs += [
+    'int f(int n,int a[sizeof(int[n])]) { return n+a[0]; } int main(void) { int a[8]; a[0]=40; return f(2,a); }',
     'int main(void) { int a[true]; a[0]=42; static_assert(sizeof a==4); return a[0]; }',
     "int main(void) { int a['A'-63]; a[1]=42; static_assert(sizeof a==8); return a[1]; }",
     'int main(void) { int a[(unsigned char)258]; a[1]=42; static_assert(sizeof a==8); return a[1]; }',
@@ -72,7 +73,6 @@ constraints = [
     ('int f(void) { int a[1ULL<<63]; return 0; }', 'storage limit'),
     ('int f(void) { int a[1?-1:0U]; return 0; }', 'storage limit'),
     ('int f(void) { int a[18446744073709551615ULL]; return 0; }', 'storage limit'),
-    ('int f(int n,int a[sizeof(int[n])]) { return 0; }', 'variable-length arrays'),
     ('int f(int n,int (*p)[n]);', 'variable-length arrays'),
     ('int f(int a[sizeof a]);', 'undeclared identifier'),
     ('int f(void) { int a[sizeof a]; return 0; }', 'undeclared identifier'),

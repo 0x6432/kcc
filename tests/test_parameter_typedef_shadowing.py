@@ -21,6 +21,7 @@ for name in integers:
         f'int main(void) {{ int a[sizeof({name})]; a[sizeof({name})-1]=42; return f(0,a); }}',
     ]
 programs += [
+    'typedef int T; int f(int T,int a[T]); int f(int T,int a[T]) { return T+a[0]; } int main(void) { int a[2]; a[0]=40; return f(2,a); }',
     'typedef long T; int f(T T) { T+=2; return T; } int main(void) { T x=40; return f(x); }',
     'typedef long T; int f(int T); int f(int x) { return x; } int main(void) { T x=42; return f(x); }',
     'typedef long T; int f(int x); int f(int T) { return T; } int main(void) { return f(42); }',
@@ -89,7 +90,6 @@ constraints = [
 ]
 # These are subset rejections, not native constraints (C permits prototype VLAs).
 subset_errors = [
-    ('typedef int T; int f(int T,int a[T]);', 'variable-length arrays'),
     ('typedef int T; int f(int T,int a[(T)2]);', 'error:'),
 ]
 def native_named_void_warning(text, status, diagnostics):

@@ -110,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix='kcc string concatenation ') as director
                  'int main(void) { char *p="a" U"b"; return 0; }']:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
-        assert result.returncode == 1 and not result.stdout and 'prefixed string' in result.stderr, result.stderr
+        assert result.returncode == 1 and not result.stdout and 'pointer conversion' in result.stderr, result.stderr
 print(f'String concatenation passed ({len(programs)} full-value programs, escape/NUL boundaries, macro/include lifetimes, '
       f'one combined static object, both-direction ABI and exact fragment/storage constraints; {host})'
       + ('; QBE/runtime passed' if qbe else ''))
