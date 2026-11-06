@@ -42,15 +42,15 @@ the added regression cases and generated-program runtime remain untested.
 ## Conditional static floating initializers
 
 Floating static initializers now support conditional expressions whose condition
-is a supported arithmetic constant and whose two converted arms are both in the
-existing finite floating-constant subset. The selected value retains its target
-float/double bits and can also initialize an integer through the existing checked
-conversion. This deliberately requires both arms to be foldable, even when one
-is not evaluated. Conditions can be integer constant expressions, supported
+is a supported arithmetic constant. The selected arm must fold within the
+existing finite floating-constant subset; a skipped arm must have supported
+arithmetic-constant form but need not be evaluated. The selected value retains
+its target float/double bits and can also initialize an integer through the
+existing checked conversion. Conditions can be integer constant expressions, supported
 finite floating expressions, a logical negation of a supported floating
 expression, or a
 comparison of supported floating expressions. Broader arithmetic constant
-expressions and general short-circuit form analysis remain unsupported.
+expressions and general arithmetic-constant form analysis remain unsupported.
 
 The compiler build and focused positive and negative compilation/IL checks were
 run; integer- and floating-conditioned examples were also lowered by pinned
@@ -90,9 +90,9 @@ runtime, ABI and fuzz validation remain pending.
 Logical AND, OR and nested negation with supported finite floating operands and
 integer constant operands can initialize integer, boolean or floating static
 objects and can serve as conditions in supported floating conditional
-initializers. Both sides must independently fold even for short-circuit
-operations; this is conservative and does not extend integer constant expression
-rules. Broader arithmetic containing these results is not supported.
+initializers. A short-circuited right operand must have supported arithmetic
+constant form, but is not evaluated. This does not extend integer constant
+expression rules. Broader arithmetic containing these results is not supported.
 
 The compiler rebuilt; eight values were checked in emitted IL, lowered by pinned
 QBE 1.2 and assembled. Seven invalid or unsupported focused examples were
@@ -103,8 +103,9 @@ pending.
 
 An integer-valued conditional with a supported finite floating condition and
 integer-constant-expression arms can initialize static integer, boolean, or
-floating objects and aggregate elements. Both arms must fold even if one is not
-selected. Usual arithmetic conversions on the arms and the destination conversion
+floating objects and aggregate elements. The selected arm must fold; a skipped
+arm must have supported arithmetic-constant form. Usual arithmetic conversions
+on the arms and the destination conversion
 are retained. This is initializer-only support; it does not make these
 expressions integer constant expressions or cover arbitrary arithmetic around
 them.
@@ -117,9 +118,25 @@ fuzz checks remain pending; this does not complete M20.
 Floating-conditioned integer conditionals may also nest in supported conditions,
 logical operands, or integer arms, provided every arm is either a strict ICE or
 another supported conditional and conversions do not introduce unsupported
-forms. All branches remain required to fold; ICE rules are unchanged.
+forms. Skipped branches need only pass the bounded arithmetic form check; ICE
+rules are unchanged.
 
 The compiler rebuilt; six nested initializer values were inspected in IL,
 lowered with pinned QBE 1.2 and assembled, and five invalid or unsupported
 forms were rejected. Regression fixtures, generated-program runtime, ABI,
 sanitizer and fuzz checks remain unrun.
+
+## Short-circuited static arithmetic forms
+
+Supported floating conditionals, floating logical expressions and integer-valued
+conditionals with floating conditions now validate skipped operands without
+evaluating them. Thus an unselected `1.0/0.0` or `1/0` can be accepted while
+nonconstant operands such as object loads and calls remain conservatively
+rejected, even when skipped. Evaluated operations must still meet the existing
+finite/range checks. Form support is bounded, not a general implementation of
+all C arithmetic constant expressions, and strict ICE classification is unchanged.
+
+The compiler rebuilt; twelve focused values were checked in emitted IL, lowered
+with pinned QBE 1.2 and assembled, and ten invalid or unsupported examples were
+rejected. Added regression fixtures, generated-program execution, ABI, sanitizer
+and fuzz checks remain unrun. This does not complete M20.

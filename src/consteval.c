@@ -340,6 +340,11 @@ struct constant_result evaluate_integer_constant(const struct ast_expression *ex
 	return evaluate(expression, true, false);
 }
 
+struct constant_result check_integer_constant_form(const struct ast_expression *expression)
+{
+	return evaluate(expression, false, false);
+}
+
 /* Initializer selection is distinct from strict ICE operand validation: an
  * unselected pointer branch may contain an otherwise valid load or call.
  * Both branches have already passed sema; this query only evaluates selection. */

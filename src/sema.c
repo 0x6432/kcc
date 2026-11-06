@@ -3427,6 +3427,47 @@ static bool is_static_float_conditioned_integer(const struct ast_expression *exp
 static bool static_float_conditioned_integer(const struct ast_expression *expression,
 	struct constant_result *result);
 
+/* Validate the supported arithmetic-constant operand forms without executing
+ * a skipped expression. This does not prove its value finite or make it an ICE. */
+static bool static_arithmetic_constant_form(const struct ast_expression *expression)
+{
+	if (!type_is_integer(expression->type) && !type_is_floating(expression->type))
+		return false;
+	if (type_is_integer(expression->type) &&
+		check_integer_constant_form(expression).status == constant_value)
+		return true;
+	if (expression->kind == expression_floating)
+		return true;
+	if (expression->kind == expression_cast || expression->kind == expression_conversion) {
+		const struct ast_expression *operand = expression->kind == expression_cast ?
+			((const struct ast_cast_expression *)expression)->operand :
+			((const struct ast_conversion_expression *)expression)->operand;
+		return static_arithmetic_constant_form(operand);
+	}
+	if (expression->kind == expression_unary) {
+		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
+		return (unary->operation == unary_plus || unary->operation == unary_minus ||
+			unary->operation == unary_not) && static_arithmetic_constant_form(unary->operand);
+	}
+	if (expression->kind == expression_binary) {
+		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
+		return (binary->operation == binary_add || binary->operation == binary_subtract ||
+			binary->operation == binary_multiply || binary->operation == binary_divide ||
+			comparison_operator(binary->operation)) &&
+			static_arithmetic_constant_form(binary->left) && static_arithmetic_constant_form(binary->right);
+	}
+	if (expression->kind == expression_logical) {
+		const struct ast_logical_expression *logical = (const struct ast_logical_expression *)expression;
+		return static_arithmetic_constant_form(logical->left) && static_arithmetic_constant_form(logical->right);
+	}
+	if (expression->kind == expression_conditional) {
+		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+		return static_arithmetic_constant_form(node->condition) &&
+			static_arithmetic_constant_form(node->then_value) && static_arithmetic_constant_form(node->else_value);
+	}
+	return false;
+}
+
 static bool static_floating_condition(const struct ast_expression *expression, bool *truth)
 {
 	if (type_is_floating(expression->type)) {
@@ -3454,12 +3495,17 @@ static bool static_floating_condition(const struct ast_expression *expression, b
 	if (expression->kind == expression_logical) {
 		const struct ast_logical_expression *logical = (const struct ast_logical_expression *)expression;
 		bool left, right;
-		/* Require both sides to be within the supported finite subset, even
-		 * when C evaluation would short circuit. */
-		if (!static_floating_condition(logical->left, &left) ||
-			!static_floating_condition(logical->right, &right))
+		if (!static_floating_condition(logical->left, &left))
 			return false;
-		*truth = logical->operation == logical_and ? left && right : left || right;
+		if (logical->operation == logical_and ? !left : left) {
+			if (!static_arithmetic_constant_form(logical->right))
+				return false;
+			*truth = left;
+			return true;
+		}
+		if (!static_floating_condition(logical->right, &right))
+			return false;
+		*truth = right;
 		return true;
 	}
 	if (expression->kind == expression_binary) {
@@ -3503,8 +3549,8 @@ static bool is_static_floating_boolean(const struct ast_expression *expression)
 }
 
 /* Integer-valued arithmetic conditionals can use a floating condition without
- * becoming integer constant expressions. Require both converted integer arms
- * to be strict ICEs or similarly bounded conditionals so this bounded initializer-only path never broadens ICEs. */
+ * becoming integer constant expressions. Selected arms must be foldable and
+ * skipped arms must have supported arithmetic-constant form. */
 static bool is_static_float_conditioned_integer(const struct ast_expression *expression)
 {
 	if (expression->kind != expression_conditional || !type_is_integer(expression->type))
@@ -3520,15 +3566,15 @@ static bool static_float_conditioned_integer(const struct ast_expression *expres
 	if (!is_static_float_conditioned_integer(expression))
 		return false;
 	const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
-	struct constant_result then_value = evaluate_integer_constant(node->then_value);
-	struct constant_result else_value = evaluate_integer_constant(node->else_value);
 	bool condition;
-	if ((then_value.status != constant_value && !static_float_conditioned_integer(node->then_value, &then_value)) ||
-		(else_value.status != constant_value && !static_float_conditioned_integer(node->else_value, &else_value)) ||
-		!static_floating_condition(node->condition, &condition))
+	if (!static_floating_condition(node->condition, &condition))
 		return false;
-	*result = condition ? then_value : else_value;
-	return true;
+	const struct ast_expression *selected = condition ? node->then_value : node->else_value;
+	const struct ast_expression *skipped = condition ? node->else_value : node->then_value;
+	if (!static_arithmetic_constant_form(skipped))
+		return false;
+	*result = evaluate_integer_constant(selected);
+	return result->status == constant_value || static_float_conditioned_integer(selected, result);
 }
 
 /* Static constants use the host's target-matching binary32/binary64 format,
@@ -3554,16 +3600,11 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 	if (expression->kind == expression_conditional) {
 		const struct ast_conditional_expression *conditional = (const struct ast_conditional_expression *)expression;
 		bool condition;
-		uint64_t then_bits, else_bits;
-
-		/* This bounded evaluator requires both branches to be supported finite
-		 * constants. It does not claim all C arithmetic-constant forms. */
-		if (!static_floating_condition(conditional->condition, &condition) ||
-			!static_floating_literal_bits(conditional->then_value, &then_bits) ||
-			!static_floating_literal_bits(conditional->else_value, &else_bits))
+		if (!static_floating_condition(conditional->condition, &condition))
 			return false;
-		*bits = condition ? then_bits : else_bits;
-		return true;
+		const struct ast_expression *selected = condition ? conditional->then_value : conditional->else_value;
+		const struct ast_expression *skipped = condition ? conditional->else_value : conditional->then_value;
+		return static_arithmetic_constant_form(skipped) && static_floating_literal_bits(selected, bits);
 	}
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;

@@ -23,6 +23,9 @@ struct constant_result {
  */
 struct constant_result evaluate_integer_constant(const struct ast_expression *expression);
 
+/* Check strict integer operand form without evaluating the expression. */
+struct constant_result check_integer_constant_form(const struct ast_expression *expression);
+
 /* A null proof has no integer bits or numeric address representation. */
 struct null_initializer_result {
 	enum constant_status status;
