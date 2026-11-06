@@ -3349,6 +3349,20 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				UINT64_C(0x80000000) : UINT64_C(0x8000000000000000);
 		return true;
 	}
+	if (expression->kind == expression_conditional) {
+		const struct ast_conditional_expression *conditional = (const struct ast_conditional_expression *)expression;
+		struct constant_result condition = evaluate_integer_constant(conditional->condition);
+		uint64_t then_bits, else_bits;
+
+		/* This bounded evaluator requires both branches to be supported finite
+		 * constants. It does not claim all C arithmetic-constant forms. */
+		if (condition.status != constant_value ||
+			!static_floating_literal_bits(conditional->then_value, &then_bits) ||
+			!static_floating_literal_bits(conditional->else_value, &else_bits))
+			return false;
+		*bits = condition.bits ? then_bits : else_bits;
+		return true;
+	}
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
 		uint64_t left_bits, right_bits;

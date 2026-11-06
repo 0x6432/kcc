@@ -30,6 +30,9 @@ double global_unsigned=18446744073709551615UL;
 double global_signed=(-9223372036854775807L-1L);
 signed char low_char=-128.5; short low_short=-32768.5; int low_int=-2147483648.5;
 float global_arithmetic=1.5f+2.25f;
+float global_choice=0 ? 1.5f : 2.25f;
+double global_choice_mixed=1 ? 2.5 : 3;
+int global_choice_int=1 ? 42.75 : 3.0;
 double global_mixed=2.5*4-1.0;
 int static_int=4.75-10.0;
 long static_cast=(int)(1.25-4.75);
@@ -69,7 +72,7 @@ float update(float *); int compound_int(int);
 extern double global_float; extern float global_negzero;
 extern float global_subnormal; extern double global_subnormal_double;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
-extern float global_arithmetic; extern double global_mixed;
+extern float global_arithmetic, global_choice; extern double global_mixed, global_choice_mixed; extern int global_choice_int;
 extern signed char low_char; extern short low_short; extern int low_int;
 extern int static_int; extern unsigned int static_unsigned; extern _Bool static_bool;
 extern long static_cast; extern unsigned long static_unsigned_cast;
@@ -90,7 +93,7 @@ int main(void) {
  if (global_subnormal!=0x1p-149f || global_subnormal_double!=0x1p-1074) return 13;
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
      global_unsigned!=(double)18446744073709551615UL || global_signed!=(double)(-9223372036854775807L-1L)) return 10;
- if (global_arithmetic!=3.75f || global_mixed!=9.0) return 11;
+ if (global_arithmetic!=3.75f || global_mixed!=9.0 || global_choice!=2.25f || global_choice_mixed!=2.5 || global_choice_int!=42) return 11;
  if (static_int!=-5 || static_cast!=-3 || static_unsigned_cast!=(unsigned long)-3 || static_unsigned!=0 || static_bool ||
      static_ints.a!=6 || static_ints.b!=42 || !static_ints.c) return 12;
  return 0;
@@ -108,6 +111,8 @@ int main(void) {
 '''
 hostimpl = 'float hf(float x,float y){return x+y;} double hd(double x,double y){return x+y;} float host_zero(void){return -0.0f;}'
 reject = [
+ 'int n; double x=n?1.0:2.0;', 'double x=1?2.0:1.0/0.0;',
+ 'int a[(int)(1?2.0:3.0)];',
  'long double x;', 'unsigned float x;', 'double double x;', 'float long x;',
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
  'signed char too_low=-129.0;', 'short too_low=-32769.0;',

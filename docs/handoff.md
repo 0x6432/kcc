@@ -5,7 +5,9 @@
 This section supersedes stale forward-looking implementation statements below;
 the remainder is historical evidence for earlier, exact commits. Recent work
 implements bounded float/double, scalar variadics, VLA, atomic and C23 subsets,
-plus partial target-specific headers and runtime helpers. See each feature's
+plus partial target-specific headers and runtime helpers. Static float/double
+initializer folding includes bounded integer-conditioned expressions with two
+finite supported arms; see `m20-floating-foundation.md`. See each feature's
 documentation for boundaries. Notable remaining work includes aggregate-by-value
 ABI, bit-fields, source `_BitInt`, `long double`, complete preprocessing and
 attributes, and a complete hosted C library. The internal bit-precise arithmetic
