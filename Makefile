@@ -37,7 +37,10 @@ build/free_sized.o: runtime/free_sized.c | build
 build/unreachable.o: runtime/unreachable.c | build
 	$(CC) $(CFLAGS) -fno-lto -c $< -o $@
 
-build/libkccrt.a: build/volatile.o build/checked.o build/memset_explicit.o build/free_sized.o build/unreachable.o
+build/math_compare.o: runtime/math_compare.c | build
+	$(CC) $(CFLAGS) -fno-fast-math -fno-lto -c $< -o $@
+
+build/libkccrt.a: build/math_compare.o build/volatile.o build/checked.o build/memset_explicit.o build/free_sized.o build/unreachable.o
 	ar rcs $@ $^
 
 build/test_support: tests/test_support.c src/source.c src/arena.c src/diagnostic.c src/source.h src/arena.h src/diagnostic.h | build

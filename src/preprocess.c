@@ -1107,6 +1107,18 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define isnormal(x) (fpclassify(x)==FP_NORMAL)\n#define issubnormal(x) (fpclassify(x)==FP_SUBNORMAL)\n"
 			"#define iszero(x) (fpclassify(x)==FP_ZERO)\n"
 			"#define issignaling(x) _Generic((x),float:__issignalingf,default:__issignaling)(x)\n"
+			"int __kcc_isgreater_f(float,float); int __kcc_isgreater_d(double,double);\n"
+			"#define isgreater(x,y) _Generic(((x)+(y)),float:__kcc_isgreater_f,default:__kcc_isgreater_d)((x),(y))\n"
+			"int __kcc_isgreaterequal_f(float,float); int __kcc_isgreaterequal_d(double,double);\n"
+			"#define isgreaterequal(x,y) _Generic(((x)+(y)),float:__kcc_isgreaterequal_f,default:__kcc_isgreaterequal_d)((x),(y))\n"
+			"int __kcc_isless_f(float,float); int __kcc_isless_d(double,double);\n"
+			"#define isless(x,y) _Generic(((x)+(y)),float:__kcc_isless_f,default:__kcc_isless_d)((x),(y))\n"
+			"int __kcc_islessequal_f(float,float); int __kcc_islessequal_d(double,double);\n"
+			"#define islessequal(x,y) _Generic(((x)+(y)),float:__kcc_islessequal_f,default:__kcc_islessequal_d)((x),(y))\n"
+			"int __kcc_islessgreater_f(float,float); int __kcc_islessgreater_d(double,double);\n"
+			"#define islessgreater(x,y) _Generic(((x)+(y)),float:__kcc_islessgreater_f,default:__kcc_islessgreater_d)((x),(y))\n"
+			"int __kcc_isunordered_f(float,float); int __kcc_isunordered_d(double,double);\n"
+			"#define isunordered(x,y) _Generic(((x)+(y)),float:__kcc_isunordered_f,default:__kcc_isunordered_d)((x),(y))\n"
 			"double fabs(double); float fabsf(float);\n"
 			"double sqrt(double); float sqrtf(float); double cbrt(double); float cbrtf(float);\n"
 			"double sin(double); float sinf(float); double cos(double); float cosf(float);\n"
@@ -1118,6 +1130,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"double floor(double); float floorf(float); double ceil(double); float ceilf(float);\n"
 			"double trunc(double); float truncf(float); double round(double); float roundf(float);\n"
 			"double fmod(double,double); float fmodf(float,float);\n"
+			"";
+		static const char math_header_tail[] =
 			"double sinh(double); float sinhf(float);\n"
 			"double cosh(double); float coshf(float);\n"
 			"double tanh(double); float tanhf(float);\n"
@@ -1687,6 +1701,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			source_name = "<kcc/errno.h>";
 		} else if (strcmp(name->path, "math.h") == 0) {
 			header = math_header;
+			header_tail = math_header_tail;
 			source_name = "<kcc/math.h>";
 		} else if (strcmp(name->path, "tgmath.h") == 0) {
 			header = tgmath_header;

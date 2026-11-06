@@ -70,9 +70,13 @@ Source provenance, not a filename, determines which budget is charged.
   classification functions for `isfinite`, `isinf`, `isnan` and `signbit`,
   evaluating each argument once after conversion to double. `fpclassify`,
   `isnormal`, `issubnormal`, `iszero` and `issignaling` dispatch float and
-  double to glibc helpers, preserving float subnormal classification. Long
-  double, other classifications and many math interfaces remain unsupported; link
-  math functions with `-lm`.
+  double to glibc helpers, preserving float subnormal classification. The six ordered/unordered comparison macros evaluate each argument once,
+  dispatch to float or double helpers, and link through `build/libkccrt.a`.
+  The helpers rely on a matching IEEE host and are built without fast-math or
+  LTO; they do not add full floating-environment semantics to the compiler.
+  Long double and many other math interfaces remain unsupported; link math
+  functions with `-lm`. A host-only helper smoke check covered a quiet NaN and ordinary comparison;
+  generated-program runtime behavior has not been tested.
 - `tgmath.h` provides bounded unary real functions, `atan2`, `pow`, `fmod`,
   `hypot`, `copysign`, `fdim`, `fmax`, `fmin`, `remainder`, `nextafter` and
   `fma` as generic macros for float, double and integer arguments. All-float
