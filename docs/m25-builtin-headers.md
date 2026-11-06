@@ -189,3 +189,19 @@ The compiler rebuilt; thirteen focused values were inspected in IL, lowered
 through pinned QBE 1.2 and assembled, and seven invalid or unsupported forms
 were rejected. Added regression fixtures, generated-program runtime, ABI,
 sanitizer and fuzz checks remain unrun.
+
+## Additional C23 real math interfaces
+
+The fallback `math.h` declares float and double `exp10`, `llogb`, `nextup`
+and `nextdown` variants, and supplies target `FP_LLOGB0` and `FP_LLOGBNAN`
+constants. The matching `tgmath.h` macros select the float variant for a float
+argument and otherwise the double variant for supported real arithmetic
+arguments, evaluating the actual argument once. These interfaces require a
+compatible libm: on glibc, nextup/nextdown require 2.24+, llogb 2.25+, and
+exp10f 2.32+. They do not implement long double, complex or missing newer
+C23 library functions. Link with `-lm`.
+
+The compiler rebuilt; all eight float/double calls were checked in generated IL,
+lowered with pinned QBE 1.2, assembled and linked to the local libm without
+executing the output. Four invalid argument cases were rejected. Regression
+fixtures and generated-program runtime remain unrun.

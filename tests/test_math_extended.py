@@ -19,6 +19,11 @@ static_assert(_Generic(NAN,float:1,default:0));
 static_assert(_Generic(HUGE_VAL,double:1,default:0));
 static_assert(_Generic(HUGE_VALF,float:1,default:0));
 static_assert(FP_ILOGB0==(-2147483647-1));
+static_assert(FP_LLOGB0==(-9223372036854775807L-1L));
+static_assert(_Generic(nextup(0.0f),float:1,default:0));
+static_assert(_Generic(nextdown(0.0),double:1,default:0));
+static_assert(_Generic(exp10(0.0f),float:1,default:0));
+static_assert(_Generic(llogb(1.0f),long:1,default:0));
 float global_inf=INFINITY, global_nan=NAN;
 double global_inf_wide=INFINITY, global_nan_wide=NAN, global_huge=HUGE_VAL;
 _Bool global_nan_bool=NAN;
@@ -32,6 +37,8 @@ int main(void) {
       !isnan(global_nan_wide) || !isinf(global_huge) || !global_nan_bool ||
       !global_nan_not_equal || !global_inf_greater) return 10;
   float x=2.0f;
+  if (nextup(0.0f)!=FLT_TRUE_MIN || nextdown(0.0)!=-DBL_TRUE_MIN ||
+      exp10(2.0f)!=100.0f || llogb(8.0)!=3) return 11;
   float tiny=FLT_TRUE_MIN;
   double double_tiny=DBL_TRUE_MIN;
   if (!issubnormal(double_tiny)) return 6;
@@ -48,7 +55,7 @@ int main(void) {
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
-    for name in ('fmaf', 'hypot', 'exp2', 'fmaxf', 'copysign', '__kcc_isgreater_f', '__kcc_isunordered_d'):
+    for name in ('fmaf', 'hypot', 'exp2', 'fmaxf', 'copysign', '__kcc_isgreater_f', '__kcc_isunordered_d', 'nextupf', 'nextdown', 'exp10f', 'llogb'):
         assert 'call $' + name in result.stdout, name
     if qbe:
         il, asm, exe = (path / n for n in ('test.ssa', 'test.s', 'test'))
