@@ -372,6 +372,12 @@ struct constant_result check_integer_constant_form(const struct ast_expression *
 	return evaluate(expression, false, false);
 }
 
+struct constant_result evaluate_integer_initializer(const struct ast_expression *expression)
+{
+	assert(expression && expression->type && type_is_integer(expression->type));
+	return evaluate(expression, true, true);
+}
+
 /* Initializer selection is distinct from strict ICE operand validation: an
  * unselected pointer branch may contain an otherwise valid load or call.
  * Both branches have already passed sema; this query only evaluates selection. */

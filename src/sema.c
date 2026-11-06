@@ -3830,7 +3830,9 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 					value.type = operand->type;
 					value.bits = truth;
 				} else if (!static_integer_arithmetic(operand, &value)) {
-					return false;
+					value = evaluate_integer_initializer(operand);
+					if (value.status != constant_value)
+						return false;
 				}
 			}
 			width = type_integer_width(value.type);
@@ -3974,7 +3976,8 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 	struct constant_result arithmetic_result;
 	if (type_is_integer(source->type) && type_is_integer(converted->type) &&
 		evaluate_integer_constant(source).status != constant_value &&
-		static_integer_arithmetic(source, &arithmetic_result)) {
+		(static_integer_arithmetic(source, &arithmetic_result) ||
+		 (arithmetic_result = evaluate_integer_initializer(source)).status == constant_value)) {
 		struct constant_result result = arithmetic_result;
 		unsigned width, target_width;
 		uint64_t bits;
@@ -5999,7 +6002,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		is_static_floating_boolean(*initializer) || is_static_float_conditioned_integer(*initializer) ||
 		(type_is_integer((*initializer)->type) &&
 			evaluate_integer_constant(*initializer).status != constant_value &&
-			static_integer_arithmetic(*initializer, &arithmetic_result))) &&
+			(static_integer_arithmetic(*initializer, &arithmetic_result) ||
+			 (arithmetic_result = evaluate_integer_initializer(*initializer)).status == constant_value))) &&
 		type_is_integer(type)) {
 		struct ast_expression *source_expression = *initializer;
 		target = unqualified_type(sema, type, name.location);

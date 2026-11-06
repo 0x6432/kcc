@@ -133,3 +133,21 @@ supported. Five focused unsupported forms produced diagnostics rather than a
 crash; two supported pointer-truth forms compiled, and the earlier focused
 floating-pointer checks continued to pass. The compiler rebuilt. Regression
 fixtures, generated-program runtime and fuzz checks remain unrun.
+
+## Address-derived scalar initializers
+
+Static integer and boolean initializers may use values calculated by the
+existing symbolic address-condition evaluator, including proved pointer truth,
+same-object comparisons and differences, and arithmetic around their results.
+Those integer values can also be converted to float/double static objects.
+Conditional/logical evaluation retains the initializer-only treatment of
+unselected branches; it does not make these expressions integer constant
+expressions. Pointer loads, thread-local addresses, unproved string identity,
+pointer-to-integer numeric values and evaluated invalid arithmetic remain
+rejected. A floating-valued conditional with a pointer condition remains
+outside this slice.
+
+The compiler rebuilt; ten scalar values were inspected in IL, lowered by pinned
+QBE 1.2 and assembled, and nine invalid or unsupported examples were rejected.
+Added regression fixtures, generated-program runtime, ABI, sanitizer and fuzz
+checks remain unrun. This does not imply M17 approval.

@@ -26,6 +26,9 @@ struct constant_result evaluate_integer_constant(const struct ast_expression *ex
 /* Check strict integer operand form without evaluating the expression. */
 struct constant_result check_integer_constant_form(const struct ast_expression *expression);
 
+/* Initializer-only integer value with bounded symbolic-address conditions. */
+struct constant_result evaluate_integer_initializer(const struct ast_expression *expression);
+
 /* A null proof has no integer bits or numeric address representation. */
 struct null_initializer_result {
 	enum constant_status status;
