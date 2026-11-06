@@ -15,6 +15,8 @@ host = os.environ.get('HOST_CC', 'cc')
 program = '''enum E { A=1, B=2 };
 enum W { W1=2147483648L, W2=-1 };
 enum F : unsigned short { F1=4, F2=5 };
+enum Self { SELF_POINTER_SIZE=sizeof(enum Self *) };
+enum Fixed : int { FIXED_VALUE=(enum Fixed)3 };
 typedef enum E Outer;
 int main(void) {
     enum E e=A; enum W w=W1; enum F f=F1;
@@ -25,6 +27,8 @@ int main(void) {
     return e==2 && w==2147483648L && f==4 ? 42 : 2;
 }'''
 invalid = [
+    'enum E { A=(enum E)0 };',
+    'enum E { A=sizeof((enum E)0) };',
     'enum E { A=1 }; int f(void) { enum E x; { enum E { A=2 }; enum E *p=&x; } return 0; }',
     'enum E { A=1 }; int f(void) { enum E x; { enum E { B=1 }; enum E *p=&x; } return 0; }',
     'enum E { A=1 }; int f(void) { enum E x; { enum E { A=1, B=2 }; enum E *p=&x; } return 0; }',

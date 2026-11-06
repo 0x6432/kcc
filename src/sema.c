@@ -2815,6 +2815,11 @@ static bool sema_expression(struct sema *sema,
 		result_type = resolve_type_syntax(sema, node->type_syntax);
 		if (!result_type)
 			return false;
+		if (result_type->kind == type_kind_enum && !type_is_complete_object(result_type)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"cast target cannot be an incomplete enum type");
+			return false;
+		}
 		result_type = unqualified_type(sema, result_type, node->type_syntax->location);
 		if (!result_type)
 			return false;

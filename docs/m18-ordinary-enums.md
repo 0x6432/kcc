@@ -125,3 +125,14 @@ compilation checks succeeded. New fixtures, QBE/runtime, ABI, sanitizer, fuzz
 and full regression checks have not been run. This is a bounded implementation
 increment, not M18 completion, M17 approval or full C23 conformance.
 See ISO C 2024 working draft N3220 6.2.7 and 6.7.3.3.
+
+## Incomplete enum cast constraint
+
+An ordinary enum is incomplete inside its own enumerator list. Casts to that
+incomplete enum are rejected, including inside unevaluated `sizeof` operands,
+rather than using the provisional int representation. Pointers to the
+incomplete enum remain valid; a fixed-underlying enum is already complete and
+can be the target of a cast during its definition.
+
+The compiler build and focused acceptance and rejection checks succeeded.
+Regression fixtures, runtime, sanitizer and fuzz checks remain unrun.
