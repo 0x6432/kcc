@@ -1201,6 +1201,16 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define trunc(x) _Generic((x),float:truncf,default:trunc)(x)\n"
 			"#define round(x) _Generic((x),float:roundf,default:round)(x)\n"
 			"#define roundeven(x) _Generic((x),float:roundevenf,default:roundeven)(x)\n"
+			"#define ilogb(x) _Generic((x),float:ilogbf,default:ilogb)(x)\n"
+			"#define lrint(x) _Generic((x),float:lrintf,default:lrint)(x)\n"
+			"#define llrint(x) _Generic((x),float:llrintf,default:llrint)(x)\n"
+			"#define lround(x) _Generic((x),float:lroundf,default:lround)(x)\n"
+			"#define llround(x) _Generic((x),float:llroundf,default:llround)(x)\n"
+			"#define frexp(x,e) _Generic((x),float:frexpf,default:frexp)((x),(e))\n"
+			"#define ldexp(x,e) _Generic((x),float:ldexpf,default:ldexp)((x),(e))\n"
+			"#define scalbn(x,e) _Generic((x),float:scalbnf,default:scalbn)((x),(e))\n"
+			"#define scalbln(x,e) _Generic((x),float:scalblnf,default:scalbln)((x),(e))\n"
+			"#define remquo(x,y,q) _Generic((x),float:_Generic((y),float:remquof,default:remquo),default:remquo)((x),(y),(q))\n"
 			"#define fromfp(x,r,w) _Generic((x),float:fromfpf,default:fromfp)((x),(r),(w))\n"
 			"#define ufromfp(x,r,w) _Generic((x),float:ufromfpf,default:ufromfp)((x),(r),(w))\n"
 			"#define fromfpx(x,r,w) _Generic((x),float:fromfpxf,default:fromfpx)((x),(r),(w))\n"
@@ -1208,6 +1218,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define atan2(x,y) _Generic((x),float:_Generic((y),float:atan2f,default:atan2),default:atan2)((x),(y))\n"
 			"#define pow(x,y) _Generic((x),float:_Generic((y),float:powf,default:pow),default:pow)((x),(y))\n"
 			"#define fmod(x,y) _Generic((x),float:_Generic((y),float:fmodf,default:fmod),default:fmod)((x),(y))\n"
+			"";
+		static const char tgmath_header_tail[] =
 			"#define sinh(x) _Generic((x),float:sinhf,default:sinh)(x)\n"
 			"#define cosh(x) _Generic((x),float:coshf,default:cosh)(x)\n"
 			"#define tanh(x) _Generic((x),float:tanhf,default:tanh)(x)\n"
@@ -1727,6 +1739,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			source_name = "<kcc/math.h>";
 		} else if (strcmp(name->path, "tgmath.h") == 0) {
 			header = tgmath_header;
+			header_tail = tgmath_header_tail;
 			source_name = "<kcc/tgmath.h>";
 		} else if (strcmp(name->path, "ctype.h") == 0) {
 			header = ctype_header;

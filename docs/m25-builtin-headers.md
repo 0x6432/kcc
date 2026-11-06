@@ -84,9 +84,12 @@ Source provenance, not a filename, determines which budget is charged.
   generated-program runtime behavior has not been tested.
 - `tgmath.h` provides bounded unary real functions, `atan2`, `pow`, `fmod`,
   `hypot`, `copysign`, `fdim`, `fmax`, `fmin`, `remainder`, `nextafter` and
-  `fma` as generic macros for float, double and integer arguments. All-float
-  arguments select the `f` variant; any double or integer selects the double
-  variant. Arguments are evaluated once. Other generic functions, complex and
+  `fma`, `remquo`, `frexp`, `ldexp`, `scalbn`, `scalbln`, `ilogb`,
+  `lrint`, `llrint`, `lround` and `llround` as generic macros for float, double
+  and integer arguments. All-float
+  arithmetic arguments select the `f` variant; any double or integer arithmetic
+  argument selects the double variant. Integer exponent, quotient-pointer, and
+  output-pointer arguments do not participate in dispatch. Arguments are evaluated once. Other generic functions, complex and
   long-double generic math are not provided.
 - `ctype.h` declares the usual narrow-character classification and conversion
   functions from libc. `inttypes.h` supplies exact-width, pointer-width and

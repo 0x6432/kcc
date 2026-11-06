@@ -227,6 +227,11 @@ int f(float x, double y) {
         assert '$' + symbol in result.stdout, symbol
     source.write_text(r'''
 #include <tgmath.h>
+static_assert(sizeof(frexp(4.0f,(int *)0))==sizeof(float));
+static_assert(sizeof(ldexp(4,1))==sizeof(double));
+static_assert(sizeof(scalbn(4.0f,1))==sizeof(float));
+static_assert(sizeof(remquo(4.0f,2.0f,(int *)0))==sizeof(float));
+static_assert(sizeof(remquo(4.0f,2,(int *)0))==sizeof(double));
 static_assert(sizeof(roundeven(4.0f))==sizeof(float));
 static_assert(sizeof(roundeven(4))==sizeof(double));
 static_assert(sizeof(sqrt(4.0f))==sizeof(float));
@@ -238,7 +243,11 @@ static_assert(sizeof(pow(4,2.0f))==sizeof(double));
 int main(void) {
   int n=4;
   float f=4.0f;
-  return sqrt(n++)==2.0 && n==5 && sqrt(f)==2.0f && pow(f,2)==16.0 ? 42 : 1;
+  int exp, quo;
+  return sqrt(n++)==2.0 && n==5 && sqrt(f)==2.0f && pow(f,2)==16.0 &&
+    frexp(f,&exp)==0.5f && exp==3 && remquo(f,2.0f,&quo)==0.0f &&
+    ldexp(0.5f,3)==4.0f && scalbn(0.5f,3)==4.0f && scalbln(0.5f,3)==4.0f &&
+    ilogb(f)==2 && lrint(f)==4 && llrint(f)==4 && lround(f)==4 && llround(f)==4 ? 42 : 1;
 }
 ''')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
