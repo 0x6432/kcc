@@ -22,8 +22,10 @@ items/tokens per sequence. Argument tokens must be supported language tokens;
 this is not yet a general preprocessing-token attribute parser. `[[nodiscard]]` and `[[nodiscard("message")]]` are accepted on function
 identifier declarations, at file and block scope, as declaration prefixes or
 declarator suffixes. Adjacent ordinary strings are accepted as a message. The
-compiler does not issue the recommended discarded-result warning or advertise
-this partial support through `__has_c_attribute`. Typedef- and `typeof`-derived
+compiler warns for a stand-alone direct call that discards the result of a
+visible nodiscard function. It does not warn for indirect calls, nested discarded
+expressions or all declaration-redeclaration scopes. `(void)` casts suppress this
+limited warning. It does not advertise partial support through `__has_c_attribute`. Typedef- and `typeof`-derived
 function identifiers are resolved semantically; objects, record/enum
 declarations and other placements are currently rejected. The flag is retained
 on declaration nodes for future warning support.

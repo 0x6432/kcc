@@ -4953,8 +4953,25 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 	case statement_expression: {
 		struct ast_expression_statement *node =
 			(struct ast_expression_statement *)statement;
-
-		return sema_expression(sema, &node->value, true);
+		bool warn_nodiscard = false;
+		/* This deliberately diagnoses only a direct, stand-alone call; wider
+		 * discarded-value analysis and indirect calls remain future work. */
+		if (node->value->kind == expression_call) {
+			struct ast_call_expression *call = (struct ast_call_expression *)node->value;
+			if (call->callee->kind == expression_name) {
+				struct ast_name_expression *name = (struct ast_name_expression *)call->callee;
+				struct ast_local_declaration *local = find_local(sema, name->name);
+				struct function_symbol *function = local ? local->function_symbol :
+					visible_file_function(sema, name->name);
+				warn_nodiscard = function && ((local && local->is_nodiscard) || function->file_nodiscard);
+			}
+		}
+		if (!sema_expression(sema, &node->value, true))
+			return false;
+		if (warn_nodiscard && node->value->type->kind != type_kind_void)
+			diagnostic_warning(sema->diagnostics, node->value->location,
+				"discarded result of nodiscard function");
+		return true;
 	}
 	case statement_empty:
 		return true;
@@ -5970,6 +5987,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 	if (!record_inline(sema, declaration->symbol, declaration->is_inline, declaration->is_extern,
 		true, declaration->name.location))
 		return false;
+	declaration->symbol->file_nodiscard |= declaration->is_nodiscard;
 	declaration->type = type;
 	return true;
 }
@@ -6009,6 +6027,7 @@ static bool sema_function_declaration(struct sema *sema,
 	if (!record_inline(sema, symbol, declaration->is_inline, declaration->is_extern,
 		true, declaration->name.location))
 		return false;
+	symbol->file_nodiscard |= declaration->is_nodiscard;
 	if (!definition)
 		return true;
 	const struct function_type *signature = (const struct function_type *)resolved;

@@ -112,6 +112,12 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
         assert not result.stdout, (source, result.stdout)
         if message:
             assert message in result.stderr, (source, result.stderr)
+    result = compile('[[nodiscard]] int f(void); int g(void){f(); (void)f(); return f();}')
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.count('warning: discarded result of nodiscard function') == 1, result.stderr
+    result = compile('int f(void); int g(void){[[nodiscard]] int f(void); f(); return 0;} int h(void){f(); return 0;}')
+    assert result.returncode == 0, result.stderr
+    assert result.stderr.count('warning: discarded result of nodiscard function') == 1, result.stderr
     for count, success in [(256, True), (257, False)]:
         result = compile('[[]]' * count + ' int x;')
         assert (result.returncode == 0) == success, (count, result.stderr)

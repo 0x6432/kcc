@@ -46,6 +46,7 @@ struct external_object_symbol {
 
 struct function_symbol {
 	bool has_inline_declaration;
+	bool file_nodiscard;
 	bool has_noninline_file_declaration;
 	bool is_inline_only;
 	struct token name;
