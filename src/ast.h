@@ -993,6 +993,7 @@ struct ast_parameter_scope_name {
 
 struct ast_parameter {
 	struct ast_type_syntax *type_syntax;
+	struct ast_alignment_group *alignments;
 	/* Enumerator names introduced in this parameter's prototype scope. */
 	struct ast_parameter_scope_name *scope_names;
 	const struct type *type;

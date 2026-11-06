@@ -1280,6 +1280,7 @@ static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *pa
 	local->type_syntax = parameter->type_syntax;
 	local->type = parameter->type;
 	local->is_register = parameter->is_register;
+	local->alignment = parameter->alignments ? parameter->alignments->alignment : 0;
 	parameter->prototype_local = local;
 	*binding = (struct binding) { .declaration = local, .next = sema->scope->bindings };
 	sema->scope->bindings = binding;
@@ -1482,6 +1483,8 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		struct ast_type_syntax *saved_candidate = sema->prototype_vla_candidate;
 		struct ast_type_syntax *saved_definition_candidate = sema->definition_vla_candidate;
 
+		if (parameter->alignments && !sema_alignment_group(sema, parameter->alignments))
+			goto done;
 		if (parameter->type_syntax->kind == type_syntax_array &&
 			((struct ast_array_type_syntax *)parameter->type_syntax)->parameter_star &&
 			function == sema->definition_syntax) {
@@ -1509,7 +1512,8 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 			goto done;
 		if (declared->kind == type_kind_void) {
 			/* Resolve query-derived void without removing its written syntax. */
-			if (function->parameter_count == 1 && !function->variadic && !parameter->has_name && !declared->qualifiers) {
+			if (function->parameter_count == 1 && !function->variadic && !parameter->has_name &&
+				!declared->qualifiers && !parameter->alignments) {
 				parameter->type = declared;
 				parameter->is_void_marker = true;
 				void_marker = true;
@@ -1532,6 +1536,9 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 				}
 			}
 		}
+		if (parameter->alignments && !check_object_alignment(sema, parameter->type,
+			parameter->alignments->alignment, parameter->location))
+			goto done;
 		parameters[count] = unqualified_type(sema, parameter->type, parameter->location);
 		if (!parameters[count] || !bind_prototype_parameter(sema, parameter))
 			goto done;

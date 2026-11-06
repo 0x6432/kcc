@@ -35,7 +35,7 @@ an explicit implementation policy, not a claim those questions are resolved.
 Across translation units kcc cannot verify matching declarations; callers must
 supply consistent alignment themselves.
 
-Still unsupported: alignment on typedefs, parameters, register objects,
+Still unsupported: alignment on typedefs, register objects,
 functions, or
 requests above 16. Alignment on inferred automatic objects is supported.
 These are implementation limits, not claims that all such programs violate C. No broader C23 alignment conformance is claimed.
@@ -89,3 +89,18 @@ to their older underscore forms. Regression fixtures were added but not run;
 QBE runtime, ABI, sanitizer, fuzz and full regression checks remain outstanding.
 This is an implementation increment, not M18 completion, M17 approval, or a
 full C23 conformance claim.
+
+## Parameter alignment
+
+Parameters may have supported alignment specifiers. Requests are checked in
+prototype scope, before the parameter enters scope, and are validated against
+the adjusted parameter object type; an array parameter therefore has pointer
+alignment. A definition's named parameter spill slot uses the requested
+alignment. Alignment is not part of the function type or calling convention,
+and a prototype's request does not impose storage alignment on a separate
+definition. Register parameters and void parameter markers cannot have an
+alignment specifier. Requests above 16 remain unsupported.
+
+The compiler build and focused accept/reject and emitted-IL checks succeeded.
+Regression fixtures, generated-program runtime, ABI, sanitizer and fuzz checks
+were not run. This does not complete or approve M18.

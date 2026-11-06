@@ -403,7 +403,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			struct ast_alignment_specifier *alignment;
 			struct token beginning_type;
 
-			if (!head || (context != declarator_local && context != declarator_external && context != declarator_member)) {
+			if (!head || (context != declarator_local && context != declarator_external &&
+				context != declarator_member && context != declarator_parameter)) {
 				diagnostic_error(parser->diagnostics, token.location,
 					"alignment specifier is not permitted in this context");
 				return NULL;
@@ -4014,7 +4015,7 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		}
 		/* Keep written register void for the semantic subset diagnostic. */
-		if (!function->parameter_count && !has_name && head.keyword.kind != token_register &&
+		if (!function->parameter_count && !has_name && !head.alignments && head.keyword.kind != token_register &&
 			type_syntax->kind == type_syntax_void &&
 			preprocess_peek(parser->preprocessor).kind == token_right_paren)
 			return true;
@@ -4024,6 +4025,7 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		}
 		parameter->type_syntax = type_syntax;
+		parameter->alignments = head.alignments;
 		parameter->is_register = head.keyword.kind == token_register;
 		/* Nested function parameter lists restore parser names, so only
 		 * names belonging to this scope remain between these sentinels. */

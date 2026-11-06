@@ -32,6 +32,11 @@ accepted = [
     ('int f(void) { alignas(16) char a[]={1,2,3}; return sizeof a; }', 'alloc16 3'),
     ('#define A alignas\nint f(void) { A(16) char x; return sizeof x; }', 'alloc16 1'),
     ('int f(void) { for (alignas(16) int x=0; x<1; x=x+1) {} return 0; }', 'alloc16 4'),
+    ('int f(alignas(16) int x) { return x; }', 'alloc16 4'),
+    ('int f(int alignas(16) x) { return x; }', 'alloc16 4'),
+    ('int f(alignas(16) int x[3]) { return x[0]; }', 'alloc16 8'),
+    ('int f(alignas(16) int); int f(int x) { return x; }', 'alloc4 4'),
+    ('int f(enum { N=16 } a, alignas(N) int b) { return a+b; }', 'alloc16 4'),
     ('int f(void) { ' + 'alignas(0) '*32 + 'int x; return 0; }', 'alloc4 4'),
 ]
 rejected = [
@@ -50,7 +55,11 @@ rejected = [
     ('int f(void) { int alignas(16) register x; return 0; }', 'typedef or register'),
     ('int f(void) { alignas(16) register int x; return 0; }', 'typedef or register'),
     ('int f(void) { alignas(16) typedef int T; return 0; }', 'typedef or register'),
-    ('int f(alignas(16) int x);', 'not permitted in this context'),
+    ('int f(alignas(2) int x);', 'weaken'),
+    ('int f(alignas(4) int x[3]);', 'weaken'),
+    ('int f(alignas(16) register int x);', 'typedef or register'),
+    ('int f(alignas(16) void);', 'parameter cannot have void type'),
+    ('int f(alignas(3) int x);', 'supported alignments'),
     ('int f(void) { alignas(16) int g(void); return 0; }', 'object type'),
     ('int f(void) { alignas(2) auto x=1; return 0; }', 'weaken'),
     ('int f(void) { alignas(32) auto x=1; return 0; }', 'supported alignments'),
@@ -58,6 +67,7 @@ rejected = [
 ]
 
 runtime = '''int aligned(void *p, int n);
+int parameter_aligned(alignas(16) int n) { return aligned(&n,16) && n==7; }
 int main(void) {
     int alignas(16) x=3;
     alignas(16) auto inferred=5;
@@ -65,6 +75,7 @@ int main(void) {
     alignas(long) char b=4;
     if (!aligned(&x,16) || !aligned(a,16) || !aligned(&b,8) || !aligned(&inferred,16)) return 1;
     if (sizeof x!=4 || sizeof a!=3 || x!=3 || a[2]!=3 || b!=4 || inferred!=5) return 2;
+    if (!parameter_aligned(7)) return 3;
     return 42;
 }'''
 with tempfile.TemporaryDirectory(prefix='kcc-align-') as directory:

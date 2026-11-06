@@ -17,7 +17,8 @@ are historical, not the current branching policy. Merge feature branches
 without losing their unique changes; delete a branch only after its history
 has been integrated and pushed.
 
-An M18 increment supports bounded alignment on anonymous struct/union members;
+M18 increments support bounded alignment on anonymous struct/union members and
+function parameters;
 see `m18-declaration-alignment.md`. The compiler build and focused compile/IL
 checks succeeded, with a focused host GCC layout comparison. The regression
 fixtures and generated-program runtime checks have not been run.
