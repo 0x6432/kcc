@@ -17,6 +17,19 @@ are historical, not the current branching policy. Merge feature branches
 without losing their unique changes; delete a branch only after its history
 has been integrated and pushed.
 
+Local integration status: `feature/m17-initializers` and the divergent
+`feature/m15-null-initializers` history are in local `development`. The
+divergent `feature/m18-enums-alignment` history is not merged: a merge preview
+reports conflicts in core compiler files and documents. Its separate M18
+implementation includes choices and machinery that need deliberate
+reconciliation, including enum representation, tentative-object alignment
+policy, transaction handling, and its additive test gates. Newer bounded
+parameter and compound-literal alignment implementations do not by themselves
+prove the branch's other changes are incorporated. Do not resolve the merge by
+discarding a side wholesale, claim the branch is integrated, or delete it
+before that reconciliation. Remote push and branch deletion status must be
+checked directly rather than inferred from this local record.
+
 M18 increments support bounded alignment on anonymous struct/union members,
 function parameters and compound literals;
 see `m18-declaration-alignment.md`. The compiler build and focused compile/IL
