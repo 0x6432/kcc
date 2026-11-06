@@ -20,7 +20,7 @@ Deprecated enum definitions now warn on subsequent direct named enum type
 references, and bounded nodiscard warnings cover discarded comma operands,
 with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Notable remaining work includes aggregate-by-value
-ABI, bit-fields, source `_BitInt`, `long double`, complete preprocessing and
+ABI, general bit-fields (the full-width subset is in `m22-bit-fields.md`), source `_BitInt`, `long double`, complete preprocessing and
 attributes, and a complete hosted C library. The internal bit-precise arithmetic
 helpers do **not** enable `_BitInt` source programs.
 

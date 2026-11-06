@@ -9,7 +9,8 @@ the flexible member itself. Whole-record copies use the fixed struct size.
 This subset rejects structs containing a flexible-array struct as a member or
 array element, direct flexible-array members in unions, and direct flexible-array initialization. These are implementation
 boundaries, not a complete C23 flexible-array implementation. Access must stay
-within storage actually allocated by the program. Bit-fields remain unsupported.
+within storage actually allocated by the program. The later full-width bit-field
+subset is documented in `m22-bit-fields.md`.
 The implementation has been built but has not yet been integration-tested.
 
 ## Promoted names and trailing assertions

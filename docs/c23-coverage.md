@@ -6,7 +6,8 @@ and partial standard headers. Aggregate-by-value ABI, bit-fields, expanded C23
 record compatibility and full language/library coverage remain incomplete.
 Recent integration has not been fully tested; M17 approval and conformance are
 not claimed. Earlier entries and the detailed table below may be historical;
-read the feature-specific documents for current boundaries.
+read the feature-specific documents for current boundaries. For the bounded
+full-width bit-field subset, see `m22-bit-fields.md`.
 
 
 Storage/linkage for existing supported types includes block extern/function

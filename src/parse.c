@@ -1232,7 +1232,8 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 
 static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
 	struct ast_record_member_declaration ***tail, struct ast_type_syntax *syntax,
-	struct token name, bool anonymous, struct ast_alignment_group *alignments)
+	struct token name, bool anonymous, struct ast_alignment_group *alignments,
+	struct ast_expression *bit_width, struct source_location bit_colon)
 {
 	struct ast_record_member_declaration *member;
 
@@ -1249,6 +1250,7 @@ static bool append_record_member(struct parser *parser, struct ast_record_type_s
 	}
 	*member = (struct ast_record_member_declaration) {
 		.type_syntax = syntax, .name = name, .anonymous = anonymous, .alignments = alignments,
+		.bit_width = bit_width, .bit_colon = bit_colon,
 	};
 	**tail = member;
 	*tail = &member->next;
@@ -1321,7 +1323,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name, true, head.alignments))
+			if (!append_record_member(parser, record, &tail, base, name, true, head.alignments, NULL, beginning.location))
 				return false;
 			continue;
 		}
@@ -1329,6 +1331,8 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			struct token name = { 0 };
 			bool has_name = false;
 			struct ast_type_syntax *syntax;
+			struct ast_expression *bit_width = NULL;
+			struct source_location bit_colon = beginning.location;
 
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
 				diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -1344,15 +1348,16 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 					return false;
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
-				diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
-					"bit-fields are not supported yet (M22)");
-				return false;
+				bit_colon = preprocess_next(parser->preprocessor).location;
+				bit_width = parse_expression(parser, 2);
+				if (!bit_width)
+					return false;
 			}
 			if (!has_name) {
 				diagnostic_error(parser->diagnostics, beginning.location, "expected member name");
 				return false;
 			}
-			if (!append_record_member(parser, record, &tail, syntax, name, false, head.alignments))
+			if (!append_record_member(parser, record, &tail, syntax, name, false, head.alignments, bit_width, bit_colon))
 				return false;
 			if (preprocess_peek(parser->preprocessor).kind != token_comma)
 				break;

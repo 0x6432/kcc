@@ -641,7 +641,13 @@ bool type_record_layout(struct record_definition *definition)
 		uint64_t member_size;
 		unsigned member_alignment;
 
+		/* This representation only admits named, non-volatile full int units.
+		 * Narrow/unnamed fields cannot be laid out as ordinary members. */
 		if (++count > 1024 ||
+			(member->is_bit_field && (member->anonymous || !member->name.length ||
+			member->alignment || member->is_flexible ||
+			(member->type->kind != type_kind_int && member->type->kind != type_kind_uint) ||
+			(member->type->qualifiers & ~type_qualifier_const))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member,
 			&member_size, &member_alignment))

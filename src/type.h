@@ -77,6 +77,7 @@ struct record_member {
 	unsigned alignment; /* Explicit member alignment; zero means natural. */
 	bool anonymous;
 	bool is_flexible;
+	bool is_bit_field; /* Accepted bit-fields occupy a complete int allocation unit. */
 	struct record_member *next;
 };
 

@@ -290,6 +290,16 @@ static const struct type *unqualified_type(struct sema *sema, const struct type 
 
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required);
+
+/* Only direct designators are bit-fields; conversions and arithmetic yield
+ * ordinary values. Parentheses are erased by the parser. */
+static bool is_bit_field_expression(const struct ast_expression *expression)
+{
+	return expression->kind == expression_member &&
+		((const struct ast_member_expression *)expression)->member &&
+		((const struct ast_member_expression *)expression)->member->is_bit_field;
+}
+
 /* Restrict may qualify a pointer to an object (including void), or an
  * array typedef whose ultimately qualified element is such a pointer. */
 static bool restrict_qualifiable(const struct type *type)
@@ -552,6 +562,28 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		type = resolve_type_syntax(sema, member->type_syntax);
 		if (!type)
 			goto done;
+		if (member->bit_width) {
+			struct constant_result width;
+			if (member->alignments) {
+				diagnostic_error(sema->diagnostics, member->bit_colon,
+					"alignment specifier cannot apply to a bit-field");
+				goto done;
+			}
+			if (!sema_expression(sema, &member->bit_width, true))
+				goto done;
+			width = evaluate_integer_constant(member->bit_width);
+			/* This subset deliberately accepts only the exact full 32-bit
+			 * allocation unit. Narrow fields need distinct layout, promotions,
+			 * read/modify/write and initializer machinery. */
+			if ((type->kind != type_kind_int && type->kind != type_kind_uint) ||
+				(type->qualifiers & ~type_qualifier_const) ||
+				!type_is_integer(member->bit_width->type) ||
+				width.status != constant_value || width.bits != 32) {
+				diagnostic_error(sema->diagnostics, member->bit_colon,
+					"bit-fields are not supported yet (M22)");
+				goto done;
+			}
+		}
 		struct ast_type_syntax *written = member->type_syntax;
 		while (written->kind == type_syntax_qualified)
 			written = ((struct ast_qualified_type_syntax *)written)->base;
@@ -631,6 +663,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		}
 		*resolved = (struct record_member) { .name = member->name, .type = type,
 			.anonymous = member->anonymous, .is_flexible = flexible,
+			.is_bit_field = member->bit_width != NULL,
 			.alignment = member->alignments ? member->alignments->alignment : 0 };
 		*tail = resolved;
 		tail = &resolved->next;
@@ -1192,6 +1225,10 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		 */
 		if (!sema_unevaluated_expression(sema, &query->operand))
 			return NULL;
+		if (is_bit_field_expression(query->operand)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "typeof cannot be applied to a bit-field");
+			return NULL;
+		}
 		if (query->operand->type->kind == type_kind_array &&
 			((const struct array_type *)query->operand->type)->runtime_bound) {
 			diagnostic_error(sema->diagnostics, syntax->location, "typeof of variable-length array is not supported");
@@ -2500,6 +2537,10 @@ static bool sema_expression(struct sema *sema,
 
 		if (!sema_expression(sema, &node->operand, false))
 			return false;
+		if (is_bit_field_expression(node->operand)) {
+			diagnostic_error(sema->diagnostics, expression->location, "cannot take the address of a bit-field");
+			return false;
+		}
 		if (!node->operand->is_lvalue && node->operand->type->kind != type_kind_function &&
 			node->operand->kind != expression_indirection) {
 			diagnostic_error(sema->diagnostics, expression->location, "address-of requires an object lvalue or function designator");
@@ -2757,6 +2798,10 @@ static bool sema_expression(struct sema *sema,
 		/* No immediate load/array/function decay; constraints still apply inside. */
 		if (!sema_unevaluated_expression(sema, &node->operand))
 			return false;
+		if (is_bit_field_expression(node->operand)) {
+			diagnostic_error(sema->diagnostics, expression->location, "sizeof cannot be applied to a bit-field");
+			return false;
+		}
 		if (node->operand->type->kind == type_kind_array &&
 			((const struct array_type *)node->operand->type)->runtime_bound) {
 			node->vla_local = direct_vla_local(node->operand);
@@ -2809,6 +2854,11 @@ static bool sema_expression(struct sema *sema,
 					if (!member) {
 						diagnostic_error(sema->diagnostics, step->member.location,
 							"no member with this name in offsetof");
+						return false;
+					}
+					if (member->is_bit_field) {
+						diagnostic_error(sema->diagnostics, step->member.location,
+							"offsetof cannot designate a bit-field");
 						return false;
 					}
 					offset += member_offset;

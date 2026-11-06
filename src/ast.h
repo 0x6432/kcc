@@ -587,6 +587,8 @@ struct ast_record_type_syntax {
 
 struct ast_record_member_declaration {
 	struct ast_type_syntax *type_syntax;
+	struct ast_expression *bit_width;
+	struct source_location bit_colon;
 	struct ast_alignment_group *alignments;
 	struct token name;
 	bool anonymous;
