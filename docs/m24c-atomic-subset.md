@@ -53,9 +53,9 @@ arguments are evaluated once. Callers must supply valid success/failure orders:
 failure cannot be release or acquire-release or stronger than success.
 The fallback header declares the out-of-line libatomic `atomic_thread_fence`
 and `atomic_signal_fence` functions. They take a runtime memory order and require
-a libatomic providing these functions. Signal handling and volatile atomic
-objects remain outside the compiler's supported subset. Fence interactions have
-not been tested.
+a libatomic providing these functions. Signal handling remains outside the supported concurrency contract. Volatile
+atomic scalars use these same atomic access paths; their automatic initialization
+uses the separately linked `libkccrt.a`. Fence interactions have not been tested.
 The fallback `atomic_flag` uses the naturally aligned four-byte atomic unsigned
 representation and implements test-and-set and clear using exchange and store.
 This relies on the target libatomic providing lock-free 4-byte operations on
@@ -77,7 +77,7 @@ Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
 Aggregate and array atomic types,
-volatile atomic types and other atomic library operations are not implemented. `_Atomic(type-name)` rejects
+and other atomic library operations are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
 query limit. The libatomic ABI's reserved function names must not be redefined by

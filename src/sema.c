@@ -1080,11 +1080,6 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "unsupported atomic type");
 			return NULL;
 		}
-		if (((qualified->qualifiers | base->qualifiers) & type_qualifier_volatile) &&
-			((qualified->qualifiers | base->qualifiers) & type_qualifier_atomic)) {
-			diagnostic_error(sema->diagnostics, syntax->location, "volatile atomic types are not supported yet");
-			return NULL;
-		}
 		if (qualified->qualifiers & type_qualifier_volatile) {
 			const struct type *element = base;
 			while (element->kind == type_kind_array)
@@ -4377,8 +4372,7 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		diagnostic_error(sema->diagnostics, local->name.location, "unsupported atomic type");
 		return false;
 	}
-	if ((syntax->qualifiers & type_qualifier_volatile) &&
-		(type_is_record(type) || ((syntax->qualifiers | type->qualifiers) & type_qualifier_atomic))) {
+	if ((syntax->qualifiers & type_qualifier_volatile) && type_is_record(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location, "unsupported inferred volatile type");
 		return false;
 	}

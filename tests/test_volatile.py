@@ -16,6 +16,7 @@ volatile signed char narrow=-2;
 volatile double real=1.5;
 volatile int *target=&global;
 volatile int array[2]={1,2};
+volatile _Atomic int atomic_global=1;
 typedef int row[2];
 volatile row via_typedef;
 static_assert(_Generic(&global, volatile int *: 1, default: 0));
@@ -30,13 +31,14 @@ int f(volatile int n) {
     volatile int matrix[2][2]={{1},{2}};
     volatile int vla[n]={}; vla[0]=local_array[0];
     array[1]++; via_typedef[0]=local_array[2];
+    atomic_global++;
     (void)empty; (void)floating; (void)ptr;
     (void)(volatile int){3};
     x += n; x++;
     (void)global;
     narrow++; real += 0.5;
     *target=x;
-    return global==4 && narrow==-1 && real==2.0 && local_array[1]==0 &&
+    return global==4 && narrow==-1 && real==2.0 && atomic_global==2 && local_array[1]==0 &&
         local_array[2]==3 && text[2]=='c' && text[5]==0 && wide[1]=='y' &&
         matrix[1][0]==2 && matrix[1][1]==0 ? 42 : 1;
 }
@@ -46,18 +48,18 @@ int main(void) { return f(2); }
     assert result.returncode == 0 and not result.stderr, result.stderr
     for name in ('__kcc_volatile_load_1', '__kcc_volatile_store_1',
                  '__kcc_volatile_load_4', '__kcc_volatile_store_4',
-                 '__kcc_volatile_load_8', '__kcc_volatile_store_8'):
+                 '__kcc_volatile_load_8', '__kcc_volatile_store_8',
+                 '__atomic_fetch_add_4', '__atomic_load_4'):
         assert name in result.stdout, name
     if qbe:
         il, asm, exe = (path / n for n in ('test.ssa', 'test.s', 'test'))
         il.write_text(result.stdout)
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
-        subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'),
+        subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'), '-latomic',
                         '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
     for text in ('struct S { volatile int member; };',
                  'struct S { int x; }; typedef struct S A[2]; volatile A a;',
-                 '_Atomic volatile int x;',
                  'int f(void){volatile int x=1; int *p=&x; return 0;}'):
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)

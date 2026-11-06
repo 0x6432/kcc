@@ -17,13 +17,18 @@ aliasing behavior. It is not a general memory-mapped I/O or concurrency
 contract; `volatile` does not make operations atomic.
 
 Arrays of volatile scalar elements, including multidimensional arrays and VLAs,
-support indexed access and static initialization. Automatic array initializers, including strings, designators, implicit zeros
+support indexed access and static initialization. Automatic array initializers,
+including strings, designators, implicit zeros
 and empty VLAs, use helper stores for each scalar element. Surviving explicit
 expressions are captured before stores; implicit zeros and string ranges use
-bounded generated loops. Scalar accesses use the same helpers. Volatile record types and members, and volatile atomic
-objects are rejected. Scalar braced initializers, including empty initializers
+bounded generated loops. Scalar accesses use the same helpers. Volatile record
+types and members are rejected. Supported volatile atomic scalars use the atomic
+paths for accesses and require `-latomic`; initialization uses the volatile
+runtime helper where an automatic store is needed. Scalar braced initializers,
+including empty initializers
 and automatic compound literals, emit one volatile store after evaluating the
-surviving initializer expression. Static scalar initializers are also supported. No general aggregate volatile copy or C23 conformance is claimed.
+surviving initializer expression. Static scalar initializers are also supported.
+No general aggregate volatile copy or C23 conformance is claimed.
 The compiler and runtime archive build, and focused compile/IL checks were run.
 Regression, QBE backend, signal, concurrency and generated-program runtime tests
 remain unrun.
