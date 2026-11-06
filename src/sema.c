@@ -3476,7 +3476,7 @@ static bool static_float_cast_to_integer(const struct ast_expression *source,
 
 /* The source is checked before conversion so narrowing cannot hide invalid
  * evaluated arithmetic. Both queries are pure: no lowered node is re-sema'd. */
-/* A direct integer ICE cast to a pointer denotes an absolute target value.
+/* Pointer casts around an integer ICE denote an absolute target value.
  * Do not treat pointer-derived integers or arithmetic on these values as
  * constant addresses, and do not widen the null-pointer-constant rules. */
 static bool static_numeric_pointer(const struct ast_expression *source, uint64_t *bits)
@@ -3487,6 +3487,8 @@ static bool static_numeric_pointer(const struct ast_expression *source, uint64_t
 	if (source->kind != expression_cast || source->type->kind != type_kind_pointer)
 		return false;
 	operand = ((const struct ast_cast_expression *)source)->operand;
+	while (operand->kind == expression_cast && operand->type->kind == type_kind_pointer)
+		operand = ((const struct ast_cast_expression *)operand)->operand;
 	if (!type_is_integer(operand->type))
 		return false;
 	value = evaluate_integer_constant(operand);

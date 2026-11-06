@@ -14,6 +14,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-int-pointer-') as directory:
 #include <stdint.h>
 void *absolute=(void *)(signed char)-1;
 void *values[]={(void *)1,(void *)(short)-2,0};
+int *chained=(int *)(void *)4;
 void *from_signed(int n) { return (void *)n; }
 void *from_unsigned(unsigned int n) { return (void *)n; }
 unsigned char low(void *p) { return (unsigned char)p; }
@@ -25,7 +26,7 @@ int main(void) {
   if ((uintptr_t)from_unsigned(0xffffffffU)!=0xffffffffUL) return 3;
   if (low((void *)0x1234UL)!=0x34) return 4;
   if ((uintptr_t)absolute != ~(uintptr_t)0 || (uintptr_t)values[0]!=1 ||
-      (uintptr_t)values[1] != ~(uintptr_t)1 || values[2]) return 5;
+      (uintptr_t)values[1] != ~(uintptr_t)1 || values[2] || (uintptr_t)chained != 4) return 5;
   return 42;
 }
 ''')

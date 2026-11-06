@@ -7,8 +7,8 @@ pointer-to-integer conversion uses the low target-width bits (with normal
 subword normalization). Null pointers use the target all-zero representation.
 These are implementation-defined representation choices; fabricated pointers
 must not be dereferenced or called unless valid for the execution environment.
-Implicit non-null integer/pointer conversions remain rejected. Direct casts of nonzero integer constant expressions to pointer types are
-also supported in static scalar and aggregate initializers, with the same bit
+Implicit non-null integer/pointer conversions remain rejected. Casts of nonzero integer constant expressions to pointer types, including
+explicit pointer-to-pointer cast chains, are also supported in static scalar and aggregate initializers, with the same bit
 conversion. Static pointer arithmetic on those numeric values and integer
 objects initialized from pointer relocations are not yet supported. Pointer-to-bool behavior is unchanged.
 
