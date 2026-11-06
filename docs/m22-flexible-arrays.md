@@ -27,10 +27,10 @@ fixtures and fuzzing remain unrun. This is not M22 completion or a C23 conforman
 
 ## Unions containing flexible-array structures
 
-A union may contain a named structure with a flexible array member, or another
-such union recursively. The restriction is propagated: the resulting union may
-not be a member of a structure or an array element. Anonymous members containing
-such a type remain outside this subset, as do the earlier flexible-array limits.
+A union may contain a named or anonymous structure with a flexible array member,
+or another such union recursively. The restriction is propagated: the resulting
+union may not be a member of a structure or an array element. Other earlier
+flexible-array limits remain.
 
 The compiler build and focused layout, initializer and rejection checks were
 run; one example was lowered through pinned QBE and assembled. Generated-program
@@ -64,3 +64,18 @@ The compiler rebuilt. Five focused relocation examples compiled, lowered via
 pinned QBE 1.2 and assembled; four out-of-bound examples were rejected. A host
 C11 syntax and layout check succeeded. Regression, generated-program runtime,
 ABI and fuzzing remain unrun. This does not complete M22.
+
+## Anonymous union members with flexible arrays
+
+An anonymous struct containing a flexible member, or an anonymous union
+recursively containing such a struct, may be a union member. Promoted names,
+record layout, initializers for fixed members, member access and bounded static
+addresses use the existing machinery. The enclosing union remains prohibited as
+a struct member or array element, and flexible-member initialization is still
+rejected.
+
+The compiler rebuilt. Two layouts, three relocation addends and a member access
+were inspected in IL, lowered through pinned QBE 1.2 and assembled; six invalid
+examples were rejected. Equivalent host C11 syntax/layout checks succeeded.
+Regression fixtures, generated-program runtime, ABI and fuzzing remain unrun;
+M22 remains incomplete.

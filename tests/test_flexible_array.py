@@ -33,6 +33,16 @@ union OuterChoice { union PacketChoice choice; double alternate; };
 union PacketChoice choice={.packet={.n=3,.tag=4}};
 static_assert(sizeof(union PacketChoice)==8);
 static_assert(sizeof(union OuterChoice)==8);
+union AnonymousChoice { struct { long head; int count; char bytes[]; }; long alternate; };
+union AnonymousOuter { union { struct { long head; int count; char bytes[]; }; long alternate; }; double other; };
+static_assert(sizeof(union AnonymousChoice)==16 && alignof(union AnonymousChoice)==8);
+static_assert(sizeof(union AnonymousOuter)==16 && alignof(union AnonymousOuter)==8);
+union AnonymousChoice anonymous_choice={.head=2,.count=3};
+union AnonymousOuter anonymous_outer={.head=4,.count=5};
+char *anonymous_start=anonymous_choice.bytes;
+char *anonymous_end=anonymous_choice.bytes+4;
+char *anonymous_nested_end=&anonymous_outer.bytes[4];
+int anonymous_read(union AnonymousChoice *p) { return p->count; }
 struct Nested { union { struct { int n; }; long pad; }; long items[]; static_assert(1); };
 static_assert(sizeof(struct Nested)==8 && alignof(struct Nested)==8);
 long read_item(struct Packet *p) { return p->items[1]; }
@@ -68,6 +78,11 @@ invalid = [
  'struct S { struct { int n; }; int a[]; static_assert(1); int x; };',
  'union U { int n; int a[]; };',
  'struct S { int n; int a[]; }; struct S rows[2];',
+ 'struct O { union { struct { int n; char a[]; }; int x; }; int y; };',
+ 'union U { struct { int n; char a[]; }; int x; }; union U rows[2];',
+ 'union U { struct { long n; int m; char a[]; }; int x; }; union U u; char *p=u.a+5;',
+ 'union U { struct { int n; char a[]; }; int x; }; union U u={.a={1}};',
+ 'union U { struct { int n; char a[]; }; int n; };',
  'struct S { int n; int a[]; }; struct Outer { struct S s; };',
  'struct S { int n; int a[]; }; union U { struct S s; int i; }; struct O { union U u; };',
  'struct S { int n; int a[]; }; union U { struct S s; }; union U rows[2];',

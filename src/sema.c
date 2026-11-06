@@ -604,10 +604,10 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		if (type_is_record(element)) {
 			struct record_state *child = record_state(sema, element);
 			if (type_record_definition(element)->has_flexible_array) {
-				/* A union may directly contain a named struct or union that
+				/* A union may directly contain a struct or union that
 				 * contains a flexible member; propagate the restriction to
 				 * the union so it cannot later be nested in a struct or array. */
-				if (!definition->is_union || member->anonymous || type->kind == type_kind_array) {
+				if (!definition->is_union || type->kind == type_kind_array) {
 					diagnostic_error(sema->diagnostics, member->type_syntax->location,
 						"record containing a flexible array cannot be this member");
 					goto done;
