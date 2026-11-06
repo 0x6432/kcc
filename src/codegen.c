@@ -770,6 +770,10 @@ static size_t codegen_expression(struct codegen *codegen,
 	switch (expression->kind) {
 	case expression_atomic_fetch: {
 		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
+		const struct type *referent = ((const struct pointer_type *)node->object->type)->referent;
+		bool pointer = referent->kind == type_kind_pointer;
+		unsigned width = pointer ? 8u : 4u;
+		char value_type = pointer ? 'l' : 'w';
 		size_t object = codegen_expression(codegen, node->object);
 		size_t expected = node->expected ? codegen_expression(codegen, node->expected) : 0;
 		size_t argument = node->argument ? codegen_expression(codegen, node->argument) : 0;
@@ -780,16 +784,16 @@ static size_t codegen_expression(struct codegen *codegen,
 		if (node->operation == ast_atomic_is_lock_free) {
 			size_t result = codegen->next_temporary++;
 			temporary = codegen->next_temporary++;
-			emit(codegen, "\t%%t%zu =w call $__atomic_is_lock_free(l 4, l %%t%zu)\n",
-				result, object);
+			emit(codegen, "\t%%t%zu =w call $__atomic_is_lock_free(l %u, l %%t%zu)\n",
+				result, width, object);
 			emit(codegen, "\t%%t%zu =w and %%t%zu, 1\n", temporary, result);
 			return temporary;
 		}
 		if (node->operation == ast_atomic_compare_exchange) {
 			size_t result = codegen->next_temporary++;
 			temporary = codegen->next_temporary++;
-			emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_4(l %%t%zu, l %%t%zu, w %%t%zu, ",
-				result, object, expected, argument);
+			emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_%u(l %%t%zu, l %%t%zu, %c %%t%zu, ",
+				result, width, object, expected, value_type, argument);
 			if (node->order)
 				emit(codegen, "w %%t%zu, w %%t%zu)\n", order, failure_order);
 			else
@@ -800,16 +804,16 @@ static size_t codegen_expression(struct codegen *codegen,
 		if (node->operation == ast_atomic_load) {
 			temporary = codegen->next_temporary++;
 			if (node->order)
-				emit(codegen, "\t%%t%zu =w call $__atomic_load_4(l %%t%zu, w %%t%zu)\n", temporary, object, order);
+				emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w %%t%zu)\n", temporary, value_type, width, object, order);
 			else
-				emit(codegen, "\t%%t%zu =w call $__atomic_load_4(l %%t%zu, w 5)\n", temporary, object);
+				emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n", temporary, value_type, width, object);
 			return temporary;
 		}
 		if (node->operation == ast_atomic_store) {
 			if (node->order)
-				emit(codegen, "\tcall $__atomic_store_4(l %%t%zu, w %%t%zu, w %%t%zu)\n", object, argument, order);
+				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w %%t%zu)\n", width, object, value_type, argument, order);
 			else
-				emit(codegen, "\tcall $__atomic_store_4(l %%t%zu, w %%t%zu, w 5)\n", object, argument);
+				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n", width, object, value_type, argument);
 			return argument;
 		}
 		switch (node->operation) {
@@ -823,11 +827,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		}
 		temporary = codegen->next_temporary++;
 		if (node->order)
-			emit(codegen, "\t%%t%zu =w call $__atomic_%s_4(l %%t%zu, w %%t%zu, w %%t%zu)\n",
-				temporary, operation, object, argument, order);
+			emit(codegen, "\t%%t%zu =%c call $__atomic_%s_%u(l %%t%zu, %c %%t%zu, w %%t%zu)\n",
+				temporary, value_type, operation, width, object, value_type, argument, order);
 		else
-			emit(codegen, "\t%%t%zu =w call $__atomic_%s_4(l %%t%zu, w %%t%zu, w 5)\n",
-				temporary, operation, object, argument);
+			emit(codegen, "\t%%t%zu =%c call $__atomic_%s_%u(l %%t%zu, %c %%t%zu, w 5)\n",
+				temporary, value_type, operation, width, object, value_type, argument);
 		return temporary;
 	}
 	case expression_va: {

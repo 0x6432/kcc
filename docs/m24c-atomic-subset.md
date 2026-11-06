@@ -9,8 +9,7 @@ lvalue conversion performs a sequentially consistent atomic load; simple
 assignment performs a sequentially consistent atomic store and yields the stored
 non-atomic value. Atomic pointers are also supported for ordinary loads and simple
 stores, using the target’s 8-byte pointer size and alignment and libatomic’s
-`__atomic_load_8` and `__atomic_store_8` ABI. Pointer arguments to the partial
-`stdatomic.h` intrinsics are rejected. Addresses are evaluated once. Unevaluated expressions emit no
+`__atomic_load_8` and `__atomic_store_8` ABI. Addresses are evaluated once. Unevaluated expressions emit no
 operation. Object initialization (including parameter initialization, zero and
 aggregate initialization) is initialization, not a concurrent atomic store;
 programs must not access an object concurrently before initialization completes.
@@ -59,8 +58,13 @@ x86-64. Its representation must not be assumed compatible with native compilers'
 `atomic_flag` types, which may use a different size or layout. Explicit variants
 accept runtime orders; a clear order must be valid for an atomic store. Flag
 interoperability and concurrency remain untested.
-`atomic_is_lock_free` queries libatomic for a supported four-byte atomic object,
-evaluating its pointer once; it does not support other atomic object types.
+Atomic pointers also support load, store, exchange, and strong/weak compare-
+exchange intrinsics, including explicit-order forms, using the corresponding
+8-byte libatomic ABI. The expected compare-exchange argument must point to a
+mutable matching non-atomic pointer. `atomic_is_lock_free` queries libatomic
+for supported four-byte integer or eight-byte pointer atomic objects, evaluating
+its pointer once. Atomic pointer fetch-add/subtract and bitwise intrinsics are
+not supported. These pointer intrinsics have not been runtime-tested.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.

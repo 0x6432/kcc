@@ -10,6 +10,8 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    '#include <stdatomic.h>\nint main(void) { int x=1,y=42; _Atomic(int *) p=&x; int *expected=&x; if (!atomic_compare_exchange_strong(&p,&expected,&y)) return 1; return *atomic_load_explicit(&p,memory_order_acquire); }',
+    '#include <stdatomic.h>\nint main(void) { int x=42,y=1; _Atomic(int *) p=&x; int *expected=&y; if (atomic_compare_exchange_weak(&p,&expected,&y)) return 1; atomic_store(&p,expected); return *atomic_exchange_explicit(&p,&y,memory_order_seq_cst); }',
     'int main(void) { int a[4]={0,1,2,42}; _Atomic(int *) p=a; int *x=p++; int *y=++p; p+=1; return x==a && y==a+2 && *p==42 ? 42 : 1; }',
     'int main(void) { int a[4]={42,1,2,3}; _Atomic(int *) p=a+3; int *x=p--; int *y=--p; int *z=(p-=1L); return x==a+3 && y==a+1 && z==a && *p==42 ? 42 : 1; }',
     'int main(void) { int a[3]={0,0,42}; _Atomic(int *) p[2]={a,a}; int i=0; p[i++]+=2; return i==1 && *p[0]==42 ? 42 : 1; }',
@@ -35,6 +37,8 @@ positive = [
     'int main(void) { _Atomic unsigned x=63; x &= 42; x |= 1; x ^= 1; return x; }',
 ]
 negative = [
+    '#include <stdatomic.h>\nint f(_Atomic(int *) *p) { return atomic_fetch_add(p,1)!=0; }',
+    '#include <stdatomic.h>\nint f(_Atomic(int *) *p, double **e, int *q) { return atomic_compare_exchange_strong(p,e,q); }',
     'int f(void) { _Atomic(void *) p=0; p++; return 0; }',
     'int f(void) { int x[2]; _Atomic(int *) p=x; p&=1; return 0; }',
     'struct S { _Atomic(int *) p; };',
@@ -79,6 +83,10 @@ with tempfile.TemporaryDirectory(prefix='kcc-atomics-') as tmp:
     pointer_updates = compile_kcc('int *f(_Atomic(int *) *p, int n) { (*p)++; return *p+=n; }')
     assert '$__atomic_fetch_add_8' in pointer_updates and '$__atomic_add_fetch_8' in pointer_updates
     assert 'mul' in pointer_updates and ', 4' in pointer_updates
+
+    pointer_intrinsics = compile_kcc('#include <stdatomic.h>\nint *f(_Atomic(int *) *p,int *q,int **e) { atomic_store_explicit(p,q,memory_order_release); q=atomic_exchange(p,q); atomic_compare_exchange_strong(p,e,q); if (atomic_is_lock_free(p)) return atomic_load_explicit(p,memory_order_acquire); return 0; }')
+    for name in ('store_8', 'exchange_8', 'compare_exchange_8', 'load_8', 'is_lock_free'):
+        assert '$__atomic_' + name in pointer_intrinsics
 
     # Both translation units access the same atomic objects; synchronize iterations
     # without racing on result slots. The forbidden outcome violates seq_cst.

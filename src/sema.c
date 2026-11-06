@@ -2042,10 +2042,16 @@ static bool sema_expression(struct sema *sema,
 		if (!(referent->qualifiers & type_qualifier_atomic) ||
 			(node->operation != ast_atomic_load && node->operation != ast_atomic_is_lock_free &&
 				(referent->qualifiers & type_qualifier_const)) ||
-			(referent->kind != type_kind_int && referent->kind != type_kind_uint) ||
-			(node->argument && !type_is_integer(node->argument->type))) {
+			(referent->kind != type_kind_int && referent->kind != type_kind_uint &&
+				referent->kind != type_kind_pointer) ||
+			(referent->kind != type_kind_pointer && node->argument &&
+				!type_is_integer(node->argument->type)) ||
+			(referent->kind == type_kind_pointer &&
+				node->operation != ast_atomic_load && node->operation != ast_atomic_store &&
+				node->operation != ast_atomic_exchange && node->operation != ast_atomic_compare_exchange &&
+				node->operation != ast_atomic_is_lock_free)) {
 			diagnostic_error(sema->diagnostics, expression->location,
-				"atomic operation requires a suitable atomic int or unsigned int and an integer value");
+				"unsupported atomic object type or operation");
 			return false;
 		}
 		result_type = unqualified_type(sema, referent, expression->location);
@@ -2057,13 +2063,13 @@ static bool sema_expression(struct sema *sema,
 			const struct type *expected_type;
 			if (node->expected->type->kind != type_kind_pointer) {
 				diagnostic_error(sema->diagnostics, node->expected->location,
-					"compare exchange expected argument must point to a mutable matching integer");
+					"compare exchange expected argument must point to a mutable matching object");
 				return false;
 			}
 			expected_type = ((const struct pointer_type *)node->expected->type)->referent;
 			if (expected_type->qualifiers || !type_same(expected_type, result_type)) {
 				diagnostic_error(sema->diagnostics, node->expected->location,
-					"compare exchange expected argument must point to a mutable matching integer");
+					"compare exchange expected argument must point to a mutable matching object");
 				return false;
 			}
 			result_type = &type_bool;
