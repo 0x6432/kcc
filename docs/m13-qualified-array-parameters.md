@@ -19,7 +19,9 @@ visible objects, enumerators and literals as its outer bound. Supported direct
 and function-pointer calls, pointer and record-member accesses, assignments, increments and atomic
 operations are evaluated in the function prologue; pure expressions are omitted
 because adjustment discards their values. Casts of supported expressions are
-accepted, as are bounded `_Generic`, `sizeof` and `alignof` expressions.
+accepted, as are strings and bounded `_Generic`, `sizeof` and `alignof` expressions.
+Evaluated definition-bound strings have static storage; prototype-only strings
+are not published.
 Compound literals, nested `[*]`, nested variable bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.

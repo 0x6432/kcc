@@ -94,6 +94,8 @@ struct sema {
 	uint64_t local_storage;
 	struct ast_type_syntax *vla_candidate;
 	struct ast_type_syntax *prototype_vla_candidate;
+	struct ast_type_syntax *definition_vla_candidate;
+	unsigned evaluated_parameter_depth;
 	struct ast_local_declaration *vla_local;
 	struct function_symbol *functions;
 	struct external_object_symbol *external_objects;
@@ -1119,7 +1121,13 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			struct constant_result result;
 			bool negative;
 
-			if (!sema_expression(sema, &array->bound, true))
+			unsigned saved_depth = sema->evaluated_parameter_depth;
+			bool bound_ok;
+			if (syntax == sema->definition_vla_candidate)
+				sema->evaluated_parameter_depth = sema->prototype_depth;
+			bound_ok = sema_expression(sema, &array->bound, true);
+			sema->evaluated_parameter_depth = saved_depth;
+			if (!bound_ok)
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
 			/* Prototype bounds are analyzed without runtime evaluation.
@@ -1223,6 +1231,9 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 	case expression_sizeof_type:
 	case expression_alignof:
 		/* This subset rejects VM sizeof operands during semantic analysis. */
+		return true;
+	case expression_string:
+		*effect = true; /* Keep the occurrence available for emitted code. */
 		return true;
 	case expression_generic: {
 		const struct ast_generic_expression *node = (const struct ast_generic_expression *)expression;
@@ -1368,6 +1379,7 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
 		const struct type *declared;
 		struct ast_type_syntax *saved_candidate = sema->prototype_vla_candidate;
+		struct ast_type_syntax *saved_definition_candidate = sema->definition_vla_candidate;
 
 		if (parameter->type_syntax->kind == type_syntax_array &&
 			((struct ast_array_type_syntax *)parameter->type_syntax)->parameter_star &&
@@ -1385,11 +1397,13 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 			bool effect = false;
 			if (array->bound && definition_bound(sema, array->bound, &effect)) {
 				sema->prototype_vla_candidate = parameter->type_syntax;
+				sema->definition_vla_candidate = parameter->type_syntax;
 				array->evaluate_parameter_bound = effect;
 			}
 		}
 		declared = resolve_type_syntax(sema, parameter->type_syntax);
 		sema->prototype_vla_candidate = saved_candidate;
+		sema->definition_vla_candidate = saved_definition_candidate;
 		if (!declared)
 			goto done;
 		if (declared->kind == type_kind_void) {
@@ -2311,7 +2325,8 @@ static bool sema_expression(struct sema *sema,
 		expression->is_lvalue = true;
 		/* Query/prototype operands still receive decoded bytes and a checked
 		 * array type, but never publish an evaluated static string object. */
-		if (!sema->unevaluated && !sema->prototype_depth) {
+		if (!sema->unevaluated && (!sema->prototype_depth ||
+			(sema->evaluated_parameter_depth && sema->prototype_depth == sema->evaluated_parameter_depth))) {
 			node->object_id = sema->string_count++;
 			*sema->string_tail = node;
 			sema->string_tail = &node->next_string;

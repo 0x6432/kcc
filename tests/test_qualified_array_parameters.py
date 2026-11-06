@@ -8,6 +8,7 @@ compiler = Path(os.environ.get('KCC', Path(__file__).resolve().parents[1] / 'bui
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 valid = [
+    'int unused(int a["not-published"[0]]); int f(int a["A"[0]]) { return a[0]; } int main(void) { int a[65]; a[0]=42; return f(a); }',
     'struct S { int n; }; int f(struct S *s,int a[s->n++]) { return s->n+a[0]; } int main(void) { struct S s={1}; int a[1]; a[0]=40; return f(&s,a); }',
     'int f(int n,int a[_Generic(n,int: n++,default: 1)+sizeof n]) { return n+a[0]; } int main(void) { int a[5]; a[0]=40; return f(1,a); }',
     '#include <stdatomic.h>\nint f(_Atomic int *p,int a[atomic_fetch_add(p,1)]) { return *p+a[0]; } int main(void) { _Atomic int n=1; int a[1]; a[0]=40; return f(&n,a); }',
@@ -63,6 +64,9 @@ with tempfile.TemporaryDirectory(prefix='kcc qualified array parameters ') as di
             subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(assembly), str(il)], check=True, timeout=10)
             subprocess.run([host, str(assembly), '-latomic', '-o', str(executable)], check=True, timeout=10)
             assert subprocess.run([str(executable)], timeout=5).returncode == 42, text
+    source.write_text('int unused(int a["not-published"[0]]); int f(int a["A"[0]]) { return a[0]; }\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and result.stdout.count('data $.Lkcc.string.') == 1, result.stderr
     for text, diagnostic in invalid:
         source.write_text(text + '\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
