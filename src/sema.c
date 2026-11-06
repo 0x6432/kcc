@@ -945,11 +945,6 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 			diagnostic_error(sema->diagnostics, syntax->syntax.location, "nested definition of enum tag");
 			return NULL;
 		}
-		if (syntax->has_definition && definition->fixed && !syntax->underlying) {
-			diagnostic_error(sema->diagnostics, syntax->syntax.location,
-				"fixed enum definition must repeat its underlying type in this subset");
-			return NULL;
-		}
 		if (!syntax->has_definition) {
 			if (!standalone && !syntax->underlying && definition->is_deprecated)
 				diagnostic_warning(sema->diagnostics, syntax->tag.location,

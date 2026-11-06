@@ -8,8 +8,8 @@ ordinary enum implementation. It is not a tested checkpoint.
   yielding those types. Target signedness, rank, size, alignment,
   ABI width and promotions follow the chosen underlying integer type.
 - `enum E : unsigned short;` declares a complete fixed enum immediately. A
-  matching later definition repeats the underlying type and shares the nominal
-  identity; scope shadowing and mismatched definitions are checked. Matching
+  matching later definition shares the nominal identity and may repeat or omit
+  the underlying type; scope shadowing and mismatched definitions are checked. Matching
   same-scope definitions may repeat their members with the same values.
   A fixed enum specifier without an enumerator list is restricted to a
   standalone tag declaration; use `enum E value;` for an object.
@@ -26,8 +26,7 @@ Boundaries: enum types as fixed underlying types are explicitly rejected.
 Qualifiers on an underlying integer type are discarded; atomic spellings are
 limited by the existing atomic type subset. Direct fixed enum definitions in
 outer parameter declaration specifiers and supported nested parameter type
-syntax are supported. A fixed forward tag's definition must
-repeat its underlying type; a bare tag-only `enum E;` is rejected because it
+syntax are supported. A bare tag-only `enum E;` is rejected because it
 declares no entity, even if the tag is already visible. An unknown non-fixed
 tag cannot be introduced this way. Non-fixed enum constants remain restricted to signed int range,
 with no general C23 changing-enumerator-type or underlying selection rules.
@@ -76,3 +75,19 @@ C23 constraint. Positive, negative and runtime fixtures were updated but have
 not been run. The compiler build succeeded. This is not M18 completion.
 See ISO C 2024 draft N3220, 6.7.3.3 paragraphs 5–8:
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3220.pdf
+
+## Inherited fixed underlying type in definitions
+
+A definition or matching same-scope redefinition of a previously declared fixed
+enum may omit the enum type specifier: `enum E : unsigned char; enum E { A=42 };`.
+The fixed type is inherited from the existing tag; enumerator types, range and
+successor constraints, and enum layout continue to follow that type. A mismatched
+explicit base is still rejected. A definition in a nested scope introduces a
+new tag rather than inheriting an outer scope's type unless that scope has its
+own fixed declaration. This does not change the rejection of a bare tag-only
+`enum E;` declaration.
+
+The semantic AST suite and fixed, boolean, compatibility and successor enum
+fixtures ran successfully with QBE 1.2. The available host does not support
+C23 fixed-enum syntax, so no independent native agreement is claimed. This is
+not M18 completion or full C23 conformance.

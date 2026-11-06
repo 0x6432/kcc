@@ -6560,6 +6560,10 @@ static void test_ordinary_enums(void)
 		"enum W : unsigned long long { MAX=18446744073709551615ULL, WRAP=MAX+1, TWO=2 }; "
 		"_Static_assert(sizeof(MAX)==8 && WRAP==0 && TWO==2, \"wide\"); "
 		"enum W f(enum W x) { return x; }",
+		"enum F : unsigned char; enum F { A=41, B, C=sizeof(enum F) }; "
+		"_Static_assert(sizeof(A)==1 && B==42 && C==1, \"inherited fixed base\"); "
+		"enum F { C=1, B=42, A=41 };",
+		"enum F : bool; enum F { ZERO=0, ONE }; _Static_assert(sizeof(ONE)==1, \"bool\");",
 		"enum F : int; enum F : int; enum F : int { A=sizeof(enum F), B=A+1 }; "
 		"enum F *p; int *q; int f(void) { p=q; return B; }",
 		"enum E : int { A=1 }; int f(void) { enum E : long; "
@@ -6609,7 +6613,11 @@ static void test_ordinary_enums(void)
 		"int f(enum E { A } x); int y=A;",
 		"int f(int (*p)(enum E { A } x)); int outside=A;",
 		"enum E : int; enum E : long;",
-		"enum E : int; enum E : long { A };", "enum E : int; enum E { A };",
+		"enum E : int; enum E : long { A };",
+		"enum E : unsigned char; enum E { A=256 };",
+		"enum E : signed char; enum E { A=127, B };",
+		"enum E : bool; enum E { A=1, B };",
+		"enum E : int; enum E { A=1 }; enum E { A=2 };",
 		"enum E : int { A }; enum E : int { B };",
 		"enum E : bool { A=2 };", "enum E : _Bool { A=-1 };",
 		"enum E : bool { A=1, B };",

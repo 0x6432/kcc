@@ -14,6 +14,14 @@ host = os.environ.get('HOST_CC', 'cc')
 qbe = os.environ.get('QBE')
 
 programs = [
+    'enum U : unsigned char; enum U { A=41, ANSWER, SIZE=sizeof(enum U) }; '
+    'enum U { SIZE=1, ANSWER=42, A=41 }; '
+    '_Static_assert(sizeof(ANSWER)==1 && _Generic(ANSWER,unsigned char:1,default:0),"base"); '
+    'int main(void) { enum U x=ANSWER; return x; }',
+    'enum B : bool; enum B { NO=0, YES }; '
+    'int main(void) { enum B x=YES; return sizeof(x)==1 && x==1 ? 42 : 1; }',
+    'enum T : int { OUTER=1 }; int main(void) { enum T : unsigned short; '
+    'enum T { INNER=42 }; return sizeof(enum T)==2 && OUTER==1 ? INNER : 1; }',
     'enum U : unsigned short; enum U saved; '
     'enum U : unsigned short { ZERO=0, LAST=65535, WRAP=(unsigned short)(LAST+1), OK=42 }; '
     '_Static_assert(sizeof(enum U)==2 && sizeof(OK)==2 && WRAP==0,"layout"); '

@@ -102,7 +102,9 @@ checks succeeded, with a focused host GCC layout comparison. The regression
 fixtures and generated-program runtime checks have not been run.
 Completed tagged enums with matching members also support bounded cross-scope
 compatibility; see `m18-ordinary-enums.md` for the exact rules and pending
-validation.
+validation. Previously declared fixed enum tags now
+retain their underlying type in same-scope definitions that omit the base;
+see `m18-fixed-enums.md` for the scope and validation boundaries.
 Known bounded and ignored unknown attributes are parsed on enum definitions
 and enumerators. Enum-type `nodiscard` emits a bounded standalone-call warning;
 deprecated enumerator uses emit warnings; deprecation diagnostics for other
