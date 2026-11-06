@@ -405,6 +405,39 @@ struct initializer_capture {
 	size_t value;
 };
 
+static int initializer_offset_order(const void *left, const void *right);
+
+/* Initialize each scalar representation exactly once, including implicit
+ * zeros, without expanding large arrays into unbounded generated code. */
+static void codegen_volatile_array_range(struct codegen *codegen, size_t destination,
+	uint64_t length, unsigned width, bool copy, size_t source)
+{
+	assert(length && length % width == 0);
+	size_t predecessor = codegen->current_label;
+	size_t loop = new_label(codegen), done = new_label(codegen);
+	size_t index = codegen->next_temporary++, next = codegen->next_temporary++;
+	size_t address = codegen->next_temporary++, more = codegen->next_temporary++;
+	emit(codegen, "\tjmp @b%zu\n", loop);
+	emit_label(codegen, loop);
+	emit(codegen, "\t%%t%zu =l phi @b%zu 0, @b%zu %%t%zu\n", index, predecessor, loop, next);
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %%t%zu\n", address, destination, index);
+	if (copy) {
+		size_t source_address = codegen->next_temporary++, bits = codegen->next_temporary++;
+		const char *load = width == 1 ? "loadub" : width == 2 ? "loaduh" : "loadw";
+		assert(width <= 4);
+		emit(codegen, "\t%%t%zu =l add %%t%zu, %%t%zu\n", source_address, source, index);
+		emit(codegen, "\t%%t%zu =w %s %%t%zu\n", bits, load, source_address);
+		emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, w %%t%zu)\n", width, address, bits);
+	} else {
+		emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, %c 0)\n",
+			width, address, width == 8 ? 'l' : 'w');
+	}
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", next, index, width);
+	emit(codegen, "\t%%t%zu =w cultl %%t%zu, %ju\n", more, next, (uintmax_t)length);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", more, loop, done);
+	emit_label(codegen, done);
+}
+
 static void codegen_initializer_plan(struct codegen *codegen,
 	const struct ast_initializer_plan *plan, size_t destination)
 {
@@ -413,7 +446,7 @@ static void codegen_initializer_plan(struct codegen *codegen,
 
 	/* Volatile scalar plans have one whole-object surviving write. Evaluate
 	 * its expression before writing, including for re-evaluated literals. */
-	if (plan->type->qualifiers & type_qualifier_volatile) {
+	if (plan->type->kind != type_kind_array && (plan->type->qualifiers & type_qualifier_volatile)) {
 		const struct ast_initializer_plan_entry *entry = plan->entries;
 		unsigned width = (unsigned)plan->size;
 		assert(type_is_scalar(plan->type));
@@ -454,6 +487,55 @@ static void codegen_initializer_plan(struct codegen *codegen,
 				codegen_address(codegen, entry->expression) : codegen_expression(codegen, entry->expression);
 			captures[i] = (struct initializer_capture) { entry->expression, value };
 		}
+	}
+	if (plan->type->kind == type_kind_array && (plan->type->qualifiers & type_qualifier_volatile)) {
+		const struct type *element = plan->type;
+		while (element->kind == type_kind_array)
+			element = ((const struct array_type *)element)->element;
+		unsigned width = (unsigned)type_object_size(element);
+		const struct ast_initializer_plan_entry **ordered = calloc(plan->entry_count ? plan->entry_count : 1, sizeof(*ordered));
+		if (!ordered) {
+			free(captures);
+			codegen->output_ok = false;
+			return;
+		}
+		size_t count = 0;
+		for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next)
+			if (entry->length && entry->kind != ast_initializer_write_zero)
+				ordered[count++] = entry;
+		qsort(ordered, count, sizeof(*ordered), initializer_offset_order);
+		uint64_t position = 0;
+		for (size_t n = 0; n <= count; n++) {
+			uint64_t next = n == count ? plan->size : ordered[n]->offset;
+			assert(next >= position && next <= plan->size && position % width == 0 && next % width == 0);
+			if (next > position)
+				codegen_volatile_array_range(codegen, codegen_byte_offset(codegen, destination, position),
+					next - position, width, false, 0);
+			if (n < count) {
+				assert(ordered[n]->length % width == 0 && ordered[n]->length <= plan->size - next);
+				position = next + ordered[n]->length;
+			}
+		}
+		free(ordered);
+		for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
+			if (!entry->length || entry->kind == ast_initializer_write_zero)
+				continue;
+			size_t i = ((uintptr_t)entry->expression >> 3) & (capacity - 1);
+			while (captures[i].expression != entry->expression) {
+				assert(captures[i].expression);
+				i = (i + 1) & (capacity - 1);
+			}
+			size_t address = codegen_byte_offset(codegen, destination, entry->offset);
+			if (entry->kind == ast_initializer_write_string) {
+				size_t source = codegen_byte_offset(codegen, captures[i].value, entry->source_offset);
+				codegen_volatile_array_range(codegen, address, entry->length, width, true, source);
+			} else {
+				assert(entry->kind == ast_initializer_write_expression && entry->length == width);
+				codegen_volatile_store(codegen, address, captures[i].value, entry->type);
+			}
+		}
+		free(captures);
+		return;
 	}
 	if (plan->zero_fill)
 		codegen_zero_bytes(codegen, destination, plan->size);

@@ -24,16 +24,21 @@ int f(volatile int n) {
     volatile int empty={};
     volatile double floating={2.0};
     int * volatile ptr={};
-    volatile int local_array[2]; local_array[0]=3;
+    volatile int local_array[4]={[2]=3, [0]=7};
+    volatile char text[6]="abc";
+    volatile unsigned short wide[4]=u"xy";
+    volatile int matrix[2][2]={{1},{2}};
     volatile int vla[n]={}; vla[0]=local_array[0];
-    array[1]++; via_typedef[0]=local_array[0];
+    array[1]++; via_typedef[0]=local_array[2];
     (void)empty; (void)floating; (void)ptr;
     (void)(volatile int){3};
     x += n; x++;
     (void)global;
     narrow++; real += 0.5;
     *target=x;
-    return global==4 && narrow==-1 && real==2.0 ? 42 : 1;
+    return global==4 && narrow==-1 && real==2.0 && local_array[1]==0 &&
+        local_array[2]==3 && text[2]=='c' && text[5]==0 && wide[1]=='y' &&
+        matrix[1][0]==2 && matrix[1][1]==0 ? 42 : 1;
 }
 int main(void) { return f(2); }
 ''')
@@ -50,8 +55,7 @@ int main(void) { return f(2); }
         subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'),
                         '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
-    for text in ('int f(void){volatile int a[2]={1}; return 0;}',
-                 'struct S { volatile int member; };',
+    for text in ('struct S { volatile int member; };',
                  'struct S { int x; }; typedef struct S A[2]; volatile A a;',
                  '_Atomic volatile int x;',
                  'int f(void){volatile int x=1; int *p=&x; return 0;}'):
