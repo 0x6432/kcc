@@ -3423,6 +3423,10 @@ static bool static_floating_number(const struct ast_expression *expression, doub
 	return isfinite(*number);
 }
 
+static bool is_static_float_conditioned_integer(const struct ast_expression *expression);
+static bool static_float_conditioned_integer(const struct ast_expression *expression,
+	struct constant_result *result);
+
 static bool static_floating_condition(const struct ast_expression *expression, bool *truth)
 {
 	if (type_is_floating(expression->type)) {
@@ -3435,7 +3439,7 @@ static bool static_floating_condition(const struct ast_expression *expression, b
 	if (!type_is_integer(expression->type))
 		return false;
 	struct constant_result integer = evaluate_integer_constant(expression);
-	if (integer.status == constant_value) {
+	if (integer.status == constant_value || static_float_conditioned_integer(expression, &integer)) {
 		*truth = integer.bits != 0;
 		return true;
 	}
@@ -3482,12 +3486,13 @@ static bool is_static_floating_boolean(const struct ast_expression *expression)
 	if (expression->kind == expression_unary) {
 		const struct ast_unary_expression *unary = (const struct ast_unary_expression *)expression;
 		return unary->operation == unary_not && (type_is_floating(unary->operand->type) ||
-			is_static_floating_boolean(unary->operand));
+			is_static_floating_boolean(unary->operand) || is_static_float_conditioned_integer(unary->operand));
 	}
 	if (expression->kind == expression_logical) {
 		const struct ast_logical_expression *logical = (const struct ast_logical_expression *)expression;
 		return type_is_floating(logical->left->type) || type_is_floating(logical->right->type) ||
-			is_static_floating_boolean(logical->left) || is_static_floating_boolean(logical->right);
+			is_static_floating_boolean(logical->left) || is_static_floating_boolean(logical->right) ||
+			is_static_float_conditioned_integer(logical->left) || is_static_float_conditioned_integer(logical->right);
 	}
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
@@ -3499,13 +3504,14 @@ static bool is_static_floating_boolean(const struct ast_expression *expression)
 
 /* Integer-valued arithmetic conditionals can use a floating condition without
  * becoming integer constant expressions. Require both converted integer arms
- * to be strict ICEs so this bounded initializer-only path never broadens ICEs. */
+ * to be strict ICEs or similarly bounded conditionals so this bounded initializer-only path never broadens ICEs. */
 static bool is_static_float_conditioned_integer(const struct ast_expression *expression)
 {
 	if (expression->kind != expression_conditional || !type_is_integer(expression->type))
 		return false;
 	const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
-	return type_is_floating(node->condition->type) || is_static_floating_boolean(node->condition);
+	return type_is_floating(node->condition->type) || is_static_floating_boolean(node->condition) ||
+		is_static_float_conditioned_integer(node->condition);
 }
 
 static bool static_float_conditioned_integer(const struct ast_expression *expression,
@@ -3517,7 +3523,8 @@ static bool static_float_conditioned_integer(const struct ast_expression *expres
 	struct constant_result then_value = evaluate_integer_constant(node->then_value);
 	struct constant_result else_value = evaluate_integer_constant(node->else_value);
 	bool condition;
-	if (then_value.status != constant_value || else_value.status != constant_value ||
+	if ((then_value.status != constant_value && !static_float_conditioned_integer(node->then_value, &then_value)) ||
+		(else_value.status != constant_value && !static_float_conditioned_integer(node->else_value, &else_value)) ||
 		!static_floating_condition(node->condition, &condition))
 		return false;
 	*result = condition ? then_value : else_value;

@@ -113,3 +113,13 @@ The compiler rebuilt. Six focused scalar/aggregate values were inspected in
 emitted IL, lowered with pinned QBE 1.2, and assembled; seven invalid or
 unsupported examples were rejected. Regression, runtime, ABI, sanitizer and
 fuzz checks remain pending; this does not complete M20.
+
+Floating-conditioned integer conditionals may also nest in supported conditions,
+logical operands, or integer arms, provided every arm is either a strict ICE or
+another supported conditional and conversions do not introduce unsupported
+forms. All branches remain required to fold; ICE rules are unchanged.
+
+The compiler rebuilt; six nested initializer values were inspected in IL,
+lowered with pinned QBE 1.2 and assembled, and five invalid or unsupported
+forms were rejected. Regression fixtures, generated-program runtime, ABI,
+sanitizer and fuzz checks remain unrun.

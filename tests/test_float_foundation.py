@@ -42,6 +42,9 @@ float global_not_condition=!0.0 ? 14.0f : 15.0f;
 int global_choice_int=1 ? 42.75 : 3.0;
 int global_float_compare=1.0f < 2.0;
 int global_integer_choice=1.0 ? -5 : 6;
+int global_nested_choice=(1.0 ? 0 : 1) ? 10 : 11;
+int global_nested_logic=!(1.0 ? 0 : 1);
+float global_nested_float=(1.0 ? 2 : 3) ? 9.0f : 8.0f;
 unsigned long global_unsigned_choice=0.0 ? 5 : -1;
 float global_integer_choice_float=(2.0 > 1.0) ? 9 : 4;
 int global_float_logic=(1.0 && 2) || !3.0;
@@ -88,6 +91,7 @@ float update(float *); int compound_int(int);
 extern double global_float; extern float global_negzero;
 extern float global_subnormal, global_tiny, global_tiny_above; extern double global_subnormal_double, global_tiny_double, global_tiny_double_above;
 extern float global_narrow, global_integer; extern double global_widen, global_unsigned, global_signed;
+extern int global_nested_choice, global_nested_logic; extern float global_nested_float;
 extern int global_integer_choice; extern unsigned long global_unsigned_choice; extern float global_integer_choice_float;
 extern int global_float_logic; extern float global_float_logic_value; extern double global_float_logic_choice;
 extern float global_arithmetic, global_choice, global_float_condition, global_not_condition; extern double global_mixed, global_choice_mixed, global_compare_condition; extern int global_choice_int, global_float_compare; extern _Bool global_float_not; extern float global_compare_as_float;
@@ -114,6 +118,7 @@ int main(void) {
  if (global_narrow!=42.0f || global_widen!=42.0 || global_integer!=42.0f ||
      global_unsigned!=(double)18446744073709551615UL || global_signed!=(double)(-9223372036854775807L-1L)) return 10;
  if (global_arithmetic!=3.75f || global_mixed!=9.0 || global_choice!=2.25f || global_choice_mixed!=2.5 || global_choice_int!=42 ||
+     global_nested_choice!=11 || global_nested_logic!=1 || global_nested_float!=9.0f ||
      global_integer_choice!=-5 || global_unsigned_choice!=(unsigned long)-1 || global_integer_choice_float!=9.0f ||
      global_float_logic!=1 || global_float_logic_value!=1.0f || global_float_logic_choice!=9.0 ||
      global_float_condition!=11.0f || global_compare_condition!=12.0 || global_not_condition!=14.0f || global_float_compare!=1 || !global_float_not ||
