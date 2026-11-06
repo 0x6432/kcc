@@ -12,6 +12,14 @@ as identical. The loader is still called before a repeated include is skipped.
 
 The implementation rejects `#pragma STDC` and `#pragma pack`
 rather than silently discarding requested floating-point or layout effects.
-`_Pragma`, other implementation-specific effects, and complete
-standard floating-environment support remain unimplemented. This is a source
-checkpoint; the added tests have not yet been run.
+`_Pragma("...")` is supported in the main expanded token stream, including
+macro-produced operands such as `#define DO_PRAGMA(x) _Pragma(#x)`. The ordinary
+string literal is destringized by unescaping `\\` and `\"`, then handled like
+`#pragma`; `once` uses the operator's actual expansion file. Malformed forms,
+wide/prefixed operands, nested operators and operators encountered during
+isolated macro-argument or directive expansion are rejected. Diagnostics for
+pragma-body errors can refer to synthesized spelling. Processing shares the
+existing expansion, storage and include limits. Other implementation-specific
+effects and complete standard floating-environment support remain unimplemented.
+The compiler builds and focused direct, macro, once and negative examples were
+compiled; regression and runtime tests remain unrun.

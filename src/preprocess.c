@@ -483,7 +483,7 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 		!pp_spelling_is(name, "defined") && !is_predefined_location(name) &&
 		!is_predefined_clock(name) && !is_predefined_embed_status(name) &&
 		!pp_spelling_is(name, "__has_c_attribute") && !pp_spelling_is(name, "__has_include") &&
-		!pp_spelling_is(name, "__has_embed");
+		!pp_spelling_is(name, "__has_embed") && !pp_spelling_is(name, "_Pragma");
 	if (is_protected_name(name) && !builtin_reserved) {
 		*error = reject_directive(preprocessor, marker, name,
 			"reserved macro names are not supported yet");
@@ -2837,6 +2837,70 @@ static bool finish_include(struct preprocessor *preprocessor)
 	return true;
 }
 
+static bool read_expanded_token(struct preprocessor *preprocessor,
+	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error);
+
+/* Bounded _Pragma: expand one ordinary string operand, destringize only \\
+ * and \" as required, and process its tokens using the directive handler.
+ * Isolated directive/argument cursors remain explicitly unsupported. */
+static bool read_pragma_operator(struct preprocessor *preprocessor,
+	struct expansion_cursor *cursor, struct rescan_token operator, struct token *error)
+{
+	struct rescan_token left, literal, right;
+	struct source *spelling;
+	struct pp_lexer saved;
+	struct pp_token marker = operator.token;
+	const unsigned char *text;
+	size_t used = 0;
+	if (cursor != &preprocessor->cursor || preprocessor->pragma_operator_depth) {
+		*error = stop_preprocessing(preprocessor, operator.token,
+			"nested or isolated _Pragma is not supported yet");
+		return false;
+	}
+	preprocessor->pragma_operator_depth++;
+	if (!read_expanded_token(preprocessor, cursor, &left, error))
+		goto failed;
+	if (!is_punctuator(left.token, "("))
+		goto malformed;
+	if (!read_expanded_token(preprocessor, cursor, &literal, error))
+		goto failed;
+	if (literal.token.kind != pp_string || literal.token.length < 2 ||
+		!literal.token.location.source)
+		goto malformed;
+	text = literal.token.location.source->data + literal.token.location.offset;
+	if (text[0] != '"' || text[literal.token.length - 1] != '"')
+		goto malformed;
+	if (!read_expanded_token(preprocessor, cursor, &right, error))
+		goto failed;
+	if (!is_punctuator(right.token, ")"))
+		goto malformed;
+	preprocessor->pragma_operator_depth--;
+	spelling = allocate_spelling(preprocessor, literal.token.length - 1, operator.token, error);
+	if (!spelling)
+		return false;
+	for (size_t i = 1; i + 1 < literal.token.length; i++) {
+		if (text[i] == '\\' && i + 2 < literal.token.length &&
+			(text[i + 1] == '\\' || text[i + 1] == '"'))
+			i++;
+		spelling->data[used++] = text[i];
+	}
+	spelling->data[used] = 0;
+	spelling->length = spelling->physical_length = used;
+	marker.location = operator.semantic_location;
+	saved = preprocessor->input;
+	pp_lexer_init(&preprocessor->input, spelling, preprocessor->diagnostics);
+	bool ok = read_pragma_directive(preprocessor, marker, error);
+	preprocessor->input = saved;
+	cursor->deferred_space = true;
+	return ok;
+malformed:
+	*error = stop_preprocessing(preprocessor, operator.token,
+		"_Pragma requires one ordinary string literal in parentheses");
+failed:
+	preprocessor->pragma_operator_depth--;
+	return false;
+}
+
 /* Expansion stays in pp tokens, including during isolated argument prescan. */
 static bool read_expanded_token(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error)
@@ -2883,6 +2947,11 @@ static bool read_expanded_token(struct preprocessor *preprocessor,
 		}
 		if (input.from_source && is_directive_marker(input.token)) {
 			if (!read_directive(preprocessor, input.token, error))
+				return false;
+			continue;
+		}
+		if (input.token.kind == pp_identifier && pp_spelling_is(input.token, "_Pragma")) {
+			if (!read_pragma_operator(preprocessor, cursor, input, error))
 				return false;
 			continue;
 		}

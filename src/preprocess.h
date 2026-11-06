@@ -118,6 +118,7 @@ struct preprocessor {
 	size_t spelling_bytes;
 	size_t line_scan_bytes;
 	size_t prescan_depth;
+	size_t pragma_operator_depth;
 	size_t optional_depth;
 	size_t paste_depth;
 	char translation_date[14];
