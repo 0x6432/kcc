@@ -1116,6 +1116,25 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define pow(x,y) _Generic((x),float:_Generic((y),float:powf,default:pow),default:pow)((x),(y))\n"
 			"#define fmod(x,y) _Generic((x),float:_Generic((y),float:fmodf,default:fmod),default:fmod)((x),(y))\n"
 			"#endif\n";
+		static const char threads_header[] =
+			"#ifndef __KCC_THREADS_H\n#define __KCC_THREADS_H 1\n#include <time.h>\n"
+			"typedef unsigned long thrd_t; typedef unsigned int tss_t;\n"
+			"typedef int (*thrd_start_t)(void *); typedef void (*tss_dtor_t)(void *);\n"
+			"typedef struct { int __opaque; } once_flag;\n#define ONCE_FLAG_INIT {0}\n"
+			"typedef struct { unsigned long __opaque[5]; } mtx_t;\n"
+			"typedef struct { unsigned long __opaque[6]; } cnd_t;\n"
+			"enum { thrd_success=0, thrd_busy=1, thrd_error=2, thrd_nomem=3, thrd_timedout=4 };\n"
+			"enum { mtx_plain=0, mtx_recursive=1, mtx_timed=2 };\n#define TSS_DTOR_ITERATIONS 4\n"
+			"int thrd_create(thrd_t *,thrd_start_t,void *); int thrd_equal(thrd_t,thrd_t);\n"
+			"thrd_t thrd_current(void); int thrd_sleep(const struct timespec *,struct timespec *);\n"
+			"_Noreturn void thrd_exit(int); int thrd_detach(thrd_t); int thrd_join(thrd_t,int *); void thrd_yield(void);\n"
+			"int mtx_init(mtx_t *,int); int mtx_lock(mtx_t *); int mtx_timedlock(mtx_t *,const struct timespec *);\n"
+			"int mtx_trylock(mtx_t *); int mtx_unlock(mtx_t *); void mtx_destroy(mtx_t *);\n"
+			"void call_once(once_flag *,void (*)(void));\n"
+			"int cnd_init(cnd_t *); int cnd_signal(cnd_t *); int cnd_broadcast(cnd_t *);\n"
+			"int cnd_wait(cnd_t *,mtx_t *); int cnd_timedwait(cnd_t *,mtx_t *,const struct timespec *); void cnd_destroy(cnd_t *);\n"
+			"int tss_create(tss_t *,tss_dtor_t); void *tss_get(tss_t); int tss_set(tss_t,void *); void tss_delete(tss_t);\n"
+			"#endif\n";
 		static const char fenv_header[] =
 			"#ifndef __KCC_FENV_H\n#define __KCC_FENV_H 1\n"
 			"typedef unsigned short fexcept_t;\n"
@@ -1518,7 +1537,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "fenv.h") == 0) {
+		if (strcmp(name->path, "threads.h") == 0) {
+			header = threads_header;
+			source_name = "<kcc/threads.h>";
+		} else if (strcmp(name->path, "fenv.h") == 0) {
 			header = fenv_header;
 			source_name = "<kcc/fenv.h>";
 		} else if (strcmp(name->path, "stdalign.h") == 0) {
