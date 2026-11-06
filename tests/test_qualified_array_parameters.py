@@ -8,13 +8,15 @@ compiler = Path(os.environ.get('KCC', Path(__file__).resolve().parents[1] / 'bui
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 valid = [
+    'int f(int n,int a[_Generic(n,int: n++,default: 1)+sizeof n]) { return n+a[0]; } int main(void) { int a[5]; a[0]=40; return f(1,a); }',
+    '#include <stdatomic.h>\nint f(_Atomic int *p,int a[atomic_fetch_add(p,1)]) { return *p+a[0]; } int main(void) { _Atomic int n=1; int a[1]; a[0]=40; return f(&n,a); }',
     'int bump(int n) { return n; } int f(int *p,int (*cb)(int),int a[cb((*p)++)]) { return *p+a[0]; } int main(void) { int n=1; int a[1]; a[0]=40; return f(&n,bump,a); }',
     'int f(int *p,int a[p[0]]) { return a[0]; } int main(void) { int n=1; int a[1]; a[0]=42; return f(&n,a); }',
     'int f(_Atomic int n,int a[n]) { return a[0]; } int main(void) { int a[1]; a[0]=42; return f(1,a); }',
     'int c; int bump(int n) { c+=1; return n; } int f(int n,int a[bump((int)n)]) { return c+a[0]; } int main(void) { int a[1]; a[0]=41; return f(1,a); }',
     'int count; int f(int a[++count]) { return count+a[0]; } int main(void) { int a[1]; a[0]=41; return f(a); }',
     'int f(int n,int a[static n++]) { return n+a[0]; } int main(void) { int a[2]; a[0]=40; return f(1,a); }',
-    'int f(int n,int a[(n+=1)],int b[(n=3)]) { return n+a[0]+b[0]; } int main(void) { int a[2],b[3]; a[0]=20; b[0]=19; return f(1,a,b); }',
+    'int f(int n,int m,int a[(n+=1)],int b[(m=3)]) { return n+m+a[0]+b[0]; } int main(void) { int a[2],b[3]; a[0]=20; b[0]=17; return f(1,1,a,b); }',
     'int f(int n,int a[n?++n:1]) { return n+a[0]; } int main(void) { int a[2]; a[0]=40; return f(1,a); }',
     'enum { K=1 }; int f(int n,int a[static restrict (n>0?n+K:1)]) { return a[n]; } int main(void) { int a[2]; a[1]=42; return f(1,a); }',
     'int f(int n,int m,int a[(n && m)?n*m:1]) { return a[0]; } int main(void) { int a[2]; a[0]=42; return f(1,2,a); }',
@@ -58,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='kcc qualified array parameters ') as di
         if qbe:
             il.write_text(result.stdout)
             subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(assembly), str(il)], check=True, timeout=10)
-            subprocess.run([host, str(assembly), '-o', str(executable)], check=True, timeout=10)
+            subprocess.run([host, str(assembly), '-latomic', '-o', str(executable)], check=True, timeout=10)
             assert subprocess.run([str(executable)], timeout=5).returncode == 42, text
     for text, diagnostic in invalid:
         source.write_text(text + '\n')

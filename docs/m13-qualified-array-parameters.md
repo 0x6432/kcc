@@ -17,8 +17,9 @@ adjust immediately to a pointer. This includes `static` bounds; no dynamic
 minimum check is emitted. A definition may use supported scalar expressions over earlier parameters,
 visible objects, enumerators and literals as its outer bound. Supported direct
 and function-pointer calls, pointer accesses, assignments, increments and atomic
-reads are evaluated in the function prologue; pure expressions are omitted
+operations are evaluated in the function prologue; pure expressions are omitted
 because adjustment discards their values. Casts of supported expressions are
-accepted. Compound literals, nested `[*]`, nested variable bounds, `volatile`,
+accepted, as are bounded `_Generic`, `sizeof` and `alignof` expressions.
+Compound literals, nested `[*]`, nested variable bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.

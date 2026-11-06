@@ -1217,7 +1217,27 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 	case expression_integer:
 	case expression_character:
 	case expression_boolean:
+	case expression_sizeof:
+	case expression_sizeof_type:
+	case expression_alignof:
+		/* This subset rejects VM sizeof operands during semantic analysis. */
 		return true;
+	case expression_generic: {
+		const struct ast_generic_expression *node = (const struct ast_generic_expression *)expression;
+		for (const struct ast_generic_association *item = node->associations; item; item = item->next)
+			if (!definition_bound(sema, item->value, effect))
+				return false;
+		return true;
+	}
+	case expression_atomic_fetch: {
+		const struct ast_atomic_expression *node = (const struct ast_atomic_expression *)expression;
+		*effect = true;
+		return definition_bound(sema, node->object, effect) &&
+			(!node->expected || definition_bound(sema, node->expected, effect)) &&
+			(!node->argument || definition_bound(sema, node->argument, effect)) &&
+			(!node->order || definition_bound(sema, node->order, effect)) &&
+			(!node->failure_order || definition_bound(sema, node->failure_order, effect));
+	}
 	case expression_name: {
 		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
 		struct ast_local_declaration *prior = find_in_scope(sema->scope, name->name);
