@@ -8,6 +8,10 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('void f(void){[[noreturn]] void stop(void); stop();}',
+     'void f(void){_Noreturn void stop(void); stop();}'),
+    ('typedef void F(void); void f(void){[[noreturn]] F stop; stop();}',
+     'typedef void F(void); void f(void){_Noreturn F stop; stop();}'),
     ('[[noreturn]] void stop(void); int f(void){stop(); return 1;}',
      '_Noreturn void stop(void); int f(void){stop(); return 1;}'),
     ('typedef void F(void); [[noreturn]] F stop;',
@@ -47,8 +51,10 @@ invalid = [
     ('[[noreturn]] typedef void F(void);', 'requires a function identifier'),
     ('[[noreturn]] enum E { X };', 'requires a function identifier'),
     ('[[noreturn(1)]] void f(void);', 'take no arguments'),
-    ('void f(void) [[noreturn]];', 'only supported before file-scope'),
-    ('void f(void){ [[noreturn]] void g(void); }', 'only supported before file-scope'),
+    ('void f(void) [[noreturn]];', 'only supported in function declaration prefixes'),
+    ('void f(void){ [[noreturn]] int x; }', 'requires a function declaration'),
+    ('void f(void){ [[noreturn]] typedef int T; }', 'requires a function identifier'),
+    ('void f(void){ [[noreturn]] return; }', 'requires a function identifier'),
     ('[[nodiscard]] int f(void);', 'unsupported standard attribute'),
     ('[[fallthrough]] int x;', 'fallthrough is only supported'),
     ('[[maybe_unused(1)]] int x;', 'take no arguments'),

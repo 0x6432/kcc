@@ -34,6 +34,7 @@ struct parser {
 	size_t compound_literals;
 	bool in_function;
 	bool declaration_attributes;
+	bool declaration_noreturn;
 	bool builtin_declaration;
 	unsigned parameter_nesting;
 	size_t record_declarations;
@@ -222,7 +223,7 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 		return false;
 	if (attributes.noreturn) {
 		diagnostic_error(parser->diagnostics, location.location,
-			"noreturn attribute is only supported before file-scope function declarations");
+			"noreturn attribute is only supported in function declaration prefixes");
 		return false;
 	}
 	if (attributes.fallthrough) {
@@ -3267,7 +3268,7 @@ static struct ast_statement *parse_statement(struct parser *parser)
 		token = preprocess_peek(parser->preprocessor);
 		if (attributes.noreturn) {
 			diagnostic_error(parser->diagnostics, first.location,
-				"noreturn attribute is only supported before file-scope function declarations");
+				"noreturn attribute is only supported in function declaration prefixes");
 			return NULL;
 		}
 		if (attributes.deprecated) {
@@ -3431,6 +3432,11 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 
 	if (!base)
 		return NULL;
+	if (parser->declaration_noreturn && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		diagnostic_error(parser->diagnostics, beginning.location,
+			"noreturn attribute requires a function identifier declaration");
+		return NULL;
+	}
 	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
 		return NULL;
@@ -3566,7 +3572,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		node->alignments = head.alignments;
 		node->initializer_syntax = initializer_syntax;
 		node->is_inline = head.inline_keyword.kind == token_inline;
-		node->is_noreturn = head.noreturn_keyword.kind == token_noreturn;
+		node->is_noreturn = head.noreturn_keyword.kind == token_noreturn || parser->declaration_noreturn;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
 		node->is_extern = head.keyword.kind == token_extern;
@@ -3686,6 +3692,11 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 
 	if (!base)
 		return NULL;
+	if (parser->declaration_noreturn) {
+		diagnostic_error(parser->diagnostics, keyword.location,
+			"noreturn attribute requires a function identifier declaration");
+		return NULL;
+	}
 	for (;;) {
 		struct token name;
 		struct ast_type_syntax *type_syntax;
@@ -3836,9 +3847,9 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			if (!parse_attributes(parser, &attributes))
 				return NULL;
 			token = preprocess_peek(parser->preprocessor);
-			if (attributes.noreturn) {
+			if (attributes.noreturn && !begins_declaration_specifier(parser, token)) {
 				diagnostic_error(parser->diagnostics, first.location,
-					"noreturn attribute is only supported before file-scope function declarations");
+					"noreturn attribute requires a function identifier declaration");
 				return NULL;
 			}
 			if (attributes.deprecated && !begins_declaration_specifier(parser, token)) {
@@ -3891,8 +3902,10 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 			!count_block_item(parser, token.location))
 			return NULL;
 		parser->declaration_attributes = attributes.present;
+		parser->declaration_noreturn = attributes.noreturn;
 		item = parse_block_item(parser);
 		parser->declaration_attributes = false;
+		parser->declaration_noreturn = false;
 		if (!item)
 			return NULL;
 		*tail = item;
