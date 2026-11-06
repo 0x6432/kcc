@@ -461,8 +461,6 @@ CONSTRAINTS.update({
 # Valid language forms outside the explicit M17 supported type/ABI set. These
 # compile unchanged on natives, never run, and never become native constraints.
 SUBSET={
-    'M21 aggregate argument': 'struct S { int x; }; int f(struct S s) { return s.x; }',
-    'M21 aggregate return': 'struct S { int x; }; struct S f(struct S *p) { return *p; }',
     'M22 bitfield': 'struct S { unsigned int x:3; }; struct S s;',
 }
 # No native compilation or execution for UB/proof-boundary/resource refusals.
@@ -557,8 +555,6 @@ KCC_REFUSALS={'excess array': (1, 16, 'excess elements in initializer'),
                                  51,
                                  'unsupported pointer conversion (incompatible pointers or integer/pointer '
                                  'conversion)'),
- 'M21 aggregate argument': (1, 26, 'aggregate function arguments are not supported yet (M21)'),
- 'M21 aggregate return': (1, 31, 'aggregate function returns are not supported yet (M21)'),
  'M22 bitfield': (1, 26, 'bit-fields are not supported yet (M22)'),
  'array beyond onepast': (1, 59, 'static pointer offset is outside its captured object bounds'),
  'null arithmetic': (1,45,'pointer arithmetic on null is not a static address constant'),

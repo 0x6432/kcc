@@ -92,6 +92,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_float_foundation.py
 	QBE="$(QBE)" python3 tests/test_compile.py
 	QBE="$(QBE)" python3 tests/test_abi.py
+	QBE="$(QBE)" python3 tests/test_aggregate_abi.py
 	QBE="$(QBE)" python3 tests/test_variadic.py
 	QBE="$(QBE)" python3 tests/test_builtin_headers.py
 	QBE="$(QBE)" python3 tests/test_wide_library_declarations.py

@@ -39,7 +39,7 @@ conformance is not claimed.
 | M18 | Enums/constant evaluation/assertions/sizeof/alignment | Constraints and unevaluated-expression tests | in progress (M18a fixed sizeof/alignof, M18b1 integer constant evaluation and M18b2 static assertions implemented; enum/alignment work remains) |
 | M19 | switch/labels/goto/remaining operators | Branch targets, duplicate labels/cases, sequencing | in progress (M19a comma, M19b conditional and M19c1/c2 prefix/postfix updates and M19d1/d2 all current integer compound assignments implemented; M19e1 named labels and M19e2 direct goto implemented; M19f1/f2 integer switch/case/default implemented; attributes/VLA interactions remain) |
 | M20 | Floating arithmetic and ordinary floating types | Conversions/rounding/host ABI; do not fake long double | planned |
-| M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | planned |
+| M21 | Variadics and aggregate calls/returns | Mixed arguments, va_list behavior, host ABI interoperability | in progress (scalar variadics and bounded x86-64 SysV aggregate calls/returns; see m21-aggregate-abi.md; aggregate ellipsis and va_arg remain unsupported) |
 | M22 | Bit-fields/flexible arrays/baseline gap audit | Target layout, constraints, remaining C17 feature inventory | planned |
 | M23a | C23 keyword changes and boolean constants | Token/declaration/expression constraints | in progress (M23a1 bool/true/false and M23a2 nullptr constant implemented; other changes planned) |
 | M23b | C23 integer/literal spelling additions | Binary literals, separators, literal typing | in progress (existing binary constants and integer digit separators covered by M23b checkpoint; bit-precise suffixes and floating constants remain unsupported) |

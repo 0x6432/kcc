@@ -760,3 +760,59 @@ const struct record_member *type_record_find_member(const struct type *type,
 		*offset = result_offset;
 	return member;
 }
+
+/* Classify only actual subobjects, never padding. Union alternatives merge at
+ * their real offsets. The caller bounds the walk to a <=16-byte object. */
+static bool classify_aggregate_part(const struct type *type, uint64_t offset,
+	enum aggregate_abi_class classes[2], unsigned depth)
+{
+	if (depth > 128) return false;
+	if (type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+		uint64_t stride = type_object_size(array->element);
+		if (!array->count || !stride || array->count > 16) return false;
+		for (uint64_t i = 0; i < array->count; i++)
+			if (!classify_aggregate_part(array->element, offset + i * stride, classes, depth + 1))
+				return false;
+		return true;
+	}
+	if (type_is_record(type)) {
+		const struct record_definition *record = type_record_definition(type);
+		if (!record->complete || record->has_flexible_array) return false;
+		for (const struct record_member *member = record->members; member; member = member->next)
+			if (!classify_aggregate_part(member->type, offset + member->offset, classes, depth + 1))
+				return false;
+		return true;
+	}
+	if (!type_is_scalar(type)) return false;
+	uint64_t size = type_object_size(type);
+	if (!size || offset + size > 16 || offset % type_object_alignment(type)) return false;
+	enum aggregate_abi_class cls = type_is_floating(type) ? aggregate_abi_sse : aggregate_abi_integer;
+	for (uint64_t i = offset / 8; i <= (offset + size - 1) / 8; i++) {
+		if (cls == aggregate_abi_integer || classes[i] == aggregate_abi_none)
+			classes[i] = cls;
+	}
+	return true;
+}
+
+bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
+{
+	*abi = (struct aggregate_abi) {0};
+	if (!type_is_record(type) || !type_is_complete_object(type) ||
+		type_record_definition(type)->has_flexible_array) return false;
+	uint64_t size = type_object_size(type);
+	unsigned alignment = type_object_alignment(type);
+	if (!size || size > type_max_abi_record_size || alignment > 8) return false;
+	abi->size = (unsigned)size;
+	abi->alignment = alignment;
+	if (size > 16) return true; /* QBE opaque MEMORY type. */
+	if (!classify_aggregate_part(type, 0, abi->classes, 0)) return false;
+	/* QBE cannot represent a NO_CLASS eightbyte in its register lowering.
+	 * SSE chunks must have a whole number of four-byte fields. */
+	for (unsigned i = 0; i < (size + 7) / 8; i++) {
+		unsigned bytes = size - i * 8 < 8 ? (unsigned)(size - i * 8) : 8;
+		if (abi->classes[i] == aggregate_abi_none ||
+			(abi->classes[i] == aggregate_abi_sse && bytes % 4)) return false;
+	}
+	return true;
+}

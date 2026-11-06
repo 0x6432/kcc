@@ -289,6 +289,36 @@ static const struct type *unqualified_type(struct sema *sema, const struct type 
 	return result;
 }
 
+/* QBE aggregate temporaries and staging buffers are entry allocations. */
+static bool reserve_aggregate_abi_storage(struct sema *sema, const struct type *type,
+	struct source_location location, size_t *slot)
+{
+	uint64_t size = (type_object_size(type) + 7) & ~UINT64_C(7);
+	if (!sema->function) return true;
+	if (sema->function->record_temporary_count == ast_max_record_temporaries) {
+		diagnostic_error(sema->diagnostics, location, "function exceeds record value temporary limit (256)");
+		return false;
+	}
+	if (size > ast_max_local_storage - sema->local_storage) {
+		diagnostic_error(sema->diagnostics, location, "function exceeds local object and record temporary storage limit (1 MiB)");
+		return false;
+	}
+	sema->local_storage += size;
+	if (slot) *slot = sema->function->record_temporary_count;
+	sema->function->record_temporary_count++;
+	return true;
+}
+
+static bool check_aggregate_abi(struct sema *sema, const struct type *type,
+	struct source_location location)
+{
+	struct aggregate_abi abi;
+	if (type_aggregate_abi(type, &abi)) return true;
+	diagnostic_error(sema->diagnostics, location,
+		"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes");
+	return false;
+}
+
 static bool sema_expression(struct sema *sema,
 	struct ast_expression **expression_slot, bool value_required);
 
@@ -2530,23 +2560,20 @@ static bool sema_expression(struct sema *sema,
 		}
 		result_type = node->signature->return_type;
 		if (type_is_record(result_type)) {
-			if (!sema->unevaluated) {
-				diagnostic_error(sema->diagnostics, expression->location,
-					"aggregate function returns are not supported yet (M21)");
-				return false;
-			}
 			if (!type_is_complete_object(result_type)) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"function call requires a complete return object type");
 				return false;
 			}
+			if (!sema->unevaluated &&
+				(!check_aggregate_abi(sema, result_type, expression->location) ||
+				 !reserve_aggregate_abi_storage(sema, result_type, expression->location, NULL)))
+				return false;
 		}
 		for (parameter = node->signature->parameters; parameter; parameter = parameter->next) {
-			if (!sema->unevaluated && type_is_record(parameter->type)) {
-				diagnostic_error(sema->diagnostics, expression->location,
-					"aggregate function arguments are not supported yet (M21)");
+			if (!sema->unevaluated && type_is_record(parameter->type) &&
+				!check_aggregate_abi(sema, parameter->type, expression->location))
 				return false;
-			}
 		}
 		parameter = node->signature->parameters;
 		expression->depth = node->callee->depth + 1;
@@ -2554,11 +2581,6 @@ static bool sema_expression(struct sema *sema,
 			argument = argument->next) {
 			if (!sema_expression(sema, &argument->value, true))
 				return false;
-			if (!sema->unevaluated && type_is_record(argument->value->type)) {
-				diagnostic_error(sema->diagnostics, argument->value->location,
-					"aggregate function arguments are not supported yet (M21)");
-				return false;
-			}
 			if (parameter) {
 				if (!convert_expression(sema, &argument->value, parameter->type))
 					return false;
@@ -2574,8 +2596,17 @@ static bool sema_expression(struct sema *sema,
 				argument->value->type->kind != type_kind_nullptr &&
 				!(sema->unevaluated && type_is_record(argument->value->type))) {
 				diagnostic_error(sema->diagnostics, argument->value->location,
-					"unsupported variadic argument type");
+					"unsupported variadic argument type (aggregate varargs are not supported yet)");
 				return false;
+			}
+			if (!sema->unevaluated && type_is_record(argument->value->type)) {
+				if (!check_aggregate_abi(sema, argument->value->type, argument->value->location) ||
+					!reserve_aggregate_abi_storage(sema, argument->value->type, argument->value->location, &argument->abi_slot))
+					return false;
+				if (sema->function) {
+					argument->next_abi_argument = sema->function->abi_arguments;
+					sema->function->abi_arguments = argument;
+				}
 			}
 			if (argument->value->depth + 1 > expression->depth)
 				expression->depth = argument->value->depth + 1;
@@ -5757,6 +5788,11 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 
 	assert(!sema->scope && !sema->control);
 	sema->function = definition;
+	if (type_is_record(definition->return_type) &&
+		!reserve_aggregate_abi_storage(sema, definition->return_type, definition->declaration->name.location, NULL)) {
+		sema->function = NULL;
+		return false;
+	}
 	sema->labels = NULL;
 	sema->label_count = 0;
 	sema->switch_label_count = 0;
@@ -5767,6 +5803,10 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	sema->scope = &scope;
 	for (struct ast_parameter *parameter = definition->declaration->parameters; parameter;
 		parameter = parameter->next) {
+		/* QBE may materialize even an unnamed register aggregate at entry. */
+		if (!parameter->is_void_marker && type_is_record(parameter->type) &&
+			!reserve_aggregate_abi_storage(sema, parameter->type, parameter->location, NULL))
+			goto done;
 		/* Unnamed C23 parameters remain in the ABI, without a source binding. */
 		if (!parameter->has_name)
 			continue;
@@ -6654,18 +6694,11 @@ static bool sema_function_declaration(struct sema *sema,
 	if (!definition)
 		return true;
 	const struct function_type *signature = (const struct function_type *)resolved;
-	if (type_is_record(signature->return_type)) {
-		diagnostic_error(sema->diagnostics, declaration->name.location,
-			"aggregate function returns are not supported yet (M21)");
-		return false;
-	}
-	for (const struct function_parameter_type *parameter = signature->parameters; parameter; parameter = parameter->next) {
-		if (type_is_record(parameter->type)) {
-			diagnostic_error(sema->diagnostics, declaration->name.location,
-				"aggregate function arguments are not supported yet (M21)");
-			return false;
-		}
-	}
+	if (type_is_record(signature->return_type) &&
+		!check_aggregate_abi(sema, signature->return_type, declaration->name.location)) return false;
+	for (const struct function_parameter_type *parameter = signature->parameters; parameter; parameter = parameter->next)
+		if (type_is_record(parameter->type) &&
+			!check_aggregate_abi(sema, parameter->type, declaration->name.location)) return false;
 	/* Install the definition before its body: direct recursion is visible. */
 	symbol->definition = definition;
 	definition->return_type = symbol->type->return_type;

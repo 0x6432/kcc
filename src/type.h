@@ -103,6 +103,15 @@ static inline unsigned type_stack_alignment_padding(unsigned alignment)
 {
 	return alignment > 16 ? alignment - 16 : 0;
 }
+/* Bounded x86-64 SysV/QBE aggregate calling convention. */
+enum { type_max_abi_record_size = 64 };
+enum aggregate_abi_class { aggregate_abi_none, aggregate_abi_integer, aggregate_abi_sse };
+struct aggregate_abi {
+	unsigned size, alignment;
+	enum aggregate_abi_class classes[2]; /* Both none denotes MEMORY. */
+};
+bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi);
+
 bool type_is_record(const struct type *type);
 struct record_definition *type_record_definition(const struct type *type);
 struct record_type *type_new_record(struct arena *arena, bool is_union);

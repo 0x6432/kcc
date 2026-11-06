@@ -2,8 +2,9 @@
 
 On x86-64 SysV, variadic prototypes, definitions, direct and indirect calls
 support promoted integers, pointers and `double` arguments. `float` arguments
-receive the default promotion to `double`. Aggregate variadic arguments and
-aggregate call/return ABI are not implemented.
+receive the default promotion to `double`. Aggregate variadic arguments remain unsupported. Fixed aggregate parameters
+and aggregate returns are supported within the separate bounded slice in
+`m21-aggregate-abi.md`.
 
 The compiler provides a fallback `stdarg.h` when no explicit include directory
 supplies one. It defines a SysV-compatible 24-byte `va_list` and macros for

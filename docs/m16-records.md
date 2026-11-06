@@ -26,11 +26,12 @@ Existing file, block-static and thread storage can hold zero-initialized records
 and arrays of records. Automatic same-type expression initialization, `auto`
 expression inference, assignment, comma and conditional record values are
 supported. General braces, designators and compound literals remain M17.
-Record prototypes and function-pointer types are representable, but evaluated
-by-value aggregate calls and function definitions remain M21. Unevaluated calls
-are type-checked without performing an ABI call or reserving a value temporary.
-Pointer-based native interoperability is tested; aggregate-by-value ABI is not
-silently approximated with a pointer calling convention.
+Record prototypes and function-pointer types are representable. The later
+bounded M21 slice now supports evaluated by-value aggregate calls and function
+definitions; see m21-aggregate-abi.md for exact limits. Unevaluated calls are
+type-checked without performing an ABI call or reserving a value temporary.
+The original M16 interoperability tests cover pointer-based access, not the
+new aggregate calling convention.
 
 ## Representation and lowering
 

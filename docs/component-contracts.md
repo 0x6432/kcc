@@ -2197,7 +2197,8 @@ Qualified record views share their definition identity. Member expressions retai
 written arrow/dot, actual leaf member and cumulative anonymous offset. Evaluated
 record loads link bounded entry-allocated snapshots to their owning function;
 unevaluated queries do not allocate these. Codegen consumes checked layout and
-uses address-backed record values without pretending aggregate ABI support.
+uses address-backed record values. The later bounded aggregate calling convention
+is specified separately in m21-aggregate-abi.md.
 Static member proofs retain canonical relocation bases and start a selected
 subobject domain, not a fabricated enclosing-object domain. See m16-records.md.
 

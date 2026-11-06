@@ -337,6 +337,8 @@ struct ast_function_decay_expression {
 struct ast_argument {
 	struct ast_expression *value;
 	struct ast_argument *next;
+	struct ast_argument *next_abi_argument;
+	size_t abi_slot;
 };
 
 enum ast_va_operation {
@@ -1053,6 +1055,7 @@ struct ast_function {
 	uint64_t vla_storage_budget;
 	size_t label_count;
 	size_t switch_label_count;
+	struct ast_argument *abi_arguments;
 	struct ast_load_expression *record_temporaries;
 	size_t record_temporary_count;
 };

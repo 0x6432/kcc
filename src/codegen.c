@@ -13,7 +13,13 @@ struct control_codegen {
 	size_t continue_label;
 };
 
+struct abi_registry {
+	bool used[type_max_abi_record_size + 1][9][aggregate_abi_sse + 1][aggregate_abi_sse + 1];
+};
+
 struct codegen {
+	struct abi_registry *abi;
+
 	FILE *stream;
 	struct control_codegen *control;
 	size_t next_temporary;
@@ -61,6 +67,21 @@ static const char *qbe_abi_type(const struct type *type)
 	if (type_value_width(type) == 16)
 		return type_is_unsigned(type) ? "uh" : "sh";
 	return type_value_width(type) == 64 ? "l" : "w";
+}
+
+static void emit_abi_type(struct codegen *codegen, const struct type *type)
+{
+	if (!type_is_record(type)) {
+		emit(codegen, "%s", qbe_abi_type(type));
+		return;
+	}
+	struct aggregate_abi abi;
+	bool valid = type_aggregate_abi(type, &abi);
+	assert(valid && codegen->abi);
+	(void)valid;
+	codegen->abi->used[abi.size][abi.alignment][abi.classes[0]][abi.classes[1]] = true;
+	emit(codegen, ":kcc_abi_%u_%u_%u_%u", abi.size, abi.alignment,
+		(unsigned)abi.classes[0], (unsigned)abi.classes[1]);
 }
 
 static const char *qbe_load_instruction(const struct type *type)
@@ -874,13 +895,23 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 		target = codegen_expression(codegen, node->callee);
 	/* Finish each argument's IL, including branches, before the call line. */
 	for (const struct ast_argument *argument = node->arguments; argument;
-		argument = argument->next)
-		arguments[count++] = codegen_expression(codegen, argument->value);
+		argument = argument->next) {
+		size_t value_arg = codegen_expression(codegen, argument->value);
+		if (type_is_record(argument->value->type)) {
+			size_t destination = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l copy %%a%zu\n", destination, argument->abi_slot);
+			codegen_record_copy(codegen, value_arg, destination, type_object_size(argument->value->type));
+			value_arg = destination;
+		}
+		arguments[count++] = value_arg;
+	}
 	assert(count == node->argument_count && count <= ast_max_arguments);
 	assert((node->expression.type->kind == type_kind_void) == (value == NULL));
 	if (value) {
 		*value = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =%s call ", *value, qbe_abi_type(node->expression.type));
+		emit(codegen, "\t%%t%zu =", *value);
+		emit_abi_type(codegen, node->expression.type);
+		emit(codegen, " call ");
 	} else {
 		emit(codegen, "\tcall ");
 	}
@@ -896,15 +927,15 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 	for (const struct ast_argument *argument = node->arguments; argument; argument = argument->next) {
 		if (node->signature->variadic && count == node->signature->parameter_count)
 			emit(codegen, "%s...", count ? ", " : "");
-		emit(codegen, "%s%s %%t%zu",
-			(count || (node->signature->variadic && !node->signature->parameter_count)) ? ", " : "",
-			qbe_abi_type(argument->value->type), arguments[count]);
+		emit(codegen, "%s", (count || (node->signature->variadic && !node->signature->parameter_count)) ? ", " : "");
+		emit_abi_type(codegen, argument->value->type);
+		emit(codegen, " %%t%zu", arguments[count]);
 		count++;
 	}
 	if (node->signature->variadic && count == node->signature->parameter_count)
 		emit(codegen, "%s...", count ? ", " : "");
 	emit(codegen, ")\n");
-	if (value)
+	if (value && !type_is_record(node->expression.type))
 		*value = codegen_canonicalize(codegen, *value, node->expression.type);
 }
 
@@ -1724,6 +1755,12 @@ static bool codegen_statement(struct codegen *codegen,
 		if (node->value) {
 			size_t value = codegen_expression(codegen, node->value);
 
+			if (type_is_record(node->value->type)) {
+				size_t destination = codegen->next_temporary++;
+				emit(codegen, "\t%%t%zu =l copy %%retbuf\n", destination);
+				codegen_record_copy(codegen, value, destination, type_object_size(node->value->type));
+				value = destination;
+			}
 			emit(codegen, "\tret %%t%zu\n", value);
 		} else {
 			emit(codegen, "\tret\n");
@@ -1831,10 +1868,11 @@ static bool codegen_block_items(struct codegen *codegen,
 	return terminated;
 }
 
-static bool codegen_function(FILE *stream, const struct ast_function *function)
+static bool codegen_function(FILE *stream, const struct ast_function *function, struct abi_registry *abi)
 {
 	struct codegen codegen = {
 		.stream = stream,
+		.abi = abi,
 		.next_label = function->label_count + function->switch_label_count + 1,
 		.named_label_count = function->label_count,
 		.output_ok = true,
@@ -1843,21 +1881,24 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	struct token name = function->declaration->name;
 	size_t parameter_index = 0;
 
-	assert(type_is_scalar(function->return_type) || function->return_type->kind == type_kind_void);
+	assert(type_is_scalar(function->return_type) || type_is_record(function->return_type) || function->return_type->kind == type_kind_void);
 
 	if (!function->declaration->symbol->is_internal)
 		emit(&codegen, "export ");
 	emit(&codegen, "function ");
-	if (function->return_type->kind != type_kind_void)
-		emit(&codegen, "%s ", qbe_abi_type(function->return_type));
+	if (function->return_type->kind != type_kind_void) {
+		emit_abi_type(&codegen, function->return_type);
+		emit(&codegen, " ");
+	}
 	emit(&codegen, "$%.*s(", (int)name.length,
 		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
 		if (parameter->is_void_marker)
 			continue;
-		emit(&codegen, "%s%s %%p%zu", parameter_index ? ", " : "",
-			qbe_abi_type(parameter->type), parameter_index);
+		emit(&codegen, "%s", parameter_index ? ", " : "");
+		emit_abi_type(&codegen, parameter->type);
+		emit(&codegen, " %%p%zu", parameter_index);
 		parameter_index++;
 	}
 	if (function->declaration->type_syntax->variadic)
@@ -1893,12 +1934,24 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 		codegen_fixed_slot(&codegen, 'r', capture->record_temporary_slot,
 			type_object_size(capture->expression.type), alignment);
 	}
+	/* QBE loads complete eightbytes, including for small objects. Staging
+	 * buffers are rounded up so it never reads past a source subobject. */
+	if (type_is_record(function->return_type))
+		emit(&codegen, "\t%%retbuf =l alloc8 %ju\n", (uintmax_t)((type_object_size(function->return_type) + 7) & ~UINT64_C(7)));
+	for (const struct ast_argument *argument = function->abi_arguments; argument; argument = argument->next_abi_argument)
+		emit(&codegen, "\t%%a%zu =l alloc8 %ju\n", argument->abi_slot,
+			(uintmax_t)((type_object_size(argument->value->type) + 7) & ~UINT64_C(7)));
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
 		if (parameter->is_void_marker)
 			continue;
-		if (parameter->local && (parameter->type->qualifiers & type_qualifier_volatile)) {
+		if (parameter->local && type_is_record(parameter->type)) {
+			size_t source = codegen.next_temporary++, destination = codegen.next_temporary++;
+			emit(&codegen, "\t%%t%zu =l copy %%p%zu\n", source, parameter_index);
+			emit(&codegen, "\t%%t%zu =l copy %%v%zu\n", destination, parameter->local->slot);
+			codegen_record_copy(&codegen, source, destination, type_object_size(parameter->type));
+		} else if (parameter->local && (parameter->type->qualifiers & type_qualifier_volatile)) {
 			size_t address = codegen.next_temporary++, value = codegen.next_temporary++;
 			emit(&codegen, "\t%%t%zu =l copy %%v%zu\n", address, parameter->local->slot);
 			emit(&codegen, "\t%%t%zu =%c copy %%p%zu\n", value, qbe_type(parameter->type), parameter_index);
@@ -1920,6 +1973,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function)
 	if (!codegen_block_items(&codegen, function->body->items)) {
 		if (function->return_type->kind == type_kind_void)
 			emit(&codegen, "\tret\n");
+		else if (type_is_record(function->return_type))
+			emit(&codegen, "\tret %%retbuf\n");
 		else
 			emit(&codegen, "\tret %s\n", function->return_type->kind == type_kind_float ? "s_0.0" : function->return_type->kind == type_kind_double ? "d_0.0" : "0");
 	}
@@ -2013,7 +2068,7 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 	free(entries);
 }
 
-bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
+static bool codegen_translation_unit_body(FILE *stream, const struct ast_translation_unit *unit, struct abi_registry *abi)
 {
 	const struct ast_external_declaration *external = unit->declarations;
 	struct codegen data_codegen = { .stream = stream, .output_ok = true };
@@ -2110,9 +2165,47 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 		}
 		if (external->kind == external_function_definition &&
 			!((const struct ast_function *)external)->declaration->symbol->is_inline_only &&
-			!codegen_function(stream, (const struct ast_function *)external))
+			!codegen_function(stream, (const struct ast_function *)external, abi))
 			return false;
 		external = external->next;
 	}
 	return fflush(stream) == 0;
+}
+
+/* QBE requires aggregate types before any use. Generate the translation unit
+ * once into a temporary stream while collecting ABI shapes, then emit the
+ * small, deduplicated type prelude followed by the unchanged body. */
+bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
+{
+	struct abi_registry abi = {0};
+	FILE *body = tmpfile();
+	if (!body) return false;
+	bool ok = codegen_translation_unit_body(body, unit, &abi);
+	for (unsigned size = 1; ok && size <= type_max_abi_record_size; size++)
+		for (unsigned align = 1; align <= 8; align *= 2)
+			for (unsigned c0 = 0; c0 < 3; c0++)
+				for (unsigned c1 = 0; c1 < 3; c1++) {
+					if (!abi.used[size][align][c0][c1]) continue;
+					if (fprintf(stream, "type :kcc_abi_%u_%u_%u_%u = align %u { ", size, align, c0, c1, align) < 0) ok = false;
+					if (size > 16) {
+						if (fprintf(stream, "%u", size) < 0) ok = false;
+					} else {
+						unsigned classes[2] = { c0, c1 };
+						for (unsigned i = 0; i < (size + 7) / 8; i++) {
+							unsigned n = size - i * 8 < 8 ? size - i * 8 : 8;
+							if (fprintf(stream, "%s%c %u", i ? ", " : "", classes[i] == aggregate_abi_sse ? 's' : 'b',
+								classes[i] == aggregate_abi_sse ? n / 4 : n) < 0) ok = false;
+						}
+					}
+					if (fprintf(stream, " }\n") < 0) ok = false;
+				}
+	if (ok && fseek(body, 0, SEEK_SET) != 0) ok = false;
+	char buffer[4096];
+	while (ok) {
+		size_t n = fread(buffer, 1, sizeof buffer, body);
+		if (n && fwrite(buffer, 1, n, stream) != n) ok = false;
+		if (n < sizeof buffer) { if (ferror(body)) ok = false; break; }
+	}
+	if (fclose(body) != 0 || fflush(stream) != 0) ok = false;
+	return ok;
 }

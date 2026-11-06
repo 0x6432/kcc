@@ -22,10 +22,12 @@ programs using the runtime-backed features requires `build/libkccrt.a` after
 the generated object; atomic and math calls can additionally require `-latomic`
 and `-lm`. See the milestone-specific documents for exact boundaries.
 
-Aggregate-by-value calls, general bit-fields, full C23 types and the complete standard
-library remain unsupported. Named full-width int bit-fields are supported within
-the bounds in `docs/m22-bit-fields.md`. Recent integrated changes have been built but have
-not been fully tested. M17 approval and ISO C23 conformance are not claimed.
+Bounded aggregate-by-value calls and returns are supported on x86-64 SysV;
+see `docs/m21-aggregate-abi.md` for exact limits. Named full-width int bit-fields
+are supported as described in `docs/m22-bit-fields.md`. Aggregate variadic
+arguments, general bit-fields, full C23 types and the complete standard library
+remain unsupported. Recent integrated changes have been built but have not been
+fully tested. M17 approval and ISO C23 conformance are not claimed.
 
 ### Previous checkpoint
 

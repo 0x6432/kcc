@@ -73,8 +73,9 @@ use bounded loops, not proportional machine-code expansion or hidden libc calls.
 This is not full C23 conformance. constexpr compound literals require M23h
 constant-object semantics and receive an explicit dependency diagnostic. C23
 expanded record compatibility/redefinition rules remain M23h. Floating/complex,
-_BitInt, VLA, atomics, bit-fields/flexible arrays and by-value aggregate ABI still
-belong to their listed milestones. Explicit integer-pointer casts are supported at runtime using the target LP64
+_BitInt, VLA, atomics, bit-fields/flexible arrays and by-value aggregate ABI
+belong to their listed milestones; bounded aggregate calls are described in
+`m21-aggregate-abi.md`. Explicit integer-pointer casts are supported at runtime using the target LP64
 representation; integer-constant casts and explicit pointer cast chains can
 initialize static pointers.
 Pointer arithmetic on those values and pointer-to-integer relocations remain
