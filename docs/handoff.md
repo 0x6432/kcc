@@ -1,5 +1,27 @@
 # Current handoff — M17 validation recovery
 
+## Current implementation lane (through 1539fdb)
+
+This section supersedes stale forward-looking implementation statements below;
+the remainder is historical evidence for earlier, exact commits. Recent work
+implements bounded float/double, scalar variadics, VLA, atomic and C23 subsets,
+plus partial target-specific headers and runtime helpers. See each feature's
+documentation for boundaries. Notable remaining work includes aggregate-by-value
+ABI, bit-fields, source `_BitInt`, `long double`, complete preprocessing and
+attributes, and a complete hosted C library. The internal bit-precise arithmetic
+helpers do **not** enable `_BitInt` source programs.
+
+Builds and selected compile/IL checks have run during this lane, together with a
+few host-only helper smoke checks. Newly added regression suites, fuzzing,
+generated-program runtime and integration/ABI/concurrency validation remain
+outstanding. QBE was not available in this environment. No later-checkpoint CI
+success, M17 approval, or C23 conformance is implied. As requested for this
+implementation lane, comprehensive validation is deferred until implementation
+work is complete; historical statements below about waiting for each gate are
+not the current work order. Runtime-backed features require `build/libkccrt.a`
+after generated objects; atomic and math operations may also need `-latomic` and
+`-lm`, and the headers target Linux x86-64 glibc.
+
 ## Implementation and release status
 
 M17 initializers, designators and compound literals are implemented for the
