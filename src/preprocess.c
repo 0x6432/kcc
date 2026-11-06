@@ -476,7 +476,15 @@ static bool read_macro_directive(struct preprocessor *preprocessor,
 		*error = reject_directive(preprocessor, marker, name, "expected a macro name");
 		return false;
 	}
-	if (is_protected_name(name)) {
+	/* Built-in headers may define their own implementation-reserved guards
+	 * and compatibility macros, but not the preprocessor's magic operators
+	 * or predefined values. Trust is attached to the source, never its name. */
+	bool builtin_reserved = name.location.source->compiler_builtin &&
+		!pp_spelling_is(name, "defined") && !is_predefined_location(name) &&
+		!is_predefined_clock(name) && !is_predefined_embed_status(name) &&
+		!pp_spelling_is(name, "__has_c_attribute") && !pp_spelling_is(name, "__has_include") &&
+		!pp_spelling_is(name, "__has_embed");
+	if (is_protected_name(name) && !builtin_reserved) {
 		*error = reject_directive(preprocessor, marker, name,
 			"reserved macro names are not supported yet");
 		return false;
@@ -913,8 +921,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define va_end(ap) __kcc_va_end(ap)\n"
 			"#endif\n";
 		if (source_from_bytes(source, "<kcc/stdarg.h>",
-			(const unsigned char *)header, sizeof(header) - 1))
+			(const unsigned char *)header, sizeof(header) - 1)) {
+			source->compiler_builtin = true;
 			return true;
+		}
 		*error = stop_preprocessing(preprocessor, name->invocation,
 			"cannot allocate built-in stdarg.h");
 		return false;
@@ -1427,8 +1437,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			source_name = "<kcc/float.h>";
 		}
 		if (header) {
-			if (source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header)))
+			if (source_from_bytes(source, source_name, (const unsigned char *)header, strlen(header))) {
+				source->compiler_builtin = true;
 				return true;
+			}
 			*error = stop_preprocessing(preprocessor, name->invocation,
 				"cannot allocate built-in standard header");
 			return false;

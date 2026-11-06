@@ -310,3 +310,15 @@ int main(void) {
         subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
+
+    # Reserved implementation names are allowed only in actual compiler-owned
+    # fallbacks, not merely in a user file with a similar displayed name.
+    spoof_dir = Path(directory) / '<kcc'
+    spoof_dir.mkdir()
+    spoof = spoof_dir / 'fake.h>'
+    spoof.write_text('#define __KCC_FAKE_GUARD 1\nint main(void) { return 0; }\n')
+    result = subprocess.run([str(compiler), '<kcc/fake.h>'], cwd=directory, capture_output=True, text=True)
+    assert result.returncode == 1 and 'reserved macro' in result.stderr, result.stderr
+    source.write_text('#define __LINE__ 4\nint main(void) { return 0; }\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 1 and 'reserved macro' in result.stderr, result.stderr

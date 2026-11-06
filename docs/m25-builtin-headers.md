@@ -5,7 +5,12 @@ provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
 `math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h` and `uchar.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
-include directories take precedence.
+include directories take precedence. Compiler-owned fallback source objects can
+define implementation-reserved guard and compatibility macros; ordinary user
+sources cannot acquire that permission by using a similar filename. Predefined
+operators and built-in location/clock/embed macros remain protected. A focused
+compile covering several guarded headers passed after this fix; the full header
+suite remains unrun.
 
 - `stdbool.h` defines `__bool_true_false_are_defined`; `bool`, `true` and
   `false` are C23 keywords.

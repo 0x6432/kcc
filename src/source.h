@@ -18,6 +18,7 @@ struct source {
 	struct source_mapping *mappings;
 	size_t mapping_count;
 	bool prepared;
+	bool compiler_builtin; /* Trusted built-in header, not inferred from its filename. */
 };
 
 /* Offset indexes source.data, not the optional physical/original buffer. */
