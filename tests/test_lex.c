@@ -339,13 +339,13 @@ static void check_bit_precise_diagnostic(const char *text)
 	assert(fflush(stream) == 0 && fseek(stream, 0, SEEK_SET) == 0);
 	length = fread(message, 1, sizeof(message) - 1, stream);
 	message[length] = '\0';
-	assert(strstr(message, "bit-precise integer literals are not supported yet"));
+	assert(strstr(message, "conditional integer exceeds signed 64-bit range"));
 	preprocess_destroy(&preprocessor);
 	source_destroy(&source);
 	assert(fclose(stream) == 0);
 }
 
-/* Language tokens preserve the suffix; #if still rejects bit-precise literals. */
+/* Language tokens preserve the suffix and #if uses intmax/uintmax arithmetic. */
 static void test_bit_precise_integer_spellings(void)
 {
 	const char *bases[] = { "42", "052", "0x2a", "0B101010", "4'2", "0x2'a" };
@@ -360,7 +360,7 @@ static void test_bit_precise_integer_spellings(void)
 		"1lwb", "1wbL", "1wbx", "1wb1" };
 	const enum token_kind invalid[] = { token_invalid };
 	const enum token_kind integer[] = { token_integer };
-	const enum token_kind rejected_condition[] = { token_invalid, token_int };
+	const enum token_kind included_condition[] = { token_int };
 	const unsigned char bounded[] = { '4', '2', 'U', 'W', 'B', 'x' };
 	const unsigned char embedded_nul[] = { '4', '2', 'w', 'b', 0 };
 	struct integer_spelling spelling;
@@ -376,8 +376,8 @@ static void test_bit_precise_integer_spellings(void)
 			assert(spelling.unsigned_suffix == unsign && spelling.long_suffix == 0);
 			assert(spelling.base == (i == 1 ? 8u : i == 2 || i == 5 ? 16u : i == 3 ? 2u : 10u));
 			check_tokens(text, integer, 1, 0);
-			assert(snprintf(text, sizeof(text), "#if %s%s\nint", bases[i], suffixes[j]) > 0);
-			check_tokens(text, rejected_condition, 2, 1);
+			assert(snprintf(text, sizeof(text), "#if %s%s\nint\n#endif", bases[i], suffixes[j]) > 0);
+			check_tokens(text, included_condition, 1, 0);
 		}
 	}
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
@@ -399,17 +399,17 @@ static void test_bit_precise_integer_spellings(void)
 	assert(!parse_integer_spelling((const unsigned char *)"0xffffffffffffffffWB", 20, &spelling));
 	assert(spelling.value == UINT64_MAX && spelling.base == 16 && spelling.bit_precise_suffix);
 
-	/* Macro expansion and token pasting preserve the suffix; #if still rejects. */
+	/* Macro expansion and token pasting preserve the suffix in #if. */
 	check_tokens("#define B 1wb\nB", integer, 1, 0);
 	check_tokens("#define JOIN(a,b) a##b\nJOIN(1,WB)", integer, 1, 0);
-	check_tokens("#define B 1UWB\n#if B\nint", rejected_condition, 2, 1);
-	check_tokens("#define JOIN(a,b) a##b\n#if JOIN(1,wb)\nint", rejected_condition, 2, 1);
+	check_tokens("#define B 1UWB\n#if B\nint\n#endif", included_condition, 1, 0);
+	check_tokens("#define JOIN(a,b) a##b\n#if JOIN(1,wb)\nint\n#endif", included_condition, 1, 0);
 	{
 		const enum token_kind integer[] = { token_integer };
 		check_tokens("1wb", integer, 1, 0);
 	}
-	check_bit_precise_diagnostic("#if 1UWB\n");
-	check_bit_precise_diagnostic("#if 0 && 1wb\n");
+	check_bit_precise_diagnostic("#if 9223372036854775808wb\n");
+	check_bit_precise_diagnostic("#if 0 && 0x8000000000000000WB\n");
 	{
 		const enum token_kind integer[] = { token_integer };
 
