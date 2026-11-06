@@ -3,7 +3,7 @@
 After explicit include paths have been searched, the x86-64 SysV compiler
 provides fallback subsets of `stdbool.h`, `stdnoreturn.h`, `stddef.h`, `stdint.h`, `limits.h`, `float.h`,
 `assert.h`, `stdatomic.h`, `stdlib.h`, `string.h`, `stdio.h`, `errno.h` and
-`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h` and `signal.h`, in addition
+`math.h`, `tgmath.h`, `ctype.h`, `inttypes.h`, `time.h`, `locale.h`, `wchar.h`, `wctype.h`, `uchar.h`, `stdbit.h`, `signal.h` and `stdalign.h`, in addition
 to the existing `stdarg.h`. The fallbacks have include guards and explicit
 include directories take precedence. Compiler-owned fallback source objects can
 define implementation-reserved guard and compatibility macros; ordinary user
@@ -15,6 +15,8 @@ suite remains unrun.
 - `stdbool.h` defines `__bool_true_false_are_defined`; `bool`, `true` and
   `false` are C23 keywords.
 - `stdnoreturn.h` provides the deprecated `noreturn` macro as `_Noreturn`.
+- `stdalign.h` is an empty compatibility header: C23 uses the `alignas` and
+  `alignof` keywords and removed its legacy macros.
 - `stddef.h` supplies `size_t`, `ptrdiff_t`, `wchar_t`, `nullptr_t`, `NULL`,
   a 16-byte-aligned `max_align_t`, and bounded `offsetof` for named members,
   nested members and constant in-bounds fixed-array indices. The `max_align_t`
@@ -43,11 +45,14 @@ suite remains unrun.
   built and smoke-checked, but their runtime and concurrency suites are unrun.
 - `stdlib.h` and `string.h` declare a bounded set of common allocation,
   conversion, sorting, memory and string functions with x86-64 libc-compatible
-  signatures. They omit many standard interfaces and require a compatible
-  linked libc; they do not provide implementations.
+  signatures, including C23 `strdup`, `strndup` and `memset_explicit` declarations.
+  They omit other interfaces and require a compatible linked libc; they do not
+  provide implementations. In particular, the development glibc 2.34 does not
+  export `memset_explicit`, which needs a newer compatible libc or another
+  implementation.
 - `stdio.h` exposes an opaque glibc `FILE` and common stream, file, formatted
-  input/output and positioning declarations, including `va_list` variants.
-  It omits other standard stdio interfaces and relies on glibc and the
+  input/output and positioning declarations, including `va_list` variants and
+  buffering controls. It omits other standard stdio interfaces and relies on glibc and the
   compiler's limited variadic ABI.
 - `errno.h` exposes glibc thread-local `errno` through `__errno_location` and
   a small selection of Linux error constants; other error codes are not provided.

@@ -10,6 +10,7 @@ host = os.environ.get("HOST_CC", "cc")
 
 source_text = r"""
 #include <stdbool.h>
+#include <stdalign.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdint.h>
@@ -58,6 +59,20 @@ with tempfile.TemporaryDirectory(prefix="kcc-headers-") as directory:
         subprocess.run([qbe, "-t", "amd64_sysv", "-o", str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
+    # Compile-only: memset_explicit is absent from some older compatible libcs.
+    source.write_text(r"""
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+void done(void) {}
+void *f(void *p,FILE *stream) {
+    char *s=strdup("abc"); size_t n=strspn(s,"a");
+    atexit(done); setvbuf(stream,0,_IONBF,0); free(s);
+    return memset_explicit(p,0,n);
+}
+""")
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
     (path / "present.h").write_text("#define PRESENT 1\n")
     (path / "defined.h").write_text("/* header named like a conditional operator */\n")
     (path / "__VA_ARGS__.h").write_text("/* header named like a variadic token */\n")

@@ -972,6 +972,9 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#define stdc_bit_floor(x) _Generic((x), unsigned char: stdc_bit_floor_uc, unsigned short: stdc_bit_floor_us, unsigned int: stdc_bit_floor_ui, unsigned long: stdc_bit_floor_ul, unsigned long long: stdc_bit_floor_ull)(x)\n"
 			"#define stdc_bit_ceil(x) _Generic((x), unsigned char: stdc_bit_ceil_uc, unsigned short: stdc_bit_ceil_us, unsigned int: stdc_bit_ceil_ui, unsigned long: stdc_bit_ceil_ul, unsigned long long: stdc_bit_ceil_ull)(x)\n"
 			"#endif\n";
+		/* C23 keeps the deprecated header but makes alignas/alignof keywords. */
+		static const char stdalign_header[] =
+			"#ifndef __KCC_STDALIGN_H\n#define __KCC_STDALIGN_H 1\n#endif\n";
 		static const char signal_header[] =
 			"#ifndef __KCC_SIGNAL_H\n#define __KCC_SIGNAL_H 1\n"
 			"typedef int sig_atomic_t; typedef void (*__kcc_sighandler_t)(int);\n"
@@ -1326,12 +1329,17 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#include <stddef.h>\n"
 			"#define EXIT_SUCCESS 0\n#define EXIT_FAILURE 1\n#define RAND_MAX 2147483647\n"
 			"void *malloc(size_t); void *calloc(size_t,size_t); void *realloc(void *,size_t);\n"
-			"void free(void *); void abort(void); void exit(int); void _Exit(int);\n"
+			"void free(void *); void *aligned_alloc(size_t,size_t);\n"
+			"void abort(void); void exit(int); void _Exit(int); void quick_exit(int);\n"
+			"int atexit(void (*)(void)); int at_quick_exit(void (*)(void)); char *getenv(const char *);\n"
 			"int atoi(const char *); long atol(const char *); long long atoll(const char *);\n"
 			"long strtol(const char *,char **,int); unsigned long strtoul(const char *,char **,int);\n"
 			"long long strtoll(const char *,char **,int); unsigned long long strtoull(const char *,char **,int);\n"
 			"float strtof(const char *,char **); double strtod(const char *,char **);\n"
 			"int rand(void); void srand(unsigned int);\n"
+			"int mblen(const char *,size_t); int mbtowc(wchar_t *,const char *,size_t);\n"
+			"int wctomb(char *,wchar_t); size_t mbstowcs(wchar_t *,const char *,size_t);\n"
+			"size_t wcstombs(char *,const wchar_t *,size_t);\n"
 			"int abs(int); long labs(long); long long llabs(long long);\n"
 			"void qsort(void *,size_t,size_t,int (*)(const void *,const void *));\n"
 			"void *bsearch(const void *,const void *,size_t,size_t,int (*)(const void *,const void *));\n"
@@ -1347,7 +1355,12 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"char *strncat(char *,const char *,size_t); int strcmp(const char *,const char *);\n"
 			"int strncmp(const char *,const char *,size_t); char *strchr(const char *,int);\n"
 			"char *strrchr(const char *,int); char *strstr(const char *,const char *);\n"
-			"char *strerror(int);\n"
+			"char *strerror(int); char *strtok(char *,const char *);\n"
+			"size_t strspn(const char *,const char *); size_t strcspn(const char *,const char *);\n"
+			"char *strpbrk(const char *,const char *); int strcoll(const char *,const char *);\n"
+			"size_t strxfrm(char *,const char *,size_t);\n"
+			"char *strdup(const char *); char *strndup(const char *,size_t);\n"
+			"void *memset_explicit(void *,int,size_t);\n"
 			"#endif\n";
 		static const char stdio_header[] =
 			"#ifndef __KCC_STDIO_H\n#define __KCC_STDIO_H 1\n"
@@ -1355,11 +1368,13 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"typedef struct _IO_FILE FILE;\n"
 			"extern FILE *stdin; extern FILE *stdout; extern FILE *stderr;\n"
 			"#define EOF (-1)\n#define SEEK_SET 0\n#define SEEK_CUR 1\n#define SEEK_END 2\n"
-			"#define BUFSIZ 8192\n"
+			"#define BUFSIZ 8192\n#define _IOFBF 0\n#define _IOLBF 1\n#define _IONBF 2\n"
+			"#define FOPEN_MAX 16\n#define FILENAME_MAX 4096\n#define L_tmpnam 20\n#define TMP_MAX 238328\n"
 			"FILE *fopen(const char *,const char *); FILE *freopen(const char *,const char *,FILE *);\n"
-			"int fclose(FILE *); int fflush(FILE *);\n"
+			"int fclose(FILE *); int fflush(FILE *); int setvbuf(FILE *,char *,int,size_t);\n"
+			"void setbuf(FILE *,char *); FILE *tmpfile(void); char *tmpnam(char *);\n"
 			"size_t fread(void *,size_t,size_t,FILE *); size_t fwrite(const void *,size_t,size_t,FILE *);\n"
-			"int fgetc(FILE *); int getc(FILE *); int getchar(void);\n"
+			"int fgetc(FILE *); int getc(FILE *); int getchar(void); int ungetc(int,FILE *);\n"
 			"int fputc(int,FILE *); int putc(int,FILE *); int putchar(int);\n"
 			"char *fgets(char *,int,FILE *); int fputs(const char *,FILE *); int puts(const char *);\n"
 			"int printf(const char *,...); int fprintf(FILE *,const char *,...);\n"
@@ -1367,6 +1382,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"int vprintf(const char *,va_list); int vfprintf(FILE *,const char *,va_list);\n"
 			"int vsprintf(char *,const char *,va_list); int vsnprintf(char *,size_t,const char *,va_list);\n"
 			"int scanf(const char *,...); int fscanf(FILE *,const char *,...); int sscanf(const char *,const char *,...);\n"
+			"int vscanf(const char *,va_list); int vfscanf(FILE *,const char *,va_list);\n"
+			"int vsscanf(const char *,const char *,va_list);\n"
 			"int fseek(FILE *,long,int); long ftell(FILE *); void rewind(FILE *);\n"
 			"int feof(FILE *); int ferror(FILE *); void clearerr(FILE *);\n"
 			"int remove(const char *); int rename(const char *,const char *); void perror(const char *);\n"
@@ -1451,7 +1468,10 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		const char *header = NULL, *header_tail = NULL, *source_name = NULL;
 
-		if (strcmp(name->path, "signal.h") == 0) {
+		if (strcmp(name->path, "stdalign.h") == 0) {
+			header = stdalign_header;
+			source_name = "<kcc/stdalign.h>";
+		} else if (strcmp(name->path, "signal.h") == 0) {
 			header = signal_header;
 			source_name = "<kcc/signal.h>";
 		} else if (strcmp(name->path, "stdbit.h") == 0) {
