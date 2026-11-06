@@ -3223,6 +3223,24 @@ static struct ast_statement *parse_statement(struct parser *parser)
 {
 	struct token token = preprocess_peek(parser->preprocessor);
 
+	if (token.kind == token_left_bracket) {
+		struct parsed_attributes attributes;
+		struct token first = token;
+		if (!parse_attributes(parser, &attributes))
+			return NULL;
+		token = preprocess_peek(parser->preprocessor);
+		if (attributes.fallthrough) {
+			diagnostic_error(parser->diagnostics, first.location,
+				"fallthrough is supported only as a block item before a case label");
+			return NULL;
+		}
+		if (attributes.maybe_unused && token.kind != token_case && token.kind != token_default &&
+			!(token.kind == token_identifier && preprocess_peek_second(parser->preprocessor).kind == token_colon)) {
+			diagnostic_error(parser->diagnostics, first.location,
+				"maybe_unused is supported only on declarations or labels here");
+			return NULL;
+		}
+	}
 	if (token.kind == token_identifier) {
 		preprocess_next(parser->preprocessor);
 		if (preprocess_peek(parser->preprocessor).kind == token_colon)
@@ -3798,7 +3816,8 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 				tail = &statement_item->item.next;
 				continue;
 			}
-			if (!begins_declaration_specifier(parser, token) && token.kind != token_case &&
+			if ((attributes.maybe_unused || begins_static_assertion(token.kind)) &&
+				!begins_declaration_specifier(parser, token) && token.kind != token_case &&
 				token.kind != token_default && !(token.kind == token_identifier &&
 				preprocess_peek_second(parser->preprocessor).kind == token_colon)) {
 				diagnostic_error(parser->diagnostics, token.location,

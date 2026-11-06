@@ -8,6 +8,8 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('int f(int x){ [[vendor::trace]] if(x) [[ignored(2)]] return 1; [[unknown]] return 0; }',
+     'int f(int x){ if(x) return 1; return 0; }'),
     ('[[vendor::unknown(1, {2, [3]}), unknown, maybe_unused]] int x=42; int main(void){return x;}',
      'int x=42; int main(void){return x;}'),
     ('[[unknown]] [[vendor::nodiscard("message")]] int x;', 'int x;'),
