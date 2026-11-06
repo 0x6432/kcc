@@ -21,8 +21,10 @@ Source provenance, not a filename, determines which budget is charged.
 - `stdalign.h` is an empty compatibility header: C23 uses the `alignas` and
   `alignof` keywords and removed its legacy macros.
 - `stddef.h` supplies `size_t`, `ptrdiff_t`, `wchar_t`, `nullptr_t`, `NULL`,
-  a 16-byte-aligned `max_align_t`, and bounded `offsetof` for named members,
-  nested members and constant in-bounds fixed-array indices. The `max_align_t`
+  a 16-byte-aligned `max_align_t`, bounded `offsetof` for named members,
+  nested members and constant in-bounds fixed-array indices, and `unreachable()`.
+  Reaching `unreachable()` is undefined by C23; this fallback calls `abort`
+  through `libkccrt.a` rather than adding optimizer assumptions. The `max_align_t`
   representation is a target-specific 32-byte struct rather than long double.
 - `stdint.h` supplies exact-width 8-, 16-, 32- and 64-bit integer types,
   least- and fast-width types, pointer-sized and maximum-width integer types,

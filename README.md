@@ -17,7 +17,10 @@ for the safety boundary and pending validation.
 The development branch includes bounded initializers, enums, alignment,
 float/double operations, scalar variadic calls and `va_list` access, flexible
 arrays, outermost VLAs, preprocessing location features and partial standard
-headers. See the milestone-specific documents for exact boundaries.
+headers, bounded volatile access and C23 checked integer arithmetic. Linking
+programs using the runtime-backed features requires `build/libkccrt.a` after
+the generated object; atomic and math calls can additionally require `-latomic`
+and `-lm`. See the milestone-specific documents for exact boundaries.
 
 Aggregate-by-value calls, bit-fields, full C23 types and the complete standard
 library remain unsupported. Recent integrated changes have been built but have
