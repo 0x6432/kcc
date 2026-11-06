@@ -639,7 +639,6 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			if (!sema_expression(sema, &member->bit_width, true))
 				goto done;
 			width = evaluate_integer_constant(member->bit_width);
-			/* The layout pass admits only fields starting at byte boundaries. */
 			if ((type->kind != type_kind_int && type->kind != type_kind_uint) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
@@ -740,7 +739,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		goto done;
 	if (!type_record_layout(definition)) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location,
-			"record must contain members and fit record layout storage limit (1 MiB); unsupported bit-offset bit-field layout");
+			"record must contain members and fit record layout storage limit (1 MiB)");
 		goto done;
 	}
 	success = true;
@@ -4351,11 +4350,12 @@ static struct ast_initializer_plan_entry *initializer_new_store(struct initializ
 	return initializer_alloc(builder, sizeof(struct ast_initializer_plan_entry), location);
 }
 
-/* Remove precisely the later-written byte interval. Aggregate snapshots and
+/* Remove the later-written extent. Disjoint field bits may share bytes;
+ * overlapping field writes are pruned by bit range. Aggregate snapshots and
  * strings can be sliced, sharing expression identity as a single capture key.
  * No interval bitmap or per-byte/per-omitted-leaf allocation is used. */
 static bool initializer_prune(struct initializer_builder *builder, uint64_t offset,
-	uint64_t length, struct source_location location)
+	uint64_t length, const struct record_member *field, struct source_location location)
 {
 	struct ast_initializer_plan_entry **slot = &builder->plan->entries;
 	uint64_t finish = offset + length;
@@ -4366,6 +4366,26 @@ static bool initializer_prune(struct initializer_builder *builder, uint64_t offs
 			slot = &entry->next;
 			continue;
 		}
+		if (field && entry->bit_field) {
+			uint64_t a = offset * 8 + field->bit_offset;
+			uint64_t b = entry->offset * 8 + entry->bit_field->bit_offset;
+			if (a + field->bit_width <= b || b + entry->bit_field->bit_width <= a) {
+				slot = &entry->next;
+				continue;
+			}
+			if (a != b || field->bit_width != entry->bit_field->bit_width)
+				return initializer_error(builder, location, "unsupported overlapping bit-field initializer");
+			*slot = entry->next;
+			builder->plan->entry_count--;
+			continue;
+		}
+		/* A field write cannot replace only bits of an earlier copy or scalar.
+		 * Zero entries may be sliced because the object starts zero-filled. */
+		if (field && entry->kind != ast_initializer_write_zero &&
+			(field->bit_offset || field->bit_width % 8))
+			return initializer_error(builder, location, "unsupported bit-field initializer over existing storage");
+		if (!field && entry->bit_field && !(offset <= entry->offset && finish >= end))
+			return initializer_error(builder, location, "unsupported partial bit-field initializer override");
 		if (offset <= entry->offset && finish >= end) {
 			*slot = entry->next;
 			builder->plan->entry_count--;
@@ -4412,7 +4432,7 @@ static bool initializer_store(struct initializer_builder *builder,
 		return true;
 	if (value->offset > ast_max_local_storage || value->length > ast_max_local_storage - value->offset)
 		return initializer_error(builder, location, "initializer object exceeds storage limit (1 MiB)");
-	if (!initializer_prune(builder, value->offset, value->length, location))
+	if (!initializer_prune(builder, value->offset, value->length, value->bit_field, location))
 		return false;
 	if (builder->plan->entry_count == ast_max_initializer_entries)
 		return initializer_error(builder, location, "initializer exceeds resolved store limit (16384)");
@@ -4812,8 +4832,8 @@ static bool initializer_list(struct initializer_builder *builder,
 	bool available = true;
 	if (member && member->is_bit_field && member->bit_width) {
 		if (!initializer_store(builder, &(struct ast_initializer_plan_entry) {
-			.kind = ast_initializer_write_zero, .offset = offset, .length = (member->bit_width + 7) / 8,
-			.type = type, .syntax = syntax,
+			.kind = ast_initializer_write_zero, .offset = offset, .length = (member->bit_offset + member->bit_width + 7) / 8,
+			.type = type, .bit_field = member, .syntax = syntax,
 		}, syntax->location))
 			return false;
 	} else if (type_is_complete_object(type) && !initializer_clear(builder, type, offset, syntax))
@@ -4888,7 +4908,7 @@ static bool initializer_value(struct initializer_builder *builder,
 	store.bit_field = object->member && object->member->is_bit_field ? object->member : NULL;
 	store.length = type_is_complete_object(object->type) ? type_object_size(object->type) : 0;
 	if (store.bit_field && store.bit_field->bit_width)
-		store.length = (store.bit_field->bit_width + 7) / 8;
+		store.length = (store.bit_field->bit_offset + store.bit_field->bit_width + 7) / 8;
 	if (string && initializer_string_array(object->type, (const struct ast_string_expression *)expression)) {
 		const struct ast_string_expression *literal = (const struct ast_string_expression *)expression;
 		const struct array_type *array = (const struct array_type *)object->type;

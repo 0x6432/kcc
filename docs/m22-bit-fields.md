@@ -11,14 +11,12 @@ retain the existing record restrictions.
 
 Layout follows the target's little-endian, low-bit-first 32-bit allocation
 units and natural four-byte int alignment. A field that does not fit in the
-current unit starts in the next one. Every accepted field must start on a byte
-boundary. Thus adjacent 8-, 16-, and 24-bit fields can share units, and fields
-of any width can be interleaved with ordinary members when their calculated
-starts are byte-aligned. For example, `unsigned a:3; char b;` is accepted,
-but `unsigned a:3; unsigned b:4;` is rejected because `b` starts at bit 3.
-A 16- or 24-bit field may start at an unaligned byte offset. Union alternatives
-overlap normally. Layouts outside these rules are rejected rather than
-approximated; this is not complete SysV bit-field coverage.
+current unit starts in the next one. Adjacent fields may start at any bit
+within a byte, share bytes, or cross byte boundaries within a unit. Ordinary
+members start at their normal alignment after the occupied bits, and union
+alternatives overlap. For example, `unsigned a:3, b:4;` shares one byte;
+`unsigned a:3, b:31;` places `b` in the next unit. These rules apply only to
+the supported int-based declarations, not general SysV bit-field coverage.
 
 ## Values, initialization and expressions
 
@@ -31,10 +29,16 @@ bits. Narrow `unsigned int` fields promote to `int` in integer-promotion
 contexts, including arithmetic, shifts, conditional operands and variadic calls.
 Within existing initializer limits, static and automatic, positional and
 designated initializers, scalar braces, record copies and pointer-based host
-interop are supported. Bounded aggregate calls and returns are also available;
+interop are supported. Adjacent fields are merged bitwise; repeated field
+designators replace only that field. A partial-bit field initializer that
+overrides an earlier whole-record copy or another nonzero scalar storage write
+is rejected, as is a later byte-range override that partially covers a field.
+Overlapping fields with different bit ranges are rejected if initializer union
+selection has not already discarded the earlier alternative. Bounded aggregate
+calls and returns are also available;
 see `m21-aggregate-abi.md`. The aggregate classifier currently rejects some
-otherwise-supported layouts, including unaligned byte-start fields in small
-records, rather than guessing their ABI.
+otherwise-supported layouts, including fields at byte offsets not aligned for `int` in small records (whether
+or not the bit start is byte-aligned), rather than guessing their ABI.
 
 Taking a field's address, applying `sizeof`, `typeof` or `typeof_unqual`
 directly to it, and using it in an `offsetof` designator are rejected. Const
@@ -46,9 +50,8 @@ supported. Ordinary expressions formed from fields follow existing rules.
 ## Explicit boundaries
 
 Unnamed fields (including zero-width separators), `_Bool`, enum, other integer
-base types, `_BitInt`, volatile and atomic fields are rejected. Fields beginning
-at a non-byte bit offset (including sub-byte sharing) are not implemented.
-Known GNU layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
+base types, `_BitInt`, volatile and atomic fields are rejected. Known GNU
+layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
 layout; GNU attribute syntax is not supported. This is not general bit-field
@@ -57,11 +60,13 @@ can share the legacy M22 diagnostic.
 
 ## Validation
 
-`tests/test_bit_fields.py` and `tests/test_narrow_bit_fields.py` compile owner
-and companion translation units in all four host/KCC combinations using the
+`tests/test_bit_fields.py`, `tests/test_narrow_bit_fields.py` and
+`tests/test_packed_bit_fields.py` compile owner and companion translation units in all four host/KCC combinations using the
 pinned QBE 1.2 backend. They cover full units, byte-start narrow fields,
-including packed adjacent fields, all widths 1 through 32 in both host/KCC
-directions, signed and unsigned values, static and automatic initialization,
-field updates and single-evaluation bases, promotions, layout, unions, flexible
-arrays, and unsupported cases. These checks do not replace cross-platform ABI
-validation, fuzzing, or full C23 conformance testing.
+including sub-byte adjacent fields, all widths 1 through 32 after bit offsets
+1 through 7 in both host/KCC directions, signed and unsigned values, static and
+automatic initialization,
+field updates and single-evaluation bases, promotions (including variadic calls),
+layout, unions, flexible arrays, small and memory-class aggregate calls,
+`_BitInt` integration boundaries, and unsupported cases. These checks do not replace
+cross-platform ABI validation, fuzzing, or full C23 conformance testing.

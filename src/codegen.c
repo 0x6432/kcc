@@ -330,8 +330,7 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 	}
 }
 
-/* Accepted fields begin at bit zero of their addressed byte and use exact,
- * nonoverlapping byte ranges. Preserve unused bits in the final byte. */
+/* Address the first touched byte and preserve all neighboring bits. */
 static const struct record_member *codegen_bit_field(const struct ast_expression *expression)
 {
 	if (expression->kind != expression_member)
@@ -372,21 +371,32 @@ static size_t codegen_field_storage_load(struct codegen *codegen, size_t address
 static size_t codegen_field_load(struct codegen *codegen, size_t address,
 	const struct record_member *member)
 {
-	size_t value = codegen_field_storage_load(codegen, address, (member->bit_width + 7) / 8);
+	size_t value = codegen_field_storage_load(codegen, address, (member->bit_offset + member->bit_width + 7) / 8);
+	if (member->bit_offset) {
+		size_t shifted = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w shr %%t%zu, %u\n", shifted, value, member->bit_offset);
+		value = shifted;
+	}
 	return codegen_field_value(codegen, value, member);
 }
 
 static size_t codegen_field_store(struct codegen *codegen, size_t address, size_t value,
 	const struct record_member *member)
 {
-	unsigned bytes = (member->bit_width + 7) / 8;
+	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
 	uint32_t mask = UINT32_MAX >> (32 - member->bit_width);
+	uint32_t storage_mask = mask << member->bit_offset;
 	size_t old = codegen_field_storage_load(codegen, address, bytes);
 	size_t kept = codegen->next_temporary++, bits = codegen->next_temporary++;
 	size_t combined = codegen->next_temporary++;
-	emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", kept, old, ~mask);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", kept, old, ~storage_mask);
 	emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", bits, value, mask);
-	emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, kept, bits);
+	size_t placed = bits;
+	if (member->bit_offset) {
+		placed = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w shl %%t%zu, %u\n", placed, bits, member->bit_offset);
+	}
+	emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, kept, placed);
 	if (bytes == 3) {
 		size_t tail_address = codegen->next_temporary++, tail = codegen->next_temporary++;
 		emit(codegen, "\tstoreh %%t%zu, %%t%zu\n", combined, address);
@@ -636,7 +646,12 @@ static void codegen_initializer_plan(struct codegen *codegen,
 			continue;
 		address = codegen_byte_offset(codegen, destination, entry->offset);
 		if (entry->kind == ast_initializer_write_zero) {
-			codegen_zero_bytes(codegen, address, entry->length);
+			if (entry->bit_field && entry->bit_field->bit_width < 32) {
+				size_t zero = codegen->next_temporary++;
+				emit(codegen, "\t%%t%zu =w copy 0\n", zero);
+				(void)codegen_field_store(codegen, address, zero, entry->bit_field);
+			} else
+				codegen_zero_bytes(codegen, address, entry->length);
 			continue;
 		}
 		size_t i = ((uintptr_t)entry->expression >> 3) & (capacity - 1);
@@ -2100,6 +2115,35 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 		const struct ast_initializer_plan_entry *entry = entries[i];
 		const struct ast_initializer_constant *constant = &entry->constant;
 
+		/* Static field writes may share bytes. Group only overlapping extents,
+		 * merging at most plan->size bytes (bounded by the initializer limit). */
+		if (entry->bit_field) {
+			uint64_t start = entry->offset, end = start + entry->length;
+			size_t last = i + 1;
+			while (last < count && entries[last]->bit_field && entries[last]->offset < end) {
+				uint64_t next_end = entries[last]->offset + entries[last]->length;
+				if (next_end > end) end = next_end;
+				last++;
+			}
+			assert(start >= position && end <= plan->size);
+			if (start > position) emit(codegen, "z %ju, ", (uintmax_t)(start - position));
+			unsigned char *bytes = calloc((size_t)(end - start), 1);
+			if (!bytes) { codegen->output_ok = false; free(entries); return; }
+			for (size_t k = i; k < last; k++) {
+				const struct ast_initializer_plan_entry *f = entries[k];
+				if (f->kind == ast_initializer_write_zero) continue;
+				assert(f->constant.kind == ast_initializer_constant_integer);
+				uint64_t mask = (UINT64_C(1) << f->bit_field->bit_width) - 1;
+				uint64_t bits = (f->constant.bits & mask) << f->bit_field->bit_offset;
+				for (size_t j = 0; j < f->length; j++)
+					bytes[f->offset - start + j] |= (unsigned char)(bits >> (8 * j));
+			}
+			for (uint64_t j = 0; j < end - start; j++) emit(codegen, "b %u, ", (unsigned)bytes[j]);
+			free(bytes);
+			position = end;
+			i = last - 1;
+			continue;
+		}
 		assert(entry->offset >= position && entry->offset <= plan->size &&
 			entry->length <= plan->size - entry->offset);
 		if (entry->offset > position)
@@ -2143,8 +2187,6 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 			/* Byte slices preserve explicitly overridden scalar storage too;
 			 * target representation is Linux amd64 little endian. */
 			uint64_t bits = constant->bits;
-			if (entry->bit_field && entry->bit_field->bit_width && entry->bit_field->bit_width < 32)
-				bits &= UINT32_MAX >> (32 - entry->bit_field->bit_width);
 			for (size_t j = 0; j < entry->length; j++)
 				emit(codegen, "b %u, ", (unsigned)((bits >>
 					(8 * (entry->source_offset + j))) & UINT64_C(255)));

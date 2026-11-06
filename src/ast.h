@@ -182,7 +182,8 @@ struct ast_initializer_constant {
 };
 
 /* Sema publishes surviving writes in evaluation order after override pruning.
- * zero_fill clears the complete object before these writes. */
+ * Byte extents may overlap only for disjoint bit-field writes. zero_fill clears
+ * the complete object before these writes. */
 struct ast_initializer_plan_entry {
 	uint64_t offset;
 	uint64_t size; /* Reserved extent mirror; length is authoritative. */

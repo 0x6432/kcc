@@ -646,9 +646,7 @@ static bool checked_record_member_layout(const struct record_member *member,
 	return checked_member_layout(member->type, 0, size, alignment);
 }
 
-/* The target packs int fields within 32-bit allocation units, starting at
- * the next available bit. Fields beginning on a byte boundary have distinct
- * byte ranges; bit-offset fields are rejected pending bit-granular plans. */
+/* SysV packs int fields low-bit-first within 32-bit allocation units. */
 static bool record_layout_pass(struct record_definition *definition, bool publish,
 	uint64_t *result_size, unsigned *result_alignment, size_t *result_count)
 {
@@ -657,7 +655,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 	size_t count = 0;
 	for (struct record_member *member = definition->members; member; member = member->next) {
 		uint64_t member_size, offset;
-		unsigned member_alignment;
+		unsigned member_alignment, bit_offset = 0;
 		if (++count > 1024 ||
 			(member->is_bit_field && (member->anonymous || !member->name.length ||
 			member->alignment || member->is_flexible ||
@@ -682,8 +680,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			unsigned width = member->bit_width ? member->bit_width : 32;
 			if (bits % 32 + width > 32)
 				bits = (bits + 31) & ~UINT64_C(31);
-			if (bits % 8 != 0)
-				return false;
+			bit_offset = (unsigned)(bits % 8);
 			offset = bits / 8;
 			bits += width;
 		} else {
@@ -695,8 +692,10 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 		}
 		if (offset > type_max_record_size || bits > (uint64_t)type_max_record_size * 8)
 			return false;
-		if (publish)
+		if (publish) {
 			member->offset = offset;
+			member->bit_offset = bit_offset;
+		}
 	}
 	uint64_t size = definition->is_union ? union_size : (bits + 7) / 8;
 	if (!count || !checked_align(size, alignment, &size))

@@ -77,7 +77,6 @@ int main(void) {
 '''
 # Diagnostics are not claimed to distinguish invalid C from valid-but-unsupported C.
 REJECT = {
-    'shared-unit': ('struct S { unsigned x:3, y:4; };', 'unsupported bit-offset bit-field layout'),
     'too-wide': ('struct S { unsigned x:33; };', 'bit-fields are not supported yet'),
     'zero-named': ('struct S { int x:0; };', 'bit-fields are not supported yet'),
     'negative': ('struct S { int x:-1; };', 'bit-fields are not supported yet'),
@@ -103,10 +102,12 @@ REJECT = {
     'offsetof': ('struct S { int x:32; }; int a[__kcc_offsetof(struct S, x)];', 'offsetof cannot designate a bit-field'),
     'const-write': ('struct S { const int x:32; } s; int f(void) { return s.x=1; }', 'modifiable lvalue'),
 }
+# Formerly rejected; now exercise the exact declaration at runtime.
 POSITIVE = r'''
+struct Shared { unsigned x:3, y:4; };
 struct S { const int c:32; unsigned u:32; };
 struct S s = { .c = -1, .u = 2 };
-int main(void) { int x=0; return sizeof(s.u+0)==4 && sizeof((x,s.u))==4 && sizeof(s.u=5)==4 && s.u==2 && s.c == -1 ? 0 : 1; }
+int main(void) { int x=0; struct Shared v={5,9}; if(v.x!=5 || v.y!=9) return 1; v.y=3; if(v.x!=5 || v.y!=3) return 2; return sizeof(s.u+0)==4 && sizeof((x,s.u))==4 && sizeof(s.u=5)==4 && s.u==2 && s.c == -1 ? 0 : 1; }
 '''
 
 def run(args, **kw):

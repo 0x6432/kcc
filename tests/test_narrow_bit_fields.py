@@ -103,11 +103,19 @@ int main(void) {
 }
 '''
 LOCAL = r'''
+/* Formerly rejected layouts now have runtime coverage. */
+struct Shared34 { unsigned a:3, b:4; };
+struct Shared38 { unsigned a:3, b:8; };
+struct Shared1216 { unsigned a:12, b:16; };
 struct P { unsigned a:8; signed b:16; unsigned c:8; };
 struct P global = { .a={3}, .b={-7}, .c={9}, .a={4} };
 struct N { char c; unsigned a:3; char b; };
 struct N gn = { .c=4, .a={7}, .b=9 };
 int main(void) {
+  struct Shared34 x={5,9}; struct Shared38 y={5,199}; struct Shared1216 z={3000,60000};
+  if(x.a!=5 || x.b!=9 || y.a!=5 || y.b!=199 || z.a!=3000 || z.b!=60000) return 6;
+  x.b=7; y.b=88; z.b=12345;
+  if(x.a!=5 || x.b!=7 || y.a!=5 || y.b!=88 || z.a!=3000 || z.b!=12345) return 7;
   struct N n = { .c=4, .a={7}, .b=9 };
   if (gn.c!=4 || gn.a!=7 || gn.b!=9 || n.c!=4 || n.a!=7 || n.b!=9) return 4;
   if ((n.a+=2)!=1 || n.c!=4 || n.b!=9) return 5;
@@ -119,9 +127,6 @@ int main(void) {
 }
 '''
 REJECT = [
-    'struct S { unsigned a:3, b:4; };',
-    'struct S { unsigned a:3, b:8; };',
-    'struct S { unsigned a:12, b:16; };',
     'struct S { unsigned a:0; };',
     'struct S { unsigned :0; };',
     'struct S { volatile unsigned a:8; };',

@@ -1,6 +1,6 @@
 /* Independent M16 nominal identity/layout/source-point/rollback tests.
  * Build with compiler sources excluding main.c. Assertions must stay enabled.
- * No aggregate by-value ABI, braced source initializers, bitfields or flex arrays.
+ * No aggregate by-value ABI, braced source initializers or flex arrays.
  */
 #include "parse.h"
 #include "sema.h"
@@ -219,6 +219,25 @@ static void layout_boundaries(void)
  arena_destroy(&a);
 }
 
+static void bit_offset_layout(void)
+{
+ struct fixture f;
+ open_fixture(&f,"struct X { unsigned a:3,b:4,c:23,d:3; char z; }; struct X x;");
+ assert(sema_translation_unit(f.unit,&f.arena,&f.diagnostics));
+ const struct type *t=object(&f,"x",0)->type;
+ struct record_definition *r=type_record_definition(t);
+ assert(r->size==8 && r->alignment==4);
+ assert(member(t,"a",0)->bit_offset==0 && member(t,"b",0)->bit_offset==3);
+ assert(member(t,"c",0)->bit_offset==7 && member(t,"d",4)->bit_offset==0);
+ assert(member(t,"z",5)->bit_offset==0);
+ struct record_member *d=(struct record_member *)member(t,"d",4);
+ struct record_definition before=*r;
+ d->alignment=3;
+ assert(!type_record_layout(r));
+ assert(memcmp(&before,r,sizeof before)==0 && member(t,"b",0)->bit_offset==3 && d->offset==4);
+ close_fixture(&f);
+}
+
 static void incomplete_at_sourcepoint(void)
 {
  const char *texts[]={
@@ -379,7 +398,7 @@ static void failed_temporary_budget(void)
 
 int main(void)
 {
- canonical_identity(); layout_transaction(); layout_boundaries(); incomplete_at_sourcepoint(); failed_publication();
+ canonical_identity(); layout_transaction(); layout_boundaries(); bit_offset_layout(); incomplete_at_sourcepoint(); failed_publication();
  tag_scopes(); member_captures(); member_static_assertions();
  failed_temporary_budget(); failed_record_completion();
  puts("Record AST canonical identity, layout transactions, sourcepoint guards and publication passed");
