@@ -728,6 +728,7 @@ static bool parse_object_array_suffixes(struct parser *parser,
 		struct ast_expression *bound = NULL;
 		struct ast_array_type_syntax *array;
 		bool has_bound, parameter_static = false, qualifiers_before_static = false;
+		bool parameter_star = false;
 		unsigned qualifiers = 0;
 
 		if (declarator->dimensions == ast_max_array_dimensions) {
@@ -761,6 +762,16 @@ static bool parse_object_array_suffixes(struct parser *parser,
 				qualifiers |= specifier.kind == token_const ? type_qualifier_const : type_qualifier_restrict;
 			}
 		}
+		if (preprocess_peek(parser->preprocessor).kind == token_star &&
+			preprocess_peek_second(parser->preprocessor).kind == token_right_bracket) {
+			if (context != declarator_parameter || parameter_static) {
+				diagnostic_error(parser->diagnostics, opening.location,
+					"[*] is permitted only in a non-static prototype parameter array");
+				return false;
+			}
+			preprocess_next(parser->preprocessor);
+			parameter_star = true;
+		}
 		has_bound = preprocess_peek(parser->preprocessor).kind != token_right_bracket;
 		if (parameter_static && !has_bound) {
 			diagnostic_error(parser->diagnostics, opening.location,
@@ -781,6 +792,7 @@ static bool parse_object_array_suffixes(struct parser *parser,
 		}
 		array->parameter_qualifiers = qualifiers;
 		array->parameter_static = parameter_static;
+		array->parameter_star = parameter_star;
 		*declarator->base_slot = &array->syntax;
 		declarator->base_slot = &array->element;
 		declarator->dimensions++;
@@ -925,9 +937,9 @@ static struct ast_type_syntax *parse_derived_type(struct parser *parser,
 	for (struct ast_type_syntax *item = declarator.syntax; item;) {
 		if (item->kind == type_syntax_array) {
 			struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)item;
-			if ((array->parameter_qualifiers || array->parameter_static) && item != declarator.syntax) {
+			if ((array->parameter_qualifiers || array->parameter_static || array->parameter_star) && item != declarator.syntax) {
 				diagnostic_error(parser->diagnostics, item->location,
-					"array bracket qualifiers and static require the outermost parameter array");
+					"array bracket qualifiers, static, and [*] require the outermost parameter array");
 				return NULL;
 			}
 			item = array->element;

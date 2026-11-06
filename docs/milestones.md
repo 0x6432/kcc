@@ -8,7 +8,8 @@ Do not implement a later milestone just to hide a failure in an earlier one.
 not an up-to-date release gate. Recent feature-branch checkpoints also implement
 bounded enum definitions and fixed underlying types, matching enum redefinitions,
 parameter-scope enum bindings, additional alignment placement, fixed array
-parameter `static`/`const`, and conservative `restrict` qualification. Floating,
+parameter `static`/`const`, outermost prototype `[*]`, and conservative
+`restrict` qualification. Floating,
 variadic, atomic, VLA and C23 work exists only in documented subsets. The recent
 changes build and have had limited focused compile checks; their new regression
 suites and fuzzing remain outstanding. M17 is not approved and full C23

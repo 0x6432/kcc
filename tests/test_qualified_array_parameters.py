@@ -8,6 +8,8 @@ compiler = Path(os.environ.get('KCC', Path(__file__).resolve().parents[1] / 'bui
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 valid = [
+    'int f(int a[const *]); int f(int *a) { return a[0]; } int main(void) { int a[1]; a[0]=42; return f(a); }',
+    'int f(int a[restrict *][2]); int f(int a[][2]) { return a[0][0]; } int main(void) { int a[1][2]; a[0][0]=42; return f(a); }',
     'int f(int a[static const 3][2]); int f(int a[const static 3][2]) { a[1][1]=42; return a[1][1]; } int main(void) { int a[3][2]; return f(a); }',
     'int f(int a[const]); int f(int *a) { return a[0]; } int main(void) { int a[1]; a[0]=42; return f(a); }',
     'int f(int a[static 2]) { a=a+1; return a[0]; } int main(void) { int a[2]; a[1]=42; return f(a); }',
@@ -16,6 +18,9 @@ valid = [
     'int f(int a[const 2],typeof(a) b) { return b[0]; } int main(void) { int a[2]; a[0]=42; return f(a,a); }',
 ]
 invalid = [
+    ('int f(int a[*]) { return 0; }', 'function prototype scope'),
+    ('int f(int a[static *]);', 'non-static prototype parameter'),
+    ('int f(int a[2][*]);', 'outermost parameter array'),  # Valid C; subset not implemented.
     ('int f(int a[const 2],int *p) { a=p; return 0; }', 'modifiable'),
     ('int f(int a[static]);', 'requires a bound'),
     ('int f(int a[static static 2]);', 'duplicate static'),

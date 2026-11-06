@@ -1211,8 +1211,16 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 	sema->scope = &scope;
 	sema->prototype_depth++;
 	for (struct ast_parameter *parameter = function->parameters; parameter; parameter = parameter->next) {
-		const struct type *declared = resolve_type_syntax(sema, parameter->type_syntax);
+		const struct type *declared;
 
+		if (parameter->type_syntax->kind == type_syntax_array &&
+			((struct ast_array_type_syntax *)parameter->type_syntax)->parameter_star &&
+			function == sema->definition_syntax) {
+			diagnostic_error(sema->diagnostics, parameter->location,
+				"[*] array parameter requires function prototype scope");
+			goto done;
+		}
+		declared = resolve_type_syntax(sema, parameter->type_syntax);
 		if (!declared)
 			goto done;
 		if (declared->kind == type_kind_void) {

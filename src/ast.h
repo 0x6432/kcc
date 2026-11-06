@@ -649,6 +649,7 @@ struct ast_array_type_syntax {
 	struct ast_expression *bound; /* NULL is an unspecified bound, never zero. */
 	unsigned parameter_qualifiers; /* Qualifiers on the adjusted pointer. */
 	bool parameter_static; /* Caller guarantees at least bound elements. */
+	bool parameter_star; /* Unspecified VLA bound in prototype scope. */
 };
 
 struct ast_function_type_syntax {

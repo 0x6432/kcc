@@ -10,6 +10,8 @@ checks or optimizer assumptions are introduced. Calling with insufficient
 accessible elements violates the language contract.
 
 Bracket qualifiers and `static` are rejected outside parameter declarators and
-on inner or pointed-to arrays. Variable bounds, `[*]`, `volatile`,
+on inner or pointed-to arrays. An outermost `[*]` is accepted in prototype
+scope only; its array spelling adjusts immediately to a pointer. Nested `[*]`,
+variable expression bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.
