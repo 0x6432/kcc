@@ -79,6 +79,7 @@ struct sema {
 	struct binding *file_enumerators;
 	struct ast_function_type_syntax *definition_syntax;
 	struct tag_binding *definition_tags;
+	struct binding *definition_enumerators;
 	struct record_state *records;
 	size_t record_count;
 	size_t member_count;
@@ -1155,6 +1156,11 @@ static bool bind_prototype_parameter(struct sema *sema, const struct ast_paramet
 
 	if (!parameter->has_name)
 		return true;
+	if (find_in_scope(sema->scope, parameter->name)) {
+		diagnostic_error(sema->diagnostics, parameter->location,
+			"parameter name conflicts with a prior parameter or enumerator");
+		return false;
+	}
 	local = ast_new_local(sema->arena, parameter->location, parameter->name, NULL);
 	binding = arena_alloc(sema->arena, sizeof(*binding));
 	if (!local || !binding) {
@@ -1226,8 +1232,25 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		diagnostic_error(sema->diagnostics, function->syntax.location, "out of memory creating function type");
 done:
 	sema->prototype_depth--;
-	if (function == sema->definition_syntax)
+	if (function == sema->definition_syntax) {
 		sema->definition_tags = scope.tags;
+		if (type) {
+			for (struct binding *item = scope.bindings; item; item = item->next) {
+				struct binding *copy;
+				if (!item->declaration->enum_constant)
+					continue;
+				copy = arena_alloc(sema->arena, sizeof(*copy));
+				if (!copy) {
+					diagnostic_error(sema->diagnostics, function->syntax.location,
+						"out of memory preserving parameter enumerators");
+					type = NULL;
+					break;
+				}
+				*copy = (struct binding) { item->declaration, sema->definition_enumerators };
+				sema->definition_enumerators = copy;
+			}
+		}
+	}
 	sema->scope = scope.parent;
 	return type ? &type->type : NULL;
 }
@@ -4616,7 +4639,7 @@ static bool sema_compound(struct sema *sema, struct ast_compound_statement *node
 
 static bool sema_function_body(struct sema *sema, struct ast_function *definition)
 {
-	struct scope scope = { .tags = sema->definition_tags };
+	struct scope scope = { .tags = sema->definition_tags, .bindings = sema->definition_enumerators };
 	struct typedef_binding *saved_typedefs = sema->typedefs;
 	bool success = false;
 
@@ -5468,6 +5491,7 @@ static bool sema_function_declaration(struct sema *sema,
 	sema->function = definition;
 	sema->definition_syntax = definition ? declaration->type_syntax : NULL;
 	sema->definition_tags = NULL;
+	sema->definition_enumerators = NULL;
 	resolved = resolve_type_syntax(sema, &declaration->type_syntax->syntax);
 	sema->function = NULL;
 	sema->definition_syntax = NULL;

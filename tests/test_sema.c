@@ -6525,6 +6525,11 @@ static void test_ordinary_enums(void)
 		"enum E { A=2147483648LL, B=-1 }; enum E { B=-1, A=2147483648LL }; "
 		"_Static_assert(sizeof(A)==8 && B==-1, \"wide redeclaration\");",
 		"int f(void) { enum E { A=1 }; enum E { A=1 }; return A; }",
+		"typedef int A; int f(enum E { A=42 } x, enum E y) "
+		"{ enum E z=x; return A+z-y; }",
+		"int f(enum E { N=2 } x, int a[N]);",
+		"int f(enum E : unsigned short { N=42 } x) { return N+x; }",
+		"int f(enum E { N=42 } *p) { return N+(*p); }",
 		"enum Wide { A=2147483648U, BEFORE=sizeof(A), MAX=2147483647, NEXT, "
 		"NEG=-2147483649LL }; _Static_assert(BEFORE==4 && sizeof(A)==8 && "
 		"NEXT==2147483648LL && NEG==-2147483649LL, \"wide enum\"); "
@@ -6592,7 +6597,10 @@ static void test_ordinary_enums(void)
 		"enum A { X }; enum B { Y }; enum A *p; enum B *q; int f(void) { p=q; return 0; }",
 		"enum A { X }; enum B { Y }; extern int value; extern enum A value; extern enum B value;",
 		"enum E { A }; int f(void) { return &A != 0; }",
-		"int f(enum E { A } x);",
+		"int f(enum E { A } A);",
+		"int f(int x, enum E { x=1 } y);",
+		"int f(enum E { A } x); int y=A;",
+		"int f(int (*p)(enum E { A } x));",
 		"enum E : int; enum E : long;",
 		"enum E : int; enum E : long { A };", "enum E : int; enum E { A };",
 		"enum E : int { A }; enum E : int { B };",

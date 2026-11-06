@@ -78,3 +78,19 @@ C23 cross-scope or cross-translation-unit structural compatibility. Semantic
 and runtime fixtures were added but not run. The compiler build succeeded and
 one focused source with ordinary, wide, and fixed redefinitions compiled;
 regression, ABI interop and fuzz verification remain outstanding.
+
+## Enum definitions in function parameters
+
+A direct enum definition in an outer function parameter's declaration
+specifiers is supported, including fixed enum types and derived parameter
+declarators. Tags and enumerators are visible to later parameters; for a
+function definition they extend into the outer function body. Parser and
+semantic bindings are restored after a prototype or function body, and
+parameter/enumerator ordinary-name collisions are diagnosed. Nested enum
+definitions inside callback prototypes, type queries, records or parameter
+declarators remain rejected. Parameter-scope cross-declaration enum
+compatibility remains limited to existing nominal-type rules.
+
+The compiler build and one focused parameter-scope source compiled. Semantic
+and optional QBE runtime fixtures were added but have not been run. Full
+regression, ABI interop and fuzzing remain pending.
