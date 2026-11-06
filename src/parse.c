@@ -1111,11 +1111,14 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	struct ast_enum_type_syntax *node = arena_alloc(parser->arena, sizeof(*node));
 	struct ast_enumerator **tail;
 	size_t count = 0;
+	bool enum_attributes;
 	if (!node) {
 		allocation_error(parser, keyword.location);
 		return NULL;
 	}
 	*node = (struct ast_enum_type_syntax) { .syntax = { .kind = type_syntax_enum, .location = keyword.location } };
+	if (!parse_declaration_attributes(parser, &enum_attributes))
+		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
 		node->tag = preprocess_next(parser->preprocessor);
 	if (preprocess_peek(parser->preprocessor).kind == token_colon) {
@@ -1135,6 +1138,11 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 			return NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
+		if (enum_attributes) {
+			diagnostic_error(parser->diagnostics, keyword.location,
+				"attributes after enum require an enumeration definition");
+			return NULL;
+		}
 		if (!node->tag.length) {
 			diagnostic_error(parser->diagnostics, keyword.location, "expected enum tag or definition");
 			return NULL;
@@ -1157,11 +1165,14 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	for (;;) {
 		struct token name;
 		struct ast_enumerator *item;
+		bool attributes;
 		if (count++ == 1024 || parser->record_declarations == ast_max_record_declarations) {
 			diagnostic_error(parser->diagnostics, keyword.location, "enumerator resource limit exceeded");
 			return NULL;
 		}
 		if (!expect_token(parser, token_identifier, "expected enumerator name", &name))
+			return NULL;
+		if (!parse_declaration_attributes(parser, &attributes))
 			return NULL;
 		item = arena_alloc(parser->arena, sizeof(*item));
 		if (!item) {

@@ -8,6 +8,12 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('enum [[maybe_unused]] E { A [[maybe_unused]]=40, B [[deprecated("old")]]=2 }; int f(void){return A+B;}',
+     'enum E { A=40, B=2 }; int f(void){return A+B;}'),
+    ('enum [[vendor::hint(1, [2])]] : unsigned short { A [[unknown]]=42 }; int f(void){return A;}',
+     'enum : unsigned short { A=42 }; int f(void){return A;}'),
+    ('enum [[deprecated]] E { A=1 }; enum E x; int f(void){return A;}',
+     'enum E { A=1 }; enum E x; int f(void){return A;}'),
     ('typedef int F(void); [[nodiscard]] F f;', 'typedef int F(void); F f;'),
     ('typedef int F(void); F f [[nodiscard]];', 'typedef int F(void); F f;'),
     ('typedef int F(void); void g(void){[[nodiscard]] F f; (void)f();}', 'typedef int F(void); void g(void){F f; (void)f();}'),
@@ -59,6 +65,11 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
+    ('enum [[maybe_unused]] E;', 'require an enumeration definition'),
+    ('enum E { A [[fallthrough]] };', 'fallthrough is only supported'),
+    ('enum E { A [[maybe_unused(1)]] };', 'take no arguments'),
+    ('enum [[nodiscard]] E { A };', 'nodiscard is only supported'),
+    ('enum E { A [[noreturn]] };', 'noreturn attribute is only supported'),
     ('[[noreturn]] int x;', 'requires a function declaration'),
     ('[[noreturn]] typedef void F(void);', 'requires a function identifier'),
     ('[[noreturn]] enum E { X };', 'requires a direct function declaration'),
