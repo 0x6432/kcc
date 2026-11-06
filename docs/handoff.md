@@ -38,9 +38,16 @@ include expectations overtaken by floating, VLA, wide-string and atomic work,
 changed diagnostic wording, and an unavailable exact pthread companion; each
 still requires triage rather than being counted as a pass. The M17 frozen
 runtime harnesses completed but reported explicit host capability gaps and
-semantic discrepancies; these are not native agreements or M17 approval. The
-later aggregate ABI and build changes received separate focused checks, not a
-complete integrated suite.
+semantic discrepancies; these are not native agreements or M17 approval.
+The 17 outdated expectation failures were subsequently updated with positive
+coverage where appropriate and all 17 scripts passed against the integrated
+compiler with QBE. The remaining thread-storage script still requires an exact
+C23 pthread companion that the available host compiler cannot build; later cases
+in that script have not been validated. At `f03585a`, the frozen record,
+initializer and compound-literal runtime harnesses passed with their reported
+native capability gaps and discrepancies. Aggregate ABI, narrow bit-fields and
+32/64-bit `_BitInt` received focused checks; the full integrated suite has not
+passed.
 
 The current work branch is `development`, per the revised user instruction.
 Earlier feature-branch-only instructions and the old development pin below
