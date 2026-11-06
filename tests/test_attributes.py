@@ -57,7 +57,7 @@ invalid = [
     ('[[noreturn(1)]] void f(void);', 'take no arguments'),
     ('int x [[noreturn]];', 'requires a function declaration'),
     ('void (*p)(void) [[noreturn]];', 'requires a function declaration'),
-    ('typedef int F [[noreturn]];', 'only supported in function declaration prefixes'),
+    ('typedef int F [[noreturn]];', 'only supported on function identifier declarations'),
     ('void f(void){ [[noreturn]] int x; }', 'requires a function declaration'),
     ('void f(void){ [[noreturn]] typedef int T; }', 'requires a function identifier'),
     ('void f(void){ [[noreturn]] return; }', 'requires a function identifier'),

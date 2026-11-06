@@ -223,7 +223,7 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 		return false;
 	if (attributes.noreturn) {
 		diagnostic_error(parser->diagnostics, location.location,
-			"noreturn attribute is only supported in function declaration prefixes");
+			"noreturn attribute is only supported on function identifier declarations");
 		return false;
 	}
 	if (attributes.fallthrough) {
@@ -3285,7 +3285,7 @@ static struct ast_statement *parse_statement(struct parser *parser)
 		token = preprocess_peek(parser->preprocessor);
 		if (attributes.noreturn) {
 			diagnostic_error(parser->diagnostics, first.location,
-				"noreturn attribute is only supported in function declaration prefixes");
+				"noreturn attribute is only supported on function identifier declarations");
 			return NULL;
 		}
 		if (attributes.deprecated) {
