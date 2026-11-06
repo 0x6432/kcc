@@ -134,6 +134,8 @@ extern const struct type type_ulong;
 extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 bool type_is_integer(const struct type *type);
+/* Includes a fixed enum compatible with bool. */
+bool type_is_boolean(const struct type *type);
 bool type_is_floating(const struct type *type);
 bool type_is_scalar(const struct type *type);
 bool type_is_object(const struct type *type);

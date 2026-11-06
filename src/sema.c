@@ -615,7 +615,7 @@ static bool enum_value_bits(struct constant_result value, const struct type *tar
 	bool negative = !type_is_unsigned(value.type) &&
 		(value.bits & (UINT64_C(1) << (source_width - 1)));
 	uint64_t magnitude = negative ? (source_mask - value.bits) + 1 : value.bits;
-	uint64_t maximum = type_is_unsigned(target) ? mask : mask >> 1;
+	uint64_t maximum = type_is_boolean(target) ? 1 : type_is_unsigned(target) ? mask : mask >> 1;
 
 	if (negative) {
 		if (type_is_unsigned(target) || magnitude > (UINT64_C(1) << (width - 1)))
@@ -648,10 +648,9 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		underlying = resolve_type_syntax(sema, syntax->underlying);
 		if (!underlying)
 			return NULL;
-		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum ||
-			underlying->kind == type_kind_bool || underlying->qualifiers) {
+		if (!type_is_integer(underlying) || underlying->kind == type_kind_enum || underlying->qualifiers) {
 			diagnostic_error(sema->diagnostics, syntax->syntax.location,
-				"fixed enum underlying type must be an unqualified non-bool integer");
+				"fixed enum underlying type must be an unqualified non-enum integer");
 			return NULL;
 		}
 	}
@@ -717,7 +716,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		uint64_t bits;
 		unsigned width = type_integer_width(underlying);
 		uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
-		uint64_t maximum = type_is_unsigned(underlying) ? mask : mask >> 1;
+		uint64_t maximum = type_is_boolean(underlying) ? 1 : type_is_unsigned(underlying) ? mask : mask >> 1;
 		if ((alias && alias->scope == sema->scope) ||
 			(sema->scope ? find_in_scope(sema->scope, item->name) != NULL :
 			 (find_file_enumerator(sema, item->name) || (find_external_object(sema, item->name) && find_external_object(sema, item->name)->file_type) || (find_function(sema, item->name) && find_function(sema, item->name)->file_type)))) {
@@ -1152,7 +1151,7 @@ static bool check_conversion(struct sema *sema, const struct type *source,
 		(type_is_integer(source) && type_is_integer(target)) ||
 		((type_is_floating(source) || type_is_integer(source)) &&
 		 (type_is_floating(target) || type_is_integer(target))) ||
-		((source->kind == type_kind_pointer || source->kind == type_kind_nullptr) && target->kind == type_kind_bool))
+		((source->kind == type_kind_pointer || source->kind == type_kind_nullptr) && type_is_boolean(target)))
 		return true;
 	if (type_is_floating(source) || type_is_floating(target)) {
 		diagnostic_error(sema->diagnostics, location,
@@ -2889,7 +2888,7 @@ static bool static_floating_to_integer(const struct ast_expression *source,
 		diagnostic_error(diagnostics, source->location, "non-finite floating-to-integer static initializer");
 		return false;
 	}
-	if (target->kind == type_kind_bool)
+	if (type_is_boolean(target))
 		bits = number != 0.0;
 	else {
 		boundary = (double)(UINT64_C(1) << (width - 1));
@@ -2930,7 +2929,7 @@ static bool static_float_cast_to_integer(const struct ast_expression *source,
 	if (!static_floating_to_integer(operand, source->type, value, diagnostics))
 		return false;
 	bits = value->integer_bits;
-	if (target->kind == type_kind_bool) {
+	if (type_is_boolean(target)) {
 		value->integer_bits = bits != 0;
 		return true;
 	}
@@ -2962,7 +2961,7 @@ bool sema_validate_static_initializer(const struct ast_expression *source,
 		*value = (struct static_data_value) { .kind = static_data_floating, .integer_bits = bits };
 		return true;
 	}
-	if (converted->type->kind == type_kind_bool &&
+	if (type_is_boolean(converted->type) &&
 		(source->type->kind == type_kind_pointer || source->type->kind == type_kind_nullptr))
 		return static_boolean_initializer(source, value, diagnostics);
 	if (converted->type->kind == type_kind_pointer || converted->type->kind == type_kind_nullptr) {
@@ -4892,7 +4891,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 			}
 			is_address = true;
 		}
-	} else if (type->kind == type_kind_bool &&
+	} else if (type_is_boolean(type) &&
 		((*initializer)->type->kind == type_kind_pointer || (*initializer)->type->kind == type_kind_nullptr)) {
 		if (!static_boolean_initializer(*initializer, &boolean_value, sema->diagnostics))
 			goto rollback;

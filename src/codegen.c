@@ -474,7 +474,7 @@ static size_t codegen_convert_value(struct codegen *codegen, size_t value,
 		assert(type_is_record(source) && type_unqualified_compatible(source, target));
 		return value;
 	}
-	if (target->kind == type_kind_bool)
+	if (type_is_boolean(target))
 		return codegen_truth_value(codegen, value, source);
 	if (type_is_floating(source) && type_is_floating(target)) {
 		result = codegen->next_temporary++;
@@ -624,7 +624,7 @@ static struct update_values codegen_update(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(calculation_type),
 			operation == update_increment ? "add" : "sub", previous, (unsigned long long)step);
 	/* _Bool conversion tests the promoted value, never its low bit. */
-	if (operand->type->kind == type_kind_bool)
+	if (type_is_boolean(operand->type))
 		value = codegen_truth_value(codegen, value, calculation_type);
 	else
 		value = codegen_canonicalize(codegen, value, operand->type);

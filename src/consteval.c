@@ -49,7 +49,7 @@ static uint64_t converted_bits(struct constant_result value, const struct type *
 {
 	uint64_t bits = value.bits;
 
-	if (target->kind == type_kind_bool)
+	if (type_is_boolean(target))
 		return bits != 0;
 	if (!type_is_unsigned(value.type))
 		bits = (uint64_t)signed_value(value);
@@ -83,7 +83,7 @@ static struct constant_result evaluate_float_literal_cast(const struct ast_expre
 	}
 	if (!isfinite(number))
 		return constant_failure(expression, constant_invalid, "non-finite floating-to-integer constant conversion");
-	if (expression->type->kind == type_kind_bool)
+	if (type_is_boolean(expression->type))
 		return constant_success(expression, number != 0.0);
 	boundary = (double)(UINT64_C(1) << (width - 1));
 	if (type_is_unsigned(expression->type)) {
@@ -268,7 +268,7 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 			return evaluate_float_literal_cast(expression, operand, evaluated);
 		value = evaluate(operand, evaluated, initializer_condition);
 
-		if (initializer_condition && expression->type->kind == type_kind_bool &&
+		if (initializer_condition && type_is_boolean(expression->type) &&
 			!type_is_integer(operand->type) && value.status == constant_value)
 			return constant_success(expression, value.bits != 0);
 		if (value.status != constant_value)

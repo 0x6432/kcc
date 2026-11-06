@@ -55,6 +55,15 @@ bool type_is_integer(const struct type *type)
 	return false;
 }
 
+bool type_is_boolean(const struct type *type)
+{
+	if (type->kind == type_kind_enum) {
+		const struct type *underlying = ((const struct enum_type *)type)->definition->underlying;
+		return underlying && underlying->kind == type_kind_bool;
+	}
+	return type->kind == type_kind_bool;
+}
+
 bool type_is_floating(const struct type *type)
 {
 	return type->kind == type_kind_float || type->kind == type_kind_double;

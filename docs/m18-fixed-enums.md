@@ -3,7 +3,7 @@
 This incremental change adds a bounded C23 fixed-underlying-enum slice to the
 ordinary enum implementation. It is not a tested checkpoint.
 
-- Unqualified non-bool integer types from char through unsigned long long are
+- Unqualified integer types from bool and char through unsigned long long are
   accepted after `:`, including typedef names and `typeof`/`typeof_unqual`
   yielding those types. Target signedness, rank, size, alignment,
   ABI width and promotions follow the chosen underlying integer type.
@@ -21,8 +21,8 @@ ordinary enum implementation. It is not a tested checkpoint.
   underlying integer type and composite-type identity are retained. Small
   enum constants are canonicalized to the target's signed/unsigned word form.
 
-Boundaries: `_Bool`, qualified types and enum types as fixed underlying
-types are explicitly rejected in this slice. Fixed definitions in
+Boundaries: qualified types and enum types as fixed underlying types are
+explicitly rejected in this slice. Fixed definitions in
 parameter lists remain unsupported. A fixed forward tag's definition must
 repeat its underlying spelling; a bare tag-only redeclaration is supported
 only when an enum tag already exists in the same scope. An unknown non-fixed
@@ -47,3 +47,18 @@ rejected in this slice. Fixtures were added for same-scope identities, fixed
 enums, scope and kind failures, and runtime use; these have not been run.
 The compiler was built; regression, runtime, ABI and fuzz verification remain
 outstanding. This does not complete M18 or approve M17.
+
+## Boolean underlying type checkpoint
+
+A fixed enum may use `bool`, `_Bool`, or an unqualified alias thereof as its
+underlying type. Its representation and promotion follow the existing target
+bool model. Enumerator values must be representable as 0 or 1, including
+implicit successors; ordinary scalar conversions to the enum normalize to 0
+or 1. The implementation extends constant folding, static initialization,
+scalar conversion and updates to recognize bool-compatible enums. Qualified
+and enum underlying types remain rejected.
+
+Semantic and optional host/QBE runtime fixtures were added but not run. The
+compiler build succeeded. This is not enum conformance, a tested checkpoint,
+or approval of M18 or M17. Further integration, ABI and regression testing
+remain necessary.
