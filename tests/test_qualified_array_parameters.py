@@ -8,6 +8,9 @@ compiler = Path(os.environ.get('KCC', Path(__file__).resolve().parents[1] / 'bui
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 valid = [
+    'int bump(int n) { return n; } int f(int *p,int (*cb)(int),int a[cb((*p)++)]) { return *p+a[0]; } int main(void) { int n=1; int a[1]; a[0]=40; return f(&n,bump,a); }',
+    'int f(int *p,int a[p[0]]) { return a[0]; } int main(void) { int n=1; int a[1]; a[0]=42; return f(&n,a); }',
+    'int f(_Atomic int n,int a[n]) { return a[0]; } int main(void) { int a[1]; a[0]=42; return f(1,a); }',
     'int c; int bump(int n) { c+=1; return n; } int f(int n,int a[bump((int)n)]) { return c+a[0]; } int main(void) { int a[1]; a[0]=41; return f(1,a); }',
     'int count; int f(int a[++count]) { return count+a[0]; } int main(void) { int a[1]; a[0]=41; return f(a); }',
     'int f(int n,int a[static n++]) { return n+a[0]; } int main(void) { int a[2]; a[0]=40; return f(1,a); }',
@@ -30,7 +33,6 @@ valid = [
     'int f(int a[const 2],typeof(a) b) { return b[0]; } int main(void) { int a[2]; a[0]=42; return f(a,a); }',
 ]
 invalid = [
-    ('int f(_Atomic int n,int a[n]) { return 0; }', 'variable-length arrays'),  # Atomic read not elided.
     ('int f(int n,int a[2][n]);', 'variable-length arrays'),  # Valid C; subset not implemented.
     ('int f(double n,int a[n]);', 'integer constant expression'),
     ('int f(int a[*]) { return 0; }', 'function prototype scope'),
@@ -43,7 +45,7 @@ invalid = [
     ('int f(int a[2][const 3]);', 'outermost parameter array'),
     ('int f(int (*a)[static 2]);', 'outermost parameter array'),
     ('int a[const 3];', 'require a parameter'),
-    ('int f(int *p,int a[static *p]) { return 0; }', 'variable-length arrays'),
+    ('int f(int n,int a[static ((int){n})]) { return 0; }', 'variable-length arrays'),
     ('int f(int a[static 0]);', 'array bound must be positive'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc qualified array parameters ') as directory:

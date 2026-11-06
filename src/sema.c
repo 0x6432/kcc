@@ -1207,9 +1207,9 @@ static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *pa
 	return true;
 }
 
-/* Bounded parameter expressions can use integer names, literals, direct
- * calls, casts and named-object updates. Indirection, compound literals and
- * other expression kinds remain outside this subset. */
+/* Bounded parameter expressions support scalar names, pointer indirection,
+ * calls, casts and updates. Compound literals and other expression kinds
+ * remain outside this subset. Memory access is retained in the prologue. */
 static bool definition_bound(struct sema *sema, const struct ast_expression *expression,
 	bool *effect)
 {
@@ -1223,28 +1223,50 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 		struct ast_local_declaration *prior = find_in_scope(sema->scope, name->name);
 		if (!prior)
 			prior = find_file_enumerator(sema, name->name);
-		if (prior)
-			return prior->type && type_is_integer(prior->type) &&
-				!(prior->type->qualifiers & type_qualifier_atomic);
-		struct external_object_symbol *object = find_external_object(sema, name->name);
-		return object && object->file_type && type_is_integer(object->file_type) &&
-			!(object->file_type->qualifiers & type_qualifier_atomic);
+		const struct type *type;
+		if (prior) {
+			type = prior->type;
+		} else {
+			struct external_object_symbol *object = find_external_object(sema, name->name);
+			type = object ? object->file_type : NULL;
+		}
+		if (!type || !(type_is_integer(type) || type->kind == type_kind_pointer))
+			return false;
+		if (type->qualifiers & type_qualifier_atomic)
+			*effect = true;
+		return true;
 	}
 	case expression_unary:
 		return definition_bound(sema, ((const struct ast_unary_expression *)expression)->operand, effect);
 	case expression_cast:
 		return definition_bound(sema, ((const struct ast_cast_expression *)expression)->operand, effect);
+	case expression_address:
+		return definition_bound(sema, ((const struct ast_address_expression *)expression)->operand, effect);
+	case expression_indirection:
+		*effect = true;
+		return definition_bound(sema, ((const struct ast_indirection_expression *)expression)->operand, effect);
+	case expression_subscript: {
+		const struct ast_subscript_expression *node = (const struct ast_subscript_expression *)expression;
+		*effect = true;
+		return definition_bound(sema, node->left, effect) && definition_bound(sema, node->right, effect);
+	}
 	case expression_call: {
 		const struct ast_call_expression *call = (const struct ast_call_expression *)expression;
 		struct function_symbol *function;
 		if (call->callee->kind != expression_name)
 			return false;
 		const struct ast_name_expression *name = (const struct ast_name_expression *)call->callee;
-		if (find_in_scope(sema->scope, name->name))
-			return false;
-		function = find_function(sema, name->name);
-		if (!function || !function->file_type)
-			return false;
+		struct ast_local_declaration *callee = find_in_scope(sema->scope, name->name);
+		if (callee) {
+			const struct type *type = callee->type;
+			if (!type || type->kind != type_kind_pointer ||
+				((const struct pointer_type *)type)->referent->kind != type_kind_function)
+				return false;
+		} else {
+			function = find_function(sema, name->name);
+			if (!function || !function->file_type)
+				return false;
+		}
 		for (const struct ast_argument *argument = call->arguments; argument; argument = argument->next)
 			if (!definition_bound(sema, argument->value, effect))
 				return false;
@@ -1274,7 +1296,8 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 			((const struct ast_postfix_update_expression *)expression)->operand :
 			((const struct ast_prefix_update_expression *)expression)->operand;
 		*effect = true;
-		return operand->kind == expression_name && definition_bound(sema, operand, effect);
+		return (operand->kind == expression_name || operand->kind == expression_indirection ||
+			operand->kind == expression_subscript) && definition_bound(sema, operand, effect);
 	}
 	case expression_assignment:
 	case expression_compound_assignment: {
@@ -1287,7 +1310,8 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 			left = node->left; right = node->right;
 		}
 		*effect = true;
-		return left->kind == expression_name && definition_bound(sema, left, effect) &&
+		return (left->kind == expression_name || left->kind == expression_indirection ||
+			left->kind == expression_subscript) && definition_bound(sema, left, effect) &&
 			definition_bound(sema, right, effect);
 	}
 	default:

@@ -14,12 +14,11 @@ on inner or pointed-to arrays. An outermost `[*]` is accepted in prototype
 scope only; its array spelling adjusts immediately to a pointer. Nonconstant
 integer outer bounds in prototypes are analyzed but not evaluated, and also
 adjust immediately to a pointer. This includes `static` bounds; no dynamic
-minimum check is emitted. A definition may use integer expressions over earlier non-atomic integer
-parameters, visible non-atomic integer objects, enumerators, and literals as its
-outer bound. Supported named-object assignments, increments, and direct calls
-with supported arguments are evaluated in the function prologue; pure
-expressions are omitted because adjustment discards their values. Casts of
-supported expressions are accepted. Indirect accesses, compound literals,
-nested `[*]`, nested variable bounds, `volatile`,
+minimum check is emitted. A definition may use supported scalar expressions over earlier parameters,
+visible objects, enumerators and literals as its outer bound. Supported direct
+and function-pointer calls, pointer accesses, assignments, increments and atomic
+reads are evaluated in the function prologue; pure expressions are omitted
+because adjustment discards their values. Casts of supported expressions are
+accepted. Compound literals, nested `[*]`, nested variable bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.
