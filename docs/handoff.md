@@ -24,7 +24,7 @@ implementation; see `m21-aggregate-abi.md`. Notable remaining work includes the
 rest of aggregate ABI, general bit-fields (the bounded subset is in
 `m22-bit-fields.md`), most `_BitInt` widths and bit-precise function ABI,
 `long double`, complete preprocessing and attributes, and a complete hosted C
-library. Signed and unsigned 32/64-bit `_BitInt` types have bounded value
+library. Signed and unsigned 8/16/32/64-bit `_BitInt` types have bounded value
 support; other widths through 64 have direct layout queries only. See
 `m24-bitint-foundation.md`.
 

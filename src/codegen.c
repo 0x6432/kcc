@@ -248,7 +248,7 @@ static size_t codegen_pointer_index(struct codegen *codegen,
 
 	if (type_integer_width(index->type) == 64)
 		return value;
-	assert(type_integer_width(index->type) == 32);
+	assert(type_integer_width(index->type) <= 32);
 	result = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =l %s %%t%zu\n", result,
 		type_is_unsigned(index->type) ? "extuw" : "extsw", value);
@@ -1264,7 +1264,8 @@ static size_t codegen_expression(struct codegen *codegen,
 				node->operand->type->kind == type_kind_float ? "s_0.0" : node->operand->type->kind == type_kind_double ? "d_0.0" : "0");
 			break;
 		}
-		return temporary;
+		return type_is_bitint(expression->type) ?
+			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
 	}
 	case expression_binary: {
 		const struct ast_binary_expression *node =
@@ -1277,7 +1278,8 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", temporary, qbe_type(expression->type),
 			binary_instruction(node->operation, node->left->type), left, right);
-		return temporary;
+		return type_is_bitint(expression->type) ?
+			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
 	}
 	case expression_pointer_offset: {
 		const struct ast_pointer_offset_expression *node =
@@ -1557,9 +1559,16 @@ static bool codegen_switch(struct codegen *codegen,
 		size_t comparison = codegen->next_temporary++;
 		size_t next_test = new_label(codegen);
 		size_t target = codegen->named_label_count + label->index + 1;
+		uint64_t bits = label->bits;
+		unsigned width = type_integer_width(node->control->type);
 
+		/* Constant evaluation stores narrow values as masked bits, while
+		 * signed word values are sign-extended in QBE. */
+		if (width < 32 && !type_is_unsigned(node->control->type) &&
+			(bits & (UINT64_C(1) << (width - 1))))
+			bits |= (uint64_t)UINT32_MAX << width;
 		emit(codegen, "\t%%t%zu =w ceq%c %%t%zu, %llu\n", comparison,
-			qbe_type(node->control->type), control, (unsigned long long)label->bits);
+			qbe_type(node->control->type), control, (unsigned long long)(width < 32 ? (uint32_t)bits : bits));
 		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", comparison, target, next_test);
 		emit_label(codegen, next_test);
 	}

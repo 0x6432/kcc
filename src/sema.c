@@ -1268,12 +1268,14 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		if (!bitint_query_layout(sema, node, 0, &size, &alignment))
 			return NULL;
 		width = evaluate_integer_constant(node->width);
-		if (width.bits != 32 && width.bits != 64) {
+		if (width.bits != 8 && width.bits != 16 && width.bits != 32 && width.bits != 64) {
 			diagnostic_error(sema->diagnostics, syntax->location,
-				"_BitInt value types support only widths 32 and 64; other widths are supported only in direct sizeof and alignof type queries or alignas");
+				"_BitInt value types support only widths 8, 16, 32 and 64; other widths are supported only in direct sizeof and alignof type queries or alignas");
 			return NULL;
 		}
-		syntax->type = width.bits == 32 ? (node->is_unsigned ? &type_ubitint32 : &type_bitint32) :
+		syntax->type = width.bits == 8 ? (node->is_unsigned ? &type_ubitint8 : &type_bitint8) :
+			width.bits == 16 ? (node->is_unsigned ? &type_ubitint16 : &type_bitint16) :
+			width.bits == 32 ? (node->is_unsigned ? &type_ubitint32 : &type_bitint32) :
 			(node->is_unsigned ? &type_ubitint64 : &type_bitint64);
 		break;
 	}

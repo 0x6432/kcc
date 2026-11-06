@@ -19,6 +19,10 @@ const struct type type_long = { .kind = type_kind_long };
 const struct type type_ulong = { .kind = type_kind_ulong };
 const struct type type_long_long = { .kind = type_kind_long_long };
 const struct type type_ulong_long = { .kind = type_kind_ulong_long };
+const struct type type_bitint8 = { .kind = type_kind_bitint8 };
+const struct type type_ubitint8 = { .kind = type_kind_ubitint8 };
+const struct type type_bitint16 = { .kind = type_kind_bitint16 };
+const struct type type_ubitint16 = { .kind = type_kind_ubitint16 };
 const struct type type_bitint32 = { .kind = type_kind_bitint32 };
 const struct type type_ubitint32 = { .kind = type_kind_ubitint32 };
 const struct type type_bitint64 = { .kind = type_kind_bitint64 };
@@ -26,7 +30,9 @@ const struct type type_ubitint64 = { .kind = type_kind_ubitint64 };
 
 bool type_is_bitint(const struct type *type)
 {
-	return type->kind == type_kind_bitint32 || type->kind == type_kind_ubitint32 ||
+	return type->kind == type_kind_bitint8 || type->kind == type_kind_ubitint8 ||
+		type->kind == type_kind_bitint16 || type->kind == type_kind_ubitint16 ||
+		type->kind == type_kind_bitint32 || type->kind == type_kind_ubitint32 ||
 		type->kind == type_kind_bitint64 || type->kind == type_kind_ubitint64;
 }
 
@@ -42,6 +48,10 @@ struct integer_properties {
 static const struct integer_properties integer_properties[] = {
 	/* Bool has eight storage bits but only the values 0 and 1. */
 	{ type_kind_bool, 8, 0, true, &type_bool },
+	{ type_kind_bitint8, 8, 1, false, &type_ubitint8 },
+	{ type_kind_ubitint8, 8, 1, true, &type_ubitint8 },
+	{ type_kind_bitint16, 16, 3, false, &type_ubitint16 },
+	{ type_kind_ubitint16, 16, 3, true, &type_ubitint16 },
 	{ type_kind_bitint32, 32, 5, false, &type_ubitint32 },
 	{ type_kind_ubitint32, 32, 5, true, &type_ubitint32 },
 	{ type_kind_bitint64, 64, 7, false, &type_ubitint64 },

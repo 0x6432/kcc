@@ -136,7 +136,7 @@ ordinary copied types and compatible signatures carry no register flag. Read
 docs/m15-register-parameters.md for source/AST/ABI/budget evidence and the explicit
 register-void subset refusal. Other storage/globals/linkage remain incomplete.
 
-M24: signed and unsigned `_BitInt(32)` and `_BitInt(64)` have distinct
+M24: signed and unsigned `_BitInt(8)`, `_BitInt(16)`, `_BitInt(32)` and `_BitInt(64)` have distinct
 semantic types and bounded object/value support. Direct layout queries also
 support other widths through 64; bit-precise function value ABI and `wb`
 literals remain unsupported. See `docs/m24-bitint-foundation.md` for details.

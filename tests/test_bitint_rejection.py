@@ -7,15 +7,15 @@ compiler = Path(__file__).resolve().parents[1] / 'build' / 'kcc'
 with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
     source = Path(directory) / 'input.c'
     cases = [
-        ('_BitInt(5) value;\n', 'only widths 32 and 64'),
-        ('unsigned _BitInt(1) value;\n', 'only widths 32 and 64'),
+        ('_BitInt(5) value;\n', 'only widths 8, 16, 32 and 64'),
+        ('unsigned _BitInt(1) value;\n', 'only widths 8, 16, 32 and 64'),
         ('_BitInt(65) value;\n', 'outside the supported range'),
-        ('_BitInt(3) f(_BitInt(3) x);\n', 'only widths 32 and 64'),
-        ('struct S { _BitInt(8) x; };\n', 'only widths 32 and 64'),
+        ('_BitInt(3) f(_BitInt(3) x);\n', 'only widths 8, 16, 32 and 64'),
+        ('struct S { _BitInt(7) x; };\n', 'only widths 8, 16, 32 and 64'),
         ('int main(void) { return 1wb; }\n', 'bit-precise integer literals are not supported yet'),
         ('int main(void) { return 1UWB; }\n', 'bit-precise integer literals are not supported yet'),
         ('#if 0 && 0wb\n#endif\nint main(void) { return 0; }\n', 'bit-precise integer literals are not supported yet'),
-        ('#define T _BitInt\nT(8) value;\n', 'only widths 32 and 64'),
+        ('#define T _BitInt\nT(7) value;\n', 'only widths 8, 16, 32 and 64'),
     ]
     for text, message in cases:
         source.write_text(text)
