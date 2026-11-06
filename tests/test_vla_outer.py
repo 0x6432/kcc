@@ -10,6 +10,9 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 valid = [
+    'int main(void) { int n=2; int a[n]; a[1]=42; goto done; done: return a[1]; }',
+    'int main(void) { int n=2; int result=0; { int a[n]; a[1]=42; result=a[1]; goto out; } out: return result; }',
+    'int main(void) { int n=2, i=0, result=0; again:; int a[n]; a[0]=21; result+=a[0]; if(++i<2) goto again; return result; }',
     'int main(void) { int n=2; alignas(16) int a[n]={}; a[1]=42; return a[1]; }',
     'int main(void) { int n=2; alignas(0) double a[n]={}; a[0]=42.0; return (int)a[0]; }',
     'int main(void) { int n=3; int a[n++]={}; return n==4 && a[0]==0 && a[2]==0 && sizeof a==12 ? 42 : 1; }',
@@ -47,9 +50,7 @@ rejected = [
     ('int f(int n) { switch(n) { int a[n]; case 1: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { switch(n) { case 1:; int a[n]; default: return sizeof a; } return 0; }', 'switch label enters'),
     ('int f(int n) { int a[n]={0}; return 0; }', 'require an empty initializer'),
-    ('int f(int n) { int a[n]; goto done; done: return 0; }', 'goto in a function'),
-    ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto in a function'),
-    ('int f(int n) { again:; int a[n]; goto again; }', 'goto in a function'),
+    ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto enters the scope'),
     ('int f(int n) { int a[n]; typeof(a) b; return 0; }', 'typeof of variable-length'),
     ('int f(int n) { int a[n]; static_assert(sizeof a, "x"); return 0; }', 'constant expression'),
     ('int f(int n) { int (*p)[n]; return 0; }', 'variable-length arrays'),

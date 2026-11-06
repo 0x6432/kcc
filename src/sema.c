@@ -61,12 +61,16 @@ struct control_context {
 	struct scope *scope; /* scope containing the controlled body */
 };
 
+enum { vla_scope_words = (ast_max_locals + 63) / 64 };
+
 struct goto_reference {
+	uint64_t vla_scopes[vla_scope_words]; /* one bit per bounded local slot */
 	struct ast_goto_statement *statement;
 	struct goto_reference *next;
 };
 
 struct label_binding {
+	uint64_t vla_scopes[vla_scope_words];
 	struct ast_label *label;
 	struct label_binding *next;
 };
@@ -4552,6 +4556,21 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 	return success;
 }
 
+/* Capture the currently active VLA declarations while block scopes still
+ * exist. A goto target cannot introduce any VLA absent at the source. */
+static void capture_vla_scopes(const struct sema *sema, uint64_t bits[vla_scope_words])
+{
+	memset(bits, 0, vla_scope_words * sizeof(*bits));
+	for (const struct scope *scope = sema->scope; scope; scope = scope->parent)
+		for (const struct binding *binding = scope->bindings; binding; binding = binding->next) {
+			const struct ast_local_declaration *local = binding->declaration;
+			if (local->vla_bound) {
+				assert(local->slot < ast_max_locals);
+				bits[local->slot / 64] |= UINT64_C(1) << (local->slot % 64);
+			}
+		}
+}
+
 /* Labels have function scope, separate from ordinary object/function names. */
 static bool sema_label(struct sema *sema, struct ast_label *label)
 {
@@ -4572,6 +4591,7 @@ static bool sema_label(struct sema *sema, struct ast_label *label)
 		return false;
 	}
 	*binding = (struct label_binding) { .label = label, .next = sema->labels };
+	capture_vla_scopes(sema, binding->vla_scopes);
 	sema->labels = binding;
 	label->index = sema->label_count++;
 	return true;
@@ -4591,6 +4611,7 @@ static bool sema_goto(struct sema *sema, struct ast_goto_statement *node)
 		return false;
 	}
 	*reference = (struct goto_reference) { .statement = node, .next = sema->gotos };
+	capture_vla_scopes(sema, reference->vla_scopes);
 	sema->gotos = reference;
 	sema->goto_count++;
 	return true;
@@ -4611,6 +4632,12 @@ static bool resolve_gotos(struct sema *sema)
 				"goto target is not defined in this function");
 			return false;
 		}
+		for (size_t i = 0; i < vla_scope_words; i++)
+			if (binding->vla_scopes[i] & ~reference->vla_scopes[i]) {
+				diagnostic_error(sema->diagnostics, node->statement.location,
+					"goto enters the scope of a variable-length array");
+				return false;
+			}
 		node->target = binding->label;
 	}
 	return true;
@@ -4959,11 +4986,6 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	}
 	/* Parameters and outermost body declarations inhabit the same scope. */
 	success = sema_block_items(sema, definition->body->items) && resolve_gotos(sema);
-	if (success && sema->vla_local && sema->goto_count) {
-		diagnostic_error(sema->diagnostics, sema->gotos->statement->statement.location,
-			"goto in a function containing a variable-length array is not supported");
-		success = false;
-	}
 	if (success && sema->vla_local) {
 		definition->vla_storage_budget = ast_max_local_storage - sema->local_storage;
 		for (struct ast_local_declaration *local = definition->locals; local; local = local->next_local) {

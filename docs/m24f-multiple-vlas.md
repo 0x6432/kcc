@@ -26,8 +26,9 @@ dimensions, nonempty VLA initializers, general VM typedefs or
 parameters, or `typeof` of a VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
 the whole VLA remains rejected because runtime referent size is not modeled;
 `sizeof` accepts the array name or direct indirection/address pairs such as
-`sizeof *(&a)`; other VLA expressions remain unsupported. Functions
-containing VLAs reject `goto`. The compiler was built;
+`sizeof *(&a)`; other VLA expressions remain unsupported. A `goto` may stay within or leave VLA scopes, or return to a point before a
+VLA declaration; it is rejected if its target enters the scope of a VLA absent
+at the source. Re-entering a declaration consumes the cumulative budget again. The compiler was built;
 the added regression cases and runtime behavior have not been tested.
 Runtime-bound markers are retained when array qualification is copied or when
 two unknown-bound array types are combined.
