@@ -994,7 +994,8 @@ static bool supported_atomic_type(const struct type *type)
 		type->kind == type_kind_ushort || type->kind == type_kind_int || type->kind == type_kind_uint ||
 		type->kind == type_kind_long || type->kind == type_kind_ulong ||
 		type->kind == type_kind_long_long || type->kind == type_kind_ulong_long ||
-		type->kind == type_kind_bool || type->kind == type_kind_pointer;
+		type->kind == type_kind_bool || type->kind == type_kind_pointer ||
+		(type->kind == type_kind_enum && type_is_complete_object(type));
 }
 
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
@@ -1881,9 +1882,10 @@ static const struct type *sema_update_operand(struct sema *sema,
 			"update requires a modifiable arithmetic or pointer lvalue");
 		return NULL;
 	}
-	if ((operand_type->qualifiers & type_qualifier_atomic) && type_is_boolean(operand_type)) {
+	if ((operand_type->qualifiers & type_qualifier_atomic) &&
+		(type_is_boolean(operand_type) || operand_type->kind == type_kind_enum)) {
 		diagnostic_error(sema->diagnostics, expression->location,
-			"atomic bool update is not supported yet");
+			"atomic bool or enum update is not supported yet");
 		return NULL;
 	}
 	result_type = unqualified_type(sema, operand_type, expression->location);
@@ -2066,7 +2068,7 @@ static bool sema_expression(struct sema *sema,
 			!supported_atomic_type(referent) ||
 			(referent->kind != type_kind_pointer && referent->kind != type_kind_bool &&
 				node->argument && !type_is_integer(node->argument->type)) ||
-			(referent->kind == type_kind_bool &&
+			((referent->kind == type_kind_bool || referent->kind == type_kind_enum) &&
 				node->operation != ast_atomic_load && node->operation != ast_atomic_store &&
 				node->operation != ast_atomic_exchange && node->operation != ast_atomic_compare_exchange &&
 				node->operation != ast_atomic_is_lock_free) ||
@@ -2929,7 +2931,8 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if ((left_type->qualifiers & type_qualifier_atomic) &&
-			(type_is_boolean(left_type) || !type_is_integer(node->right->type) ||
+			(type_is_boolean(left_type) || left_type->kind == type_kind_enum ||
+			 !type_is_integer(node->right->type) ||
 			 (node->operation != binary_add && node->operation != binary_subtract &&
 			  node->operation != binary_bit_and && node->operation != binary_bit_or &&
 			  node->operation != binary_bit_xor))) {
