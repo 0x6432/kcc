@@ -1122,9 +1122,9 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			if (!sema_expression(sema, &array->bound, true))
 				return NULL;
 			result = evaluate_integer_constant(array->bound);
-			/* In prototype scope an outer nonconstant bound denotes an
-			 * unspecified VLA; it is analyzed, never evaluated at runtime,
-			 * and immediately adjusted to a pointer. */
+			/* Prototype bounds are analyzed without runtime evaluation.
+			 * The definition subset also admits a pure parameter read, whose
+			 * value need not be retained after pointer adjustment. */
 			if (result.status == constant_not_constant && syntax == sema->prototype_vla_candidate &&
 				type_is_integer(array->bound->type)) {
 				type = type_new_incomplete_array(sema->arena, element);
@@ -1238,6 +1238,19 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 		}
 		sema->prototype_vla_candidate = function != sema->definition_syntax &&
 			parameter->type_syntax->kind == type_syntax_array ? parameter->type_syntax : NULL;
+		/* A definition may also use a direct read of an earlier non-atomic
+		 * integer parameter as its outer bound. The adjusted pointer does not
+		 * retain that bound; this pure read has no observable effect. */
+		if (function == sema->definition_syntax && parameter->type_syntax->kind == type_syntax_array) {
+			struct ast_array_type_syntax *array = (struct ast_array_type_syntax *)parameter->type_syntax;
+			if (array->bound && array->bound->kind == expression_name) {
+				struct ast_name_expression *name = (struct ast_name_expression *)array->bound;
+				struct ast_local_declaration *prior = find_in_scope(sema->scope, name->name);
+				if (prior && !prior->enum_constant && prior->type && type_is_integer(prior->type) &&
+					!(prior->type->qualifiers & type_qualifier_atomic))
+					sema->prototype_vla_candidate = parameter->type_syntax;
+			}
+		}
 		declared = resolve_type_syntax(sema, parameter->type_syntax);
 		sema->prototype_vla_candidate = saved_candidate;
 		if (!declared)
