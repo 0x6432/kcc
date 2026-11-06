@@ -13,8 +13,8 @@ pairs = [
     ('void stop(void) [[__noreturn__]];', 'void stop(void) [[noreturn]];'),
     ('int f(int x){switch(x){case 0: x++; [[__fallthrough__]]; case 1: return x;} return 0;}',
      'int f(int x){switch(x){case 0: x++; [[fallthrough]]; case 1: return x;} return 0;}'),
-    ('enum [[maybe_unused]] E { A [[maybe_unused]]=40, B [[deprecated("old")]]=2 }; int f(void){return A+B;}',
-     'enum E { A=40, B=2 }; int f(void){return A+B;}'),
+    ('enum [[maybe_unused]] E { A [[maybe_unused]]=40, B [[deprecated("old")]]=2 }; int f(void){return A+2;}',
+     'enum E { A=40, B=2 }; int f(void){return A+2;}'),
     ('enum [[vendor::hint(1, [2])]] : unsigned short { A [[unknown]]=42 }; int f(void){return A;}',
      'enum : unsigned short { A=42 }; int f(void){return A;}'),
     ('enum [[deprecated]] E { A=1 }; enum E x; int f(void){return A;}',
@@ -148,6 +148,15 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
                      'void g(void){ f(); (void)f(); }')
     assert result.returncode == 0, result.stderr
     assert result.stderr.count('warning: discarded result of function returning nodiscard enum') == 1, result.stderr
+    for source, count in [
+        ('enum E { A [[deprecated("old")]]=1, B=A }; int f(void){return A+B;}', 2),
+        ('enum E : unsigned long { A [[__deprecated__]]=1 }; unsigned long f(void){return A;}', 1),
+        ('enum E { A=1 }; int f(void){return A;} enum E { A [[deprecated]]=1 }; int g(void){return A;}', 1),
+        ('enum E { A [[deprecated]]=1 }; int f(void){int A=2; return A;}', 0),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.count('warning: use of deprecated enumerator') == count, result.stderr
     for count, success in [(256, True), (257, False)]:
         result = compile('[[]]' * count + ' int x;')
         assert (result.returncode == 0) == success, (count, result.stderr)

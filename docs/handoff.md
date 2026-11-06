@@ -32,8 +32,8 @@ compatibility; see `m18-ordinary-enums.md` for the exact rules and pending
 validation.
 Known bounded and ignored unknown attributes are parsed on enum definitions
 and enumerators. Enum-type `nodiscard` emits a bounded standalone-call warning;
-deprecation-use diagnostics and broader discarded-value analysis remain
-unsupported. See `m23g-extended-attributes.md`.
+deprecated enumerator uses emit warnings; deprecation diagnostics for other
+entities and broader discarded-value analysis remain unsupported. See `m23g-extended-attributes.md`.
 
 Builds and selected compile/IL checks have run during this lane, together with a
 few host-only helper smoke checks. Newly added regression suites, fuzzing,

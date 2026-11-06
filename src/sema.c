@@ -738,6 +738,7 @@ static bool check_enum_redefinition(struct sema *sema, struct ast_enum_type_synt
 		}
 		if (bits != old->binding->enum_bits) goto mismatch;
 		item->binding = old->binding;
+		old->binding->enum_deprecated |= item->is_deprecated;
 		previous = old->binding;
 		count++;
 	}
@@ -919,6 +920,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		if (!constant || !binding) goto oom;
 		item->binding = constant;
 		constant->enum_constant = true;
+		constant->enum_deprecated = item->is_deprecated;
 		constant->enum_bits = bits;
 		constant->type = constant_type;
 		if (constant_type == &type_int)
@@ -2596,6 +2598,8 @@ static bool sema_expression(struct sema *sema,
 		}
 		if (!node->declaration)
 			node->declaration = find_file_enumerator(sema, node->name);
+		if (node->declaration && node->declaration->enum_constant && node->declaration->enum_deprecated)
+			diagnostic_warning(sema->diagnostics, expression->location, "use of deprecated enumerator");
 		if (node->declaration && node->declaration->enum_constant &&
 			node->declaration->type != &type_int) {
 			struct ast_enum_constant_expression *constant = arena_alloc(sema->arena, sizeof(*constant));

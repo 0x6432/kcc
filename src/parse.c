@@ -235,7 +235,7 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 	return true;
 }
 
-static bool parse_declaration_attributes(struct parser *parser, bool *present)
+static bool parse_general_declaration_attributes(struct parser *parser, bool *present, bool *deprecated)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
@@ -258,7 +258,13 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 		return false;
 	}
 	*present = attributes.present;
+	if (deprecated) *deprecated = attributes.deprecated;
 	return true;
+}
+
+static bool parse_declaration_attributes(struct parser *parser, bool *present)
+{
+	return parse_general_declaration_attributes(parser, present, NULL);
 }
 
 /* After an ordinary declarator, function attributes apply to that declarator
@@ -1185,21 +1191,21 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	for (;;) {
 		struct token name;
 		struct ast_enumerator *item;
-		bool attributes;
+		bool attributes, deprecated;
 		if (count++ == 1024 || parser->record_declarations == ast_max_record_declarations) {
 			diagnostic_error(parser->diagnostics, keyword.location, "enumerator resource limit exceeded");
 			return NULL;
 		}
 		if (!expect_token(parser, token_identifier, "expected enumerator name", &name))
 			return NULL;
-		if (!parse_declaration_attributes(parser, &attributes))
+		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated))
 			return NULL;
 		item = arena_alloc(parser->arena, sizeof(*item));
 		if (!item) {
 			allocation_error(parser, name.location);
 			return NULL;
 		}
-		*item = (struct ast_enumerator) { .name = name };
+		*item = (struct ast_enumerator) { .name = name, .is_deprecated = deprecated };
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 			preprocess_next(parser->preprocessor);
 			item->value = parse_expression(parser, 2);

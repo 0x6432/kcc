@@ -10,10 +10,12 @@ enumerator names; these are distinct from attributes on a declaration prefix.
 
 `[[deprecated]]` and `[[deprecated("message")]]` are accepted on the same
 supported declaration positions. Messages may contain adjacent ordinary
-string fragments. The compiler does not currently issue the recommended
-warnings when deprecated names are used, and does not advertise the attribute
-through `__has_c_attribute`. It is also accepted on enum definitions and
-enumerators in the positions above.
+string fragments. The compiler warns on uses of enumerators marked deprecated, including uses
+in later enumerator initializers. It does not yet warn on uses of other
+deprecated entities or types, and does not advertise the attribute through
+`__has_c_attribute`. It is also accepted on enum definitions and enumerators
+in the positions above. Matching same-scope enum redefinitions can mark an
+existing enumerator deprecated for subsequent uses.
 
 `[[fallthrough]];` is accepted in a compound statement within a switch when the
 next block item is a case or default label. Other placements are rejected.

@@ -558,6 +558,7 @@ struct ast_type_syntax {
 
 struct ast_enumerator {
 	struct token name;
+	bool is_deprecated;
 	struct ast_expression *value;
 	struct ast_local_declaration *binding; /* Semantic binding, after declaration. */
 	struct ast_enumerator *next;
@@ -884,6 +885,7 @@ struct ast_local_declaration {
 	struct ast_alignment_group *alignments;
 	unsigned alignment; /* Effective storage alignment; zero means natural. */
 	bool enum_constant;
+	bool enum_deprecated;
 	int64_t enum_value;
 	uint64_t enum_bits;
 	bool is_register;
