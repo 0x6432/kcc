@@ -211,6 +211,7 @@ static void save_expression(struct snapshot *s, const struct ast_expression *e)
 		break;
 	}
 	case expression_integer: (void)save(s, e, sizeof(struct ast_integer_expression)); break;
+	case expression_enum_constant: (void)save(s, e, sizeof(struct ast_enum_constant_expression)); break;
 	case expression_nullptr: (void)save(s, e, sizeof(struct ast_nullptr_expression)); break;
 	case expression_sizeof_type: {
         SAVE_NODE(ast_sizeof_type_expression); save_syntax(s, n->type_syntax); break;
@@ -271,6 +272,15 @@ static void save_syntax(struct snapshot *s, const struct ast_type_syntax *t)
         for (const struct ast_record_member_declaration *m=n->members; m; m=m->next) {
             if (!save(s,m,sizeof *m)) break;
             save_syntax(s,m->type_syntax);
+        } break;
+    }
+    case type_syntax_enum: {
+        SYNTAX(ast_enum_type_syntax);
+        save_syntax(s,n->underlying);
+        for (const struct ast_enumerator *enumerator=n->enumerators; enumerator; enumerator=enumerator->next) {
+            if (!save(s,enumerator,sizeof *enumerator)) break;
+            if (enumerator->value) save_expression(s,enumerator->value);
+            save_local(s,enumerator->binding);
         } break;
     }
     case type_syntax_function: {
