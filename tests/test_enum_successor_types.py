@@ -57,7 +57,7 @@ invalid = [
     ('enum E { A=(_BitInt(64))9223372036854775807LL, B };', 'range'),
     ('enum E { A=-1, B=(unsigned _BitInt(64))9223372036854775808ULL };', 'range'),
     ('enum E : unsigned _BitInt(32) { A };', 'fixed enum underlying type'),
-    ('enum E { A=(unsigned _BitInt(31))2147483648U };', 'only widths 32 and 64'),
+    ('enum E { A=(unsigned _BitInt(31))2147483648U };', 'only widths 8, 16, 32 and 64'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-enum-successors-', dir=root / 'build') as d:
     source, il, assembly, executable = [Path(d) / name for name in ('test.c', 'test.ssa', 'test.s', 'test')]
