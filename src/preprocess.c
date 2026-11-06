@@ -2863,7 +2863,7 @@ static bool finish_include(struct preprocessor *preprocessor)
 static bool read_expanded_token(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor, struct rescan_token *result, struct token *error);
 
-/* Bounded _Pragma: expand one ordinary or wide string operand, destringize
+/* Bounded _Pragma: expand one string literal operand, destringize
  * only \\ and \" as required, then use the directive handler. Direct
  * isolated directive cursors and nested operators remain unsupported. */
 static bool read_pragma_operator(struct preprocessor *preprocessor,
@@ -2892,8 +2892,8 @@ static bool read_pragma_operator(struct preprocessor *preprocessor,
 		!literal.token.location.source)
 		goto malformed;
 	text = literal.token.location.source->data + literal.token.location.offset;
-	if (text[0] == 'L')
-		quote = 1;
+	if (text[0] == 'L' || text[0] == 'u' || text[0] == 'U')
+		quote = text[0] == 'u' && literal.token.length > 2 && text[1] == '8' ? 2 : 1;
 	if (quote + 1 >= literal.token.length || text[quote] != '"' ||
 		text[literal.token.length - 1] != '"')
 		goto malformed;
@@ -2922,7 +2922,7 @@ static bool read_pragma_operator(struct preprocessor *preprocessor,
 	return ok;
 malformed:
 	*error = stop_preprocessing(preprocessor, operator.token,
-		"_Pragma requires one ordinary or L-prefixed string literal in parentheses");
+		"_Pragma requires one string literal in parentheses");
 failed:
 	preprocessor->pragma_operator_depth--;
 	return false;
