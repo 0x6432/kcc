@@ -336,7 +336,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_noreturn || kind == token_auto ||
 		kind == token_void || kind == token_float || kind == token_double || kind == token_const || kind == token_atomic || kind == token_restrict || kind == token_volatile ||
 		kind == token_struct || kind == token_union || kind == token_enum ||
-		kind == token_typeof || kind == token_typeof_unqual || begins_integer_type(kind) || is_typedef_name(parser, token);
+		kind == token_typeof || kind == token_typeof_unqual || kind == token_bitint || begins_integer_type(kind) || is_typedef_name(parser, token);
 }
 
 /* type-qualifier-list ::= "const" { "const" }
@@ -580,6 +580,29 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			continue;
 		}
 		preprocess_next(parser->preprocessor);
+		if (token.kind == token_bitint) {
+			struct ast_bitint_type_syntax *node;
+			if (query || seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || long_count) {
+				diagnostic_error(parser->diagnostics, token.location, "_BitInt cannot combine with other type specifiers");
+				return NULL;
+			}
+			if (parser->type_query_nesting == ast_max_type_queries) {
+				diagnostic_error(parser->diagnostics, token.location, "type query nesting exceeds limit (64)");
+				return NULL;
+			}
+			if (!expect_token(parser, token_left_paren, "expected '(' after _BitInt", NULL))
+				return NULL;
+			node = arena_alloc(parser->arena, sizeof(*node));
+			if (!node) { allocation_error(parser, token.location); return NULL; }
+			*node = (struct ast_bitint_type_syntax) { .syntax = { .kind = type_syntax_bitint, .location = token.location } };
+			parser->type_query_nesting++;
+			node->width = parse_expression(parser, 2);
+			parser->type_query_nesting--;
+			if (!node->width || !expect_token(parser, token_right_paren, "expected ')' after _BitInt width", NULL))
+				return NULL;
+			query = &node->syntax;
+			continue;
+		}
 		if (token.kind == token_struct || token.kind == token_union || token.kind == token_enum) {
 			if (query || seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 				diagnostic_error(parser->diagnostics, token.location, "record cannot combine with other type specifiers");
@@ -716,6 +739,11 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		return NULL;
 	}
 	if (query) {
+		if (query->kind == type_syntax_bitint && !seen_float && !seen_double && !seen_void &&
+			!seen_int && !seen_char && !seen_short && !seen_bool && !long_count) {
+			((struct ast_bitint_type_syntax *)query)->is_unsigned = unsigned_type;
+			return qualify_type_syntax(parser, query, qualifiers, qualifier.location);
+		}
 		if (seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count) {
 			diagnostic_error(parser->diagnostics, beginning->location, query->kind == type_syntax_typedef_name ?
 				"typedef name cannot combine with other type specifiers" :

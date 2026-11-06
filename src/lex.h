@@ -18,6 +18,7 @@ enum token_kind {
 	token_float,
 	token_double,
 	token_int,
+	token_bitint,
 	token_signed,
 	token_unsigned,
 	token_long,

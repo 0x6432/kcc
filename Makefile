@@ -277,6 +277,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_macros.py
 	./build/test_bitint
 	python3 tests/test_bitint_rejection.py
+	QBE="$(QBE)" python3 tests/test_bitint_layout.py
 	./build/test_type
 	./build/test_sema
 	./build/test_static_array_ast

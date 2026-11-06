@@ -134,10 +134,10 @@ ordinary copied types and compatible signatures carry no register flag. Read
 docs/m15-register-parameters.md for source/AST/ABI/budget evidence and the explicit
 register-void subset refusal. Other storage/globals/linkage remain incomplete.
 
-M24 foundation: bounded bit-precise width and arithmetic primitives are present
-internally, but `_BitInt` types and `wb` literals remain explicitly rejected in
-source until semantic, layout, code-generation and ABI support is implemented.
-See `docs/m24-bitint-foundation.md`.
+M24: direct `_BitInt` type names are supported only in bounded `sizeof`,
+`alignof` and `alignas` layout queries. Bit-precise values, semantic type
+identity, objects and ABI remain unsupported, and `wb` literals are rejected.
+See `docs/m24-bitint-foundation.md` for widths, target layout and boundaries.
 
 M23b: Binary integer constants and digit separators use the shared integer
 spelling decoder in runtime expressions and preprocessing conditions. Existing

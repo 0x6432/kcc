@@ -1,5 +1,6 @@
 #include "sema.h"
 #include "consteval.h"
+#include "bitint.h"
 #include "type.h"
 
 #include <assert.h>
@@ -1141,12 +1142,62 @@ static bool supported_atomic_type(const struct type *type)
 		(type->kind == type_kind_enum && type_is_complete_object(type));
 }
 
+/* No semantic integer type escapes this path.  All other uses go through
+ * resolve_type_syntax and are rejected, including aliases and derived types. */
+static struct ast_bitint_type_syntax *direct_bitint_query(struct ast_type_syntax *syntax,
+	unsigned *qualifiers)
+{
+	*qualifiers = 0;
+	while (syntax->kind == type_syntax_qualified) {
+		struct ast_qualified_type_syntax *q = (struct ast_qualified_type_syntax *)syntax;
+		*qualifiers |= q->qualifiers;
+		syntax = q->base;
+	}
+	return syntax->kind == type_syntax_bitint ? (struct ast_bitint_type_syntax *)syntax : NULL;
+}
+
+static bool bitint_query_layout(struct sema *sema, struct ast_bitint_type_syntax *node,
+	unsigned qualifiers, unsigned *size, unsigned *alignment)
+{
+	struct constant_result value;
+	struct bitint_type type;
+	if (qualifiers & (type_qualifier_atomic | type_qualifier_restrict)) {
+		diagnostic_error(sema->diagnostics, node->syntax.location, "_BitInt layout query does not support atomic or restrict qualification");
+		return false;
+	}
+	if (!sema_expression(sema, &node->width, true))
+		return false;
+	if (!type_is_integer(node->width->type)) {
+		diagnostic_error(sema->diagnostics, node->width->location, "_BitInt width must be an integer constant expression");
+		return false;
+	}
+	value = evaluate_integer_constant(node->width);
+	if (value.status != constant_value) {
+		diagnostic_error(sema->diagnostics, node->width->location, "_BitInt width must be an integer constant expression");
+		return false;
+	}
+	if ((!type_is_unsigned(value.type) &&
+		(value.bits & (UINT64_C(1) << (type_integer_width(value.type) - 1)))) || value.bits > 64) {
+		diagnostic_error(sema->diagnostics, node->width->location, "_BitInt width is outside the supported range");
+		return false;
+	}
+	type = (struct bitint_type) { (unsigned)value.bits, node->is_unsigned };
+	if (bitint_amd64_layout(type, size, alignment) != bitint_ok) {
+		diagnostic_error(sema->diagnostics, node->width->location, "_BitInt width is outside the supported range");
+		return false;
+	}
+	return true;
+}
+
 /* Syntax owns spelling/locations; resolved types share compilation lifetime. */
 static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type_syntax *syntax)
 {
 	if (syntax->type)
 		return syntax->type;
 	switch (syntax->kind) {
+	case type_syntax_bitint:
+		diagnostic_error(sema->diagnostics, syntax->location, "_BitInt is supported only in direct sizeof and alignof type queries or alignas");
+		return NULL;
 	case type_syntax_enum:
 		return resolve_enum_syntax(sema, (struct ast_enum_type_syntax *)syntax, false);
 	case type_syntax_record:
@@ -2826,7 +2877,16 @@ static bool sema_expression(struct sema *sema,
 		struct ast_sizeof_type_expression *node = (struct ast_sizeof_type_expression *)expression;
 		struct ast_type_syntax *saved_candidate = sema->sizeof_vla_candidate;
 		const struct type *type;
+		unsigned qualifiers, size, alignment;
+		struct ast_bitint_type_syntax *bitint = direct_bitint_query(node->type_syntax, &qualifiers);
 
+		if (!node->is_offsetof && bitint) {
+			if (!bitint_query_layout(sema, bitint, qualifiers, &size, &alignment))
+				return false;
+			node->size = size;
+			result_type = &type_ulong;
+			break;
+		}
 		if (!node->is_offsetof && node->type_syntax->kind == type_syntax_array) {
 			sema->sizeof_vla_candidate = node->type_syntax;
 			type = resolve_type_syntax(sema, node->type_syntax);
@@ -2919,8 +2979,18 @@ static bool sema_expression(struct sema *sema,
 	}
 	case expression_alignof: {
 		struct ast_alignof_expression *node = (struct ast_alignof_expression *)expression;
-		const struct type *type = resolve_alignment_type_syntax(sema, node->type_syntax);
+		const struct type *type;
+		unsigned qualifiers, size, alignment;
+		struct ast_bitint_type_syntax *bitint = direct_bitint_query(node->type_syntax, &qualifiers);
 
+		if (bitint) {
+			if (!bitint_query_layout(sema, bitint, qualifiers, &size, &alignment))
+				return false;
+			node->alignment = alignment;
+			result_type = &type_ulong;
+			break;
+		}
+		type = resolve_alignment_type_syntax(sema, node->type_syntax);
 		if (!type)
 			return false;
 		type = alignment_complete_type(type);
@@ -4958,15 +5028,23 @@ static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *
 		if (a->preceding_type && !resolve_type_syntax(sema, a->preceding_type))
 			return false;
 		if (a->type_syntax) {
-			const struct type *operand = resolve_alignment_type_syntax(sema, a->type_syntax);
-			if (!operand)
-				return false;
-			operand = alignment_complete_type(operand);
-			if (!type_is_complete_object(operand)) {
-				diagnostic_error(sema->diagnostics, a->location, "alignment type must be a complete object type");
-				return false;
+			unsigned qualifiers, size, alignment;
+			struct ast_bitint_type_syntax *bitint = direct_bitint_query(a->type_syntax, &qualifiers);
+			if (bitint) {
+				if (!bitint_query_layout(sema, bitint, qualifiers, &size, &alignment))
+					return false;
+				value = alignment;
+			} else {
+				const struct type *operand = resolve_alignment_type_syntax(sema, a->type_syntax);
+				if (!operand)
+					return false;
+				operand = alignment_complete_type(operand);
+				if (!type_is_complete_object(operand)) {
+					diagnostic_error(sema->diagnostics, a->location, "alignment type must be a complete object type");
+					return false;
+				}
+				value = type_object_alignment(operand);
 			}
-			value = type_object_alignment(operand);
 		} else {
 			struct constant_result result;
 			bool saved = sema->unevaluated;

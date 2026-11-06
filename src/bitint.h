@@ -4,8 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Bounded, target-independent arithmetic foundation. This is NOT yet an ABI,
- * object layout, language type, or permission to accept _BitInt in source.
+/* Bounded, target-independent arithmetic foundation. Except for the explicit
+ * amd64 layout query below, this is not an ABI or a semantic language type.
  * Values use the low N bits of a two's-complement representation; no host
  * signed overflow or shifts by 64 are required. Signed widths are 2..64,
  * unsigned widths 1..64. Larger widths must be rejected, not truncated.
@@ -33,6 +33,10 @@ enum bitint_operation {
 };
 
 bool bitint_type_valid(struct bitint_type type);
+/* Linux x86-64 storage layout used by bounded direct type queries. Invalid
+ * widths leave both outputs unchanged. No value or calling ABI is implied. */
+enum bitint_status bitint_amd64_layout(struct bitint_type type,
+	unsigned *size, unsigned *alignment);
 /* Minimal C23 wb/WB literal type for nonnegative spelling value. A signed
  * value requiring 65 bits is outside this implementation's bound. */
 enum bitint_status bitint_literal_type(uint64_t value, bool is_unsigned,

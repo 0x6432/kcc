@@ -7,6 +7,18 @@ bool bitint_type_valid(struct bitint_type type)
 	return type.width <= 64 && type.width >= (type.is_unsigned ? 1u : 2u);
 }
 
+enum bitint_status bitint_amd64_layout(struct bitint_type type,
+	unsigned *size, unsigned *alignment)
+{
+	unsigned bytes;
+	if (!bitint_type_valid(type))
+		return bitint_invalid_width;
+	bytes = type.width <= 8 ? 1 : type.width <= 16 ? 2 : type.width <= 32 ? 4 : 8;
+	*size = bytes;
+	*alignment = bytes;
+	return bitint_ok;
+}
+
 static uint64_t mask_for(unsigned width)
 {
 	return width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;

@@ -140,7 +140,8 @@ static void test_errors(void)
 	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
 		check_tokens(cases[i], invalid, 1, 1);
 	check_tokens("integer", separate, 1, 0);
-	check_tokens("_BitInt", invalid, 1, 1);
+	{ const enum token_kind bitint[] = { token_bitint };
+		check_tokens("_BitInt", bitint, 1, 0); }
 	{
 		const enum token_kind floats[] = { token_float, token_double, token_floating,
 			token_floating, token_floating, token_floating };

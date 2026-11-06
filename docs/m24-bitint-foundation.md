@@ -1,47 +1,40 @@
-# M24: bounded bit-precise foundations (not source-language support)
+# M24: bounded `_BitInt` layout-query slice
 
-This incremental checkpoint deliberately does **not** implement `_BitInt` in C
-source. The language-token boundary diagnoses `_BitInt` explicitly; the shared
-integer-spelling decoder recognizes `wb`/`WB` and optional `u`/`U` but both
-ordinary tokens and evaluated preprocessing conditions reject such literals.
-Malformed suffixes and values beyond `UINT64_MAX` still fail spelling conversion.
-Inactive preprocessing groups keep the existing skipped-group behavior.
+On the Linux x86-64 LP64 target, direct type names in `sizeof`, `alignof` /
+`_Alignof`, and `alignas` / `_Alignas` accept `_BitInt(N)` and `signed` or
+`unsigned _BitInt(N)`. `N` must be a checked integer constant expression:
+2–64 for signed, 1–64 for unsigned. Signedness may occur before or after the
+specifier. `const` and `volatile` are accepted; atomic and restrict types are
+not. The query's size and alignment in bytes are both 1 for widths 1–8, 2 for
+9–16, 4 for 17–32, and 8 for 33–64. The ordinary `sizeof`/`alignof` result is
+`unsigned long`. The width expression can itself contain supported constant
+expressions and layout queries. No width is silently truncated.
 
-`src/bitint.c` supplies independent internal building blocks for a future
-implementation, not a replacement for C semantic analysis or code generation:
+The syntax is intentionally limited to the **direct** queried type: aliases,
+`typeof` wrappers, pointer/array/function-derived types and compound literals
+are not accepted. The semantic type system does not yet represent bit-precise
+types. In particular, the layout query is not a standard integer type alias:
+no `_BitInt` object, typedef, record member, cast, expression, `_Generic`
+association, parameter, return, variadic use or other ABI exposure is accepted.
+Values, type identity/compatibility, promotions, mixed conversions, arithmetic,
+initializers, storage and function ABI remain unimplemented. `wb`/`WB` literals
+and evaluated preprocessor uses remain rejected. Widths beyond 64 are rejected;
+no wider runtime library or backend support is implied. The target layout is an
+implementation choice; this checkpoint does not claim host interoperability for
+objects or calls.
 
-- A distinct `(width, signedness)` description, with signed widths 2–64 and
-  unsigned widths 1–64, and minimal `wb` literal width selection. A signed
-  literal value of 2^63 or more requires at least 65 bits and is rejected by
-  this bounded model rather than assigned `long long`.
-- Identity promotion for non-bit-field bit-precise types and the common type
-  of two bit-precise operands. Standard/bit-precise combinations, integer
-  bit-fields and their promotion/rank rules are not handled by this API.
-- Canonical low-width two's-complement bits, conversions, comparisons, checked
-  same-type addition, subtraction, multiplication, division and remainder,
-  plus bitwise AND/OR/XOR. Unsigned results wrap at the specified width;
-  signed overflow and division by zero are reported. Conversion to an
-  out-of-range signed destination follows this model's explicit modulo
-  two's-complement choice. The API has no object storage or ABI interpretation.
+`src/bitint.c` also retains independent internal arithmetic building blocks:
+distinct `(width, signedness)` descriptors; minimal `wb` width selection;
+bit-precise-only promotion/common-type rules; checked operations, comparisons,
+shifts and conversions on canonical low-width bits. These helpers are not yet
+integrated into expression semantics. The layout helper validates the same
+width limits and does not imply support for value representation or ABI.
 
-This is a bounded internal arithmetic model only. The parser, AST, type system,
-constant evaluator and backend do not yet use it. Expression shifts and unary operators are not connected to this API; mixed
-standard-type conversions, arbitrary-width arithmetic,
-objects, layouts, calls, returns, external linkage and ABI interoperability
-are not implemented. All source `_BitInt` widths and `wb` literals are rejected,
-including those within the model's range. No claim is made that a particular
-object layout or ABI is correct; these must be designed and validated before
-source acceptance. For width >64 the internal helpers return invalid width.
-
-Tests were added for width inference, bit-precise-only conversion, arithmetic,
-source rejection, suffix recognition and preprocessing. They were not run in
-this checkpoint at the user's request. `build/kcc`, `build/test_bitint` and
-`build/test_lex` compiled successfully; compilation is not a test result.
-
-The internal API also handles unary plus, negation and complement, plus checked
-left/right shifts on already-promoted bit-precise operands. Negative shift counts
-must be rejected by the caller; counts at least the operand width are rejected
-by the helper. Signed right shift uses arithmetic fill; signed negative or
-overflowing left shift and negation of signed minimum are rejected. These are
-internal foundations only, not source-language support. New cases were added to
-the test binary but not run; the compiler and test binary were built.
+`tests/test_bitint_layout.py` covers every accepted width and sign, all layout
+transitions, ICE constraints, direct query forms and the rejected boundaries;
+when `QBE` is set it links and runs a query-only program. It compares the layout
+table with the native compiler when that compiler supports `_BitInt` on Linux
+x86-64; this is a layout oracle, not a value or call ABI test. `tests/test_bitint.c`
+checks the helper and internal arithmetic; `tests/test_bitint_rejection.py`
+checks remaining source and literal rejection. These focused checks are not a
+substitute for full suites, fuzzing, or a host `_BitInt` ABI oracle.

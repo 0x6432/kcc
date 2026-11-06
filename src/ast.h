@@ -544,6 +544,7 @@ enum type_syntax_kind {
 	type_syntax_typeof_type,
 	type_syntax_typeof_expression,
 	type_syntax_integer,
+	type_syntax_bitint,
 	type_syntax_pointer,
 	type_syntax_array,
 	type_syntax_function,
@@ -555,6 +556,13 @@ struct ast_type_syntax {
 	enum type_syntax_kind kind;
 	struct source_location location;
 	const struct type *type;
+};
+
+/* This syntax is only resolved by the bounded layout-query path. */
+struct ast_bitint_type_syntax {
+	struct ast_type_syntax syntax;
+	struct ast_expression *width;
+	bool is_unsigned;
 };
 
 struct ast_enumerator {

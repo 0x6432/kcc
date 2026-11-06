@@ -9,6 +9,27 @@ static uint64_t bits(int value, unsigned width)
 	return (uint64_t)value & ((UINT64_C(1) << width) - 1);
 }
 
+static void test_layout(void)
+{
+	unsigned size, alignment;
+	for (unsigned width = 1; width <= 64; width++) {
+		unsigned expected = width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
+		size = alignment = 0;
+		assert(bitint_amd64_layout((struct bitint_type){width, true}, &size, &alignment) == bitint_ok);
+		assert(size == expected && alignment == expected);
+		if (width >= 2) {
+			size = alignment = 0;
+			assert(bitint_amd64_layout((struct bitint_type){width, false}, &size, &alignment) == bitint_ok);
+			assert(size == expected && alignment == expected);
+		}
+	}
+	size = alignment = 99;
+	assert(bitint_amd64_layout((struct bitint_type){1, false}, &size, &alignment) == bitint_invalid_width);
+	assert(size == 99 && alignment == 99);
+	assert(bitint_amd64_layout((struct bitint_type){65, true}, &size, &alignment) == bitint_invalid_width);
+	assert(size == 99 && alignment == 99);
+}
+
 static void test_literal_width(void)
 {
 	struct bitint_type type = { 17, true };
@@ -127,6 +148,7 @@ static void test_unary_and_shifts(void)
 
 int main(void)
 {
+	test_layout();
 	test_literal_width();
 	test_conversions();
 	test_small_signed();

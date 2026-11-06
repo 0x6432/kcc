@@ -336,7 +336,7 @@ static bool is_unsupported_keyword(struct token token)
 		"volatile", "while", "_Alignas", "_Alignof", "_Atomic",
 		"_Complex", "_Decimal32", "_Decimal64", "_Decimal128",
 		"_Generic", "_Imaginary", "_Noreturn", "_Static_assert",
-		"_Thread_local", "_BitInt", "alignas", "alignof", "bool",
+		"_Thread_local", "alignas", "alignof", "bool",
 		"constexpr", "false", "nullptr", "static_assert", "thread_local",
 		"true", "typeof", "typeof_unqual",
 	};
@@ -370,7 +370,7 @@ static const struct keyword keywords[] = {
 	{ "nullptr", token_nullptr }, { "bool", token_c23_bool }, { "true", token_true }, { "false", token_false },
 	{ "_Generic", token_generic },
 	{ "float", token_float }, { "double", token_double },
-	{ "int", token_int }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
+	{ "int", token_int }, { "_BitInt", token_bitint }, { "signed", token_signed }, { "unsigned", token_unsigned }, { "long", token_long }, { "void", token_void }, { "return", token_return },
 	{ "if", token_if }, { "else", token_else }, { "case", token_case }, { "default", token_default }, { "switch", token_switch }, { "while", token_while },
 	{ "do", token_do }, { "for", token_for }, { "break", token_break },
 	{ "continue", token_continue }, { "goto", token_goto }, { "const", token_const },
@@ -1055,12 +1055,6 @@ struct token token_from_pp(struct pp_token input, struct diagnostics *diagnostic
 	case pp_invalid:
 		return token;
 	case pp_identifier:
-		/* Do not let the parser, type system or ABI mistake this reserved
-		 * type keyword for an implemented integer type. Preprocessing itself
-		 * still sees the unchanged identifier token. */
-		if (spelling_is(token, "_BitInt"))
-			return invalid_language_token(token, diagnostics,
-				"_BitInt types and their ABI are not supported yet");
 		return convert_identifier(token);
 	case pp_number:
 		return convert_number(token, diagnostics);
@@ -1094,6 +1088,7 @@ const char *token_kind_name(enum token_kind kind)
 	case token_string: return "string";
 	case token_character: return "character";
 	case token_int: return "int";
+	case token_bitint: return "_BitInt";
 	case token_signed: return "signed";
 	case token_unsigned: return "unsigned";
 	case token_long: return "long";

@@ -291,6 +291,7 @@ static void save_syntax(struct snapshot *s, const struct ast_type_syntax *t)
         } break;
     }
     case type_syntax_integer: { SYNTAX(ast_integer_type_syntax); break; }
+    case type_syntax_bitint: { SYNTAX(ast_bitint_type_syntax); save_expression(s,n->width); break; }
     case type_syntax_void: { SYNTAX(ast_void_type_syntax); break; }
     case type_syntax_typedef_name: { SYNTAX(ast_typedef_name_type_syntax); break; }
     case type_syntax_inferred: { SYNTAX(ast_inferred_type_syntax); break; }
