@@ -8,6 +8,7 @@ compiler = Path(os.environ.get('KCC', Path(__file__).resolve().parents[1] / 'bui
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 valid = [
+    'int f(int n,int a[((int){n++})]) { int x=40; return n+x; } int main(void) { int a[1]; return f(1,a); }',
     'int unused(int a["not-published"[0]]); int f(int a["A"[0]]) { return a[0]; } int main(void) { int a[65]; a[0]=42; return f(a); }',
     'struct S { int n; }; int f(struct S *s,int a[s->n++]) { return s->n+a[0]; } int main(void) { struct S s={1}; int a[1]; a[0]=40; return f(&s,a); }',
     'int f(int n,int a[_Generic(n,int: n++,default: 1)+sizeof n]) { return n+a[0]; } int main(void) { int a[5]; a[0]=40; return f(1,a); }',
@@ -49,7 +50,7 @@ invalid = [
     ('int f(int a[2][const 3]);', 'outermost parameter array'),
     ('int f(int (*a)[static 2]);', 'outermost parameter array'),
     ('int a[const 3];', 'require a parameter'),
-    ('int f(int n,int a[static ((int){n})]) { return 0; }', 'variable-length arrays'),
+    ('int f(int n,int a[static ((static int){1})]) { return 0; }', 'variable-length arrays'),
     ('int f(int a[static 0]);', 'array bound must be positive'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc qualified array parameters ') as directory:

@@ -1215,9 +1215,25 @@ static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *pa
 	return true;
 }
 
+static bool definition_bound(struct sema *sema, const struct ast_expression *expression,
+	bool *effect);
+
+/* Initializers are checked again by sema; this preflight only restricts the
+ * runtime expressions whose objects can be materialized at function entry. */
+static bool definition_bound_initializer(struct sema *sema, const struct ast_initializer *initializer,
+	bool *effect)
+{
+	if (initializer->kind == ast_initializer_expression)
+		return definition_bound(sema, initializer->expression, effect);
+	for (const struct ast_initializer_entry *entry = initializer->entries; entry; entry = entry->next)
+		if (!definition_bound_initializer(sema, entry->value, effect))
+			return false;
+	return true;
+}
+
 /* Bounded parameter expressions support scalar names, pointer indirection,
- * calls, casts and updates. Compound literals and other expression kinds
- * remain outside this subset. Memory access is retained in the prologue. */
+ * calls, casts, updates and automatic compound literals. Memory access is
+ * retained in the prologue. */
 static bool definition_bound(struct sema *sema, const struct ast_expression *expression,
 	bool *effect)
 {
@@ -1235,6 +1251,12 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 	case expression_string:
 		*effect = true; /* Keep the occurrence available for emitted code. */
 		return true;
+	case expression_compound_literal: {
+		const struct ast_compound_literal_expression *node = (const struct ast_compound_literal_expression *)expression;
+		*effect = true;
+		return !node->is_static && !node->is_thread_local &&
+			definition_bound_initializer(sema, node->initializer_syntax, effect);
+	}
 	case expression_generic: {
 		const struct ast_generic_expression *node = (const struct ast_generic_expression *)expression;
 		for (const struct ast_generic_association *item = node->associations; item; item = item->next)
@@ -4873,8 +4895,7 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 	sema->switch_label_count = 0;
 	sema->gotos = NULL;
 	sema->goto_count = 0;
-	sema->local_count = 0;
-	sema->local_storage = 0;
+	/* Parameter-bound compound literals may already own entry slots. */
 	sema->vla_local = NULL;
 	sema->scope = &scope;
 	for (struct ast_parameter *parameter = definition->declaration->parameters; parameter;
@@ -5563,7 +5584,8 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 		static_duration ? ast_compound_literal_static : ast_compound_literal_automatic;
 	/* Prototype/query operands are checked but create no runtime object or
 	 * record snapshot, nor any local/storage-budget charge. */
-	if (sema->unevaluated || sema->prototype_depth)
+	if (sema->unevaluated || (sema->prototype_depth &&
+		(!sema->evaluated_parameter_depth || sema->prototype_depth != sema->evaluated_parameter_depth)))
 		return true;
 	source = arena_alloc(sema->arena, sizeof(*source));
 	spelling = arena_alloc(sema->arena, 64);
@@ -5707,6 +5729,10 @@ static bool sema_function_declaration(struct sema *sema,
 	 * including unevaluated references in return/parameter type syntax.
 	 */
 	sema->function = definition;
+	if (definition) {
+		sema->local_count = 0;
+		sema->local_storage = 0;
+	}
 	sema->definition_syntax = definition ? declaration->type_syntax : NULL;
 	sema->definition_tags = NULL;
 	sema->definition_enumerators = NULL;

@@ -22,6 +22,8 @@ because adjustment discards their values. Casts of supported expressions are
 accepted, as are strings and bounded `_Generic`, `sizeof` and `alignof` expressions.
 Evaluated definition-bound strings have static storage; prototype-only strings
 are not published.
-Compound literals, nested `[*]`, nested variable bounds, `volatile`,
+Automatic compound literals with supported initializers receive distinct entry
+slots and are initialized when the bound is evaluated. Static/thread-local
+compound literals, nested `[*]`, nested variable bounds, `volatile`,
 and atomic pointer qualification remain unsupported. This checkpoint builds;
 the dedicated regression suite and QBE runtime coverage have not yet been run.
