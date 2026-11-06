@@ -42,10 +42,25 @@ complete or approved.
 Static initializers can form the zero-position address of a flexible member,
 including array decay, `&object.member[0]`, and `&object.member`. The address
 must still be based on a proven static record subobject; thread-local bases are
-not static address constants. The proof intentionally assumes zero usable
-flexible elements even when padding or an enclosing union might provide room:
-pointer offsets beyond zero are rejected. It does not justify accessing an
-element or claim extra storage exists. The compiler rebuilt. Eight focused address/relocation examples compiled,
+not static address constants. The initial checkpoint assumed zero usable
+flexible elements, rejecting offsets beyond zero; the following tail-padding
+checkpoint supersedes that restriction while retaining conservative bounds.
+It does not justify accessing uninitialized elements. The compiler rebuilt. Eight focused address/relocation examples compiled,
 lowered through pinned QBE 1.2 and assembled; five invalid or unsupported
 examples were rejected. Regression, generated-program runtime and ABI
 validation remain pending.
+
+## Guaranteed tail-padding address bounds
+
+For a flexible member of a proven static record subobject, the address proof
+can use elements that fit in the record type's own fixed size after the member
+offset, including their one-past address. It does not assume any extra extent
+from an enclosing union, allocation, cast, or later declaration. If no element
+fits, only the starting address is accepted; forming an imaginary one-past
+pointer is rejected. This permits address formation only and does not justify
+loading uninitialized elements or extending object lifetime.
+
+The compiler rebuilt. Five focused relocation examples compiled, lowered via
+pinned QBE 1.2 and assembled; four out-of-bound examples were rejected. A host
+C11 syntax and layout check succeeded. Regression, generated-program runtime,
+ABI and fuzzing remain unrun. This does not complete M22.

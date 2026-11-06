@@ -15,7 +15,7 @@ C23 `nullptr_t`, and `va_arg` accepts enums compatible with their promoted
 types; see `m21-variadic-scalars.md`. Flexible arrays also recognize prior
 names promoted through anonymous members, allow trailing static assertions,
 support named flexible-array structures in unions, and form conservative static
-zero-position flexible-member addresses; see `m22-flexible-arrays.md`.
+flexible-member addresses bounded by the record's own size; see `m22-flexible-arrays.md`.
 Deprecated enum definitions now warn on subsequent direct named enum type
 references, and bounded nodiscard warnings cover discarded comma operands,
 with limitations in `m23g-extended-attributes.md`. See each feature's

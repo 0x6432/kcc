@@ -17,6 +17,13 @@ long *start=zero.items;
 long *element_zero=&zero.items[0];
 long (*whole)[]=&zero.items;
 void *same_start=(void *)zero.items;
+struct Padded { long large; int count; char bytes[]; };
+struct Padded padded;
+char *pad_start=padded.bytes;
+char *pad_end=padded.bytes+4;
+struct PaddedInt { long large; int count; int values[]; };
+struct PaddedInt padded_int;
+int *pad_int_end=&padded_int.values[1];
 struct Promoted { struct { int n; }; long items[]; static_assert(1); };
 static_assert(sizeof(struct Promoted)==8);
 static_assert(alignof(struct Promoted)==8);
@@ -67,6 +74,8 @@ invalid = [
  'struct S { int n; int a[]; }; struct S x={1,2};',
  'struct S { int n; int a[]; }; struct S x={.a={1}};',
  'struct S { int n; int a[]; }; struct S x; int *bad=x.a+1;',
+ 'struct S { long n; int m; char a[]; }; struct S x; char *bad=x.a+5;',
+ 'struct S { long n; int m; int a[]; }; struct S x; int *bad=x.a+2;',
  'struct S { int n; int a[]; }; struct S x; int *bad=&x.a[1];',
  'struct S { int n; int a[]; }; thread_local struct S x; int *bad=x.a;',
  'struct S { int n; int a[]; }; int f(struct S *p){return sizeof p->a;}',

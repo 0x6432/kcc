@@ -824,16 +824,18 @@ static struct address_proof prove_member_address(const struct ast_expression *ex
 	proof.start = addend;
 	proof.position = 0;
 	proof.known_extent = true;
-	/* A flexible array has incomplete type. Its zero-position address is
-	 * valid even if no element fits, but in that case forming a one-past
-	 * pointer is undefined. Do not infer extra storage from enclosing unions,
-	 * padding, or casts: retain a conservative zero-element domain. */
+	/* A flexible array has incomplete type. The named record's own size is
+	 * guaranteed storage, even when tail padding extends past the member's
+	 * offset. Never infer extra storage from an enclosing union or a cast.
+	 * With zero fitting elements, its start is still valid but forming a
+	 * pointer one past the imaginary element would be undefined. */
 	if (member->member->is_flexible) {
 		const struct array_type *array = (const struct array_type *)selected;
 		assert(selected->kind == type_kind_array && !array->count);
+		assert(member->offset <= type_object_size(record));
 		proof.element = decay ? array->element : NULL;
-		proof.extent = 0;
 		proof.stride = decay ? type_object_size(array->element) : 0;
+		proof.extent = decay ? (type_object_size(record) - member->offset) / proof.stride : 0;
 	} else {
 		proof.element = selected;
 		proof.extent = 1;
