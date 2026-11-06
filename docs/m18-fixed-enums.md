@@ -24,8 +24,9 @@ ordinary enum implementation. It is not a tested checkpoint.
 Boundaries: `_Bool`, qualified types and enum types as fixed underlying
 types are explicitly rejected in this slice. Fixed definitions in
 parameter lists remain unsupported. A fixed forward tag's definition must
-repeat its underlying spelling; bare non-fixed tag-only declarations remain
-unsupported. Non-fixed enum constants remain restricted to signed int range,
+repeat its underlying spelling; a bare tag-only redeclaration is supported
+only when an enum tag already exists in the same scope. An unknown non-fixed
+tag still cannot be introduced this way. Non-fixed enum constants remain restricted to signed int range,
 with no general C23 changing-enumerator-type or underlying selection rules.
 This change is not a full C23 enum or cross-toolchain ABI conformance claim.
 The typedef and `typeof` extension has been built but not tested.
@@ -35,3 +36,14 @@ been run. A compiler build was used during implementation. Exact-source full
 regression, QBE and host ABI interop, sanitizers, bounded fuzz and CI remain
 required. See WG14 N3030 for the fixed enum model:
 https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3030.htm
+
+## Same-scope bare enum tag redeclarations
+
+Bare `enum E;` now redeclares an existing ordinary or fixed enum tag in the
+same scope. It does not create a new non-fixed incomplete enum, and a bare
+tag-only declaration in an inner scope does not reuse an outer tag. Kind
+conflicts remain errors. Qualified bare no-declarator references remain
+rejected in this slice. Fixtures were added for same-scope identities, fixed
+enums, scope and kind failures, and runtime use; these have not been run.
+The compiler was built; regression, runtime, ABI and fuzz verification remain
+outstanding. This does not complete M18 or approve M17.

@@ -1,7 +1,7 @@
 # M18 ordinary enums: int-range implementation checkpoint
 
 This is the earlier ordinary-enum checkpoint. For subsequent fixed-enum work
-and its current limits, see `m18-fixed-enums.md`.
+and same-scope tag-only redeclarations, see `m18-fixed-enums.md`.
 
 This change implements a bounded ordinary-enum subset. The work is an
 implementation checkpoint, not a tested or approved milestone.
@@ -23,7 +23,7 @@ implementation checkpoint, not a tested or approved milestone.
 
 Not implemented: C23 fixed underlying types, wider/out-of-int enumerators and
 C23's full changing-enumerator-type and underlying-type selection rules; enum
-forward declarations (including tag-only redeclarations); and enum definitions
+forward declarations of unknown non-fixed tags; and enum definitions
 inside function parameter lists. These are rejected, not silently widened.
 There is no cross-compiler enum ABI claim beyond this subset's chosen int ABI.
 Implementation-specific corner cases, cross-translation-unit compatibility,

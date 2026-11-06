@@ -13,6 +13,8 @@ host = os.environ.get('HOST_CC', 'cc')
 qbe = os.environ.get('QBE')
 
 programs = [
+    'enum E { ANSWER=42 }; enum E; enum E value=ANSWER; '
+    'int main(void) { enum F { OTHER=1 }; enum F; return value; }',
     'enum E { NEG=-2, ZERO=0, N=40, ANSWER=N+2 }; '
     'enum E value=ANSWER; int array[ANSWER]; '
     'int f(enum E x) { switch (x) { case ANSWER: return x; default: return 0; } } '

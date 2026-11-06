@@ -6536,9 +6536,16 @@ static void test_ordinary_enums(void)
 		"typedef unsigned short T; enum F : T; enum F : typeof((unsigned short)0) { A=42 }; "
 		"_Static_assert(sizeof(enum F)==2 && A==42, \"aliased underlying type\");",
 		"enum F : int object; enum F : int { A=42 }; int f(void) { object=A; return object; }",
+		"enum E { A=42 }; enum E; enum E; enum E x=A; "
+		"int f(void) { enum F { B=2 }; enum F; enum F y=B; return x+y; }",
+		"enum E : unsigned short; enum E; enum E : unsigned short { A=42 }; enum E; "
+		"int f(void) { enum E e=A; return e; }",
 	};
 	static const char *const rejected[] = {
 		"enum { };", "enum E;", "enum E *p;",
+		"enum E { A }; int f(void) { enum E; return A; }",
+		"struct E { int x; }; enum E;",
+		"enum E { A }; const enum E;",
 		"enum E { A=2147483648LL };", "enum E { A=2147483647, B };",
 		"enum E { A=-2147483647-2 };", "enum E { A=1/0 };",
 		"int x; enum E { A=x };", "enum E { A=B, B=1 };",
