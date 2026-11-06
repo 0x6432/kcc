@@ -1208,6 +1208,7 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#endif\n";
 		static const char stdatomic_header[] =
 			"#ifndef __KCC_STDATOMIC_H\n#define __KCC_STDATOMIC_H 1\n"
+			"typedef _Atomic _Bool atomic_bool;\n"
 			"typedef _Atomic char atomic_char;\ntypedef _Atomic signed char atomic_schar;\n"
 			"typedef _Atomic unsigned char atomic_uchar;\ntypedef _Atomic short atomic_short;\n"
 			"typedef _Atomic unsigned short atomic_ushort;\n"

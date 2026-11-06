@@ -10,6 +10,8 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    '#include <stdatomic.h>\nint main(void) { atomic_bool b=0; atomic_store(&b,8); _Bool old=atomic_exchange(&b,0); _Bool expected=0; if(!atomic_compare_exchange_strong(&b,&expected,1)) return 1; return old && atomic_load(&b) ? 42 : 1; }',
+    'int main(void) { _Atomic _Bool x=0; x=42; return x ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void) { atomic_schar x=-2; int old=atomic_fetch_add(&x,1); int next=++x; return old==-2 && next==0 && atomic_load(&x)==0 ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void) { atomic_ushort x=65535; unsigned short old=atomic_exchange(&x,40); x+=2; return old==65535 && x==42 ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void) { atomic_short x=-1; short expected=-1; if(!atomic_compare_exchange_strong(&x,&expected,42)) return 1; return atomic_load(&x); }',
@@ -44,13 +46,15 @@ positive = [
     'int main(void) { _Atomic unsigned x=63; x &= 42; x |= 1; x ^= 1; return x; }',
 ]
 negative = [
+    'int f(void) { _Atomic _Bool b=1; b++; return 0; }',
+    'int f(void) { _Atomic _Bool b=1; b+=1; return 0; }',
+    '#include <stdatomic.h>\nint f(atomic_bool *p) { return atomic_fetch_add(p,1); }',
     '#include <stdatomic.h>\nint f(_Atomic(int *) *p) { return atomic_fetch_and(p,1)!=0; }',
     '#include <stdatomic.h>\nint f(_Atomic(void *) *p) { return atomic_fetch_add(p,1)!=0; }',
     '#include <stdatomic.h>\nint f(_Atomic(int *) *p, double **e, int *q) { return atomic_compare_exchange_strong(p,e,q); }',
     'int f(void) { _Atomic(void *) p=0; p++; return 0; }',
     'int f(void) { int x[2]; _Atomic(int *) p=x; p&=1; return 0; }',
     'struct S { _Atomic(int *) p; };',
-    '_Atomic _Bool x;',
     '_Atomic void x;', '_Atomic(int[2]) x;',
     '_Atomic(const int) x;', '_Atomic(_Atomic(int)) x;',
     'struct S { _Atomic int x; };', 'struct S { _Atomic int x[2]; };',

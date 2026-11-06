@@ -6,7 +6,7 @@ priority over compile-time performance.
 
 ## M24c atomic subset
 
-On x86-64 SysV, atomic `char`, `short`, `int`, `long`, `long long` (signed and unsigned), and
+On x86-64 SysV, atomic `_Bool`, `char`, `short`, `int`, `long`, `long long` (signed and unsigned), and
 pointer objects support ordinary sequentially consistent loads, stores and
 selected read-modify-write operations via libatomic. Link generated assembly with `-latomic`. Other atomic operations
 and atomic record members remain unsupported. See `docs/m24c-atomic-subset.md`

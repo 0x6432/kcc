@@ -1,12 +1,12 @@
 # M24c: bounded atomic types and sequentially consistent loads/stores
 
 This is an intentionally small x86-64 SysV subset, not full C atomic support.
-Atomic `char`, signed and unsigned `char`, `short`, `int`, `long`, and `long long`
+Atomic `_Bool`, `char`, signed and unsigned `char`, `short`, `int`, `long`, and `long long`
 are recognized using
 both qualifier and type-specifier syntax, including typedefs, const, pointers
 to these types, arrays of them,
 `sizeof`, `alignof`, and the existing `typeof` facilities. Each has the same size and alignment as its non-atomic integer counterpart:
-1 byte for `char`, 2 bytes for `short`, 4 bytes for `int`, and 8 bytes for
+1 byte for `_Bool` and `char`, 2 bytes for `short`, 4 bytes for `int`, and 8 bytes for
 `long` and `long long`. Ordinary
 lvalue conversion performs a sequentially consistent atomic load; simple
 assignment performs a sequentially consistent atomic store and yields the stored
@@ -29,7 +29,7 @@ non-atomic accesses to the same object and data races are not made safe by casts
 
 Sequentially consistent atomic `++`, `--`, `+=`, `-=`, `&=`, `|=` and `^=`
 on the supported atomic integer types use the corresponding 1-, 2-, 4-, or
-8-byte libatomic read-modify-write operations. Subword results are sign- or
+8-byte libatomic read-modify-write operations (except `_Bool`). Subword results are sign- or
 zero-extended according to their C type. Prefix, postfix and compound expressions yield the
 appropriate new or old value, and the object address is evaluated once. Atomic
 compound multiplication, division, remainder, shifts and floating right operands
@@ -76,7 +76,7 @@ not been runtime-tested.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
-Bool, enum, floating, aggregate and array atomic types,
+Enum, floating, aggregate and array atomic types,
 volatile atomic types and other atomic library operations are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
@@ -92,3 +92,8 @@ before integration; no conformance claim follows from this bounded subset.
 The built-in header provides atomic character and short typedefs and `atomic_long`, `atomic_ulong`, `atomic_llong`, and
 `atomic_ullong` alongside `atomic_int` and `atomic_uint`. The new 8-byte integer
 and narrow integer paths have not been runtime- or concurrency-tested.
+
+`atomic_bool` supports loads, stores, exchange, compare-exchange and lock-free
+queries, with scalar values converted to `_Bool`. Atomic bool increment, compound
+assignment, and fetch arithmetic/bitwise intrinsics are currently rejected.
+These paths have not been runtime- or concurrency-tested.
