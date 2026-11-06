@@ -76,8 +76,9 @@ suite remains unrun.
 - `wctype.h` declares wide classification and case-conversion functions and
   glibc-compatible classification and transformation descriptor types.
 - `uchar.h` supplies the C23 character typedefs, glibc-compatible `mbstate_t`,
-  and 16/32-bit conversion function declarations. C23 8-bit conversion
-  functions are omitted on the current glibc 2.34 target.
+  and 8/16/32-bit conversion function declarations. The C23 8-bit conversion
+  declarations require a libc exporting those symbols; the development glibc
+  2.34 does not.
 - `time.h` supplies glibc x86-64 `time_t`, `clock_t` and `struct tm` layout,
   `struct timespec`, `CLOCKS_PER_SEC`, `TIME_UTC`, and common clock, calendar
   and formatting declarations including `timespec_get` and `timespec_getres`.

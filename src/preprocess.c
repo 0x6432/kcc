@@ -939,6 +939,8 @@ static bool load_include_source(struct preprocessor *preprocessor,
 			"#ifndef __mbstate_t_defined\n#define __mbstate_t_defined 1\n"
 			"typedef struct { int __count; union { unsigned int __wch; char __wchb[4]; } __value; } mbstate_t;\n"
 			"#endif\n"
+			"size_t mbrtoc8(char8_t *,const char *,size_t,mbstate_t *);\n"
+			"size_t c8rtomb(char *,char8_t,mbstate_t *);\n"
 			"size_t mbrtoc16(char16_t *,const char *,size_t,mbstate_t *);\n"
 			"size_t c16rtomb(char *,char16_t,mbstate_t *);\n"
 			"size_t mbrtoc32(char32_t *,const char *,size_t,mbstate_t *);\n"

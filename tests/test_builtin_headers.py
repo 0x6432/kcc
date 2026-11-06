@@ -311,6 +311,12 @@ int main(void) {
         subprocess.run([host, str(asm), "-o", str(exe)], check=True)
         assert subprocess.run([str(exe)]).returncode == 42
 
+    # C23 UTF-8 conversions are declared even where the host libc lacks them.
+    # Compile only: the development glibc does not provide these symbols.
+    source.write_text("#include <uchar.h>\nsize_t f(char8_t *c,const char *s,mbstate_t *st) { return mbrtoc8(c,s,1,st); }\nsize_t g(char *s,char8_t c,mbstate_t *st) { return c8rtomb(s,c,st); }\n")
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
+    assert result.returncode == 0 and '$mbrtoc8' in result.stdout and '$c8rtomb' in result.stdout, result.stderr
+
     # Reserved implementation names are allowed only in actual compiler-owned
     # fallbacks, not merely in a user file with a similar displayed name.
     spoof_dir = Path(directory) / '<kcc'
