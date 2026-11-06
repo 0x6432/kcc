@@ -21,11 +21,28 @@ conformance or M21 completion.
 `nullptr_t` values, including the `nullptr` constant, are passed unchanged
 through an ellipsis and can be retrieved with `va_arg(ap, nullptr_t)`. The
 existing target represents them in the same 64-bit QBE scalar class as object
-pointers. `nullptr_t` remains a distinct C type: retrieving it as a pointer is
-not made type-compatible by this implementation. Other existing variadic and
+pointers. `nullptr_t` remains a distinct C type. C23 nevertheless permits a
+`nullptr_t` actual argument to be retrieved as a pointer type with character-
+pointer-compatible representation and alignment; this target uses the same
+64-bit representation for its pointers. The converse retrieval is not generally
+permitted. Other existing variadic and
 aggregate ABI limits remain.
 
 The compiler build and focused compile/IL and rejection checks were run. One
 example was lowered through pinned QBE and assembled; generated-program runtime,
 host ABI interop, regression fixtures and fuzzing remain pending. This is not
 M21 completion or a general ABI conformance claim.
+
+## Promoted-compatible enum va_arg types
+
+`va_arg` accepts complete enum types compatible with their own integer-promoted
+type, such as int-compatible enums and fixed long-compatible enums. The result
+retains the requested enum type, using the existing integer QBE class. A
+subword-compatible enum that promotes to int remains rejected in `va_arg`;
+passing such an enum through an ellipsis continues to use the existing integer
+promotions. Callers remain responsible for the actual C `va_arg` type and value
+rules; this does not validate dynamic argument types.
+
+The compiler build and focused compile/IL and rejection checks succeeded; one
+example was lowered using pinned QBE and assembled. Generated-program runtime,
+ABI interop, regression fixtures and fuzzing remain unrun.

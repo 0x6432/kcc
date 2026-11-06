@@ -2282,9 +2282,11 @@ static bool sema_expression(struct sema *sema,
 				result_type->kind == type_kind_long || result_type->kind == type_kind_ulong ||
 				result_type->kind == type_kind_long_long || result_type->kind == type_kind_ulong_long ||
 				result_type->kind == type_kind_double || result_type->kind == type_kind_pointer ||
-				result_type->kind == type_kind_nullptr)) {
+				result_type->kind == type_kind_nullptr ||
+				(result_type->kind == type_kind_enum && type_is_complete_object(result_type) &&
+				 type_compatible(result_type, type_integer_promotion(result_type))))) {
 				diagnostic_error(sema->diagnostics, expression->location,
-					"va_arg supports promoted integer, double, pointer, and nullptr_t types only");
+					"va_arg supports promoted integer-compatible enums, integer, double, pointer, and nullptr_t types only");
 				return false;
 			}
 		} else {

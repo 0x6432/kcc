@@ -58,6 +58,8 @@ def main():
             'int f(int ...);', 'int f(int, ...,);',
             'struct S { int x; }; int f(int,...); int g(void){ struct S s; return f(1,s); }',
             'int f(int,...); void v(void); int g(void){return f(0,v());}',
+            '#include <stdarg.h>\nenum E : unsigned short { A=7 }; int f(int n,...){va_list a;va_start(a);return va_arg(a,enum E);}',
+            '#include <stdarg.h>\nenum E : bool { A=1 }; int f(int n,...){va_list a;va_start(a);return va_arg(a,enum E);}',
         ]
         for source in invalid:
             result = compile_source(d, source)
@@ -78,6 +80,27 @@ int take(int marker, ...) {
   return marker==3 && p==nullptr && q==nullptr && n==42;
 }
 int main(void) { return !take(3,nullptr,42); }
+'''
+        link_and_run(d, source, '')
+
+        # Enums compatible with their promoted types retain their va_arg type.
+        source = r'''
+#include <stdarg.h>
+enum Small { A=7 }; enum Large : long { B=4294967296L };
+int take(int n, ...) {
+  va_list a; va_start(a);
+  enum Small x=va_arg(a,enum Small); enum Large y=va_arg(a,enum Large);
+  va_end(a); return n==2 && x==A && y==B;
+}
+int main(void) { return !take(2,A,B); }
+'''
+        link_and_run(d, source, '')
+        # C23 permits fetching nullptr_t as a same-representation pointer.
+        source = r'''
+#include <stdarg.h>
+int take(int n, ...) { va_list a; va_start(a); void *p=va_arg(a,void *);
+  va_end(a); return n==1 && p==0; }
+int main(void) { return !take(1,nullptr); }
 '''
         link_and_run(d, source, '')
 
