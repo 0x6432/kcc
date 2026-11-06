@@ -26,14 +26,13 @@ results. Signed values slightly below the negative limit are accepted when
 truncation toward zero makes them representable. This is a static
 initializer extension only: it does not broaden integer constant expressions
 in array bounds or case labels. Floating-to-integer casts nested inside a larger
-constant expression remain limited. The file-scope scalar gate now permits
+constant expression are supported only within the bounded subset below. The file-scope scalar gate now permits
 floating object initializers. These changes have not been tested.
 
 A top-level explicit integer cast of a supported floating constant expression
 is also accepted for static integer and boolean initializers, including when
 the result is converted again to the object type. This does not relax integer
-constant-expression rules, and arbitrary integer arithmetic containing such a
-cast remains unsupported. Regression cases were added but not run.
+constant-expression rules, and nested arithmetic is supported within the bounded subset below. Regression cases were added but not run.
 
 The static floating-to-signed-integer boundary check now accounts for truncation
 toward zero below the negative limit. Focused IL and rejection checks were run;
@@ -150,11 +149,26 @@ floating-conditioned integer choices. Nested conversion to float/double and
 aggregate subobjects use the same support. Integer operators reuse the strict
 ICE evaluator's width, signed-overflow, division, and shift checks on typed
 intermediate values, without classifying the original expression as an ICE.
-This is still a bounded subset: arbitrary floating-to-integer casts inside
-arithmetic, other unsupported forms, host rounding subtleties and broader
-constant-expression coverage remain unresolved.
+This is still a bounded subset; unsupported forms, host rounding subtleties and
+broader constant-expression coverage remain unresolved.
 
 The compiler rebuilt; ten scalar values and two aggregate fields were checked
 in IL, lowered with pinned QBE 1.2 and assembled. Eight invalid or unsupported
 examples were rejected. Regression fixtures, generated-program runtime, ABI,
 sanitizer and fuzz checks remain unrun. M20 remains incomplete.
+
+## Nested floating casts and arithmetic conditions
+
+A checked cast from a supported finite floating expression to an integer type
+can be used within supported integer arithmetic, conversions, logical operands,
+and conditional values and conditions for static initialization. The cast is
+checked at its own target width before further integer arithmetic or conversion.
+Short-circuited operands are validated for supported form without evaluation.
+These initializer-only rules do not make such casts ICEs; unsupported forms and
+non-finite or out-of-range evaluated casts are rejected.
+
+The compiler rebuilt; eleven focused values were checked in emitted IL, lowered
+with pinned QBE 1.2 and assembled, and eight invalid or unsupported examples were
+rejected. Added regression fixtures, generated-program runtime, ABI, sanitizer
+and fuzz checks remain unrun. M20 and general arithmetic constant-expression
+coverage remain incomplete.

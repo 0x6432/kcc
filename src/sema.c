@@ -3428,6 +3428,9 @@ static bool static_float_conditioned_integer(const struct ast_expression *expres
 	struct constant_result *result);
 static bool static_integer_arithmetic(const struct ast_expression *expression,
 	struct constant_result *result);
+static bool is_static_floating_boolean(const struct ast_expression *expression);
+static bool static_floating_to_integer(const struct ast_expression *source,
+	const struct type *target, struct static_data_value *value, struct diagnostics *diagnostics);
 
 /* Validate the supported arithmetic-constant operand forms without executing
  * a skipped expression. This does not prove its value finite or make it an ICE. */
@@ -3513,18 +3516,25 @@ static bool static_floating_condition(const struct ast_expression *expression, b
 	if (expression->kind == expression_binary) {
 		const struct ast_binary_expression *binary = (const struct ast_binary_expression *)expression;
 		double left, right;
-		if (!type_is_floating(binary->left->type) || !type_is_floating(binary->right->type) ||
-			!static_floating_number(binary->left, &left) || !static_floating_number(binary->right, &right))
-			return false;
-		switch (binary->operation) {
-		case binary_equal: *truth = left == right; return true;
-		case binary_not_equal: *truth = left != right; return true;
-		case binary_less: *truth = left < right; return true;
-		case binary_less_equal: *truth = left <= right; return true;
-		case binary_greater: *truth = left > right; return true;
-		case binary_greater_equal: *truth = left >= right; return true;
-		default: return false;
+		if (type_is_floating(binary->left->type) && type_is_floating(binary->right->type)) {
+			if (!static_floating_number(binary->left, &left) || !static_floating_number(binary->right, &right))
+				return false;
+			switch (binary->operation) {
+			case binary_equal: *truth = left == right; return true;
+			case binary_not_equal: *truth = left != right; return true;
+			case binary_less: *truth = left < right; return true;
+			case binary_less_equal: *truth = left <= right; return true;
+			case binary_greater: *truth = left > right; return true;
+			case binary_greater_equal: *truth = left >= right; return true;
+			default: return false;
+			}
 		}
+	}
+	/* Avoid re-entering the special Boolean/conditional paths on failure. */
+	if (!is_static_floating_boolean(expression) && !is_static_float_conditioned_integer(expression) &&
+		static_integer_arithmetic(expression, &integer)) {
+		*truth = integer.bits != 0;
+		return true;
 	}
 	return false;
 }
@@ -3631,6 +3641,14 @@ static bool static_integer_arithmetic(const struct ast_expression *expression,
 			((const struct ast_cast_expression *)expression)->operand :
 			((const struct ast_conversion_expression *)expression)->operand;
 		struct constant_result value;
+		if (type_is_floating(operand->type)) {
+			struct static_data_value converted;
+			if (!static_floating_to_integer(operand, expression->type, &converted, NULL))
+				return false;
+			*result = (struct constant_result) { .status = constant_value, .type = expression->type,
+				.bits = converted.integer_bits, .location = expression->location };
+			return true;
+		}
 		if (!static_integer_arithmetic(operand, &value))
 			return false;
 		struct ast_integer_expression leaf = { .expression = *operand, .value = value.bits };
@@ -3639,6 +3657,30 @@ static bool static_integer_arithmetic(const struct ast_expression *expression,
 		copy.expression.kind = expression_conversion;
 		*result = evaluate_integer_constant(&copy.expression);
 		return result->status == constant_value;
+	}
+	if (expression->kind == expression_logical) {
+		const struct ast_logical_expression *node = (const struct ast_logical_expression *)expression;
+		bool left, right;
+		if (!static_floating_condition(node->left, &left))
+			return false;
+		if (node->operation == logical_and ? !left : left) {
+			if (!static_arithmetic_constant_form(node->right))
+				return false;
+			right = left;
+		} else if (!static_floating_condition(node->right, &right)) {
+			return false;
+		}
+		*result = (struct constant_result) { .status = constant_value, .type = expression->type,
+			.bits = right, .location = expression->location };
+		return true;
+	}
+	if (expression->kind == expression_conditional) {
+		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
+		bool condition;
+		if (!static_floating_condition(node->condition, &condition) ||
+			!static_arithmetic_constant_form(condition ? node->else_value : node->then_value))
+			return false;
+		return static_integer_arithmetic(condition ? node->then_value : node->else_value, result);
 	}
 	return false;
 }
@@ -3798,8 +3840,9 @@ static bool static_floating_to_integer(const struct ast_expression *source,
 	unsigned width = type_integer_width(target);
 
 	if (!static_floating_literal_bits(source, &raw)) {
-		diagnostic_error(diagnostics, source->location,
-			"static integer initializer requires a supported finite floating constant expression");
+		if (diagnostics)
+			diagnostic_error(diagnostics, source->location,
+				"static integer initializer requires a supported finite floating constant expression");
 		return false;
 	}
 	if (source->type->kind == type_kind_float) {
@@ -3811,7 +3854,8 @@ static bool static_floating_to_integer(const struct ast_expression *source,
 		memcpy(&number, &raw, sizeof(number));
 	}
 	if (!isfinite(number)) {
-		diagnostic_error(diagnostics, source->location, "non-finite floating-to-integer static initializer");
+		if (diagnostics)
+			diagnostic_error(diagnostics, source->location, "non-finite floating-to-integer static initializer");
 		return false;
 	}
 	if (type_is_boolean(target))
@@ -3834,7 +3878,8 @@ static bool static_floating_to_integer(const struct ast_expression *source,
 	*value = (struct static_data_value) { .kind = static_data_integer, .integer_bits = bits };
 	return true;
 out_of_range:
-	diagnostic_error(diagnostics, source->location, "floating-to-integer static initializer is out of range");
+	if (diagnostics)
+		diagnostic_error(diagnostics, source->location, "floating-to-integer static initializer is out of range");
 	return false;
 }
 

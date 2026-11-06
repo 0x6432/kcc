@@ -44,6 +44,9 @@ int global_float_compare=1.0f < 2.0;
 int global_comparison_arithmetic=((1.0<2.0)+2)*3;
 float global_comparison_arithmetic_float=(1.0<2.0)+2;
 int global_conditional_arithmetic=1.0 ? (1.0<2.0)+4 : 1/0;
+int global_nested_float_cast=(int)(1.0+2.75)+2;
+int global_cast_condition=((int)(1.0+2.0)>2) ? 11 : 12;
+int global_cast_short_circuit=((int)(2.0+1.0)) || ((int)(1.0/0.0));
 int global_integer_choice=1.0 ? -5 : 6;
 int global_nested_choice=(1.0 ? 0 : 1) ? 10 : 11;
 int global_nested_logic=!(1.0 ? 0 : 1);
@@ -102,6 +105,7 @@ extern float global_narrow, global_integer; extern double global_widen, global_u
 extern int global_nested_choice, global_nested_logic; extern float global_nested_float;
 extern double skipped_float; extern float skipped_nested; extern int skipped_int, skipped_or, skipped_and;
 extern int global_comparison_arithmetic, global_conditional_arithmetic; extern float global_comparison_arithmetic_float;
+extern int global_nested_float_cast, global_cast_condition, global_cast_short_circuit;
 extern int global_integer_choice; extern unsigned long global_unsigned_choice; extern float global_integer_choice_float;
 extern int global_float_logic; extern float global_float_logic_value; extern double global_float_logic_choice;
 extern float global_arithmetic, global_choice, global_float_condition, global_not_condition; extern double global_mixed, global_choice_mixed, global_compare_condition; extern int global_choice_int, global_float_compare; extern _Bool global_float_not; extern float global_compare_as_float;
@@ -133,6 +137,7 @@ int main(void) {
      global_float_logic!=1 || global_float_logic_value!=1.0f || global_float_logic_choice!=9.0 ||
      global_float_condition!=11.0f || global_compare_condition!=12.0 || global_not_condition!=14.0f || global_float_compare!=1 || !global_float_not ||
      global_compare_as_float!=1.0f) return 11;
+ if (global_nested_float_cast!=5 || global_cast_condition!=11 || global_cast_short_circuit!=1) return 18;
  if (global_comparison_arithmetic!=9 || global_comparison_arithmetic_float!=3.0f || global_conditional_arithmetic!=5) return 17;
  if (skipped_float!=2.0 || !signbit(skipped_nested) || skipped_int!=3 || skipped_or!=1 || skipped_and!=0) return 16;
  if (static_int!=-5 || static_cast!=-3 || static_unsigned_cast!=(unsigned long)-3 || static_unsigned!=0 || static_bool ||
@@ -162,6 +167,7 @@ reject = [
  'int a[(1.0<2.0)?1:2];', 'int a[1.0<2.0];',
  'double x; int a=x<1.0;', 'int a=(1.0/0.0)<2.0;',
  'int a=(1.0<2.0)+2147483647;', 'int a=(1.0<2.0)/(2.0<1.0);',
+ 'int x=(int)(2147483648.0+1.0)+1;', 'int x=(int)(1.0/0.0)+1;',
  'int a[(int)(1?2.0:3.0)];',
  'long double x;', 'unsigned float x;', 'double double x;', 'float long x;',
  'float f(float x){return x%=1;}', 'int f(int x){return x&=1.0;}',
