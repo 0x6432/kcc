@@ -7,7 +7,11 @@ are recognized, including typedefs, const, pointers to these types, arrays of th
 4-byte size and 4-byte alignment as its non-atomic integer counterpart. Ordinary
 lvalue conversion performs a sequentially consistent atomic load; simple
 assignment performs a sequentially consistent atomic store and yields the stored
-non-atomic value. Addresses are evaluated once. Unevaluated expressions emit no
+non-atomic value. Atomic pointers are also supported for ordinary loads and simple
+stores, using the target’s 8-byte pointer size and alignment and libatomic’s
+`__atomic_load_8` and `__atomic_store_8` ABI. Atomic pointer read-modify-write
+operations and pointer arguments to the partial `stdatomic.h` intrinsics are
+rejected. Addresses are evaluated once. Unevaluated expressions emit no
 operation. Object initialization (including parameter initialization, zero and
 aggregate initialization) is initialization, not a concurrent atomic store;
 programs must not access an object concurrently before initialization completes.
@@ -58,9 +62,8 @@ evaluating its pointer once; it does not support other atomic object types.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
-Atomic pointer, other integer widths, bool, enum, floating, aggregate and array
-atomic types, volatile/restrict and other atomic
-library operations are not implemented. `_Atomic(type-name)` rejects
+Other integer widths, bool, enum, floating, aggregate and array atomic types,
+volatile atomic types and other atomic library operations are not implemented. `_Atomic(type-name)` rejects
 qualified, atomic, array, function and unsupported operands. Existing syntax and
 resource limits still apply; nested atomic type specifiers share the 64-deep type
 query limit. The libatomic ABI's reserved function names must not be redefined by

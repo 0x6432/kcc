@@ -1017,8 +1017,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		}
 		if ((qualified->qualifiers & type_qualifier_atomic) &&
-			base->kind != type_kind_int && base->kind != type_kind_uint) {
-			diagnostic_error(sema->diagnostics, syntax->location, "atomic subset supports only int and unsigned int");
+			base->kind != type_kind_int && base->kind != type_kind_uint && base->kind != type_kind_pointer) {
+			diagnostic_error(sema->diagnostics, syntax->location, "atomic subset supports only int, unsigned int, and pointer types");
 			return NULL;
 		}
 		if ((qualified->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(base)) {
@@ -1863,6 +1863,11 @@ static const struct type *sema_update_operand(struct sema *sema,
 		 operand_type->kind != type_kind_pointer)) {
 		diagnostic_error(sema->diagnostics, expression->location,
 			"update requires a modifiable arithmetic or pointer lvalue");
+		return NULL;
+	}
+	if ((operand_type->qualifiers & type_qualifier_atomic) && operand_type->kind == type_kind_pointer) {
+		diagnostic_error(sema->diagnostics, expression->location,
+			"atomic pointer read-modify-write is not supported yet");
 		return NULL;
 	}
 	result_type = unqualified_type(sema, operand_type, expression->location);
@@ -2884,7 +2889,7 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if ((left_type->qualifiers & type_qualifier_atomic) &&
-			(!type_is_integer(node->right->type) ||
+			(left_type->kind == type_kind_pointer || !type_is_integer(node->right->type) ||
 			 (node->operation != binary_add && node->operation != binary_subtract &&
 			  node->operation != binary_bit_and && node->operation != binary_bit_or &&
 			  node->operation != binary_bit_xor))) {
@@ -4190,8 +4195,8 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		return false;
 	}
 	if ((syntax->qualifiers & type_qualifier_atomic) &&
-		type->kind != type_kind_int && type->kind != type_kind_uint) {
-		diagnostic_error(sema->diagnostics, local->name.location, "atomic subset supports only int and unsigned int");
+		type->kind != type_kind_int && type->kind != type_kind_uint && type->kind != type_kind_pointer) {
+		diagnostic_error(sema->diagnostics, local->name.location, "atomic subset supports only int, unsigned int, and pointer types");
 		return false;
 	}
 	if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {

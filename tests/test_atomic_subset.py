@@ -10,6 +10,9 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    'int main(void) { int x=1,y=42; _Atomic(int *) p=&x; p=&y; int *q=p; return *q; }',
+    'int main(void) { int x=42; int * _Atomic p=&x; return *p; }',
+    'int main(void) { int x=42; auto _Atomic p=&x; return *p; }',
     '_Atomic int x; int read(void) { return x; } void write(int y) { x=y; }',
     'struct S { _Atomic int *p; };',
     '_Atomic(int) x=41; int main(void) { _Atomic int *p=&x; *p=42; return *p; }',
@@ -29,8 +32,11 @@ positive = [
     'int main(void) { _Atomic unsigned x=63; x &= 42; x |= 1; x ^= 1; return x; }',
 ]
 negative = [
-    '_Atomic long x;', '_Atomic _Bool x;', '_Atomic(int *) x;',
-    'int * _Atomic x;', '_Atomic void x;', '_Atomic(int[2]) x;',
+    'int main(void) { int x[2]; _Atomic(int *) p=x; p++; return 0; }',
+    'int main(void) { int x[2]; _Atomic(int *) p=x; p+=1; return 0; }',
+    'struct S { _Atomic(int *) p; };',
+    '_Atomic long x;', '_Atomic _Bool x;',
+    '_Atomic void x;', '_Atomic(int[2]) x;',
     '_Atomic(const int) x;', '_Atomic(_Atomic(int)) x;',
     'struct S { _Atomic int x; };', 'struct S { _Atomic int x[2]; };',
     'int main(void) { _Atomic int x=1; x*=2; return x; }',
@@ -64,6 +70,9 @@ with tempfile.TemporaryDirectory(prefix='kcc-atomics-') as tmp:
             assert subprocess.run([str(exe)], timeout=5).returncode == 42, text
     for text in negative:
         compile_kcc(text, False)
+
+    pointer_output = compile_kcc('int *f(_Atomic(int *) *p) { return *p; } void g(_Atomic(int *) *p,int *q) { *p=q; }')
+    assert '$__atomic_load_8' in pointer_output and '$__atomic_store_8' in pointer_output
 
     # Both translation units access the same atomic objects; synchronize iterations
     # without racing on result slots. The forbidden outcome violates seq_cst.

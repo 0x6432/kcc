@@ -1021,7 +1021,9 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		if (node->operand->type->qualifiers & type_qualifier_atomic) {
 			/* libatomic's ABI memory order 5 is __ATOMIC_SEQ_CST. */
-			emit(codegen, "\t%%t%zu =w call $__atomic_load_4(l %%t%zu, w 5)\n", temporary, address);
+			bool pointer = node->operand->type->kind == type_kind_pointer;
+			emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n",
+				temporary, pointer ? 'l' : 'w', pointer ? 8u : 4u, address);
 			return temporary;
 		}
 		if (type_is_record(expression->type)) {
@@ -1058,8 +1060,11 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t value = codegen_expression(codegen, node->right);
 		size_t address = codegen_address(codegen, node->left);
 
-		if (node->left->type->qualifiers & type_qualifier_atomic)
-			emit(codegen, "\tcall $__atomic_store_4(l %%t%zu, w %%t%zu, w 5)\n", address, value);
+		if (node->left->type->qualifiers & type_qualifier_atomic) {
+			bool pointer = node->left->type->kind == type_kind_pointer;
+			emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n",
+				pointer ? 8u : 4u, address, pointer ? 'l' : 'w', value);
+		}
 		else if (type_is_record(node->left->type))
 			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
 		else
