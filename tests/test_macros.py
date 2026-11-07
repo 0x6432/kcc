@@ -338,7 +338,6 @@ pp_examples += [
     '__LINE__ __FILE__\n',
     '#define I(x) x\n#define M __LINE__\nI(\n__LINE__\n) I(\nM\n)\n',
     '#define I(x) x\n#define W(x) I(x)\nW(\nI(\n__LINE__\n)\n)\n',
-    '#define C(a,b) a##b\nC(,\n__LINE__\n)\n',
     '#define S(x) #x\n#define X(x) S(x)\nS(__LINE__) X(__LINE__)\n',
     '#if defined(__LINE__) && defined __FILE__ && __LINE__ == 1\n42\n#endif\n',
     '#define L __LINE__\n#if L == 2\n42\n#endif\n',
@@ -398,21 +397,25 @@ with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
     # survives token pasting with a placemarker in a multiline invocation.
     # Check KCC's exact policy and both observed host outputs; a differing
     # host result is a classified discrepancy, not an agreement.
-    text = '#define C(a,b) a##b\n#define L __LINE__\nC(__LI,NE__)\nC(\nL,\n)\n'
-    source.write_text(text)
-    reference = subprocess.run(host + ["-std=c2x", "-E", "-P", str(source)],
-                               capture_output=True, text=True, timeout=5)
-    assert reference.returncode == 0, (text, reference.stderr)
-    expanded.write_text(reference.stdout)
-    actual = subprocess.run([str(driver), "--pp", str(source)], capture_output=True, text=True, timeout=5)
-    observed = subprocess.run([str(driver), "--pp", str(expanded)], capture_output=True, text=True, timeout=5)
-    chosen = 'pp-number:3\npp-number:4\n'
-    alternate = 'pp-number:3\npp-number:6\n'
-    assert actual.returncode == observed.returncode == 0, (actual.stderr, observed.stderr)
-    assert actual.stdout == chosen, actual.stdout
-    assert observed.stdout in (chosen, alternate), observed.stdout
-    if observed.stdout != chosen:
-        print(f'{host[0]}: multiline pasted __LINE__ host discrepancy (not agreement)')
+    location_cases = [
+        ('#define C(a,b) a##b\n#define L __LINE__\nC(__LI,NE__)\nC(\nL,\n)\n',
+         'pp-number:3\npp-number:4\n', 'pp-number:3\npp-number:6\n'),
+        ('#define C(a,b) a##b\nC(,\n__LINE__\n)\n',
+         'pp-number:2\n', 'pp-number:4\n'),
+    ]
+    for text, chosen, alternate in location_cases:
+        source.write_text(text)
+        reference = subprocess.run(host + ["-std=c2x", "-E", "-P", str(source)],
+                                   capture_output=True, text=True, timeout=5)
+        assert reference.returncode == 0, (text, reference.stderr)
+        expanded.write_text(reference.stdout)
+        actual = subprocess.run([str(driver), "--pp", str(source)], capture_output=True, text=True, timeout=5)
+        observed = subprocess.run([str(driver), "--pp", str(expanded)], capture_output=True, text=True, timeout=5)
+        assert actual.returncode == observed.returncode == 0, (actual.stderr, observed.stderr)
+        assert actual.stdout == chosen, actual.stdout
+        assert observed.stdout in (chosen, alternate), observed.stdout
+        if observed.stdout != chosen:
+            print(f'{host[0]}: multiline pasted __LINE__ host discrepancy (not agreement)')
     # N3096 6.10.4.1 example H4 retains inner placemarkers for the outer paste.
     # Legacy hosts can remove them early and emit ab; never call that agreement.
     source.write_text('#define F(x,...) __VA_OPT__(a x##x) ## b\nF(,1) F(x,1) F(x)\n')
@@ -441,4 +444,4 @@ with tempfile.TemporaryDirectory(prefix="kcc-macro-oracle-") as directory:
 print(f"Macro token/spelling oracle passed ({len(examples)} language + "
       f"{len(pp_examples)} expanded-pp agreements; "
       f"1 C23 normative example; {len(policy_examples)} whitespace + "
-      f"1 inactive-argument diagnostic + 1 location-discrepancy policies; {host[0]})")
+      f"1 inactive-argument diagnostic + {len(location_cases)} location-discrepancy policies; {host[0]})")
