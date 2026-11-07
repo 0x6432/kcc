@@ -63,8 +63,8 @@ def matrix(d, prefix, kinds):
                       f'struct {name} f{name}(struct {name} x){{x.a={updated}; x.b=6; return x;}}']
             checks += [f'struct {name} r{name}=f{name}(v{name});',
                        f'if(size_{name}()!=sizeof(struct {name}) || v{name}.a!={initial} || r{name}.a!={updated} || r{name}.b!=6 || r{name}.p!={(1<<prefix)-1} || r{name}.end!=77) return 1;']
-    text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner));
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner)+'\n');
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
@@ -79,8 +79,8 @@ def matrix_unnamed(d, typ, field):
         owner += [f'struct {name} f{name}(struct {name} x){{x.x+=1; x.y+=2; return x;}}']
         checks += [f'struct {name} a{name}={{1.5,2.5f}}, b{name}=f{name}(a{name});',
                    f'if(b{name}.x!=2.5 || b{name}.y!=4.5f || a{name}.y!=2.5f) return 1;']
-    text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner))
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])

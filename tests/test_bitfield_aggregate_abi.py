@@ -48,8 +48,8 @@ def matrix(d, prefix):
             checks += [f'struct {name} x{name} = {{ {{11}}, {old}, 3, 71 }}; struct {name} y{name}={name}(x{name});',
                        f'if(y{name}.p[0]!=11||y{name}.a!={new}||y{name}.b!=6||y{name}.tail!=72||x{name}.b!=3) return 1;']
     text='\n'.join(decl)+'\n'
-    (d/'owner.c').write_text(text+'\n'.join(owner))
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])

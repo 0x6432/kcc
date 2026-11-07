@@ -110,13 +110,13 @@ def matrix(d, signed, offsets):
             check += [f'if (size_{name}!=sizeof(struct {name}) || {name}.pre!={(1 << off)-1} || {name}.x!=({v}) || {name}.post!=67) return 1;',
                       f'{name}.x={changed}; if(read_{name}()!=({changed}) || {name}.pre!={(1 << off)-1} || {name}.post!=67) return 2;']
     text = '\n'.join(decl)+'\n'
-    (d/'matrix-owner.c').write_text(text+'\n'.join(owner))
+    (d/'matrix-owner.c').write_text(text+'\n'.join(owner)+'\n')
     # Keep function and expression resources within the existing limits.
     blocks = []
     for i in range(0, len(check), 32):
         blocks.append('int check%d(void){\n%s\nreturn 0;}' % (i, '\n'.join(check[i:i+32])))
     main = 'int main(void){' + ''.join(f'if(check{i}()) return 1;' for i in range(0,len(check),32)) + 'return 0;}'
-    (d/'matrix-companion.c').write_text(text+'\n'.join(blocks)+'\n'+main)
+    (d/'matrix-companion.c').write_text(text+'\n'.join(blocks)+'\n'+main+'\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'matrix-owner.c',d/'matrix-owner.o',a)
         object_file(d/'matrix-companion.c',d/'matrix-companion.o',b)

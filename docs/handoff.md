@@ -3644,3 +3644,29 @@ Prior M13l1 isolated GCC/Clang normal+ASan/UBSan full matrices passed. M13m
 e06a497 remote run 38879492736 also passed every job. The nullptr oracle fix
 f3df148 run 38881463571 is still running; GCC passed normal tests and reached QBE.
 M19c1 isolated/remote checks are queued/pending, not claimed passed.
+
+## CI host-oracle follow-up
+
+The fixed-enum runtime test now probes inherited underlying types separately
+from basic fixed-enum syntax. Original kcc/QBE fixtures remain mandatory; the
+three fixtures that require inheritance are reported as host capability gaps,
+not native agreements, when the independently probed host lacks it. Unexpected
+probe diagnostics and other native failures still fail the test. Clang 18.1.8
+and GCC 14.2.1 locally each agreed on the other six original runtime fixtures.
+
+The unchanged boolean-enum runtime fixture returns 42 under kcc/QBE and GCC 14;
+local Clang 18.1.8 instead emits three specific integer-conversion warnings and
+returns 1. The test recognizes that exact source, Clang 18.1 release family,
+diagnostics and result as a host discrepancy, never as a native agreement.
+It still fails on any other unexpected result. Remote CI outcomes are separate.
+
+Generated bit-field matrix sources now end in a newline, so Clang's strict
+C11 mode can compile them without changing warning settings. A separate ABI
+blocker remains: on local x86-64, GCC 11 and Clang 18.1.8 use different
+register classes for aggregates containing unnamed bit-fields (for example,
+`struct A { float f; unsigned :1; }`). kcc currently follows the GCC behavior;
+Clang/kcc cross-object tests therefore fail while host/host and kcc/kcc pass.
+No mixed-compiler ABI cases have been waived. The narrow-bit-field fixture also
+returns 4 with a Clang 18.1.8 native companion, including host/host; this is
+separate from the aggregate ABI mismatch and remains to investigate. Local
+Clang 18.1.8 is not the CI runner's exact 18.1.3 release.

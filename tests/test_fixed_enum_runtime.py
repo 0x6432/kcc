@@ -5,6 +5,7 @@ Only these defined programs are executed; this is not an exhaustive ABI oracle.
 """
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -47,10 +48,33 @@ probe = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-x', 'c', '-fsynt
                        input='enum E : unsigned short; enum E : unsigned short { X=1 }; _Static_assert(sizeof(X)==sizeof(enum E),"type");\n', capture_output=True,
                        text=True, timeout=10).returncode == 0
 
+# Fixed-enum syntax support does not imply support for inheriting the base
+# when a later definition omits it. Probe that exact feature independently.
+# A failed probe is a host capability gap, never a native runtime agreement.
+inherited = False
+if probe:
+    result = subprocess.run([host, '-std=c2x', '-pedantic-errors', '-x', 'c', '-fsyntax-only', '-'],
+                            input='enum E : int; enum E { A=1 };\n',
+                            capture_output=True, text=True, timeout=10)
+    if result.returncode == 0:
+        assert not result.stdout and not result.stderr, (result.stdout, result.stderr)
+        inherited = True
+    else:
+        errors = re.findall(r'(?<!fatal )error: ([^\n]+)', result.stderr)
+        expected = (
+            "enumeration previously declared with fixed underlying type",
+            "'enum' declared with but defined without fixed underlying type",
+        )
+        normalized = [message.replace('‘', "'").replace('’', "'") for message in errors]
+        assert (result.returncode == 1 and not result.stdout and normalized in [[value] for value in expected]
+                and 'fatal error:' not in result.stderr and 'internal compiler error' not in result.stderr.lower()), (
+                    'unexpected fixed-enum inheritance probe failure', result.returncode, result.stderr)
+
 with tempfile.TemporaryDirectory(prefix='kcc-fixed-enums-') as directory:
     directory = Path(directory)
     source, il, assembly, executable = [directory / name for name in ('test.c', 'test.ssa', 'test.s', 'test')]
-    for text in programs:
+    host_agreements = host_gaps = 0
+    for index, text in enumerate(programs):
         source.write_text(text + '\n')
         result = subprocess.run([str(kcc), str(source)], capture_output=True, text=True, timeout=15)
         assert result.returncode == 0 and not result.stderr, (text, result.stderr)
@@ -60,7 +84,15 @@ with tempfile.TemporaryDirectory(prefix='kcc-fixed-enums-') as directory:
             subprocess.run([host, str(assembly), '-o', str(executable)], check=True, timeout=10)
             assert subprocess.run([str(executable)], timeout=5).returncode == 42, text
         if probe:
-            subprocess.run([host, '-std=c2x', '-pedantic-errors', str(source), '-o', str(executable)],
-                           capture_output=True, text=True, check=True, timeout=10)
+            # These originals all define a prior fixed tag without repeating
+            # its underlying type. The first also exercises redefinition.
+            if not inherited and index in (0, 1, 2):
+                host_gaps += 1
+                continue
+            native = subprocess.run([host, '-std=c2x', '-pedantic-errors', str(source), '-o', str(executable)],
+                                    capture_output=True, text=True, timeout=10)
+            assert native.returncode == 0, (index, text, native.stdout, native.stderr)
             assert subprocess.run([str(executable)], timeout=5).returncode == 42, text
-print('fixed enum runtime fixtures complete' + ('' if probe else ' (host syntax unsupported)'))
+            host_agreements += 1
+print(f'fixed enum runtime fixtures complete: {host_agreements} native runtime agreements; '
+      f'{host_gaps if probe else len(programs)} host capability gaps (NOT agreements)')

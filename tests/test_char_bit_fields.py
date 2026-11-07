@@ -42,8 +42,8 @@ def matrix(d,prefix):
                       f'struct {name} f{name}(struct {name} x){{x.a=0; x.b=3; return x;}}']
             checks += [f'struct {name} r{name}=f{name}(v{name});',
                        f'if(size_{name}()!=sizeof(struct {name})||v{name}.a!={initial}||r{name}.a!=0||r{name}.b!=3||r{name}.p!={(1<<prefix)-1}||r{name}.end!=77) return {width};']
-    text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner))
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])

@@ -49,11 +49,11 @@ def matrix_batch(d, prefix):
         checks += [f'if (size_{n}()!=sizeof(struct {n}) || tail_{n}()!=(char*)&{n}.tail-(char*)&{n} || {n}.pre!={(1<<prefix)-1} || {n}.post!=19 || {n}.tail!=67) return 1;',
                    f'{n}.post=7; if(get_{n}()!=7 || {n}.pre!={(1<<prefix)-1} || {n}.tail!=67) return 2;']
     text='\n'.join(declarations)+'\n'
-    (d/'owner.c').write_text(text+'\n'.join(owner))
+    (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
     blocks=[]
     for i in range(0,len(checks),32):
         blocks.append('int check%d(void){\n%s\nreturn 0;}' % (i, '\n'.join(checks[i:i+32])))
-    (d/'companion.c').write_text(text+'\n'.join(blocks)+'\nint main(void){'+''.join(f'if(check{i}()) return 1;' for i in range(0,len(checks),32))+'return 0;}')
+    (d/'companion.c').write_text(text+'\n'.join(blocks)+'\nint main(void){'+''.join(f'if(check{i}()) return 1;' for i in range(0,len(checks),32))+'return 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])

@@ -46,7 +46,7 @@ def matrix(d,prefix,mode):
         checks += [f'struct {name} r{name}=f{name}(g{name});',
                    f'if(r{name}.p!={(1<<prefix)-1} || r{name}.x!={updated} || r{name}.y!=6 || r{name}.end!=77 || g{name}.x!={initial}) return 1;']
     text=prefix_text+'\n'.join(decl)+'\n'
-    src_owner=text+'\n'.join(owner); src_companion=text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}'
+    src_owner=text+'\n'.join(owner)+'\n'; src_companion=text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n'
     # GCC 11 lacks C23 fixed enums. For the fixed-enum ABI only, use a
     # separately compiled representation-compatible primitive-field surrogate;
     # this is not a native C23 syntax/semantics agreement.
@@ -70,8 +70,8 @@ def unnamed_matrix(d,typ):
         checks += [f'struct {name} a{name}={{1.5,2.5f}}, b{name}=f{name}(a{name});',
                    f'if(b{name}.x!=2.5 || b{name}.y!=4.5f || a{name}.y!=2.5f) return 1;']
     text='enum E { NEG=-1, ZERO=0, POS=1 }; typedef enum E ET;\n'+'\n'.join(decl)+'\n'
-    (d/'owner.c').write_text(text+'\n'.join(owner))
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])

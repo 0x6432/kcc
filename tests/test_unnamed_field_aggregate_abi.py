@@ -41,8 +41,8 @@ def matrix(d, typ):
         owner += [f'struct {name} {name}(struct {name} x) {{ x.f+=1; x.g+=2; return x; }}']
         checks += [f'struct {name} x{name}={{1.5,2.5f}}, y{name}={name}(x{name});', f'if(y{name}.f!=2.5 || y{name}.g!=4.5f || x{name}.g!=2.5f) return {w+1};']
     text='\n'.join(decl)+'\n'
-    (d/'owner.c').write_text(text+'\n'.join(owner))
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])
@@ -57,8 +57,8 @@ def matrix_integer(d, prefix):
         owner += [f'struct {name} {name}(struct {name} x) {{ x.x+=1; x.f+=2; return x; }}']
         checks += [f'struct {name} x{name}={{{{11}},7,2.5f}}, y{name}={name}(x{name});', f'if(y{name}.p[0]!=11 || y{name}.x!=8 || y{name}.f!=4.5f || x{name}.x!=7) return {w};']
     text='\n'.join(decl)+'\n'
-    (d/'owner.c').write_text(text+'\n'.join(owner))
-    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}')
+    (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
+    (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])

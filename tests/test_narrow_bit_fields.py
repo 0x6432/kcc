@@ -160,8 +160,8 @@ def width_matrix(d):
             checks.append(f'{name}.x = {changed}; if (read_{name}() != ({changed}) || '
                           f'{name}.pre != 11 || {name}.post != 22) return 2;')
     decl = '\n'.join(declarations) + '\n'
-    (d/'matrix-owner.c').write_text(decl + '\n'.join(owner))
-    (d/'matrix-companion.c').write_text(decl + 'int main(void) {\n' + '\n'.join(checks) + '\nreturn 0; }')
+    (d/'matrix-owner.c').write_text(decl + '\n'.join(owner) + '\n')
+    (d/'matrix-companion.c').write_text(decl + 'int main(void) {\n' + '\n'.join(checks) + '\nreturn 0; }\n')
     for a, b in [('host', 'kcc'), ('kcc', 'host')]:
         object_file(d/'matrix-owner.c', d/'matrix-owner.o', a)
         object_file(d/'matrix-companion.c', d/'matrix-companion.o', b)
