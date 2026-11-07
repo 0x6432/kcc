@@ -24,7 +24,10 @@ and `-lm`. See the milestone-specific documents for exact boundaries.
 
 Bounded aggregate-by-value calls and returns are supported on x86-64 SysV;
 see `docs/m21-aggregate-abi.md` for exact limits. Bounded named and unnamed int, short, char, bool, bounded long-base and int-compatible enum bit-fields
-are supported as described in `docs/m22-bit-fields.md`. Aggregate variadic
+are supported as described in `docs/m22-bit-fields.md`. For by-value aggregates
+containing nonzero unnamed bit-fields, KCC follows the GCC x86-64 ABI; older
+Clang releases (including 18.1) can use a different calling convention, so do
+not mix those aggregates across KCC and those Clang versions. Aggregate variadic
 arguments, general bit-fields, full C23 types and the complete standard library
 remain unsupported. Recent integrated changes have been built but have not been
 fully tested. M17 approval and ISO C23 conformance are not claimed.

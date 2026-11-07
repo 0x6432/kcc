@@ -109,5 +109,12 @@ layout, unions, flexible arrays, small and memory-class aggregate calls,
 `_BitInt` integration boundaries, and unsupported cases. The unnamed-field test also covers 231 layouts with separators and padding in
 both host/KCC pointer-interoperation directions; aggregates containing zero-width barriers remain rejected by value pending
 ABI validation; nonzero unnamed fields are supported by the bounded aggregate
-ABI. These checks do not replace
-cross-platform ABI validation, fuzzing, or full C23 conformance testing.
+ABI. KCC uses GCC's x86-64 classification for nonzero unnamed bit-fields.
+Clang 18.1 uses a different classification: mixed KCC/Clang by-value calls can
+produce incorrect results even when each compiler's self-calls work. Do not
+mix such aggregates across those compiler boundaries. This is not a layout or
+pointer-interoperability claim. LLVM describes its classification change in
+[PR 217847](https://github.com/llvm/llvm-project/pull/217847); do not assume
+that a particular Clang release has the change without testing it. These checks
+do not replace cross-platform ABI validation, fuzzing, or full C23 conformance
+testing.

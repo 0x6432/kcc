@@ -3670,3 +3670,21 @@ No mixed-compiler ABI cases have been waived. The narrow-bit-field fixture also
 returns 4 with a Clang 18.1.8 native companion, including host/host; this is
 separate from the aggregate ABI mismatch and remains to investigate. Local
 Clang 18.1.8 is not the CI runner's exact 18.1.3 release.
+
+CI run 42374673015 for fba9ddf passed GCC normal, GCC sanitized and fuzz;
+both Clang 18.1.3 jobs failed the unnamed-long-bit-field by-value matrix.
+The matrix now reports the field base, floating member, compiler direction
+and failing width, instead of only exit 1. LLVM upstream describes the old
+Clang classifier and a change to match GCC for nonzero unnamed fields in
+https://github.com/llvm/llvm-project/pull/217847. This does not establish
+that a given installed Clang version contains the change.
+
+The narrow-field discrepancy is isolated to `(q.u++)-7 >= 0`: the local
+Clang 18.1.8 native fixture returns 4 and an independently split diagnostic
+returns 47; GCC and KCC return 0 for the original. The test retains the
+original and reports the two native-companion discrepancies as NOT runtime
+agreements. A supplemental explicit-int-cast variant exercises the subsequent
+checks; it is not substituted for the original agreement. The classification
+requires the exact source hash, Clang 18.1 version, output and result, the
+split diagnostic, and the supplemental variant; all other failures remain
+fatal. No C conformance conclusion about that disputed expression is claimed.
