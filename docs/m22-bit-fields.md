@@ -26,9 +26,9 @@ units and natural alignment, with zero-width separators aligning to eight-byte
 boundaries. Widths 33–63 remain unsupported for these base types. Enums
 compatible with `int` or `unsigned int`, including ordinary int-compatible enums
 and fixed-underlying enums, use the corresponding 32-bit unit and accept named
-widths 1–32 or unnamed widths 0–32. Direct `enum E : 0` syntax is still
-rejected by the parser; an enum typedef can be used for an unnamed field or
-separator instead. Other enum base types remain unsupported. Structs,
+widths 1–32 or unnamed widths 0–32. Unnamed fields and zero-width separators
+can use either a direct enum tag, such as `enum E : 0`, or an enum typedef.
+Other enum base types remain unsupported. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
 retain the existing record restrictions.
 

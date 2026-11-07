@@ -369,7 +369,8 @@ static struct ast_type_syntax *qualify_type_syntax(struct parser *parser,
 
 static struct ast_type_syntax *parse_typeof_specifier(struct parser *parser, struct token keyword);
 static struct ast_type_syntax *parse_record_specifier(struct parser *parser, struct token keyword);
-static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword);
+static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword,
+	bool member_context);
 static struct ast_static_assertion *parse_static_assertion(struct parser *parser);
 
 enum declarator_context {
@@ -620,7 +621,7 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 				diagnostic_error(parser->diagnostics, token.location, "record cannot combine with other type specifiers");
 				return NULL;
 			}
-			query = token.kind == token_enum ? parse_enum_specifier(parser, token) :
+			query = token.kind == token_enum ? parse_enum_specifier(parser, token, context == declarator_member) :
 				parse_record_specifier(parser, token);
 			if (!query)
 				return NULL;
@@ -1166,7 +1167,16 @@ static struct ast_enum_type_syntax *enum_specifier_base(struct ast_type_syntax *
 	return syntax && syntax->kind == type_syntax_enum ? (struct ast_enum_type_syntax *)syntax : NULL;
 }
 
-static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword)
+static bool begins_enum_underlying_type(struct parser *parser, struct token token)
+{
+	return begins_integer_type(token.kind) || is_typedef_name(parser, token) ||
+		token.kind == token_const || token.kind == token_atomic ||
+		token.kind == token_restrict || token.kind == token_volatile ||
+		token.kind == token_typeof || token.kind == token_typeof_unqual;
+}
+
+static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struct token keyword,
+	bool member_context)
 {
 	struct ast_enum_type_syntax *node = arena_alloc(parser->arena, sizeof(*node));
 	struct ast_enumerator **tail;
@@ -1188,14 +1198,18 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	node->is_deprecated = enum_attributes.deprecated;
 	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
 		node->tag = preprocess_next(parser->preprocessor);
-	if (preprocess_peek(parser->preprocessor).kind == token_colon) {
+	/* In a member declaration, the colon after an enum tag can instead
+	 * introduce an unnamed bit-field. A type-start token belongs to the
+	 * fixed-enum grammar; all other tokens leave the colon to the member
+	 * declarator. The second peek preserves expanded-token provenance. */
+	if (preprocess_peek(parser->preprocessor).kind == token_colon &&
+		(!member_context || begins_enum_underlying_type(parser,
+			preprocess_peek_second(parser->preprocessor)))) {
 		struct token beginning;
 		struct token next;
 		preprocess_next(parser->preprocessor);
 		next = preprocess_peek(parser->preprocessor);
-		if (!begins_integer_type(next.kind) && !is_typedef_name(parser, next) &&
-			next.kind != token_const && next.kind != token_atomic && next.kind != token_restrict && next.kind != token_volatile &&
-			next.kind != token_typeof && next.kind != token_typeof_unqual) {
+		if (!begins_enum_underlying_type(parser, next)) {
 			diagnostic_error(parser->diagnostics, keyword.location,
 				"fixed enum underlying type must name an integer type");
 			return NULL;

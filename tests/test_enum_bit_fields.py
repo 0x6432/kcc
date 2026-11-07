@@ -8,7 +8,7 @@ DECL = r'''
 enum E { NEG=-1, ZERO=0, POS=1 }; typedef enum E ET;
 struct S { char c; enum E a:9; unsigned p:7; enum E b:32; char end; };
 union U { enum E a:5; double d; };
-struct Barrier { enum E a:3; ET :0; char end; };
+struct Barrier { enum E a:3; enum E :0; char end; };
 extern struct S global; extern union U un; extern struct Barrier barrier;
 struct S change(struct S v); union U uchange(union U v);
 '''
@@ -64,7 +64,7 @@ def unnamed_matrix(d,typ):
     decl, owner, checks = [], [], []
     for width in range(1,33):
         name=f'n{typ}_{width}'
-        decl += [f'struct {name} {{ {typ} x; ET :{width}; float y; }};',
+        decl += [f'struct {name} {{ {typ} x; enum E :{width}; float y; }};',
                  f'struct {name} f{name}(struct {name} x);']
         owner += [f'struct {name} f{name}(struct {name} x){{x.x+=1; x.y+=2; return x;}}']
         checks += [f'struct {name} a{name}={{1.5,2.5f}}, b{name}=f{name}(a{name});',
@@ -86,6 +86,38 @@ def main():
         for mode in ('ordinary','fixed_signed','fixed_unsigned'):
             for prefix in range(1,8): matrix(d,prefix,mode)
         for typ in ('float','double'): unnamed_matrix(d,typ)
+        # The colon following an enum tag must remain a member declarator
+        # when the next expanded token starts a width expression.
+        direct = r'''
+        #define COLON :
+        #define WIDTH (1 + 2)
+        enum E { NEG=-1, W=3 };
+        struct S { char x; enum E COLON WIDTH, y:5; enum E : W;
+                   enum E : sizeof(char); enum E : 0; char end; };
+        struct S g={1, -3, 42};
+        int main(void) {
+            struct S s={2, -4, 43};
+            return g.x!=1 || g.y!=-3 || g.end!=42 ||
+                   s.x!=2 || s.y!=-4 || s.end!=43 ||
+                   sizeof(struct S)!=8 || (char*)&g.end-(char*)&g!=4;
+        }
+        '''
+        (d/'direct.c').write_text(direct)
+        for compiler in ('host','kcc'):
+            object_file(d/'direct.c',d/'direct.o',compiler)
+            run([HOST,d/'direct.o','-o',d/'direct']); run([d/'direct'])
+        # Fixed-underlying definitions still take the enum-specifier colon,
+        # while a later colon after a tag is an unnamed field.
+        (d/'direct_fixed.c').write_text(r'''
+        enum E : unsigned int { E0=0, E1=1 };
+        struct S {
+            enum F : int { F0=0, F1=1 } named:3;
+            enum E : (1 ? 2 : 3), x:2;
+        };
+        int main(void) { struct S s={F1,E1}; return s.named!=1 || s.x!=1; }
+        ''')
+        object_file(d/'direct_fixed.c',d/'direct_fixed.o','kcc')
+        run([HOST,d/'direct_fixed.o','-o',d/'direct_fixed']); run([d/'direct_fixed'])
         (d/'fixed.c').write_text("""enum E : unsigned int { ZERO=0, MAX=4294967295U };
         struct S { enum E x:32; unsigned p:3; }; struct S g={MAX,7};
         int main(void){ struct S s={MAX,3}; if(_Generic(+s.x,unsigned int:1,default:0)!=1) return 1;
@@ -100,10 +132,12 @@ def main():
                        'enum E : unsigned long { A }; struct S { enum E x:32; };',
                        'enum E { A }; struct S { enum E x:33; };',
                        'enum E { A }; struct S { enum E x:0; };',
+                       'enum E { A }; struct S { enum E : 33; };',
+                       'enum E { A }; struct S { enum E : ; };',
                        'enum E { A }; struct S { volatile enum E x:1; };',
-                       'enum E { A }; typedef enum E ET; struct S { ET :0; int x; }; struct S f(struct S x){return x;}']:
+                       'enum E { A }; struct S { enum E :0; int x; }; struct S f(struct S x){return x;}']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
-            diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'
+            diagnostic='aggregate ABI unsupported' if 'f(struct' in source else ('expected' if ': ;' in source else 'bit-field')
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
     print('enum bit-fields: 288 ordinary host/KCC layouts and 448 fixed-enum/primitive-surrogate layouts in both directions passed; fixed-enum native C23 comparison unavailable')
 

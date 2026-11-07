@@ -75,8 +75,10 @@ retargeted to the then-unsupported long type and their diagnostics updated.
 Long and long long bit-fields now support widths 1–32 and 64, with 924 named
 and 132 unnamed aggregate layouts checked in both GCC/KCC directions; widths
 33–63 remain unsupported. The historical long-field fixtures now use width 33. Int- and unsigned-int-
-compatible enum bit-fields support widths 1–32; a typedef is needed for unnamed
-enum fields because of a direct enum/colon parser boundary. The ordinary-enum
+compatible enum bit-fields support widths 1–32. Direct enum tags and typedefs
+are both accepted for unnamed fields and zero-width separators. The direct-tag
+parser change has focused enum bit-field and GCC/KCC interoperability coverage;
+the full strict test matrix and CI still require validation. The ordinary-enum
 host matrix covers 288 layouts; 448 fixed-enum layouts were checked against
 primitive-field surrogates, not native C23 syntax.
 At `767aefc` and later `bb4c8a1`, `KCC_ALLOW_MISSING_TLS_COMPANION=1 make -j2
