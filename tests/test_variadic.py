@@ -156,7 +156,7 @@ int main(void){ int x=9; return !from_host(4,7,2.5,1234567890123L,&x); }
         link_and_run(d, kcc, host)
         # KCC passes a promoted float to a native variadic callee.
         kcc = 'int host_float(int,...); int run(void){float x=2.5f; return !host_float(1,x);}'
-        host = '#include <stdarg.h>\nint host_float(int n,...){va_list a;va_start(a,n);double x=va_arg(a,double);va_end(a);return x==2.5;} int run(void);int main(void){return run();}'
+        host = '#include <stdarg.h>\nint host_float(int n,...){va_list a;va_start(a,n);double x=va_arg(a,double);va_end(a);return n==1 && x==2.5;} int run(void);int main(void){return run();}'
         link_and_run(d, kcc, host)
         for text in [
             '#include <stdarg.h>\nint f(void){va_list a; va_start(a); return 0;}',

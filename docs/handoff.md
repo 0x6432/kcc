@@ -28,6 +28,21 @@ library. Signed and unsigned 8/16/32/64-bit `_BitInt` types have bounded value
 support; other widths through 64 have direct layout queries only. See
 `m24-bitint-foundation.md`.
 
+## CI regression repairs (2026-11-07)
+
+The CI run on `9a7c34c` exposed separate test-infrastructure failures:
+Clang's multiline pasted `__LINE__` result differs from GCC/KCC; GCC's C23
+`va_start` can leave the named parameter unused in a variadic host fixture; and
+sanitized runtime objects were linked into generated programs without the
+sanitizer linker flags. The macro test now checks the exact KCC output and
+classifies the observed alternative as a host discrepancy, not an agreement.
+The host variadic fixture checks its named argument. Runtime-linked tests
+receive the configured linker flags without disabling instrumentation.
+Focused tests passed locally with GCC 11 and QBE 1.2, including the runtime
+tests with ASan/UBSan and local non-PIE flags. The alternate macro result was
+exercised by a test wrapper, not by a native Clang installation. Full strict
+and remote CI validation remain pending.
+
 ## Validation batch (2026-11-06)
 
 At source checkpoint `3a135e5`, the QBE 1.2 runtime batch passed its initial

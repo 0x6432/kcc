@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from runtime_link import runtime_link_flags
 
 root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
@@ -36,7 +37,7 @@ int main(void) {
         il, asm, exe = (path / n for n in ('test.ssa', 'test.s', 'test'))
         il.write_text(result.stdout)
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
-        subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'),
+        subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'), *runtime_link_flags(),
                         '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
 print('signal header checks completed')

@@ -106,6 +106,7 @@ fuzz-compile: build/fuzz_compile
 
 test-codegen: export QBE := $(QBE)
 test-codegen: export KCC_SOURCE := $(CURDIR)
+test-codegen: export KCC_RUNTIME_LDFLAGS := $(LDFLAGS)
 test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
 	./build/test_static_array_ast
 	./build/test_integer_initializer_ast
@@ -312,6 +313,7 @@ build/pp_oracle: $(patsubst %.c,build/obj/%.o,tests/pp_oracle.c $(PREPROCESS_SOU
 
 test: export QBE := $(QBE)
 test: export KCC_SOURCE := $(CURDIR)
+test: export KCC_RUNTIME_LDFLAGS := $(LDFLAGS)
 test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_support build/test_source build/test_lex build/test_pp_lex build/test_preprocess build/test_type build/test_sema build/consteval_oracle build/test_static_array_ast build/test_integer_initializer_ast build/test_null_initializer_ast build/test_direct_address_initializer_ast build/test_block_storage_ast build/test_thread_storage_ast build/test_inline_linkage_ast build/test_address_offset_ast build/test_record_layout_ast build/test_record_runtime_ast build/test_initialization_ast build/test_compound_literal_ast
 	python3 tests/test_cli.py
 	./build/test_support

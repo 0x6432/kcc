@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from runtime_link import runtime_link_flags
 
 root = Path(__file__).resolve().parents[1]
 compiler = root / 'build/kcc'
@@ -16,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as
         assert result.returncode == 0 and not result.stderr, (test, result.stderr)
         il.write_text(result.stdout)
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
-        subprocess.run([host, str(asm), str(root / 'build/libkccrt.a'), '-o', str(exe)], check=True)
+        subprocess.run([host, str(asm), str(root / 'build/libkccrt.a'), *runtime_link_flags(), '-o', str(exe)], check=True)
         result = subprocess.run([str(exe)], timeout=5)
         assert result.returncode == 0, (test, result.returncode)
     cases = [
