@@ -703,9 +703,10 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 					field_type->kind == type_kind_uchar) && width.bits > 8) ||
 				((field_type->kind == type_kind_short || field_type->kind == type_kind_ushort) &&
 					width.bits > 16) ||
+				/* Unnamed fields have no value/promotion semantics to model. */
 				((field_type->kind == type_kind_long || field_type->kind == type_kind_ulong ||
 					field_type->kind == type_kind_long_long || field_type->kind == type_kind_ulong_long) &&
-					width.bits > 32 && width.bits != 64) ||
+					member->name.length && width.bits > 32 && width.bits != 64) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");

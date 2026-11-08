@@ -690,9 +690,10 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			field_type->kind == type_kind_uchar) && member->bit_width > 8) ||
 			((field_type->kind == type_kind_short || field_type->kind == type_kind_ushort) &&
 			member->bit_width > 16) ||
+			/* Unnamed long fields have layout but no value to promote. */
 			((field_type->kind == type_kind_long || field_type->kind == type_kind_ulong ||
 			field_type->kind == type_kind_long_long || field_type->kind == type_kind_ulong_long) &&
-			member->bit_width > 32 && member->bit_width != 64) ||
+			member->name.length && member->bit_width > 32 && member->bit_width != 64) ||
 			(!member->bit_width && member->name.length))) ||
 			(member->is_flexible && (definition->is_union || count == 1 || member->next)) ||
 			!checked_record_member_layout(member, &member_size, &member_alignment))

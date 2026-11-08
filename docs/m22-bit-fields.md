@@ -21,9 +21,9 @@ is signed on this target, and zero-width separators align to a byte. Named
 unnamed fields accept widths 0 through 16. They use two-byte allocation units
 and natural alignment, with zero-width separators aligning to a two-byte
 boundary. Named signed/unsigned `long` and `long long` fields accept widths
-1–32 or 64; unnamed fields accept 0–32 or 64. They use eight-byte allocation
+1–32 or 64; unnamed fields accept 0–64. They use eight-byte allocation
 units and natural alignment, with zero-width separators aligning to eight-byte
-boundaries. Widths 33–63 remain unsupported for these base types. Enums
+boundaries. Named widths 33–63 remain unsupported for these base types. Enums
 compatible with `int` or `unsigned int`, including ordinary int-compatible enums
 and fixed-underlying enums, use the corresponding 32-bit unit and accept named
 widths 1–32 or unnamed widths 0–32. Unnamed fields and zero-width separators
@@ -75,7 +75,7 @@ supported. Ordinary expressions formed from fields follow existing rules.
 ## Explicit boundaries
 
 Enum base types other than `int`/`unsigned int`, `_BitInt` base types,
-long/long-long widths 33–63, volatile and atomic fields are rejected. Known GNU
+named long/long-long widths 33–63, volatile and atomic fields are rejected. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
@@ -90,9 +90,12 @@ GCC/KCC declarations in both call directions, plus 448 fixed-enum layouts
 against separately compiled representation-compatible primitive-field
 surrogates. GCC 11 cannot compile C23 fixed enums, so the surrogate checks are
 not native C23 syntax or semantics agreements. `tests/test_long_bit_fields.py` checks 924 named long/long-long layouts and
-132 unnamed floating/mixed layouts across by-value calls in both GCC/KCC
-directions, plus static and local initialization, signed/unsigned conversions,
-updates and 64-bit-unit zero-width pointer layout. Historical unsupported-long
+512 unnamed floating/mixed layouts across by-value calls in both host/KCC
+directions, using the selected host-compatible ABI mode, plus static and local initialization, signed/unsigned conversions,
+updates and 64-bit-unit zero-width pointer layout. `tests/test_unnamed_wide_bit_fields.py`
+checks 868 layouts with widths 33–63, prefixes 1–7 and signed/unsigned long and
+long-long base types in both host/KCC directions, plus union and nested records.
+Historical unsupported-long
 fixtures now use width 33; the original narrow example has a positive runtime
 check. `tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
 `tests/test_char_bit_fields.py` checks 112 signed/unsigned layouts across

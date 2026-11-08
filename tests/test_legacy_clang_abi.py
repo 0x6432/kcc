@@ -77,8 +77,8 @@ def run_unnamed_matrix(d, native):
     bases = [
         ('unsigned char', range(1, 9)), ('unsigned short', range(1, 17)),
         ('unsigned int', range(1, 33)), ('_Bool', (1,)), ('enum E', range(1, 33)),
-        ('unsigned long', (*range(1, 33), 64)),
-        ('unsigned long long', (*range(1, 33), 64)),
+        ('unsigned long', range(1, 65)),
+        ('unsigned long long', range(1, 65)),
     ]
     for typ in ('float', 'double'):
         for base, widths in bases:

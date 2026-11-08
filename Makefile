@@ -267,6 +267,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_legacy_clang_abi_warning.py
 	python3 tests/test_legacy_clang_abi.py
 	python3 tests/test_long_bit_fields.py
+	python3 tests/test_unnamed_wide_bit_fields.py
 	python3 tests/test_enum_bit_fields.py
 	python3 tests/test_narrow_bit_fields.py
 	python3 tests/test_packed_bit_fields.py
@@ -488,6 +489,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_legacy_clang_abi_warning.py
 	python3 tests/test_legacy_clang_abi.py
 	python3 tests/test_long_bit_fields.py
+	python3 tests/test_unnamed_wide_bit_fields.py
 	python3 tests/test_enum_bit_fields.py
 	python3 tests/test_narrow_bit_fields.py
 	python3 tests/test_packed_bit_fields.py

@@ -86,7 +86,7 @@ and unsigned field layouts by value in both host/KCC directions, plus mixed
 INTEGER/SSE, unions, nested records and register pressure.
 `tests/test_enum_bit_fields.py` checks 288 ordinary-enum and 448 fixed-enum
 surrogate layouts in both host/KCC directions; the latter are not native C23
-syntax agreements. `tests/test_long_bit_fields.py` checks 924 named and 132 unnamed long-base
+syntax agreements. `tests/test_long_bit_fields.py` checks 924 named and 512 unnamed long-base
 layouts by value in both host/KCC directions.
 `tests/test_unnamed_field_aggregate_abi.py` covers 288 floating and mixed
 nonzero-unnamed-field layouts by value in both directions and exercises a union,

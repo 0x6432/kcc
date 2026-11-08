@@ -71,9 +71,10 @@ def matrix(d, prefix, kinds):
 
 def matrix_unnamed(d, typ, field, kcc_options):
     decl, owner, checks = [], [], []
-    for width in (*range(1,33), 64):
+    for width in range(1,65):
         name=f'n{typ}_{field}_{width}'
-        field_type = 'unsigned long' if field == 'long' else 'unsigned long long'
+        field_type = {'long':'unsigned long', 'llong':'unsigned long long',
+                      'slong':'signed long', 'sllong':'signed long long'}[field]
         decl += [f'struct {name} {{ {typ} x; {field_type} :{width}; float y; }};',
                  f'struct {name} f{name}(struct {name} x);']
         owner += [f'struct {name} f{name}(struct {name} x){{x.x+=1; x.y+=2; return x;}}']
@@ -103,17 +104,17 @@ def main():
                 matrix(d,prefix,kinds)
         kcc_options = legacy_clang_options()
         for typ in ('float','double'):
-            for field in ('long','llong'): matrix_unnamed(d,typ,field,kcc_options)
+            for field in ('long','llong','slong','sllong'): matrix_unnamed(d,typ,field,kcc_options)
         (d/'formerly-unsupported.c').write_text('struct S { unsigned long x:3; }; struct S s; int main(void){return (struct S){.x=2}.x!=2;}')
         object_file(d/'formerly-unsupported.c',d/'formerly-unsupported.o','kcc'); run([HOST,d/'formerly-unsupported.o','-o',d/'formerly-unsupported']); run([d/'formerly-unsupported'])
         for source in ['struct S { long x:33; };', 'struct S { unsigned long long x:63; };',
-                       'struct S { long :33; int x; };', 'struct S { long x:0; };',
+                       'struct S { long x:0; };',
                        'struct S { volatile long x:1; };',
                        'struct S { long :0; int x; }; struct S f(struct S x){return x;}']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
-    print('long-base bit-fields 1–32 and 64: four host/KCC combinations and 924 named and '
-          f"132 unnamed by-value layouts in both directions passed (unnamed ABI: {'legacy Clang' if kcc_options else 'default'})")
+    print('long-base bit-fields: four host/KCC combinations, 924 named (1–32, 64) and '
+          f"512 unnamed by-value layouts in both directions passed (unnamed ABI: {'legacy Clang' if kcc_options else 'default'})")
 
 if __name__=='__main__': main()

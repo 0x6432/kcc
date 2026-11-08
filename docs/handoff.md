@@ -3771,8 +3771,20 @@ parameters and boundary rejections. A separate 36-layout mixed-field matrix
 also passed in both directions and ABI modes. This does not establish general
 zero-width register ABI support or complete target coverage.
 
-An isolated prototype of long bit-field widths 33–63 was not integrated:
+An isolated prototype of named long bit-field widths 33–63 was not integrated:
 GCC 11 and Clang 18.1.8 differ on the type of `+` applied to such fields and
 on mixed signed/unsigned comparisons. In one direct unsigned 33-bit fixture,
 `-1L < field` is true with GCC and false with Clang and the naïve prototype.
 Removing width guards alone is therefore not sufficient.
+
+Unnamed signed/unsigned long and long-long bit-fields now accept widths 33–63,
+completing their 0–64 layout range without exposing wide-field value or integer
+promotion semantics. Named widths 33–63 remain rejected. Focused host/KCC tests
+cover 868 width/prefix/base combinations in both directions, nested and union
+cases, and an expanded float/double by-value matrix with the host-appropriate
+ABI mode. The original formerly rejected unnamed declaration is retained
+byte-for-byte as a positive layout-only test; newly reachable leading NO_CLASS
+cases remain rejected in legacy Clang mode. GCC- and Clang-built compilers and
+a GCC ASan/UBSan build passed the focused matrices against both native hosts;
+the expanded Clang 18.1 legacy matrix passed 434 layouts in both directions.
+These checks do not claim complete M22 coverage or a full CI result.
