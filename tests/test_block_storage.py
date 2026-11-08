@@ -39,6 +39,47 @@ REGISTER_ARRAY_DIVERGENCES = {
 }
 
 
+# GCC 14's C2x front end silently accepts these two constraint violations.
+# These are exact compile-only originals, never runtime agreements. Older GCC
+# and Clang still have to produce their complete expected diagnostics.
+GCC_FOR_DECL_ACCEPTANCES = frozenset({
+    'int f(void) { for(static int cell=0;cell<1;cell++) {} return 0; }',
+    'int f(void) { for(extern int cell;cell<1;cell++) {} return 0; }',
+})
+
+
+def gcc_for_decl_acceptance(text, result, source, output, clang):
+    return (not clang and text in GCC_FOR_DECL_ACCEPTANCES
+            and source.read_text() == text+'\n'
+            and result.returncode == 0 and not result.stdout and not result.stderr
+            and output.is_file() and output.stat().st_size > 4
+            and output.read_bytes()[:4] == b'\x7fELF')
+
+
+def gcc_for_decl_controls(directory):
+    import subprocess
+    source, output = directory/'for-original.c', directory/'for-original.o'
+    good = subprocess.CompletedProcess([], 0, '', '')
+    for text in GCC_FOR_DECL_ACCEPTANCES:
+        source.write_text(text+'\n')
+        output.unlink(missing_ok=True)
+        assert not gcc_for_decl_acceptance(text, good, source, output, False)
+        output.write_bytes(b'\x7fELFtest')
+        assert gcc_for_decl_acceptance(text, good, source, output, False)
+        assert not gcc_for_decl_acceptance(text, good, source, output, True)
+        assert not gcc_for_decl_acceptance(text+' ', good, source, output, False)
+        for status, stdout, stderr in [(1,'',''),(-11,'',''),(0,'noise',''),(0,'','warning')]:
+            assert not gcc_for_decl_acceptance(text, subprocess.CompletedProcess([],status,stdout,stderr), source, output, False)
+        source.write_text(text+' changed\n')
+        assert not gcc_for_decl_acceptance(text, good, source, output, False)
+        source.write_text(text+'\n')
+        for contents in (b'', b'\x7fELF', b'wrong'):
+            output.write_bytes(contents)
+            assert not gcc_for_decl_acceptance(text, good, source, output, False)
+    output.unlink(missing_ok=True)
+    print('GCC for-declaration controls: exact originals, silent fresh ELF, poison rejection; no execution')
+
+
 @dataclass(frozen=True)
 class Storage:
     stem: str
@@ -589,6 +630,7 @@ def main():
         controls(d)
         register_array_controls(d)
         typeof_constraint_controls(d)
+        gcc_for_decl_controls(d)
         if options.harness_self_test:
             return
         compilers = native_compilers(HOST,os.environ.get('CLANG_CC') or shutil.which('clang'))
@@ -668,8 +710,12 @@ def main():
                     continue
                 native.unlink(missing_ok=True)
                 result = invoke([cc,'-std=c2x','-pedantic-errors','-fno-common','-O0','-c',source,'-o',native])
-                assert native_refusal(text,result,source,native,clang if clang_style(cc) else gcc,clang_style(cc)), (text,cc,result.stderr)
-                counts[cc][2] += 1
+                is_clang = clang_style(cc)
+                if gcc_for_decl_acceptance(text,result,source,native,is_clang):
+                    counts[cc][3] += 1  # Known native divergence, not a diagnostic or agreement.
+                else:
+                    assert native_refusal(text,result,source,native,clang if is_clang else gcc,is_clang), (text,cc,result.stderr)
+                    counts[cc][2] += 1
             if not options.native_only:
                 assert message is not None, text
                 reject(source,'error: '+message+'\n'); refused += 1
