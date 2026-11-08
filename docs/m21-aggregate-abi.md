@@ -49,18 +49,21 @@ Nonzero unnamed int, short, char, boolean, supported long-base and int-compatibl
 bits. Register-class records containing zero-width barriers are supported by
 value when their recursively contained by-value members have no floating types,
 subject to the existing size, alignment and representability limits. Pointers
-do not count their referents. Register-class records combining floating members
+do not count their referents. In the default ABI, register-class records combining floating members
 and barriers are supported only when every barrier's effective offset (including
 nested arrays and unions) is an eightbyte boundary. Other floating/barrier
-register records remain rejected: GCC 11 can pass a float/zero-width/float
+register records remain rejected by default: GCC 11 can pass a float/zero-width/float
 record differently from a classifier ignoring the barrier. Bounded 17–64-byte
 MEMORY-class records can contain barriers, including nested and union members;
 the backend uses the whole object's size and alignment. Bit-precise members
 remain rejected. Pointer-based interoperation remains supported.
 
 `--legacy-clang-abi` opts into the older Clang x86-64 behavior that ignores
-nonzero unnamed bit-fields during aggregate classification. This affects by-value
-arguments and returns, including nested records; object layout is unchanged.
+nonzero unnamed bit-fields and zero-width separators during aggregate
+classification. This affects by-value arguments and returns, including nested
+records; object layout is unchanged. Floating records with off-eightbyte barriers
+remain rejected in the default ABI and can only use legacy mode with a host known
+to follow that older Clang convention.
 Use the option consistently on all KCC translation units that share affected
 interfaces and only with a native compiler known to use this older convention.
 The default continues to classify those fields like GCC. The mode is bounded by
@@ -105,7 +108,11 @@ register pressure, fixed variadic parameters, nested records, unions and
 rejection boundaries. `tests/test_zero_width_aligned_float_abi.py` checks 75
 register and 106 MEMORY layouts in both modes and directions, 35 refused
 unaligned cases, and unnamed-field, nested, union and pressure interactions.
-Register records with unaligned effective barriers and floating members,
-bit-precise members and records above 64 bytes remain rejected.
+`tests/test_zero_width_legacy_float_abi.py` checks 216 separator and 119 combined
+unnamed-field layouts, nested arrays, unions, pressure, fixed variadic arguments
+and NO_CLASS refusal. Clang 18.1 cross-calls run only when that host is available;
+other hosts run self-calls. In the default ABI, register records with unaligned
+effective barriers and floating members remain rejected. Bit-precise members and
+records above 64 bytes remain rejected in both modes.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

@@ -90,9 +90,13 @@ if(pressure(1,1,1,1,1,1,1,1,1,1,1,1,1,1,x,5,z,6)!=35) return 2; return 0; }}'''
                     'struct S { char a[64]; unsigned :0; int x; }; struct S f(struct S x){return x;}',
                     'struct S { _BitInt(8) x; unsigned :0; char a[24]; }; struct S f(struct S x){return x;}'):
             (d/'reject.c').write_text(src)
-            for options in ((), ('--legacy-clang-abi',)):
+            options_to_reject = ((),) if 'float a;' in src else ((), ('--legacy-clang-abi',))
+            for options in options_to_reject:
                 p = subprocess.run([str(KCC), *options, str(d/'reject.c')], capture_output=True, text=True, timeout=15)
                 assert p.returncode == 1 and not p.stdout and 'aggregate ABI unsupported' in p.stderr, (src, options, p.stderr)
+            if 'float a;' in src:
+                p = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'reject.c')], capture_output=True, text=True, timeout=15)
+                assert p.returncode == 0, (src, p.stderr)
     print('zero-width MEMORY aggregate ABI: original, variadic and 33 pressure/nested/union shapes, four combinations in both modes and 36 mixed layouts in both directions passed')
 
 

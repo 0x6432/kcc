@@ -3807,3 +3807,14 @@ aligned, including through nested records, arrays and unions. The regression
 matrix checks accepted and refused layouts in both ABI modes and host/KCC
 directions, including register pressure and a fixed variadic parameter. This
 remains a conservative boundary, not general zero-width ABI support.
+
+Legacy Clang mode additionally permits floating register-class records with
+zero-width barriers at non-eightbyte offsets, while default mode still rejects
+them. This follows the older Clang convention of ignoring those separators in
+classification; use it only with a native compiler known to match. Tests retain
+the default-mode rejection fixtures, add legacy positive cases, cover 216 layouts
+and 119 combinations with nonzero unnamed fields, and check nested records,
+arrays, unions, register pressure, fixed variadic parameters and NO_CLASS
+refusal. Non-Clang-18.1 hosts run self-calls only and are not counted as legacy
+cross-compiler agreements. These checks are bounded and are not full ABI or CI
+validation.

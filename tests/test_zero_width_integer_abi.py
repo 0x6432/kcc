@@ -94,9 +94,13 @@ return 0;}
         ]
         for source in rejects:
             (d/'source.c').write_text(source)
-            for options in ((), ('--legacy-clang-abi',)):
+            options_to_reject = ((), ('--legacy-clang-abi',)) if '_BitInt' in source else ((),)
+            for options in options_to_reject:
                 result = subprocess.run([str(KCC), *options, str(d/'source.c')], capture_output=True, text=True, timeout=15)
                 assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, (source, options, result.stderr)
+            if '_BitInt' not in source:
+                result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'source.c')], capture_output=True, text=True, timeout=15)
+                assert result.returncode == 0, (source, result.stderr)
         # Pointers do not recursively contain their referents by value.
         (d/'source.c').write_text('struct S { _BitInt(8) *p; unsigned :0; int x; }; struct S f(struct S x){return x;}')
         for options in ((), ('--legacy-clang-abi',)):

@@ -38,10 +38,10 @@ def main():
                         (d/'companion.c').write_text(declaration + caller)
                         if size <= 16 and barrier_offset % 8:
                             rejected += 1
-                            for options in ((), ('--legacy-clang-abi',)):
-                                result = subprocess.run([str(KCC), *options, str(d/'owner.c')],
-                                                        text=True, capture_output=True, timeout=15)
-                                assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, (declaration, options, result.stderr)
+                            result = subprocess.run([str(KCC), str(d/'owner.c')], text=True, capture_output=True, timeout=15)
+                            assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, (declaration, result.stderr)
+                            result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'owner.c')], text=True, capture_output=True, timeout=15)
+                            assert result.returncode == 0, (declaration, result.stderr)
                             continue
                         if size > 16:
                             memory += 1
@@ -82,9 +82,10 @@ def main():
         # Inner offset zero is not enough: the effective outer offset matters.
         source = 'struct I { unsigned :0; float b; }; struct S { float a; struct I i; }; struct S f(struct S x){return x;}\n'
         (d/'source.c').write_text(source)
-        for options in ((), ('--legacy-clang-abi',)):
-            result = subprocess.run([str(KCC), *options, str(d/'source.c')], capture_output=True, text=True, timeout=15)
-            assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, result.stderr
+        result = subprocess.run([str(KCC), str(d/'source.c')], capture_output=True, text=True, timeout=15)
+        assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, result.stderr
+        result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'source.c')], capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stderr
         declarations = '''#include <stdarg.h>
 struct I {float a; unsigned :0; float b;}; struct S {int pre; struct I i;};
 struct T {float a; unsigned long :0; float b;};
@@ -105,7 +106,7 @@ union U u={0};u.t.a=1;u.t.b=2;union U v=uni(u);if(v.t.a!=3||v.t.b!=5) return 4;
 struct N n={{{1},{2}}};struct N m=array(n);if(m.a[0].a!=3||m.a[1].a!=5) return 5;return 0;}
 '''
         pair(d, declarations, definitions, caller)
-    print('aligned float barrier ABI: 75 register and 106 MEMORY layouts in both directions/modes; 35 unaligned cases rejected; 119 unnamed-field layouts plus nested/union/pressure/variadic passed')
+    print('aligned float barrier ABI: 75 register and 106 MEMORY layouts in both directions/modes; 35 unaligned cases rejected in default mode; 119 unnamed-field layouts plus nested/union/pressure/variadic passed')
 
 
 if __name__ == '__main__':

@@ -848,7 +848,7 @@ static bool aggregate_unverified(const struct type *type, unsigned depth,
 	return false;
 }
 
-/* A floating register-class record is only accepted when every zero-width
+/* In the default ABI, a floating register-class record is accepted only when every zero-width
  * separator lies on an eightbyte boundary at its effective offset. Local host
  * classifiers disagree for other offsets. Traverse arrays and union members
  * rather than assuming their nested offsets are relative to the outer record. */
@@ -938,7 +938,7 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 	size_t member_budget = 65536;
 	bool barrier = false, floating = false;
 	if (aggregate_unverified(type, 0, &member_budget, &barrier, &floating)) return false;
-	if (size <= 16 && barrier && floating) {
+	if (size <= 16 && barrier && floating && !legacy_clang_abi) {
 		size_t budget = 65536;
 		if (!aggregate_barriers_at_eightbytes(type, 0, 0, &budget)) return false;
 	}
