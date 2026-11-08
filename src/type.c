@@ -823,23 +823,24 @@ const struct record_member *type_record_find_member(const struct type *type,
 	return member;
 }
 
-/* Bit-precise scalar and zero-width-field calling conventions are not yet
- * verified across host versions. Reject containing records even for
- * MEMORY-class calls; pointers do not contain their referents by value.
- * Bound the walk for deeply shared union trees. */
+/* Bit-precise scalar calling conventions are not yet verified, even for
+ * MEMORY-class records. Zero-width barriers are rejected for register-class
+ * records but may be used in bounded MEMORY-class records, whose ABI is based
+ * on the complete object size and alignment. Pointers do not contain their
+ * referents by value. Bound the walk for deeply shared union trees. */
 static bool aggregate_has_unverified_members(const struct type *type, unsigned depth,
-	size_t *budget)
+	size_t *budget, bool allow_zero_width)
 {
 	if (depth > 128 || !*budget) return true;
 	--*budget;
 	if (type_is_bitint(type)) return true;
 	if (type->kind == type_kind_array)
-		return aggregate_has_unverified_members(((const struct array_type *)type)->element, depth + 1, budget);
+		return aggregate_has_unverified_members(((const struct array_type *)type)->element, depth + 1, budget, allow_zero_width);
 	if (type_is_record(type)) {
 		const struct record_definition *record = type_record_definition(type);
 		for (const struct record_member *member = record->members; member; member = member->next)
-			if ((member->is_bit_field && !member->bit_width) ||
-				aggregate_has_unverified_members(member->type, depth + 1, budget)) return true;
+			if ((member->is_bit_field && !member->bit_width && !allow_zero_width) ||
+				aggregate_has_unverified_members(member->type, depth + 1, budget, allow_zero_width)) return true;
 	}
 	return false;
 }
@@ -904,7 +905,7 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 	unsigned alignment = type_object_alignment(type);
 	if (!size || size > type_max_abi_record_size || alignment > 8) return false;
 	size_t member_budget = 65536;
-	if (aggregate_has_unverified_members(type, 0, &member_budget)) return false;
+	if (aggregate_has_unverified_members(type, 0, &member_budget, size > 16)) return false;
 	abi->size = (unsigned)size;
 	abi->alignment = alignment;
 	if (size > 16) return true; /* QBE opaque MEMORY type. */

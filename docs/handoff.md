@@ -3759,3 +3759,19 @@ adversarial tests check missing/changed/duplicate recipes and environments. The
 independent `test-codegen` target remains available. This removes duplicate
 executions in CI; it does not certify the next CI run or imply that the two
 recipes use identical ordering.
+
+A bounded aggregate ABI increment permits zero-width bit-field barriers inside
+17–64-byte MEMORY-class records, including nested and union members, while
+retaining the existing rejection for register-class records, bit-precise
+members and other unsupported cases. The original formerly rejected MEMORY
+example is retained and tested by value. Focused GCC 11 and Clang 18.1.8
+interop checks exercised both KCC ABI modes, four host/KCC combinations,
+31 barrier-type/size pressure shapes, nested arrays, unions, variadic fixed
+parameters and boundary rejections. This does not establish general zero-width
+register ABI support or complete target coverage.
+
+An isolated prototype of long bit-field widths 33–63 was not integrated:
+GCC 11 and Clang 18.1.8 differ on the type of `+` applied to such fields and
+on mixed signed/unsigned comparisons. In one direct unsigned 33-bit fixture,
+`-1L < field` is true with GCC and false with Clang and the naïve prototype.
+Removing width guards alone is therefore not sufficient.

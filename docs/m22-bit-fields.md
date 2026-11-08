@@ -107,9 +107,10 @@ automatic initialization,
 field updates and single-evaluation bases, promotions (including variadic calls),
 layout, unions, flexible arrays, small and memory-class aggregate calls,
 `_BitInt` integration boundaries, and unsupported cases. The unnamed-field test also covers 231 layouts with separators and padding in
-both host/KCC pointer-interoperation directions; aggregates containing zero-width barriers remain rejected by value pending
-ABI validation; nonzero unnamed fields are supported by the bounded aggregate
-ABI. KCC uses GCC's x86-64 classification for nonzero unnamed bit-fields.
+both host/KCC pointer-interoperation directions; bounded 17–64-byte MEMORY-class
+aggregates containing zero-width barriers are supported by value, while
+register-class aggregates with such barriers remain rejected. Nonzero unnamed
+fields are supported by the bounded aggregate ABI. KCC uses GCC's x86-64 classification for nonzero unnamed bit-fields.
 Clang 18.1 uses a different classification: mixed KCC/Clang by-value calls can
 produce incorrect results even when each compiler's self-calls work. Do not
 mix such aggregates across those compiler boundaries in the default mode. The

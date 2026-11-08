@@ -46,10 +46,13 @@ The 64-byte ceiling also bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
 Nonzero unnamed int, short, char, boolean, supported long-base and int-compatible enum bit-fields contribute INTEGER classes for their occupied
-bits. Records containing zero-width barriers are conservatively rejected by
-value, including nested and MEMORY-class records: the available GCC 11 host
-passed a float/zero-width/float record differently from a classifier ignoring
-the zero-width field. Pointer-based interoperation remains supported.
+bits. Register-class records containing zero-width barriers are conservatively
+rejected by value, including nested records: the available GCC 11 host passed
+a float/zero-width/float record differently from a classifier ignoring the
+zero-width field. Bounded 17–64-byte MEMORY-class records can contain these
+barriers, including nested and union members; the backend uses the whole
+object's size and alignment. Bit-precise members remain rejected. Pointer-based
+interoperation remains supported.
 
 `--legacy-clang-abi` opts into the older Clang x86-64 behavior that ignores
 nonzero unnamed bit-fields during aggregate classification. This affects by-value
@@ -88,6 +91,10 @@ layouts by value in both host/KCC directions.
 `tests/test_unnamed_field_aggregate_abi.py` covers 288 floating and mixed
 nonzero-unnamed-field layouts by value in both directions and exercises a union,
 a MEMORY-class record and register pressure. See the commit
-handoff for exact commands and results.
+handoff for exact commands and results. `tests/test_zero_width_memory_abi.py`
+checks 35 zero-width-barrier MEMORY cases, including indirect calls, stack and
+register pressure, nested arrays, unions, and a fixed variadic parameter, in
+four host/KCC combinations and both KCC ABI modes. Register-class barriers,
+bit-precise members and records above 64 bytes remain rejected.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

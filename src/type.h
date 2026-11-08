@@ -86,7 +86,7 @@ struct record_member {
 	bool anonymous;
 	bool is_flexible;
 	bool is_bit_field;
-	unsigned bit_width; /* 0..32; zero denotes an unnamed separator. */
+	unsigned bit_width; /* 0..64; zero denotes an unnamed separator. */
 	unsigned bit_offset; /* Low-bit-first offset within the addressed byte. */
 	struct record_member *next;
 };
