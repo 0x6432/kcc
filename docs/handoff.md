@@ -3743,3 +3743,19 @@ the test passed locally with Clang 18.1.8 (25 native ELF agreements and one
 source-format gap), including an ASan/UBSan-instrumented KCC run. The consteval
 regression passed after building its prerequisite. These local results are not a
 substitute for the complete CI matrix.
+
+The local Clang 18.1.8 `make test` completed at 96f5745 with
+`KCC_ALLOW_MISSING_TLS_COMPANION=1`; this is gap-aware, not strict release
+approval. The Clang host supplied all 52 TLS/pthread companions; other reported
+source, ABI and native-comparison gaps remain explicit. CI run 42474963297 for
+6e5006d passed fuzz, GCC normal, GCC sanitized and Clang normal; Clang
+sanitized was still running at the last check. Later commits need their own CI.
+
+CI previously ran `make test` and `make test-codegen` sequentially despite
+sharing 176 recipes. `make test` now also runs the one codegen-only integer ABI
+test, and CI runs that full target once. A fail-closed script compares target
+exports, prerequisite and recipe counts and rejects unsupported Makefile shapes;
+adversarial tests check missing/changed/duplicate recipes and environments. The
+independent `test-codegen` target remains available. This removes duplicate
+executions in CI; it does not certify the next CI run or imply that the two
+recipes use identical ordering.

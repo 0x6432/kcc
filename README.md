@@ -400,9 +400,11 @@ make fuzz-compile FUZZ_SECONDS=10
 
 The implementation initially targets Linux x86-64, System V ABI, LP64.
 QBE 1.2 is the backend baseline. Build it with `sh scripts/build_qbe.sh tools`.
-Both full gates now include mandatory M16 executable/ELF evidence. Run
+Both full gates include mandatory M16 executable/ELF evidence. Run
 `make test QBE="$PWD/tools/qbe-1.2/qbe"` and
-`make test-codegen QBE="$PWD/tools/qbe-1.2/qbe"`.
+`make test-codegen QBE="$PWD/tools/qbe-1.2/qbe"` when validating each target.
+CI runs `make test` once: a fail-closed coverage guard ensures that it contains
+all `test-codegen` prerequisites and recipes, including separate-object ABI tests.
 The compiler itself will not depend on LLVM. CI may use Clang and libFuzzer.
 
 ## Reading order

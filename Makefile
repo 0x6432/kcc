@@ -345,6 +345,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	./build/test_compound_literal_ast
 	python3 tests/test_float_foundation.py
 	python3 tests/test_compile.py
+	QBE="$(QBE)" python3 tests/test_abi.py
 	python3 tests/test_diagnostics.py
 	QBE="$(QBE)" python3 tests/test_aggregate_abi.py
 	python3 tests/test_variadic.py

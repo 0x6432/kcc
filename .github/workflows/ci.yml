@@ -32,8 +32,11 @@ jobs:
               'LDFLAGS=-fsanitize=address,undefined'
             )
           fi
+          # test covers every test-codegen recipe; guard that invariant before
+          # running once instead of repeating the expensive shared suite.
+          python3 tests/test_ci_test_coverage.py
+          python3 scripts/check_ci_test_coverage.py
           make test "${make_args[@]}" QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
-          make test-codegen "${make_args[@]}" QBE="$RUNNER_TEMP/kcc-qbe/qbe-1.2/qbe"
   fuzz:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
