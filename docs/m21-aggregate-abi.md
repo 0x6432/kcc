@@ -109,7 +109,8 @@ rejection boundaries. `tests/test_zero_width_aligned_float_abi.py` checks 75
 register and 106 MEMORY layouts in both modes and directions, 35 refused
 unaligned cases, and unnamed-field, nested, union and pressure interactions.
 `tests/test_zero_width_legacy_float_abi.py` checks 216 separator and 119 combined
-unnamed-field layouts, nested arrays, unions, pressure, fixed variadic arguments
+unnamed-field layouts, 480 deterministic nested record/array/union layouts
+(including 240 with named fields), pressure, fixed variadic arguments
 and NO_CLASS refusal. Clang 18.1 cross-calls run only when that host is available;
 other hosts run self-calls. In the default ABI, register records with unaligned
 effective barriers and floating members remain rejected. Bit-precise members and

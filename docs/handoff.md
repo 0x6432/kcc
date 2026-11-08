@@ -3818,3 +3818,8 @@ arrays, unions, register pressure, fixed variadic parameters and NO_CLASS
 refusal. Non-Clang-18.1 hosts run self-calls only and are not counted as legacy
 cross-compiler agreements. These checks are bounded and are not full ABI or CI
 validation.
+
+The legacy floating-barrier regression is expanded with 480 deterministic
+nested record, array and union layouts; 240 contain named bit-fields. Optimized
+Clang 18.1 cross-calls pass in both directions, and a GCC-hosted run checks KCC
+self-calls without claiming GCC/legacy-Clang ABI agreement.

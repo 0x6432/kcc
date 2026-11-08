@@ -1,5 +1,6 @@
 """Legacy Clang-mode floating records with zero-width separators."""
 from pathlib import Path
+import random
 import subprocess
 import tempfile
 from test_bit_fields import ROOT, HOST, KCC, legacy_clang_options, object_file, run
@@ -69,6 +70,41 @@ def main():
                            f'if(r{i}.a!=3||r{i}.b!=5||x{i}.a!=1||x{i}.b!=2) return 3;']
             pair(d, '\n'.join(decls), '\n'.join(bodies),
                  'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host)
+        # Deterministic nested records, arrays, and unions exercise effective offsets.
+        nested = []
+        for named in (False, True):
+            rng = random.Random(7712)
+            for _ in range(240):
+                barrier = rng.choice(('unsigned', 'unsigned char', 'unsigned short',
+                                      'unsigned long', '_Bool', 'enum E'))
+                width = rng.choice((1, 3, 7, 15, 31) if named else (0, 1, 3, 7, 15, 31))
+                prefix = rng.choice((0, 1, 3, 4, 7, 8))
+                container = rng.choice(('record', 'array', 'union'))
+                nested.append((barrier, width, prefix, container, named))
+        assert len(nested) == 480
+        for start in range(0, len(nested), 12):
+            decls, bodies, checks = ['enum E { V=1 };'], [], []
+            for i, (barrier, width, prefix, container, named) in enumerate(nested[start:start+12]):
+                extra = f'unsigned {"named" if named else ""}:{width};' if width else ''
+                pad = f'char pad[{prefix}];' if prefix else ''
+                decls.append(f'struct I{i} {{ float x; {barrier} :0; {extra} float y; }};')
+                if container == 'record':
+                    member, x, y = f'struct I{i} v;', 'v.x', 'v.y'
+                elif container == 'array':
+                    member, x, y = f'struct I{i} v[2];', 'v[0].x', 'v[1].y'
+                else:
+                    decls.append(f'union U{i} {{ struct I{i} v; long alternative[2]; }};')
+                    member, x, y = f'union U{i} u;', 'u.v.x', 'u.v.y'
+                decls += [f'struct S{i} {{ {pad} {member} }};',
+                          f'struct S{i} f{i}(struct S{i});']
+                bodies.append(f'struct S{i} f{i}(struct S{i} s){{return s;}}')
+                init_named = f's{i}.{x[:-1]}named=1;' if named else ''
+                check_named = f'||r{i}.{x[:-1]}named!=1' if named else ''
+                checks += [f'struct S{i} s{i}={{0}};s{i}.{x}=1;s{i}.{y}=2;{init_named}',
+                           f'struct S{i} r{i}=f{i}(s{i});'
+                           f'if(r{i}.{x}!=1||r{i}.{y}!=2{check_named}) return 4;']
+            pair(d, '\n'.join(decls), '\n'.join(bodies),
+                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host)
         decls = '''#include <stdarg.h>
 struct S {float a; unsigned :0; float b;};
 struct I {unsigned :0; float b;}; struct N {float a; struct I i;};
@@ -96,7 +132,7 @@ struct S q=pressure(1,1,1,1,1,1,1,s,3);if(q.a!=4||q.b!=9||var(s,3,4.)!=10) retur
         (d/'source.c').write_text(source)
         result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'source.c')], capture_output=True, text=True, timeout=15)
         assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, result.stderr
-    print(f'legacy float barriers: 216 layouts, 119 unnamed-field layouts, nested/union/pressure/variadic and NO_CLASS checks passed; host cross-calls: {"Clang 18.1" if compare_host else "not run (self-calls only)"}')
+    print(f'legacy float barriers: 216 layouts, 119 unnamed-field layouts, 480 nested layouts (240 named-field), pressure/variadic and NO_CLASS checks passed; host cross-calls: {"Clang 18.1" if compare_host else "not run (self-calls only)"}')
 
 
 if __name__ == '__main__':
