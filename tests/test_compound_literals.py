@@ -277,8 +277,8 @@ SELF_REINIT_ORIGINALS = {
     'live record literal self reinitialization': '12ca3fc6e406b4c358512b6fbcf35737d5e9c1b83aed1bf08d732007d4cf2f7c',
 }
 SELF_REINIT_COMPANION = '833aa24a7c2f00f5b642a706f14fc718fbfa7fc1d52f43d537a6099022e63860'
-# Exact recovered observations only: 11.5.0 and freshly replayed 13.3.0.
-SELF_REINIT_GCC_VERSIONS = frozenset(('11.5.0', '13.3.0'))
+# Exact recovered observations only: 11.5.0, 13.3.0 and 14.2.1.
+SELF_REINIT_GCC_VERSIONS = frozenset(('11.5.0', '13.3.0', '14.2.1'))
 
 
 def validate_self_reinit_disagreement(case,version,result):
@@ -294,7 +294,7 @@ def run_native_case(cc,objects,executable,case,version):
     if case.gcc11_disagreement and version in SELF_REINIT_GCC_VERSIONS:
         # N3096 6.5.2.5p5 and 6.7.10p20/22: old explicitly initialized
         # subobjects remain live; default fill does not clobber them before RHS
-        # capture. Independently observed GCC11/13 clear too early. Execute the
+        # capture. Independently observed GCC11/13/14 clear too early. Execute the
         # exact original, require exit1 with empty streams, NEVER count agreement.
         banner=invoke([cc,'--version'])
         assert banner.returncode==0 and not banner.stderr and banner.stdout.endswith('\n'), ('GCC identity banner',cc,banner)
@@ -465,7 +465,7 @@ def native_constraint(cc, source, output, name):
     validate_native_constraint(cc,source,output,name,result)
 
 
-# GCC13 exact-original full-stream observations differ from GCC11 in two
+# GCC13 and observed GCC14.2.1 full-stream diagnostics differ from GCC11 in two
 # diagnostics. These are constraint agreements, unrelated to runtime discrepancies.
 GCC13_CONSTRAINTS = {
     'function literal': (('error','compound literal has function type'),),
@@ -480,7 +480,7 @@ def validate_native_constraint(cc,source,output,name,result,version=None):
     expected=NATIVE_CONSTRAINTS[name][int(clang_style(cc))]
     if not clang_style(cc) and name in GCC13_CONSTRAINTS:
         version=native_version(cc) if version is None else version
-        if re.fullmatch(r'13(?:\.\d+){0,2}',version):
+        if re.fullmatch(r'13(?:\.\d+){0,2}',version) or version == '14.2.1':
             assert source.read_text()==dict(CONSTRAINTS)[name]+'\n', ('changed constraint original',name)
             expected=GCC13_CONSTRAINTS[name]
     assert result.returncode==1 and not result.stdout and not output.exists(), (name,cc,result)
@@ -625,9 +625,9 @@ def controls(d):
     # two independently reviewed GCC semantic-discrepancy classifications.
     for original in (c for c in fixtures() if c.gcc11_disagreement):
         clean=subprocess.CompletedProcess([],1,'','')
-        for version in ('11.5.0','13.3.0'):
+        for version in SELF_REINIT_GCC_VERSIONS:
             validate_self_reinit_disagreement(original,version,clean)
-        for version in ('10.5.0','12.3.0','14.1.0','clang','13.4.0junk','11','11.0','11.99.999','13','13.3','13.3.1','13.99.999','13.4.0','13.3.0junk','13.3.0\n','013.3.0','13.3.00'):
+        for version in ('10.5.0','12.3.0','14.1.0','clang','13.4.0junk','11','11.0','11.99.999','13','13.3','13.3.1','13.99.999','13.4.0','14.2.0','14.2.2','13.3.0junk','13.3.0\n','013.3.0','13.3.00'):
             must_fail(lambda:validate_self_reinit_disagreement(original,version,clean),'unreviewed discrepancy version')
         for mutation in ('owner','companion','name','marker','expected','other-original','status0','status42','status2','signal','stdout','stderr'):
             case=copy.copy(original); bad=copy.copy(clean)
@@ -642,7 +642,7 @@ def controls(d):
             elif mutation=='signal': bad.returncode=-11
             elif mutation=='stdout': bad.stdout='unexpected output'
             else: bad.stderr='unexpected diagnostic'
-            for version in ('11.5.0','13.3.0'):
+            for version in SELF_REINIT_GCC_VERSIONS:
                 must_fail(lambda:validate_self_reinit_disagreement(case,version,bad),'self-reinit '+mutation)
     # Identity/routing poison controls only, NOT native outcome observations.
     exact_case=next(c for c in fixtures() if c.gcc11_disagreement)
@@ -672,13 +672,15 @@ def controls(d):
                 (good_banner.rstrip('\n'),0,''),
                 ('',0,''),(good_banner,1,''),(good_banner,0,'tool noise\n')):
             must_fail(lambda:controlled_run(bad_banner,status,stderr),'GCC discrepancy identity')
-        for unknown_version in ('11','11.0','11.99.999','13','13.3','13.3.1','13.99.999','13.4.0','13.3.0junk','13.3.0\n','013.3.0','13.3.00'):
+        for unknown_version in ('11','11.0','11.99.999','13','13.3','13.3.1','13.99.999','13.4.0','14.2.0','14.2.2','13.3.0junk','13.3.0\n','013.3.0','13.3.00'):
             must_fail(lambda:controlled_run(good_banner,reported=unknown_version),'unobserved discrepancy routing')
-    # Each GCC13 diagnostic override remains exact-original/full-stream bound.
+    # Each GCC13/14.2.1 diagnostic override remains exact-original/full-stream bound.
     for name,expected in GCC13_CONSTRAINTS.items():
         source.write_text(dict(CONSTRAINTS)[name]+'\n'); output.unlink(missing_ok=True)
         clean=subprocess.CompletedProcess([],1,'',''.join(f'{source}:1:1: {kind}: {message}\n' for kind,message in expected))
         validate_native_constraint(str(gcc13),source,output,name,clean,'13.4.0')
+        validate_native_constraint(str(gcc13),source,output,name,clean,'14.2.1')
+        must_fail(lambda:validate_native_constraint(str(gcc13),source,output,name,clean,'14.2.0'),'unobserved GCC14 diagnostic')
         for mutation in ('original','message','note','junk','stdout','status','missing-newline','poison','version'):
             source.write_text(dict(CONSTRAINTS)[name]+'\n'); bad=copy.copy(clean); version='13.4.0'
             if mutation=='original': source.write_text(source.read_text()+' ')
@@ -778,7 +780,7 @@ def main():
         print(f'M17 compound: {len(cases)} unchanged originals; KCC/QBE/ELF/runtime {kcc_count}; {len(CONSTRAINTS)} exact native constraints per compiler')
         for cc in compilers:
             print(f'{cc}: {counts[cc]} unchanged runtime agreements; {len(gaps[cc])} explicit capability gaps: {gaps[cc]}; '
-                  f'{len(disagreements[cc])} explicit GCC11/GCC13 semantic disagreements (expected42/observed1, NOT agreements): {disagreements[cc]}')
+                  f'{len(disagreements[cc])} explicit observed GCC semantic disagreements (expected42/observed1, NOT agreements): {disagreements[cc]}')
         if args.native_only: print('NATIVE-ONLY: no frozen KCC coverage/PASS claimed')
         else: print('Frozen production hash: '+args.frozen_hash)
 
