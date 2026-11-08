@@ -126,6 +126,51 @@ SCOPE_ORIGINALS = {
     'anonymous-distinct': 'struct { int x; } a; struct { int x; } b; int main(void) { a.x=40; b.x=2; return a.x+b.x; }',
 }
 
+# GCC 14 no longer emits GCC 11/13's warning for this exact defined
+# function-definition fixture. Do not weaken warning checks for other cases.
+def gcc14_identity(banner, version):
+    return (banner.returncode == 0 and not banner.stderr
+            and re.search(r'(?i)gcc', banner.stdout) is not None
+            and 'clang' not in banner.stdout.lower()
+            and version.returncode == 0 and not version.stderr
+            and re.fullmatch(r'14(?:\.\d+){0,2}\n?', version.stdout) is not None)
+
+
+def gcc14_scope_warning_gap(name, text, banner, version):
+    return (name == 'definition-parameter-tag-scope'
+            and text == SCOPE_ORIGINALS[name] and gcc14_identity(banner, version))
+
+
+def gcc14_tag_diagnostic(name, text, banner, version):
+    if (name == 'tag-redefinition' and text == CONSTRAINTS[name]
+            and gcc14_identity(banner, version)):
+        return (('error', "redefinition of struct or union 'struct R'"),)
+    return None
+
+
+def scope_warning_controls():
+    import subprocess
+    def result(code, out, err=''):
+        return subprocess.CompletedProcess([], code, out, err)
+    name = 'definition-parameter-tag-scope'
+    text = SCOPE_ORIGINALS[name]
+    banner, version = result(0, 'gcc (GCC) 14.2.1\n'), result(0, '14.2.1\n')
+    assert gcc14_scope_warning_gap(name, text, banner, version)
+    tag = CONSTRAINTS['tag-redefinition']
+    assert gcc14_tag_diagnostic('tag-redefinition', tag, banner, version) == (("error", "redefinition of struct or union 'struct R'"),)
+    assert gcc14_tag_diagnostic('tag-redefinition', tag+' ', banner, version) is None
+    assert gcc14_tag_diagnostic('duplicate-member', tag, banner, version) is None
+    assert gcc14_tag_diagnostic('tag-redefinition', tag, banner, result(0,'13.3.0\n')) is None
+    assert not gcc14_scope_warning_gap(name, text+' ', banner, version)
+    assert not gcc14_scope_warning_gap('block-shadow', text, banner, version)
+    for v in (result(0,'13.3.0\n'), result(0,'15.0.0\n'), result(0,'14.2.1 garbage\n'),
+              result(1,'14.2.1\n'), result(0,'14.2.1\n','noise')):
+        assert not gcc14_scope_warning_gap(name, text, banner, v)
+    for b in (result(0,'clang version 14.0.0\n'), result(1,'gcc 14\n'),
+              result(0,'gcc 14\n','noise')):
+        assert not gcc14_scope_warning_gap(name, text, b, version)
+    print('Record diagnostic controls: exact GCC14 fixtures/version only')
+
 GCC_ERRORS = {
     'member-assert-false': (('error', 'static assertion failed: "record false"'),),
     'member-assert-forward': (('error', "invalid application of 'sizeof' to incomplete type 'struct I'"), ('error', 'expression in static assertion is not an integer')),
@@ -160,12 +205,16 @@ CLANG_ERRORS = {
 
 def native_constraints(tools, source, output):
     for cc in tools:
+        banner = invoke([cc, '--version']) if not clang_style(cc) else None
+        version = invoke([cc, '-dumpfullversion', '-dumpversion']) if banner else None
         for name, text in CONSTRAINTS.items():
             source.write_text(text+'\n'); output.unlink(missing_ok=True)
             flags = ['-fno-caret-diagnostics'] if clang_style(cc) and name == 'tag-kind' else []
             r = invoke([cc, '-std=c2x', '-pedantic-errors', *flags, '-fno-common', '-c', source, '-o', output])
             assert r.returncode == 1 and not r.stdout and not output.exists(), (cc, name, r)
             expected = (CLANG_ERRORS if clang_style(cc) else GCC_ERRORS)[name]
+            if banner:
+                expected = gcc14_tag_diagnostic(name, text, banner, version) or expected
             if flags:
                 # Exact complete no-caret stream, not a general parser waiver.
                 assert r.stderr == (f"{source}:1:11: error: use of 'R' with tag type that does not match previous declaration\n"
@@ -219,6 +268,7 @@ def record_self_test(directory):
     inherited_self_test(directory)
     compiler_selection_self_test(directory)
     layout_compiler_selection_self_test(directory)
+    scope_warning_controls()
     # Actual record-shaped ELF, independently adversarial against size, binding,
     # byte content and alignment. A fresh producer is required for every mutant.
     assembly, output = directory/'control.s', directory/'control.o'
@@ -333,6 +383,9 @@ def main():
                 if name == 'definition-parameter-tag-scope':
                     expected = (('warning', "declaration of 'struct T' will not be visible outside of this function [-Wvisibility]" if clang_style(cc)
                                  else "'struct T' declared inside parameter list will not be visible outside of this definition or declaration"),)
+                    if not clang_style(cc) and gcc14_scope_warning_gap(name, text,
+                            invoke([cc, '--version']), invoke([cc, '-dumpfullversion', '-dumpversion'])):
+                        expected = ()
                 producer([cc, '-std=c2x', '-pedantic-errors', '-fno-common', '-O0', '-c', owner, '-o', obj], obj, expected)
                 producer([cc, obj, '-o', exe], exe)
                 r = invoke([exe]); assert (r.returncode, r.stdout, r.stderr) == (42, '', ''), (name, r)
