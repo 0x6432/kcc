@@ -3748,8 +3748,8 @@ The local Clang 18.1.8 `make test` completed at 96f5745 with
 `KCC_ALLOW_MISSING_TLS_COMPANION=1`; this is gap-aware, not strict release
 approval. The Clang host supplied all 52 TLS/pthread companions; other reported
 source, ABI and native-comparison gaps remain explicit. CI run 42474963297 for
-6e5006d passed fuzz, GCC normal, GCC sanitized and Clang normal; Clang
-sanitized was still running at the last check. Later commits need their own CI.
+6e5006d passed all five jobs: fuzz, GCC normal and sanitized, and Clang
+normal and sanitized. Later commits need their own CI.
 
 CI previously ran `make test` and `make test-codegen` sequentially despite
 sharing 176 recipes. `make test` now also runs the one codegen-only integer ABI

@@ -10,6 +10,11 @@ original = (root / 'Makefile').read_text()
 assert module.check(original) > 0
 
 mutations = (
+    'ifeq (1,1)\n' + original + '\nendif\n',
+    'include arbitrary.mk\n' + original,
+    '$(eval hidden)\n' + original,
+    'test test-codegen: unexpected-prerequisite\n' + original,
+    '.ONESHELL:\n' + original,
     # Removing or changing even one command must fail.
     original.replace('\tpython3 tests/test_compile.py\n\tQBE="$(QBE)" python3 tests/test_abi.py\n',
                      '\tpython3 tests/test_compile.py\n', 1),

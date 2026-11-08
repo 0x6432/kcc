@@ -59,6 +59,23 @@ def target(text, name):
 
 
 def check(text):
+    # Make can conditionally replace or extend rules outside the parsed recipe
+    # blocks. Reject those forms rather than trusting a textual subset check.
+    for line in text.splitlines():
+        if line.startswith('\t') or not line.strip() or line.lstrip().startswith('#'):
+            continue
+        if line == '-include $(wildcard build/obj/src/*.d build/obj/tests/*.d build/*.d)':
+            continue  # Compiler-generated object dependency files in a clean CI checkout.
+        if (re.match(r'^\s*(?:ifeq|ifneq|ifdef|ifndef|else|endif|-?include|sinclude|define|endef|override)\b', line)
+                or re.match(r'^\s*\.ONESHELL\s*:', line)
+                or re.match(r'^\s*\.RECIPEPREFIX\s*[:?+!]?=', line)
+                or '$(eval' in line or '${eval' in line):
+            raise CoverageError(f'unsupported Makefile directive: {line}')
+        rule = re.match(r'^([^:=]+):', line)
+        if rule:
+            names = rule.group(1).split()
+            if any(name in ('test', 'test-codegen') for name in names) and len(names) != 1:
+                raise CoverageError(f'unsupported shared target rule: {line}')
     test_exports, test_dependencies, test_commands = target(text, 'test')
     codegen_exports, codegen_dependencies, codegen_commands = target(text, 'test-codegen')
     expected = {'QBE': '$(QBE)', 'KCC_SOURCE': '$(CURDIR)',
