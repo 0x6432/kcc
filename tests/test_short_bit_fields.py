@@ -60,7 +60,7 @@ def main():
         for prefix in range(1,16): matrix(d,prefix)
         (d/'formerly-unsupported.c').write_text('struct S { unsigned short x:3; }; struct S s; int main(void){return (struct S){.x=2}.x!=2;}')
         object_file(d/'formerly-unsupported.c',d/'formerly-unsupported.o','kcc'); run([HOST,d/'formerly-unsupported.o','-o',d/'formerly-unsupported']); run([d/'formerly-unsupported'])
-        for source in ['struct S { signed short a:17; };', 'struct S { unsigned short :17; int x; };', 'struct S { short a:0; };', 'struct S { volatile short a:1; };', 'struct S { short :0; int x; }; struct S f(struct S x){return x;}']:
+        for source in ['struct S { signed short a:17; };', 'struct S { unsigned short :17; int x; };', 'struct S { short a:0; };', 'struct S { volatile short a:1; };']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))

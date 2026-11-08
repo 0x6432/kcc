@@ -75,13 +75,15 @@ unavailable. A subsequent bounded increment supports unnamed int bit-fields
 and zero-width barriers, with 231 GCC/KCC pointer-layout combinations in both
 directions. Nonzero unnamed fields are supported in bounded by-value aggregates
 after 288 floating/mixed host interoperability cases in both directions; records
-containing zero-width barriers are still rejected by value because a float/zero-
-width/float host case disagreed with the initial classifier. Named bit-fields
+containing zero-width barriers are supported by value in bounded MEMORY records
+and integer-only register records; mixed floating/barrier register records remain
+rejected because a float/zero-width/float host case disagreed with the initial
+classifier. Named bit-fields
 with unaligned byte offsets now have bounded aggregate-by-value classification;
 448 signed and unsigned layouts passed the GCC/KCC cross-call matrix in both
 directions. Named and unnamed boolean bit-fields now support width 1, with
 boolean conversion, packing and cross-compiler aggregate checks; zero-width
-boolean separators have the same conservative by-value ABI boundary. Named and
+boolean separators have the same bounded by-value ABI boundary. Named and
 unnamed character-type fields are supported through 8 bits, with 112 signed/
 unsigned by-value layouts checked in both host/KCC directions. Short bit-fields
 now support 1–16 bits; 480 signed/unsigned by-value layouts were checked in
@@ -3788,3 +3790,13 @@ cases remain rejected in legacy Clang mode. GCC- and Clang-built compilers and
 a GCC ASan/UBSan build passed the focused matrices against both native hosts;
 the expanded Clang 18.1 legacy matrix passed 434 layouts in both directions.
 These checks do not claim complete M22 coverage or a full CI result.
+
+A reconstructed bounded increment supports register-class aggregates containing
+zero-width barriers when recursively contained by-value members are integer,
+enum or pointer types, subject to the existing ABI limits. Floating referents
+behind pointers do not disqualify a record; floating members and bit-precise
+members still do. The formerly rejected integer fixtures remain positive checks.
+The new regression covers 504 layouts in both host/KCC directions and both ABI
+modes, plus register pressure, fixed variadic parameters, nested arrays, unions,
+pointers and refusal boundaries. GCC 11 and Clang 18.1 focused checks passed;
+this evidence is not a full ABI or CI validation.

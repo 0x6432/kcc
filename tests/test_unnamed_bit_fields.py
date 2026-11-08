@@ -75,8 +75,6 @@ def main():
             'struct S { unsigned :33; int x; };',
             'struct S { unsigned :-1; int x; };',
             'struct S { _Bool :2; int x; };',
-            'struct S { unsigned :0; int x; }; struct S f(struct S x){return x;}',
-            'struct Inner { int x; unsigned :0; }; struct S { struct Inner i; }; struct S f(struct S x){return x;}',
         ]:
             (d/'reject.c').write_text(source)
             result = subprocess.run([str(KCC), str(d/'reject.c')], text=True, capture_output=True)

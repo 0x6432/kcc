@@ -275,6 +275,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_unnamed_field_aggregate_abi.py
 	python3 tests/test_unnamed_bit_fields.py
 	python3 tests/test_zero_width_memory_abi.py
+	python3 tests/test_zero_width_integer_abi.py
 	python3 tests/test_record_runtime.py --frozen-hash "$$(git rev-parse HEAD)"
 	python3 tests/test_initialization_promotions.py
 	python3 tests/test_initialization.py --frozen-hash "$$(git rev-parse HEAD)"
@@ -497,6 +498,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_unnamed_field_aggregate_abi.py
 	python3 tests/test_unnamed_bit_fields.py
 	python3 tests/test_zero_width_memory_abi.py
+	python3 tests/test_zero_width_integer_abi.py
 	python3 tests/test_record_runtime.py --frozen-hash "$$(git rev-parse HEAD)"
 	python3 tests/test_initialization_promotions.py
 	python3 tests/test_initialization.py --frozen-hash "$$(git rev-parse HEAD)"

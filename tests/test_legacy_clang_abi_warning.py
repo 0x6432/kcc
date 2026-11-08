@@ -16,6 +16,7 @@ fixtures = [
      'union B f(union B b) { return b; }\n', True),
     ('call', 'struct A { float x; unsigned :1; }; struct A f(struct A); '
      'int g(struct A *p) { struct A a=f(*p); return (int)a.x; }\n', True),
+    ('zero-width-integer', 'struct A { int x; unsigned :0; }; struct A f(struct A a) { return a; }\n', False),
     ('named-only', 'struct A { float x; unsigned n:1; }; struct A f(struct A a) { return a; }\n', False),
     ('pointer-only', 'struct A { float x; unsigned :1; }; int f(struct A *p) { return (int)p->x; }\n', False),
     ('unused-prototype', 'struct A { float x; unsigned :1; }; struct A f(struct A); int g(void) { return 0; }\n', False),
@@ -46,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-abi-warning-') as tmp:
     assert result.returncode == 1 and not result.stdout and 'error:' in result.stderr
     result = subprocess.run([str(kcc), flag, '--pp-tokens', str(source)], capture_output=True, text=True, timeout=5)
     assert result.returncode == 1 and not result.stdout and 'error:' in result.stderr
-    source.write_text('struct A { int x; unsigned :0; }; struct A f(struct A a) { return a; }\n')
+    source.write_text('struct A { float x; unsigned :0; float y; }; struct A f(struct A a) { return a; }\n')
     result = subprocess.run([str(kcc), flag, str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr
 print('legacy Clang ABI warning: direct, nested, union, calls, pointer/prototype controls and unchanged code passed')

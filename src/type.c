@@ -824,24 +824,26 @@ const struct record_member *type_record_find_member(const struct type *type,
 	return member;
 }
 
-/* Bit-precise scalar calling conventions are not yet verified, even for
- * MEMORY-class records. Zero-width barriers are rejected for register-class
- * records but may be used in bounded MEMORY-class records, whose ABI is based
- * on the complete object size and alignment. Pointers do not contain their
- * referents by value. Bound the walk for deeply shared union trees. */
-static bool aggregate_has_unverified_members(const struct type *type, unsigned depth,
-	size_t *budget, bool allow_zero_width)
+/* Track barriers and floating members for the bounded register ABI. Bit-precise
+ * values remain unverified even for MEMORY-class records. Pointers do not
+ * contain referents by value; bound the walk for shared union trees. */
+static bool aggregate_unverified(const struct type *type, unsigned depth,
+	size_t *budget, bool *barrier, bool *floating)
 {
 	if (depth > 128 || !*budget) return true;
 	--*budget;
 	if (type_is_bitint(type)) return true;
+	if (type_is_floating(type)) *floating = true;
 	if (type->kind == type_kind_array)
-		return aggregate_has_unverified_members(((const struct array_type *)type)->element, depth + 1, budget, allow_zero_width);
+		return aggregate_unverified(((const struct array_type *)type)->element,
+			depth + 1, budget, barrier, floating);
 	if (type_is_record(type)) {
 		const struct record_definition *record = type_record_definition(type);
-		for (const struct record_member *member = record->members; member; member = member->next)
-			if ((member->is_bit_field && !member->bit_width && !allow_zero_width) ||
-				aggregate_has_unverified_members(member->type, depth + 1, budget, allow_zero_width)) return true;
+		for (const struct record_member *member = record->members; member; member = member->next) {
+			if (member->is_bit_field && !member->bit_width) *barrier = true;
+			if (aggregate_unverified(member->type, depth + 1, budget, barrier, floating))
+				return true;
+		}
 	}
 	return false;
 }
@@ -906,7 +908,9 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 	unsigned alignment = type_object_alignment(type);
 	if (!size || size > type_max_abi_record_size || alignment > 8) return false;
 	size_t member_budget = 65536;
-	if (aggregate_has_unverified_members(type, 0, &member_budget, size > 16)) return false;
+	bool barrier = false, floating = false;
+	if (aggregate_unverified(type, 0, &member_budget, &barrier, &floating)) return false;
+	if (size <= 16 && barrier && floating) return false;
 	abi->size = (unsigned)size;
 	abi->alignment = alignment;
 	if (size > 16) return true; /* QBE opaque MEMORY type. */

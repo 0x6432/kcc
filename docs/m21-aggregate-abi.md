@@ -46,13 +46,15 @@ The 64-byte ceiling also bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
 Nonzero unnamed int, short, char, boolean, supported long-base and int-compatible enum bit-fields contribute INTEGER classes for their occupied
-bits. Register-class records containing zero-width barriers are conservatively
-rejected by value, including nested records: the available GCC 11 host passed
-a float/zero-width/float record differently from a classifier ignoring the
-zero-width field. Bounded 17–64-byte MEMORY-class records can contain these
-barriers, including nested and union members; the backend uses the whole
-object's size and alignment. Bit-precise members remain rejected. Pointer-based
-interoperation remains supported.
+bits. Register-class records containing zero-width barriers are supported by
+value when their recursively contained by-value members have no floating types,
+subject to the existing size, alignment and representability limits. Pointers
+do not count their referents. Floating members combined with barriers remain
+rejected in register-class records: GCC 11 can pass a float/zero-width/float
+record differently from a classifier ignoring the barrier. Bounded 17–64-byte
+MEMORY-class records can contain barriers, including nested and union members;
+the backend uses the whole object's size and alignment. Bit-precise members
+remain rejected. Pointer-based interoperation remains supported.
 
 `--legacy-clang-abi` opts into the older Clang x86-64 behavior that ignores
 nonzero unnamed bit-fields during aggregate classification. This affects by-value
@@ -95,7 +97,10 @@ handoff for exact commands and results. `tests/test_zero_width_memory_abi.py`
 checks 35 zero-width-barrier MEMORY cases, including indirect calls, stack and
 register pressure, nested arrays, unions, and a fixed variadic parameter, in
 four host/KCC combinations and both KCC ABI modes. A further 36 mixed-field
-layouts are checked in both directions and modes. Register-class barriers,
-bit-precise members and records above 64 bytes remain rejected.
+layouts are checked in both directions and modes. `tests/test_zero_width_integer_abi.py`
+checks 504 integer-only register layouts in both directions and modes, plus
+register pressure, fixed variadic parameters, nested records, unions and
+rejection boundaries. Floating/barrier register records, bit-precise members
+and records above 64 bytes remain rejected.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

@@ -58,7 +58,7 @@ def main():
             object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
             run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
         for prefix in range(1,8): matrix(d,prefix)
-        for source in ['struct S { signed char a:9; };', 'struct S { unsigned char :9; int x; };', 'struct S { char a:0; };', 'struct S { volatile char a:1; };', 'struct S { char :0; int x; }; struct S f(struct S x){return x;}']:
+        for source in ['struct S { signed char a:9; };', 'struct S { unsigned char :9; int x; };', 'struct S { char a:0; };', 'struct S { volatile char a:1; };']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
