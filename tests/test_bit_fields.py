@@ -5,6 +5,7 @@ executables are created under this worktree's build directory. Only defined
 programs are executed; unsupported cases are compiler-rejection checks.
 """
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -117,11 +118,19 @@ def run(args, **kw):
     return result
 
 
-def object_file(src, out, compiler):
+def legacy_clang_options():
+    """Only select the observed Clang 18.1 ABI, not every Clang release."""
+    version = subprocess.run([HOST, '--version'], capture_output=True, text=True, timeout=10)
+    if version.returncode == 0 and re.search(r'clang version 18\.1\.\d+\b', version.stdout):
+        return ('--legacy-clang-abi',)
+    return ()
+
+
+def object_file(src, out, compiler, kcc_options=()):
     if compiler == 'kcc':
         il = out.with_suffix('.ssa')
         asm = out.with_suffix('.s')
-        il.write_text(run([KCC, src]).stdout)
+        il.write_text(run([KCC, *kcc_options, src]).stdout)
         run([QBE, '-o', asm, il])
         run([HOST, '-c', asm, '-o', out])
     else:

@@ -3719,3 +3719,22 @@ matrix passed with GCC-built, Clang-built and GCC ASan/UBSan-instrumented KCC;
 the existing default GCC aggregate/long/enum/narrow bit-field regressions and
 type/sema units also passed. These checks are bounded, not a full cross-compiler
 ABI guarantee. Full suites and remote CI are separate validation gates.
+
+CI run 42468596850 for 2f9f832 passed GCC normal, GCC ASan/UBSan and fuzz.
+Both Clang 18.1.3 jobs passed the new legacy-mode matrix before failing an older
+long-bit-field fixture that still used the default ABI. The long and enum
+unnamed-field interop matrices now use legacy mode for Clang 18.1, retaining
+default mode for other hosts and all original combinations. The original
+combined unnamed-aggregate fixture contains a NO_CLASS case: under Clang 18.1,
+its two mixed-compiler combinations are explicitly checked for the expected
+rejection and reported as unsupported, not agreements. Its self-combinations
+still run, as do 288 supported mixed-layout cases in both directions. On GCC,
+all four original combinations still run. These changes do not remove the
+NO_CLASS limitation or establish the outcome of the next CI run.
+
+The revised long, enum and unnamed-aggregate tests pass locally with GCC 11 and
+Clang 18.1.8, both normally and with GCC ASan/UBSan-instrumented KCC. Other
+later Clang regression scripts passed locally except initialization promotions:
+its strict native EOF-gap oracle is intentionally pinned to CI's Clang 18.1.3,
+not local 18.1.8. The consteval regression passed after building its prerequisite.
+These local results are not a substitute for the complete CI matrix.

@@ -1,7 +1,8 @@
 """Unnamed int bit-fields in SysV by-value aggregate calls and returns."""
 from pathlib import Path
+import subprocess
 import tempfile
-from test_bit_fields import ROOT, HOST, object_file, run
+from test_bit_fields import ROOT, HOST, KCC, legacy_clang_options, object_file, run
 
 DECL = r'''
 struct A { float f; unsigned :1; }; struct B { double d; unsigned :1; };
@@ -33,7 +34,7 @@ int main(void){
 }
 '''
 
-def matrix(d, typ):
+def matrix(d, typ, kcc_options):
     decl, owner, checks = [], [], []
     for w in range(1,33):
         name=f'f_{typ}_{w}'
@@ -44,12 +45,12 @@ def matrix(d, typ):
     (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
     (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
-        object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
+        object_file(d/'owner.c',d/'owner.o',a,kcc_options); object_file(d/'companion.c',d/'companion.o',b,kcc_options)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])
         try: run([d/'test'])
         except AssertionError as e: raise AssertionError(f'{typ} {a}/{b}: {e}') from e
 
-def matrix_integer(d, prefix):
+def matrix_integer(d, prefix, kcc_options):
     decl, owner, checks = [], [], []
     for w in range(1,33):
         name=f'i_{prefix}_{w}'
@@ -60,7 +61,7 @@ def matrix_integer(d, prefix):
     (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
     (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
-        object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
+        object_file(d/'owner.c',d/'owner.o',a,kcc_options); object_file(d/'companion.c',d/'companion.o',b,kcc_options)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])
         try: run([d/'test'])
         except AssertionError as e: raise AssertionError(f'prefix {prefix} {a}/{b}: {e}') from e
@@ -70,11 +71,31 @@ def main():
     with tempfile.TemporaryDirectory(prefix='unnamed-abi-',dir=ROOT/'build') as tmp:
         d=Path(tmp)
         (d/'owner.c').write_text(OWNER); (d/'companion.c').write_text(COMPANION)
+        kcc_options = legacy_clang_options()
         for a,b in [('host','host'),('host','kcc'),('kcc','host'),('kcc','kcc')]:
+            if kcc_options and a != b:
+                # The original contains struct B { double d; unsigned :1; }.
+                # Older Clang leaves its second eightbyte NO_CLASS, which QBE
+                # cannot represent. Verify the complete original KCC source is
+                # refused; never execute it or count a mixed-host agreement.
+                source = d/'owner.c' if a == 'kcc' else d/'companion.c'
+                result = subprocess.run([str(KCC), *kcc_options, str(source)],
+                                        capture_output=True, text=True, timeout=15)
+                assert (result.returncode == 1 and not result.stdout and
+                        result.stderr.count('error:') == 1 and
+                        'aggregate ABI unsupported (M21, legacy Clang mode)' in result.stderr), result.stderr
+                print(f'original {a}/{b}: NO_CLASS unsupported (NOT an ABI agreement)')
+                continue
             object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
             run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
-        for typ in ('float','double'): matrix(d,typ)
-        for prefix in range(1,8): matrix_integer(d,prefix)
-    print('unnamed-field aggregates: four host/KCC combinations and 288 floating and mixed layouts in both directions passed')
+        for typ in ('float','double'): matrix(d,typ,kcc_options)
+        for prefix in range(1,8): matrix_integer(d,prefix,kcc_options)
+    if kcc_options:
+        print('unnamed-field aggregates: original self-combinations passed; two original mixed '
+              'NO_CLASS cases unsupported; 288 floating and mixed layouts passed in both '
+              'directions (legacy Clang ABI)')
+    else:
+        print('unnamed-field aggregates: all four original combinations and 288 floating and '
+              'mixed layouts in both directions passed (default ABI)')
 
 if __name__=='__main__': main()

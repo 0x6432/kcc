@@ -2,7 +2,7 @@
 from pathlib import Path
 import subprocess
 import tempfile
-from test_bit_fields import ROOT, HOST, KCC, object_file, run
+from test_bit_fields import ROOT, HOST, KCC, legacy_clang_options, object_file, run
 
 DECL = r'''
 struct S { unsigned p:7; signed long a:31; unsigned long long b:29; char end; };
@@ -69,7 +69,7 @@ def matrix(d, prefix, kinds):
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
 
-def matrix_unnamed(d, typ, field):
+def matrix_unnamed(d, typ, field, kcc_options):
     decl, owner, checks = [], [], []
     for width in (*range(1,33), 64):
         name=f'n{typ}_{field}_{width}'
@@ -82,7 +82,7 @@ def matrix_unnamed(d, typ, field):
     text='\n'.join(decl)+'\n'; (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
     (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
-        object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
+        object_file(d/'owner.c',d/'owner.o',a,kcc_options); object_file(d/'companion.c',d/'companion.o',b,kcc_options)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])
         result = subprocess.run([str(d/'test')], text=True, capture_output=True)
         if result.returncode or result.stdout or result.stderr:
@@ -101,8 +101,9 @@ def main():
             for kinds in ([('sl','signed long'),('ul','unsigned long')],
                           [('sll','signed long long'),('ull','unsigned long long')]):
                 matrix(d,prefix,kinds)
+        kcc_options = legacy_clang_options()
         for typ in ('float','double'):
-            for field in ('long','llong'): matrix_unnamed(d,typ,field)
+            for field in ('long','llong'): matrix_unnamed(d,typ,field,kcc_options)
         (d/'formerly-unsupported.c').write_text('struct S { unsigned long x:3; }; struct S s; int main(void){return (struct S){.x=2}.x!=2;}')
         object_file(d/'formerly-unsupported.c',d/'formerly-unsupported.o','kcc'); run([HOST,d/'formerly-unsupported.o','-o',d/'formerly-unsupported']); run([d/'formerly-unsupported'])
         for source in ['struct S { long x:33; };', 'struct S { unsigned long long x:63; };',
@@ -112,6 +113,7 @@ def main():
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
-    print('long-base bit-fields 1–32 and 64: four host/KCC combinations and 924 named and 132 unnamed by-value layouts in both directions passed')
+    print('long-base bit-fields 1–32 and 64: four host/KCC combinations and 924 named and '
+          f"132 unnamed by-value layouts in both directions passed (unnamed ABI: {'legacy Clang' if kcc_options else 'default'})")
 
 if __name__=='__main__': main()

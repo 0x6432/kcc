@@ -2,7 +2,7 @@
 from pathlib import Path
 import subprocess
 import tempfile
-from test_bit_fields import ROOT, HOST, KCC, object_file, run
+from test_bit_fields import ROOT, HOST, KCC, legacy_clang_options, object_file, run
 
 DECL = r'''
 enum E { NEG=-1, ZERO=0, POS=1 }; typedef enum E ET;
@@ -60,7 +60,7 @@ def matrix(d,prefix,mode):
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
 
-def unnamed_matrix(d,typ):
+def unnamed_matrix(d,typ,kcc_options):
     decl, owner, checks = [], [], []
     for width in range(1,33):
         name=f'n{typ}_{width}'
@@ -73,7 +73,7 @@ def unnamed_matrix(d,typ):
     (d/'owner.c').write_text(text+'\n'.join(owner)+'\n')
     (d/'companion.c').write_text(text+'\nint main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
     for a,b in [('host','kcc'),('kcc','host')]:
-        object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
+        object_file(d/'owner.c',d/'owner.o',a,kcc_options); object_file(d/'companion.c',d/'companion.o',b,kcc_options)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
 
 def main():
@@ -85,7 +85,8 @@ def main():
             run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
         for mode in ('ordinary','fixed_signed','fixed_unsigned'):
             for prefix in range(1,8): matrix(d,prefix,mode)
-        for typ in ('float','double'): unnamed_matrix(d,typ)
+        kcc_options = legacy_clang_options()
+        for typ in ('float','double'): unnamed_matrix(d,typ,kcc_options)
         # The colon following an enum tag must remain a member declarator
         # when the next expanded token starts a width expression.
         direct = r'''
@@ -102,7 +103,7 @@ def main():
                    sizeof(struct S)!=8 || (char*)&g.end-(char*)&g!=4;
         }
         '''
-        (d/'direct.c').write_text(direct)
+        (d/'direct.c').write_text(direct+'\n')
         for compiler in ('host','kcc'):
             object_file(d/'direct.c',d/'direct.o',compiler)
             run([HOST,d/'direct.o','-o',d/'direct']); run([d/'direct'])
@@ -139,6 +140,8 @@ def main():
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else ('expected' if ': ;' in source else 'bit-field')
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
-    print('enum bit-fields: 288 ordinary host/KCC layouts and 448 fixed-enum/primitive-surrogate layouts in both directions passed; fixed-enum native C23 comparison unavailable')
+    print('enum bit-fields: 288 ordinary host/KCC layouts and 448 fixed-enum/primitive-surrogate layouts '
+          f"in both directions passed; unnamed ABI: {'legacy Clang' if kcc_options else 'default'}; "
+          'fixed-enum native C23 comparison unavailable')
 
 if __name__=='__main__': main()
