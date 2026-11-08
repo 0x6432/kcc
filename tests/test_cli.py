@@ -13,6 +13,8 @@ def run(arguments):
 result = run(["--help"])
 assert result.returncode == 0 and "Usage:" in result.stdout
 assert not result.stderr
+assert "[--warn-legacy-clang-abi] [--gcc12-zero-width-abi]" in result.stdout
+assert "--legacy-clang-abi file.c" in result.stdout
 result = run(["--version"])
 assert result.returncode == 0 and "kcc milestone" in result.stdout
 assert not result.stderr

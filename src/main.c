@@ -65,8 +65,10 @@ static bool parse_options(int argc, char **argv, struct driver_options *options)
 
 static void print_usage(FILE *stream)
 {
-	fputs("Usage: kcc [-I dir] [--warn-legacy-clang-abi | --legacy-clang-abi | --gcc12-zero-width-abi | --tokens | --pp-tokens] file.c | ", stream);
-	fputs("--help | --version\n", stream);
+	fputs("Usage: kcc [-I dir] [--warn-legacy-clang-abi] [--gcc12-zero-width-abi] file.c\n", stream);
+	fputs("       kcc [-I dir] --legacy-clang-abi file.c\n", stream);
+	fputs("       kcc [-I dir] (--tokens | --pp-tokens) file.c\n", stream);
+	fputs("       kcc --help | --version\n", stream);
 	fputs("Educational C23 subset compiler; output is QBE IL.\n", stream);
 }
 
