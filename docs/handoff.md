@@ -3734,7 +3734,12 @@ NO_CLASS limitation or establish the outcome of the next CI run.
 
 The revised long, enum and unnamed-aggregate tests pass locally with GCC 11 and
 Clang 18.1.8, both normally and with GCC ASan/UBSan-instrumented KCC. Other
-later Clang regression scripts passed locally except initialization promotions:
-its strict native EOF-gap oracle is intentionally pinned to CI's Clang 18.1.3,
-not local 18.1.8. The consteval regression passed after building its prerequisite.
-These local results are not a substitute for the complete CI matrix.
+later Clang regression scripts passed locally. The initialization promotions
+harness now also recognizes the independently reproduced AWS Clang 18.1.8
+missing-final-newline rejection, using its exact version, banner, source bytes,
+diagnostic and absent object. It remains a source-format gap, not an agreement;
+near-match and cross-version poison controls fail closed. With this exact oracle,
+the test passed locally with Clang 18.1.8 (25 native ELF agreements and one
+source-format gap), including an ASan/UBSan-instrumented KCC run. The consteval
+regression passed after building its prerequisite. These local results are not a
+substitute for the complete CI matrix.

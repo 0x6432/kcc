@@ -7,7 +7,7 @@ its missing-final-LF source form is a documented extension, NOT a strict-C23 run
 Actual baseline writer bytes are pinned, including whether a final LF exists.
 No keyword rewriting, synthesized main, native UB execution or permissive stderr.
 Legacy GCC's exact per-source C23 empty-brace gaps are counted NOT agreements.
-The exact observed Clang18.1.3 no-final-LF source protocol is NOT an agreement.
+The exact observed Clang 18.1.3 and AWS 18.1.8 no-final-LF source protocols are NOT agreements.
 """
 import argparse
 import ast
@@ -611,6 +611,10 @@ def exact_native_gap(case, result, source, output, clang):
 
 
 EOF_ORIGINAL = ('test_string_literals.py', 'int main(void) { char a[2]="x"; return 0; }')
+EOF_COMPILERS = (
+    ('18.1.3\n', 'Ubuntu clang version 18.1.3 (1ubuntu1)'),
+    ('18.1.8\n', 'clang version 18.1.8 (AWS 18.1.8-6.amzn2023.0.3)'),
+)
 
 
 def eof_diagnostic(source, case):
@@ -624,9 +628,9 @@ def exact_native_eof_gap(case, result, source, output, banner, version):
     return ((case.get('origin'), case.get('text')) == EOF_ORIGINAL
             and not case['source_final_newline']
             and source.read_bytes() == original_source_bytes(case)
-            and (version.returncode, version.stdout, version.stderr) == (0, '18.1.3\n', '')
+            and version.returncode == 0 and not version.stderr
             and banner.returncode == 0 and not banner.stderr and banner.stdout.endswith('\n')
-            and banner.stdout.splitlines()[0] == 'Ubuntu clang version 18.1.3 (1ubuntu1)'
+            and (version.stdout, banner.stdout.splitlines()[0]) in EOF_COMPILERS
             and result.returncode == 1 and not result.stdout and not output.exists()
             and result.stderr == eof_diagnostic(source, case))
 
@@ -640,6 +644,16 @@ def eof_gap_controls(directory):
     version = subprocess.CompletedProcess([], 0, '18.1.3\n', '')
     good = subprocess.CompletedProcess([], 1, '', eof_diagnostic(source, case))
     assert exact_native_eof_gap(case, good, source, output, banner, version)
+    aws_banner = subprocess.CompletedProcess([], 0, EOF_COMPILERS[1][1] + '\n', '')
+    aws_version = subprocess.CompletedProcess([], 0, EOF_COMPILERS[1][0], '')
+    assert exact_native_eof_gap(case, good, source, output, aws_banner, aws_version)
+    assert not exact_native_eof_gap(case, good, source, output, aws_banner, version)
+    assert not exact_native_eof_gap(case, good, source, output, banner, aws_version)
+    for text in ('18.1.8junk', '18.1.8-lookalike', '18.1.8+lookalike', '018.1.8', '18.1.8\n'):
+        assert not exact_native_eof_gap(case, good, source, output, aws_banner, subprocess.CompletedProcess([], 0, text+'\n', ''))
+    for text in ('clang version 18.1.8', 'clang version 18.1.8 (AWS 18.1.8-6.amzn2023.0.3)-lookalike',
+                 'clang version 18.1.8 (AWS 18.1.8-6.amzn2023.0.4)', ''):
+        assert not exact_native_eof_gap(case, good, source, output, subprocess.CompletedProcess([], 0, text+'\n', ''), aws_version)
     for status in (0, 2, 127, -6, -9, -11):
         assert not exact_native_eof_gap(case, subprocess.CompletedProcess([], status, '', good.stderr), source, output, banner, version)
     for out, err in [('noise', good.stderr), ('', ''), ('', good.stderr+'noise\n'),
@@ -662,7 +676,7 @@ def eof_gap_controls(directory):
     assert not exact_native_eof_gap(case, good, source, output, banner, version)
     output.unlink()
     assert not exact_native_eof_gap(dict(case, origin='test_unrelated.py'), good, source, output, banner, version)
-    print('Exact Clang18.1.3 EOF source protocol poisons passed (NOT agreement)')
+    print('Exact Clang EOF source protocol poisons passed (NOT agreements)')
 
 
 def il_layout(text, case):
