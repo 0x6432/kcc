@@ -62,6 +62,29 @@ if(pressure(1,1,1,1,1,1,1,1,1,1,1,1,1,1,x,5,z,6)!=35) return 2; return 0; }}'''
         caller = ('union S f(union S); int main(void){ union S s={0}; s.x.data[0]=4; s.x.end=7; '
                   'union S r=f(s); return sizeof(s)!=64 || r.x.data[0]!=5 || r.x.end!=8 || s.x.end!=7; }')
         pair(d,decl,body,caller)
+        # Batch mixed named fields, floating members and varied padding, so the
+        # MEMORY path is exercised with more than byte arrays around a barrier.
+        declarations, definitions, checks = ['enum E { V=1 };'], [], []
+        for i, (typ, n) in enumerate((typ, n) for typ in
+                                     ('unsigned', 'unsigned char', 'unsigned short',
+                                      'unsigned long', '_Bool', 'enum E')
+                                     for n in (1, 3, 8, 16, 24, 32)):
+            declarations += [f'struct M{i} {{ unsigned v:3; {typ} :0; double d; int x; char pad[{n}]; }};',
+                             f'struct M{i} m{i}(struct M{i});']
+            definitions += [f'struct M{i} m{i}(struct M{i} s){{s.v=5; s.d+=2; s.x++; return s;}}']
+            checks += [f'struct M{i} x{i}={{0}}; x{i}.v=3; x{i}.d=1.5; x{i}.x=8; x{i}.pad[{n-1}]=9;',
+                       f'struct M{i} r{i}=m{i}(x{i});',
+                       f'if(sizeof(x{i})<=16 || sizeof(x{i})>64 || r{i}.v!=5 || r{i}.d!=3.5 || '
+                       f'r{i}.x!=9 || r{i}.pad[{n-1}]!=9 || x{i}.v!=3 || x{i}.x!=8) return 1;']
+        text='\n'.join(declarations)+'\n'
+        (d/'owner.c').write_text(text+'\n'.join(definitions)+'\n')
+        (d/'companion.c').write_text(text+'int main(void){\n'+'\n'.join(checks)+'\nreturn 0;}\n')
+        for options in ((), ('--legacy-clang-abi',)):
+            for a, b in (('host','kcc'), ('kcc','host')):
+                object_file(d/'owner.c', d/'owner.o', a, options)
+                object_file(d/'companion.c', d/'companion.o', b, options)
+                run([HOST, d/'owner.o', d/'companion.o', '-o', d/'test'])
+                run([d/'test'])
         # Small register-class barriers and bit-precise members remain rejected.
         for src in ('struct S { float a; unsigned :0; float b; }; struct S f(struct S x){return x;}',
                     'struct S { char a[12]; unsigned :0; int x; }; struct S f(struct S x){return x;}',
@@ -71,7 +94,7 @@ if(pressure(1,1,1,1,1,1,1,1,1,1,1,1,1,1,x,5,z,6)!=35) return 2; return 0; }}'''
             for options in ((), ('--legacy-clang-abi',)):
                 p = subprocess.run([str(KCC), *options, str(d/'reject.c')], capture_output=True, text=True, timeout=15)
                 assert p.returncode == 1 and not p.stdout and 'aggregate ABI unsupported' in p.stderr, (src, options, p.stderr)
-    print('zero-width MEMORY aggregate ABI: original, variadic and 33 pressure/nested/union shapes, four combinations in both modes passed')
+    print('zero-width MEMORY aggregate ABI: original, variadic and 33 pressure/nested/union shapes, four combinations in both modes and 36 mixed layouts in both directions passed')
 
 
 if __name__=='__main__': main()

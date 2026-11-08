@@ -94,7 +94,8 @@ a MEMORY-class record and register pressure. See the commit
 handoff for exact commands and results. `tests/test_zero_width_memory_abi.py`
 checks 35 zero-width-barrier MEMORY cases, including indirect calls, stack and
 register pressure, nested arrays, unions, and a fixed variadic parameter, in
-four host/KCC combinations and both KCC ABI modes. Register-class barriers,
+four host/KCC combinations and both KCC ABI modes. A further 36 mixed-field
+layouts are checked in both directions and modes. Register-class barriers,
 bit-precise members and records above 64 bytes remain rejected.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

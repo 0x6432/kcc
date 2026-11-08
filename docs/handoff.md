@@ -3767,8 +3767,9 @@ members and other unsupported cases. The original formerly rejected MEMORY
 example is retained and tested by value. Focused GCC 11 and Clang 18.1.8
 interop checks exercised both KCC ABI modes, four host/KCC combinations,
 31 barrier-type/size pressure shapes, nested arrays, unions, variadic fixed
-parameters and boundary rejections. This does not establish general zero-width
-register ABI support or complete target coverage.
+parameters and boundary rejections. A separate 36-layout mixed-field matrix
+also passed in both directions and ABI modes. This does not establish general
+zero-width register ABI support or complete target coverage.
 
 An isolated prototype of long bit-field widths 33–63 was not integrated:
 GCC 11 and Clang 18.1.8 differ on the type of `+` applied to such fields and
