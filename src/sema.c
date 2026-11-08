@@ -80,6 +80,7 @@ struct label_binding {
 struct sema {
 	struct arena *arena;
 	struct diagnostics *diagnostics;
+	bool warn_legacy_clang_abi;
 	struct ast_function *function;
 	struct scope *scope;
 	struct tag_binding *file_tags;
@@ -309,14 +310,45 @@ static bool reserve_aggregate_abi_storage(struct sema *sema, const struct type *
 	return true;
 }
 
+/* A conservative warning, not a second ABI classifier. Older Clang versions
+ * may disagree with GCC about nonzero unnamed fields, including nested array,
+ * struct and union members. Pointers do not pass their referents by value.
+ * Bound the walk for shared type DAGs; exhaustion warns rather than claiming
+ * compatibility. Existing by-value ABI validation runs before this walk. */
+static bool may_differ_from_legacy_clang(const struct type *type, unsigned depth, size_t *budget)
+{
+	if (depth > 128 || !*budget) return true;
+	--*budget;
+	if (type->kind == type_kind_array)
+		return may_differ_from_legacy_clang(((const struct array_type *)type)->element, depth + 1, budget);
+	if (type_is_record(type)) {
+		const struct record_definition *record = type_record_definition(type);
+		for (const struct record_member *member = record->members; member; member = member->next) {
+			if (member->is_bit_field && !member->name.length && member->bit_width)
+				return true;
+			if (may_differ_from_legacy_clang(member->type, depth + 1, budget))
+				return true;
+		}
+	}
+	return false;
+}
+
 static bool check_aggregate_abi(struct sema *sema, const struct type *type,
 	struct source_location location)
 {
 	struct aggregate_abi abi;
-	if (type_aggregate_abi(type, &abi)) return true;
-	diagnostic_error(sema->diagnostics, location,
-		"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes");
-	return false;
+	if (!type_aggregate_abi(type, &abi)) {
+		diagnostic_error(sema->diagnostics, location,
+			"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes");
+		return false;
+	}
+	if (sema->warn_legacy_clang_abi) {
+		size_t budget = 65536;
+		if (may_differ_from_legacy_clang(type, 0, &budget))
+			diagnostic_warning(sema->diagnostics, location,
+				"aggregate with unnamed bit-field may be incompatible with legacy Clang x86-64 ABI");
+	}
+	return true;
 }
 
 static bool sema_expression(struct sema *sema,
@@ -7010,12 +7042,13 @@ static bool finalize_tentative_objects(struct sema *sema)
 	return true;
 }
 
-bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
-	struct diagnostics *diagnostics)
+bool sema_translation_unit_with_options(struct ast_translation_unit *unit, struct arena *arena,
+	struct diagnostics *diagnostics, const struct sema_options *options)
 {
 	struct sema sema = {
 		.arena = arena,
 		.diagnostics = diagnostics,
+		.warn_legacy_clang_abi = options && options->warn_legacy_clang_abi,
 		.string_tail = &unit->strings,
 		.static_tail = &unit->static_declarations,
 	};
@@ -7096,4 +7129,11 @@ bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *aren
 		}
 	}
 	return finalize_tentative_objects(&sema);
+}
+
+/* Preserve the default API used by existing embedders and tests. */
+bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
+	struct diagnostics *diagnostics)
+{
+	return sema_translation_unit_with_options(unit, arena, diagnostics, NULL);
 }

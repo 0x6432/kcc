@@ -27,7 +27,11 @@ see `docs/m21-aggregate-abi.md` for exact limits. Bounded named and unnamed int,
 are supported as described in `docs/m22-bit-fields.md`. For by-value aggregates
 containing nonzero unnamed bit-fields, KCC follows the GCC x86-64 ABI; older
 Clang releases (including 18.1) can use a different calling convention, so do
-not mix those aggregates across KCC and those Clang versions. Aggregate variadic
+not mix those aggregates across KCC and those Clang versions. Compile with
+`--warn-legacy-clang-abi` to flag potentially affected by-value definitions
+and evaluated calls. This conservative warning does not change code generation
+or prove compatibility; declarations without a call or definition are not
+checked. Aggregate variadic
 arguments, general bit-fields, full C23 types and the complete standard library
 remain unsupported. Recent integrated changes have been built but have not been
 fully tested. M17 approval and ISO C23 conformance are not claimed.

@@ -62,7 +62,14 @@ struct function_symbol {
 	struct function_symbol *next;
 };
 
-/* Run once on a freshly parsed unit. Arena owns inserted conversion nodes. */
+struct sema_options {
+	bool warn_legacy_clang_abi;
+};
+
+/* Run once on a freshly parsed unit. Arena owns inserted conversion nodes.
+ * A NULL options pointer selects the default, GCC-compatible target behavior. */
+bool sema_translation_unit_with_options(struct ast_translation_unit *unit, struct arena *arena,
+	struct diagnostics *diagnostics, const struct sema_options *options);
 bool sema_translation_unit(struct ast_translation_unit *unit, struct arena *arena,
 	struct diagnostics *diagnostics);
 

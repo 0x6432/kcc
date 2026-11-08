@@ -16,6 +16,7 @@ struct driver_options {
 	const char *directories[preprocess_include_directory_limit];
 	size_t directory_count;
 	enum driver_mode mode;
+	bool warn_legacy_clang_abi;
 };
 
 static bool parse_options(int argc, char **argv, struct driver_options *options)
@@ -37,6 +38,8 @@ static bool parse_options(int argc, char **argv, struct driver_options *options)
 			if (options->directory_count == preprocess_include_directory_limit)
 				return false;
 			options->directories[options->directory_count++] = directory;
+		} else if (strcmp(argument, "--warn-legacy-clang-abi") == 0) {
+			options->warn_legacy_clang_abi = true;
 		} else if (strcmp(argument, "--tokens") == 0 || strcmp(argument, "--pp-tokens") == 0) {
 			if (has_mode)
 				return false;
@@ -48,12 +51,13 @@ static bool parse_options(int argc, char **argv, struct driver_options *options)
 			options->source = argument;
 		}
 	}
-	return options->source != NULL;
+	return options->source != NULL &&
+		(!options->warn_legacy_clang_abi || options->mode == driver_compile);
 }
 
 static void print_usage(FILE *stream)
 {
-	fputs("Usage: kcc [-I dir] [--tokens | --pp-tokens] file.c | ", stream);
+	fputs("Usage: kcc [-I dir] [--warn-legacy-clang-abi | --tokens | --pp-tokens] file.c | ", stream);
 	fputs("--help | --version\n", stream);
 	fputs("Educational C23 subset compiler; output is QBE IL.\n", stream);
 }
@@ -163,7 +167,10 @@ static int compile_source(const struct driver_options *options)
 		return 1;
 	}
 	unit = parse_translation_unit(&preprocessor, &arena, &diagnostics);
-	if (unit && sema_translation_unit(unit, &arena, &diagnostics) &&
+	const struct sema_options sema_options = {
+		.warn_legacy_clang_abi = options->warn_legacy_clang_abi,
+	};
+	if (unit && sema_translation_unit_with_options(unit, &arena, &diagnostics, &sema_options) &&
 		diagnostics.errors == 0) {
 		success = codegen_translation_unit(stdout, unit);
 		if (!success)

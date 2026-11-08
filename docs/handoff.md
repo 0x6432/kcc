@@ -3688,3 +3688,17 @@ checks; it is not substituted for the original agreement. The classification
 requires the exact source hash, Clang 18.1 version, output and result, the
 split diagnostic, and the supplemental variant; all other failures remain
 fatal. No C conformance conclusion about that disputed expression is claimed.
+
+An opt-in `--warn-legacy-clang-abi` driver option now warns conservatively at
+function definitions and evaluated calls involving by-value aggregates with
+nonzero unnamed bit-fields, including nested arrays/records. It does not change
+the GCC-compatible ABI or generated QBE, does not inspect pointer referents or
+unused prototypes, and does not prove that unflagged code is interoperable.
+Recursion is bounded and a budget exhaustion warns conservatively. Existing
+unsupported aggregate diagnostics remain errors. Regression fixtures compare
+QBE output with and without the option and exercise direct, nested, union,
+call, named-field, pointer, prototype, token-mode and rejection cases.
+Focused validation: the warning test passes with local GCC 11 and Clang 18.1.8
+linkers using normal and GCC ASan/UBSan-instrumented KCC; the GCC aggregate ABI
+regression also passes with the instrumented compiler. Full exact-source
+regression results and remote CI must be reported separately.

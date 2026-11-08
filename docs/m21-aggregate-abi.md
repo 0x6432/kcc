@@ -51,6 +51,14 @@ value, including nested and MEMORY-class records: the available GCC 11 host
 passed a float/zero-width/float record differently from a classifier ignoring
 the zero-width field. Pointer-based interoperation remains supported.
 
+`--warn-legacy-clang-abi` conservatively warns at evaluated calls and function
+definitions whose by-value record contains a nonzero unnamed bit-field, even
+when nested inside arrays, structs or unions. It does not follow pointers or
+check unused prototypes, and may warn for layouts that happen to agree. The
+option changes no target ABI, emitted QBE or success status; the absence of a
+warning is not a general interoperability guarantee. Records rejected by the
+existing ABI rules are still rejected. Token-dump modes cannot use the option.
+
 ## Focused validation and remaining gates
 
 `tests/test_aggregate_abi.py` links separately compiled GCC and kcc objects in
