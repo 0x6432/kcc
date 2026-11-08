@@ -113,8 +113,10 @@ layout, unions, flexible arrays, small and memory-class aggregate calls,
 both host/KCC pointer-interoperation directions; bounded 17–64-byte MEMORY-class
 aggregates containing zero-width barriers are supported by value. Register-class
 aggregates with barriers are supported when their recursively contained by-value
-members have no floating types, subject to the existing ABI limits; mixed
-floating/barrier register records remain rejected. Nonzero unnamed
+members have no floating types, subject to the existing ABI limits; floating
+register records with barriers are supported only when every barrier is at an
+effective eightbyte offset. Other mixed floating/barrier register records remain
+rejected. Nonzero unnamed
 fields are supported by the bounded aggregate ABI. KCC uses GCC's x86-64 classification for nonzero unnamed bit-fields.
 Clang 18.1 uses a different classification: mixed KCC/Clang by-value calls can
 produce incorrect results even when each compiler's self-calls work. Do not

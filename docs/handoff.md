@@ -76,9 +76,9 @@ and zero-width barriers, with 231 GCC/KCC pointer-layout combinations in both
 directions. Nonzero unnamed fields are supported in bounded by-value aggregates
 after 288 floating/mixed host interoperability cases in both directions; records
 containing zero-width barriers are supported by value in bounded MEMORY records
-and integer-only register records; mixed floating/barrier register records remain
-rejected because a float/zero-width/float host case disagreed with the initial
-classifier. Named bit-fields
+and integer-only register records, plus floating register records whose barriers
+all lie on effective eightbyte boundaries. Other floating/barrier register records
+remain rejected because a host case disagreed with the initial classifier. Named bit-fields
 with unaligned byte offsets now have bounded aggregate-by-value classification;
 448 signed and unsigned layouts passed the GCC/KCC cross-call matrix in both
 directions. Named and unnamed boolean bit-fields now support width 1, with
@@ -3800,3 +3800,10 @@ The new regression covers 504 layouts in both host/KCC directions and both ABI
 modes, plus register pressure, fixed variadic parameters, nested arrays, unions,
 pointers and refusal boundaries. GCC 11 and Clang 18.1 focused checks passed;
 this evidence is not a full ABI or CI validation.
+
+A subsequent reconstructed subset accepts floating register-class aggregates
+with zero-width barriers only when each effective barrier offset is eightbyte
+aligned, including through nested records, arrays and unions. The regression
+matrix checks accepted and refused layouts in both ABI modes and host/KCC
+directions, including register pressure and a fixed variadic parameter. This
+remains a conservative boundary, not general zero-width ABI support.

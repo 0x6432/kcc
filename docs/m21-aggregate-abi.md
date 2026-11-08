@@ -49,8 +49,10 @@ Nonzero unnamed int, short, char, boolean, supported long-base and int-compatibl
 bits. Register-class records containing zero-width barriers are supported by
 value when their recursively contained by-value members have no floating types,
 subject to the existing size, alignment and representability limits. Pointers
-do not count their referents. Floating members combined with barriers remain
-rejected in register-class records: GCC 11 can pass a float/zero-width/float
+do not count their referents. Register-class records combining floating members
+and barriers are supported only when every barrier's effective offset (including
+nested arrays and unions) is an eightbyte boundary. Other floating/barrier
+register records remain rejected: GCC 11 can pass a float/zero-width/float
 record differently from a classifier ignoring the barrier. Bounded 17–64-byte
 MEMORY-class records can contain barriers, including nested and union members;
 the backend uses the whole object's size and alignment. Bit-precise members
@@ -100,7 +102,10 @@ four host/KCC combinations and both KCC ABI modes. A further 36 mixed-field
 layouts are checked in both directions and modes. `tests/test_zero_width_integer_abi.py`
 checks 504 integer-only register layouts in both directions and modes, plus
 register pressure, fixed variadic parameters, nested records, unions and
-rejection boundaries. Floating/barrier register records, bit-precise members
-and records above 64 bytes remain rejected.
+rejection boundaries. `tests/test_zero_width_aligned_float_abi.py` checks 75
+register and 106 MEMORY layouts in both modes and directions, 35 refused
+unaligned cases, and unnamed-field, nested, union and pressure interactions.
+Register records with unaligned effective barriers and floating members,
+bit-precise members and records above 64 bytes remain rejected.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

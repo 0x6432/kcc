@@ -848,6 +848,34 @@ static bool aggregate_unverified(const struct type *type, unsigned depth,
 	return false;
 }
 
+/* A floating register-class record is only accepted when every zero-width
+ * separator lies on an eightbyte boundary at its effective offset. Local host
+ * classifiers disagree for other offsets. Traverse arrays and union members
+ * rather than assuming their nested offsets are relative to the outer record. */
+static bool aggregate_barriers_at_eightbytes(const struct type *type, uint64_t offset,
+	unsigned depth, size_t *budget)
+{
+	if (depth > 128 || !*budget) return false;
+	--*budget;
+	if (type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+		if (!array->count || array->count > 16) return false;
+		uint64_t stride = type_object_size(array->element);
+		for (uint64_t i = 0; i < array->count; i++)
+			if (!aggregate_barriers_at_eightbytes(array->element, offset + i * stride,
+				depth + 1, budget)) return false;
+	} else if (type_is_record(type)) {
+		const struct record_definition *record = type_record_definition(type);
+		for (const struct record_member *member = record->members; member; member = member->next) {
+			if (member->is_bit_field && !member->bit_width && (offset + member->offset) % 8)
+				return false;
+			if (!aggregate_barriers_at_eightbytes(member->type, offset + member->offset,
+				depth + 1, budget)) return false;
+		}
+	}
+	return true;
+}
+
 /* Classify only actual subobjects, never padding. Union alternatives merge at
  * their real offsets. The caller bounds the walk to a <=16-byte object. */
 static bool classify_aggregate_part(const struct type *type, uint64_t offset,
@@ -910,7 +938,10 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 	size_t member_budget = 65536;
 	bool barrier = false, floating = false;
 	if (aggregate_unverified(type, 0, &member_budget, &barrier, &floating)) return false;
-	if (size <= 16 && barrier && floating) return false;
+	if (size <= 16 && barrier && floating) {
+		size_t budget = 65536;
+		if (!aggregate_barriers_at_eightbytes(type, 0, 0, &budget)) return false;
+	}
 	abi->size = (unsigned)size;
 	abi->alignment = alignment;
 	if (size > 16) return true; /* QBE opaque MEMORY type. */
