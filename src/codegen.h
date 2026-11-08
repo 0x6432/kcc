@@ -3,7 +3,14 @@
 
 #include "ast.h"
 
-/* Only call after successful sema. False means output I/O failed. */
+struct codegen_options {
+	bool legacy_clang_abi;
+};
+
+/* Options must match successful sema. False means output I/O failed. */
+bool codegen_translation_unit_with_options(FILE *stream, const struct ast_translation_unit *unit,
+	const struct codegen_options *options);
+/* Default API uses the GCC-compatible target. */
 bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit);
 
 #endif

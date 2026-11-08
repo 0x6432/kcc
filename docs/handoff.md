@@ -3702,3 +3702,20 @@ Focused validation: the warning test passes with local GCC 11 and Clang 18.1.8
 linkers using normal and GCC ASan/UBSan-instrumented KCC; the GCC aggregate ABI
 regression also passes with the instrumented compiler. Full exact-source
 regression results and remote CI must be reported separately.
+
+The opt-in `--legacy-clang-abi` mode classifies nonzero unnamed bit-fields as
+padding for by-value x86-64 aggregates, matching the observed older Clang 18.1
+convention where QBE 1.2 can represent every eightbyte. NO_CLASS register
+chunks remain rejected; the default GCC-compatible ABI and object layout are
+unchanged. The mode must be used consistently across affected KCC translation
+units and is mutually exclusive with the default-ABI warning option.
+
+Focused validation with local GCC 11 and Clang 18.1.8 covered four native/KCC
+combinations, floating/union/nested/MEMORY returns and register exhaustion;
+310 original bool, char, short, int, enum and long-base unnamed-field layouts
+passed in both Clang/KCC directions. Separate leading and trailing NO_CLASS and
+evaluated-call cases were rejected; pointer-only use was accepted. The expanded
+matrix passed with GCC-built, Clang-built and GCC ASan/UBSan-instrumented KCC;
+the existing default GCC aggregate/long/enum/narrow bit-field regressions and
+type/sema units also passed. These checks are bounded, not a full cross-compiler
+ABI guarantee. Full suites and remote CI are separate validation gates.

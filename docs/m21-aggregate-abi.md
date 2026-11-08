@@ -51,6 +51,18 @@ value, including nested and MEMORY-class records: the available GCC 11 host
 passed a float/zero-width/float record differently from a classifier ignoring
 the zero-width field. Pointer-based interoperation remains supported.
 
+`--legacy-clang-abi` opts into the older Clang x86-64 behavior that ignores
+nonzero unnamed bit-fields during aggregate classification. This affects by-value
+arguments and returns, including nested records; object layout is unchanged.
+Use the option consistently on all KCC translation units that share affected
+interfaces and only with a native compiler known to use this older convention.
+The default continues to classify those fields like GCC. The mode is bounded by
+the same size, alignment and type restrictions as the default. In particular,
+QBE 1.2 cannot represent a NO_CLASS register eightbyte; such layouts are rejected
+rather than given a fabricated register class. Pointer-only access is unaffected.
+The mode and `--warn-legacy-clang-abi` are mutually exclusive, and neither is
+accepted in token-dump modes. This is not general Clang ABI coverage.
+
 `--warn-legacy-clang-abi` conservatively warns at evaluated calls and function
 definitions whose by-value record contains a nonzero unnamed bit-field, even
 when nested inside arrays, structs or unions. It does not follow pointers or

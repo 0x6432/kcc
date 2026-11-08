@@ -847,7 +847,7 @@ static bool aggregate_has_unverified_members(const struct type *type, unsigned d
 /* Classify only actual subobjects, never padding. Union alternatives merge at
  * their real offsets. The caller bounds the walk to a <=16-byte object. */
 static bool classify_aggregate_part(const struct type *type, uint64_t offset,
-	enum aggregate_abi_class classes[2], unsigned depth)
+	enum aggregate_abi_class classes[2], unsigned depth, bool legacy_clang_abi)
 {
 	if (depth > 128) return false;
 	if (type->kind == type_kind_array) {
@@ -855,7 +855,7 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 		uint64_t stride = type_object_size(array->element);
 		if (!array->count || !stride || array->count > 16) return false;
 		for (uint64_t i = 0; i < array->count; i++)
-			if (!classify_aggregate_part(array->element, offset + i * stride, classes, depth + 1))
+			if (!classify_aggregate_part(array->element, offset + i * stride, classes, depth + 1, legacy_clang_abi))
 				return false;
 		return true;
 	}
@@ -864,6 +864,10 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 		if (!record->complete || record->has_flexible_array) return false;
 		for (const struct record_member *member = record->members; member; member = member->next) {
 			if (member->is_bit_field) {
+				/* Clang's older x86-64 classifier treated unnamed fields
+				 * as padding. Do not apply this rule in the default ABI. */
+				if (legacy_clang_abi && !member->name.length)
+					continue;
 				/* A bit-field occupies only its actual bits, not a
 				 * base-type-sized scalar at its byte offset. */
 				uint64_t start = offset + member->offset;
@@ -874,7 +878,7 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 					return false;
 				for (uint64_t i = start / 8; i <= (start + bytes - 1) / 8; i++)
 					classes[i] = aggregate_abi_integer;
-			} else if (!classify_aggregate_part(member->type, offset + member->offset, classes, depth + 1))
+			} else if (!classify_aggregate_part(member->type, offset + member->offset, classes, depth + 1, legacy_clang_abi))
 				return false;
 		}
 		return true;
@@ -890,7 +894,8 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 	return true;
 }
 
-bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
+bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *abi,
+	bool legacy_clang_abi)
 {
 	*abi = (struct aggregate_abi) {0};
 	if (!type_is_record(type) || !type_is_complete_object(type) ||
@@ -903,7 +908,7 @@ bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
 	abi->size = (unsigned)size;
 	abi->alignment = alignment;
 	if (size > 16) return true; /* QBE opaque MEMORY type. */
-	if (!classify_aggregate_part(type, 0, abi->classes, 0)) return false;
+	if (!classify_aggregate_part(type, 0, abi->classes, 0, legacy_clang_abi)) return false;
 	/* QBE cannot represent a NO_CLASS eightbyte in its register lowering.
 	 * SSE chunks must have a whole number of four-byte fields. */
 	for (unsigned i = 0; i < (size + 7) / 8; i++) {
@@ -912,4 +917,10 @@ bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
 			(abi->classes[i] == aggregate_abi_sse && bytes % 4)) return false;
 	}
 	return true;
+}
+
+/* Existing users retain the GCC-compatible target unless they select a mode. */
+bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
+{
+	return type_aggregate_abi_for_mode(type, abi, false);
 }

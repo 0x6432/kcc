@@ -64,6 +64,7 @@ struct function_symbol {
 
 struct sema_options {
 	bool warn_legacy_clang_abi;
+	bool legacy_clang_abi;
 };
 
 /* Run once on a freshly parsed unit. Arena owns inserted conversion nodes.

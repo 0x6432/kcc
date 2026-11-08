@@ -14,6 +14,7 @@ struct control_codegen {
 };
 
 struct abi_registry {
+	bool legacy_clang_abi;
 	bool used[type_max_abi_record_size + 1][9][aggregate_abi_sse + 1][aggregate_abi_sse + 1];
 };
 
@@ -76,7 +77,7 @@ static void emit_abi_type(struct codegen *codegen, const struct type *type)
 		return;
 	}
 	struct aggregate_abi abi;
-	bool valid = type_aggregate_abi(type, &abi);
+	bool valid = type_aggregate_abi_for_mode(type, &abi, codegen->abi->legacy_clang_abi);
 	assert(valid && codegen->abi);
 	(void)valid;
 	codegen->abi->used[abi.size][abi.alignment][abi.classes[0]][abi.classes[1]] = true;
@@ -2389,9 +2390,10 @@ static bool codegen_translation_unit_body(FILE *stream, const struct ast_transla
 /* QBE requires aggregate types before any use. Generate the translation unit
  * once into a temporary stream while collecting ABI shapes, then emit the
  * small, deduplicated type prelude followed by the unchanged body. */
-bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
+bool codegen_translation_unit_with_options(FILE *stream, const struct ast_translation_unit *unit,
+	const struct codegen_options *options)
 {
-	struct abi_registry abi = {0};
+	struct abi_registry abi = { .legacy_clang_abi = options && options->legacy_clang_abi };
 	FILE *body = tmpfile();
 	if (!body) return false;
 	bool ok = codegen_translation_unit_body(body, unit, &abi);
@@ -2422,4 +2424,9 @@ bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *u
 	}
 	if (fclose(body) != 0 || fflush(stream) != 0) ok = false;
 	return ok;
+}
+
+bool codegen_translation_unit(FILE *stream, const struct ast_translation_unit *unit)
+{
+	return codegen_translation_unit_with_options(stream, unit, NULL);
 }

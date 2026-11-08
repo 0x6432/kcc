@@ -81,6 +81,7 @@ struct sema {
 	struct arena *arena;
 	struct diagnostics *diagnostics;
 	bool warn_legacy_clang_abi;
+	bool legacy_clang_abi;
 	struct ast_function *function;
 	struct scope *scope;
 	struct tag_binding *file_tags;
@@ -337,8 +338,10 @@ static bool check_aggregate_abi(struct sema *sema, const struct type *type,
 	struct source_location location)
 {
 	struct aggregate_abi abi;
-	if (!type_aggregate_abi(type, &abi)) {
+	if (!type_aggregate_abi_for_mode(type, &abi, sema->legacy_clang_abi)) {
 		diagnostic_error(sema->diagnostics, location,
+			sema->legacy_clang_abi ?
+			"aggregate ABI unsupported (M21, legacy Clang mode): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes" :
 			"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes");
 		return false;
 	}
@@ -7049,6 +7052,7 @@ bool sema_translation_unit_with_options(struct ast_translation_unit *unit, struc
 		.arena = arena,
 		.diagnostics = diagnostics,
 		.warn_legacy_clang_abi = options && options->warn_legacy_clang_abi,
+		.legacy_clang_abi = options && options->legacy_clang_abi,
 		.string_tail = &unit->strings,
 		.static_tail = &unit->static_declarations,
 	};
