@@ -18,6 +18,7 @@ struct driver_options {
 	enum driver_mode mode;
 	bool warn_legacy_clang_abi;
 	bool legacy_clang_abi;
+	bool gcc12_zero_width_abi;
 };
 
 static bool parse_options(int argc, char **argv, struct driver_options *options)
@@ -41,6 +42,8 @@ static bool parse_options(int argc, char **argv, struct driver_options *options)
 			options->directories[options->directory_count++] = directory;
 		} else if (strcmp(argument, "--legacy-clang-abi") == 0) {
 			options->legacy_clang_abi = true;
+		} else if (strcmp(argument, "--gcc12-zero-width-abi") == 0) {
+			options->gcc12_zero_width_abi = true;
 		} else if (strcmp(argument, "--warn-legacy-clang-abi") == 0) {
 			options->warn_legacy_clang_abi = true;
 		} else if (strcmp(argument, "--tokens") == 0 || strcmp(argument, "--pp-tokens") == 0) {
@@ -55,13 +58,14 @@ static bool parse_options(int argc, char **argv, struct driver_options *options)
 		}
 	}
 	return options->source != NULL &&
-		(!(options->warn_legacy_clang_abi || options->legacy_clang_abi) || options->mode == driver_compile) &&
-		!(options->warn_legacy_clang_abi && options->legacy_clang_abi);
+		(!(options->warn_legacy_clang_abi || options->legacy_clang_abi || options->gcc12_zero_width_abi) || options->mode == driver_compile) &&
+		!(options->warn_legacy_clang_abi && options->legacy_clang_abi) &&
+		!(options->legacy_clang_abi && options->gcc12_zero_width_abi);
 }
 
 static void print_usage(FILE *stream)
 {
-	fputs("Usage: kcc [-I dir] [--warn-legacy-clang-abi | --legacy-clang-abi | --tokens | --pp-tokens] file.c | ", stream);
+	fputs("Usage: kcc [-I dir] [--warn-legacy-clang-abi | --legacy-clang-abi | --gcc12-zero-width-abi | --tokens | --pp-tokens] file.c | ", stream);
 	fputs("--help | --version\n", stream);
 	fputs("Educational C23 subset compiler; output is QBE IL.\n", stream);
 }
@@ -174,8 +178,10 @@ static int compile_source(const struct driver_options *options)
 	const struct sema_options sema_options = {
 		.warn_legacy_clang_abi = options->warn_legacy_clang_abi,
 		.legacy_clang_abi = options->legacy_clang_abi,
+		.gcc12_zero_width_abi = options->gcc12_zero_width_abi,
 	};
-	const struct codegen_options codegen_options = { .legacy_clang_abi = options->legacy_clang_abi };
+	const struct codegen_options codegen_options = { .legacy_clang_abi = options->legacy_clang_abi,
+		.gcc12_zero_width_abi = options->gcc12_zero_width_abi };
 	if (unit && sema_translation_unit_with_options(unit, &arena, &diagnostics, &sema_options) &&
 		diagnostics.errors == 0) {
 		success = codegen_translation_unit_with_options(stdout, unit, &codegen_options);

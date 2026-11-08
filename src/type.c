@@ -927,9 +927,10 @@ static bool classify_aggregate_part(const struct type *type, uint64_t offset,
 }
 
 bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *abi,
-	bool legacy_clang_abi)
+	bool legacy_clang_abi, bool gcc12_zero_width_abi)
 {
 	*abi = (struct aggregate_abi) {0};
+	if (legacy_clang_abi && gcc12_zero_width_abi) return false;
 	if (!type_is_record(type) || !type_is_complete_object(type) ||
 		type_record_definition(type)->has_flexible_array) return false;
 	uint64_t size = type_object_size(type);
@@ -938,7 +939,7 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 	size_t member_budget = 65536;
 	bool barrier = false, floating = false;
 	if (aggregate_unverified(type, 0, &member_budget, &barrier, &floating)) return false;
-	if (size <= 16 && barrier && floating && !legacy_clang_abi) {
+	if (size <= 16 && barrier && floating && !legacy_clang_abi && !gcc12_zero_width_abi) {
 		size_t budget = 65536;
 		if (!aggregate_barriers_at_eightbytes(type, 0, 0, &budget)) return false;
 	}
@@ -959,5 +960,5 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 /* Existing users retain the GCC-compatible target unless they select a mode. */
 bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi)
 {
-	return type_aggregate_abi_for_mode(type, abi, false);
+	return type_aggregate_abi_for_mode(type, abi, false, false);
 }

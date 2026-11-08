@@ -3823,3 +3823,13 @@ The legacy floating-barrier regression is expanded with 480 deterministic
 nested record, array and union layouts; 240 contain named bit-fields. Optimized
 Clang 18.1 cross-calls pass in both directions, and a GCC-hosted run checks KCC
 self-calls without claiming GCC/legacy-Clang ABI agreement.
+
+A reconstructed `--gcc12-zero-width-abi` mode opts into the GCC 12+ behavior
+for zero-width separators in floating register-class aggregates. It preserves
+GCC classification for nonzero unnamed fields, rejects combination with the
+legacy Clang mode, keeps existing QBE/type limits, and does not alter the
+default ABI. GCC 14 optimized cross-object tests cover 216 separator, 119
+unnamed-field and 480 nested layouts plus pressure, fixed variadic and CLI
+boundaries. GCC 11 and Clang hosts run self-calls only for this mode; their
+results are not counted as GCC 12+ cross-compiler agreement. These focused
+checks do not establish complete ABI coverage or a full CI result.

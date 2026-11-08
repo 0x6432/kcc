@@ -62,8 +62,8 @@ remain rejected. Pointer-based interoperation remains supported.
 nonzero unnamed bit-fields and zero-width separators during aggregate
 classification. This affects by-value arguments and returns, including nested
 records; object layout is unchanged. Floating records with off-eightbyte barriers
-remain rejected in the default ABI and can only use legacy mode with a host known
-to follow that older Clang convention.
+remain rejected in the default ABI and can use an explicit mode only with a host
+known to follow the selected convention.
 Use the option consistently on all KCC translation units that share affected
 interfaces and only with a native compiler known to use this older convention.
 The default continues to classify those fields like GCC. The mode is bounded by
@@ -72,6 +72,16 @@ QBE 1.2 cannot represent a NO_CLASS register eightbyte; such layouts are rejecte
 rather than given a fabricated register class. Pointer-only access is unaffected.
 The mode and `--warn-legacy-clang-abi` are mutually exclusive, and neither is
 accepted in token-dump modes. This is not general Clang ABI coverage.
+
+`--gcc12-zero-width-abi` is a separate opt-in for GCC 12+ zero-width separator
+classification. GCC 11 and GCC 12+ differ for some floating/barrier records;
+the default remains the conservative GCC 11-compatible subset and is never
+silently switched based on the build or host compiler. Use the new mode for all
+KCC objects sharing affected by-value interfaces with a compatible GCC 12+ host.
+Unlike legacy Clang mode, it retains GCC's classification of nonzero unnamed
+fields. The two ABI modes are mutually exclusive, and neither works in token-dump
+modes. Existing size, alignment, bit-precise and QBE representability limits
+still apply. Layout and pointer-only use are unchanged.
 
 `--warn-legacy-clang-abi` conservatively warns at evaluated calls and function
 definitions whose by-value record contains a nonzero unnamed bit-field, even
@@ -112,7 +122,10 @@ unaligned cases, and unnamed-field, nested, union and pressure interactions.
 unnamed-field layouts, 480 deterministic nested record/array/union layouts
 (including 240 with named fields), pressure, fixed variadic arguments
 and NO_CLASS refusal. Clang 18.1 cross-calls run only when that host is available;
-other hosts run self-calls. In the default ABI, register records with unaligned
+other hosts run self-calls. `tests/test_zero_width_gcc12_abi.py` runs the same
+216 separator, 119 unnamed-field and 480 nested layouts in GCC 12 mode; native
+cross-calls are only counted with a detected GCC 12+ host. In the default ABI,
+register records with unaligned
 effective barriers and floating members remain rejected. Bit-precise members and
 records above 64 bytes remain rejected in both modes.
 This focused evidence is not full ABI validation or M21 completion. Full test,

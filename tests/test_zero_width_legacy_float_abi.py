@@ -10,15 +10,15 @@ def align(n, a):
     return (n + a - 1) // a * a
 
 
-def pair(d, declarations, definitions, caller, compare_host):
+def pair(d, declarations, definitions, caller, compare_host, options):
     (d/'owner.c').write_text(declarations + '\n' + definitions + '\n')
     (d/'companion.c').write_text(declarations + '\n' + caller + '\n')
     pairs = [('kcc', 'kcc')]
     if compare_host:
         pairs += [('host', 'host'), ('host', 'kcc'), ('kcc', 'host')]
     for a, b in pairs:
-        object_file(d/'owner.c', d/'owner.o', a, ('--legacy-clang-abi',))
-        object_file(d/'companion.c', d/'companion.o', b, ('--legacy-clang-abi',))
+        object_file(d/'owner.c', d/'owner.o', a, options)
+        object_file(d/'companion.c', d/'companion.o', b, options)
         run([HOST, d/'owner.o', d/'companion.o', '-o', d/'test'])
         try:
             run([d/'test'])
@@ -26,9 +26,8 @@ def pair(d, declarations, definitions, caller, compare_host):
             raise AssertionError((a, b, declarations, e)) from e
 
 
-def main():
+def run_suite(options, compare_host):
     (ROOT/'build').mkdir(exist_ok=True)
-    compare_host = bool(legacy_clang_options())
     with tempfile.TemporaryDirectory(prefix='legacy-float-barriers-', dir=ROOT/'build') as tmp:
         d = Path(tmp)
         barriers = (('unsigned char', 1), ('unsigned short', 2), ('unsigned', 4),
@@ -56,7 +55,7 @@ def main():
                            f'(char*)&x{i}.y-(char*)&x{i}!={b_offset}) return 1;',
                            f'struct S{i} r{i}=f{i}(x{i});if(r{i}.x!=3||r{i}.y!=5||x{i}.x!=1||x{i}.y!=2) return 2;']
             pair(d, '\n'.join(decls), '\n'.join(bodies),
-                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host)
+                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host, options)
         # Unnamed nonzero fields must use the same legacy classification rule.
         cases = [(typ, width) for typ, limit in (('unsigned char', 8), ('unsigned short', 16),
                  ('unsigned', 32), ('unsigned long', 63)) for width in range(1, limit+1)]
@@ -69,7 +68,7 @@ def main():
                 checks += [f'struct B{i} x{i}={{0}};x{i}.a=1;x{i}.b=2;struct B{i} r{i}=f{i}(x{i});',
                            f'if(r{i}.a!=3||r{i}.b!=5||x{i}.a!=1||x{i}.b!=2) return 3;']
             pair(d, '\n'.join(decls), '\n'.join(bodies),
-                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host)
+                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host, options)
         # Deterministic nested records, arrays, and unions exercise effective offsets.
         nested = []
         for named in (False, True):
@@ -104,7 +103,7 @@ def main():
                            f'struct S{i} r{i}=f{i}(s{i});'
                            f'if(r{i}.{x}!=1||r{i}.{y}!=2{check_named}) return 4;']
             pair(d, '\n'.join(decls), '\n'.join(bodies),
-                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host)
+                 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}', compare_host, options)
         decls = '''#include <stdarg.h>
 struct S {float a; unsigned :0; float b;};
 struct I {unsigned :0; float b;}; struct N {float a; struct I i;};
@@ -126,13 +125,19 @@ struct A a={{{1,2},{3,4}}};struct A b=array(a);if(b.a[0].a!=3||b.a[1].b!=7) retu
 union U u={0};u.s.a=1;u.s.b=2;union U v=uni(u);if(v.s.a!=3||v.s.b!=5) return 4;
 struct S q=pressure(1,1,1,1,1,1,1,s,3);if(q.a!=4||q.b!=9||var(s,3,4.)!=10) return 5;return 0;}
 '''
-        pair(d, decls, bodies, caller, compare_host)
-        # Legacy mode still must refuse an unrepresentable trailing NO_CLASS.
-        source = 'struct S { float a; unsigned :0; unsigned long :64; }; struct S f(struct S s){return s;}\n'
-        (d/'source.c').write_text(source)
-        result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'source.c')], capture_output=True, text=True, timeout=15)
-        assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, result.stderr
+        pair(d, decls, bodies, caller, compare_host, options)
+        if options == ('--legacy-clang-abi',):
+            source = 'struct S { float a; unsigned :0; unsigned long :64; }; struct S f(struct S s){return s;}\n'
+            (d/'source.c').write_text(source)
+            result = subprocess.run([str(KCC), *options, str(d/'source.c')], capture_output=True, text=True, timeout=15)
+            assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, result.stderr
+
+
+def main():
+    compare_host = bool(legacy_clang_options())
+    run_suite(('--legacy-clang-abi',), compare_host)
     print(f'legacy float barriers: 216 layouts, 119 unnamed-field layouts, 480 nested layouts (240 named-field), pressure/variadic and NO_CLASS checks passed; host cross-calls: {"Clang 18.1" if compare_host else "not run (self-calls only)"}')
+
 
 
 if __name__ == '__main__':

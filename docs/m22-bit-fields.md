@@ -117,7 +117,8 @@ members have no floating types, subject to the existing ABI limits; floating
 register records with barriers are supported in the default ABI only when every
 barrier is at an effective eightbyte offset. Other mixed floating/barrier register
 records remain rejected by default; legacy Clang mode accepts representable
-shapes only for hosts known to use the older convention. Nonzero unnamed
+shapes only for hosts known to use the older convention, while the separate
+`--gcc12-zero-width-abi` mode targets compatible GCC 12+ hosts. Nonzero unnamed
 fields are supported by the bounded aggregate ABI. KCC uses GCC's x86-64 classification for nonzero unnamed bit-fields.
 Clang 18.1 uses a different classification: mixed KCC/Clang by-value calls can
 produce incorrect results even when each compiler's self-calls work. Do not

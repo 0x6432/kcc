@@ -31,7 +31,12 @@ not mix those aggregates across default-mode KCC and those Clang versions.
 For the bounded subset supported by QBE, `--legacy-clang-abi` selects the older
 Clang calling convention for affected by-value records; all KCC objects sharing
 such interfaces must use the same mode. Unrepresentable classes are rejected,
-not approximated. Alternatively, `--warn-legacy-clang-abi` flags potentially
+not approximated. `--gcc12-zero-width-abi` separately opts into GCC 12+ handling
+of zero-width separators for supported by-value records; use it consistently
+across KCC translation units sharing those interfaces and only with a compatible
+native ABI. It is mutually exclusive with `--legacy-clang-abi`. The default ABI
+is not changed or automatically selected by host compiler version.
+Alternatively, `--warn-legacy-clang-abi` flags potentially
 affected by-value definitions and evaluated calls under the default ABI. This
 conservative warning does not change code generation or prove compatibility;
 declarations without a call or definition are not checked. The two options are

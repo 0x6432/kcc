@@ -5,6 +5,7 @@
 
 struct codegen_options {
 	bool legacy_clang_abi;
+	bool gcc12_zero_width_abi;
 };
 
 /* Options must match successful sema. False means output I/O failed. */

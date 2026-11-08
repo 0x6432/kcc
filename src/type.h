@@ -120,10 +120,11 @@ struct aggregate_abi {
 	unsigned size, alignment;
 	enum aggregate_abi_class classes[2]; /* Both none denotes MEMORY. */
 };
-/* The optional legacy-Clang mode skips unnamed bit-fields while classifying.
- * It rejects shapes QBE cannot represent; the default follows GCC. */
+/* Legacy-Clang mode skips unnamed bit-fields. GCC 12 mode separately opts
+ * into modern zero-width separator classification. Modes are exclusive;
+ * unrepresentable QBE shapes are rejected and the default remains unchanged. */
 bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *abi,
-	bool legacy_clang_abi);
+	bool legacy_clang_abi, bool gcc12_zero_width_abi);
 bool type_aggregate_abi(const struct type *type, struct aggregate_abi *abi);
 
 bool type_is_record(const struct type *type);
