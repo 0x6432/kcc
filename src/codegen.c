@@ -136,6 +136,19 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	return result;
 }
 
+/* In memory, clear _BitInt padding bits. Clang assumes these bits are zero
+ * when aggregates cross the SysV ABI, while expression values remain signed. */
+static size_t codegen_storage_bits(struct codegen *codegen, size_t value, const struct type *type)
+{
+	if (!type_is_bitint(type) || type_bitint_width_native(type_integer_width(type)))
+		return value;
+	unsigned width = type_integer_width(type), carrier = width <= 32 ? 32 : 64;
+	size_t shifted = codegen->next_temporary++, masked = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c shl %%t%zu, %u\n", shifted, carrier == 32 ? 'w' : 'l', value, carrier-width);
+	emit(codegen, "\t%%t%zu =%c shr %%t%zu, %u\n", masked, carrier == 32 ? 'w' : 'l', shifted, carrier-width);
+	return masked;
+}
+
 /* libatomic transports floating values as representation bits, not FP ABI
  * arguments. QBE cast between matching-width FP and integer classes is a bitcast. */
 static size_t atomic_to_bits(struct codegen *codegen, size_t value, const struct type *type)
@@ -174,7 +187,7 @@ static void codegen_volatile_store(struct codegen *codegen, size_t address, size
 	const struct type *type)
 {
 	unsigned width = (unsigned)type_object_size(type);
-	size_t bits = atomic_to_bits(codegen, value, type);
+	size_t bits = codegen_storage_bits(codegen, atomic_to_bits(codegen, value, type), type);
 	emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, %c %%t%zu)\n",
 		width, address, width == 8 ? 'l' : 'w', bits);
 }
@@ -753,7 +766,7 @@ static void codegen_initializer_plan(struct codegen *codegen,
 				(entry->bit_field->bit_width < 32 || type_value_width(entry->bit_field->type) == 64))
 				(void)codegen_field_store(codegen, address, value, entry->bit_field);
 			else
-				emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), value, address);
+				emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), codegen_storage_bits(codegen, value, entry->type), address);
 		}
 	}
 	free(captures);
@@ -978,7 +991,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	else if (node->left->type->qualifiers & type_qualifier_volatile)
 		codegen_volatile_store(codegen, address, value, node->left->type);
 	else
-		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), codegen_storage_bits(codegen, value, node->left->type), address);
 	return value;
 }
 
@@ -1052,7 +1065,7 @@ static struct update_values codegen_update(struct codegen *codegen,
 	else if (operand->type->qualifiers & type_qualifier_volatile)
 		codegen_volatile_store(codegen, address, value, operand->type);
 	else
-		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(operand->type), value, address);
+		emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(operand->type), codegen_storage_bits(codegen, value, operand->type), address);
 	return (struct update_values) { .previous = previous, .current = value };
 }
 
@@ -1661,7 +1674,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		else if (type_is_record(node->left->type))
 			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
 		else
-			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), value, address);
+			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), codegen_storage_bits(codegen, value, node->left->type), address);
 		return value;
 	}
 	case expression_member: {
@@ -1924,7 +1937,7 @@ static void codegen_local_initializer(struct codegen *codegen,
 			emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
 			codegen_volatile_store(codegen, address, value, local->type);
 		} else
-			emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(local->type), value, local->slot);
+			emit(codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(local->type), codegen_storage_bits(codegen, value, local->type), local->slot);
 	}
 }
 
@@ -2356,9 +2369,15 @@ static bool codegen_function(FILE *stream, const struct ast_function *function, 
 			emit(&codegen, "\t%%t%zu =l copy %%v%zu\n", address, parameter->local->slot);
 			emit(&codegen, "\t%%t%zu =%c copy %%p%zu\n", value, qbe_type(parameter->type), parameter_index);
 			codegen_volatile_store(&codegen, address, value, parameter->type);
-		} else if (parameter->local)
-			emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n",
-				qbe_store_size(parameter->type), parameter_index, parameter->local->slot);
+		} else if (parameter->local) {
+			if (type_is_bitint(parameter->type) && !type_bitint_width_native(type_integer_width(parameter->type))) {
+				size_t value = codegen.next_temporary++;
+				emit(&codegen, "\t%%t%zu =%c copy %%p%zu\n", value, qbe_type(parameter->type), parameter_index);
+				value = codegen_storage_bits(&codegen, value, parameter->type);
+				emit(&codegen, "\tstore%c %%t%zu, %%v%zu\n", qbe_store_size(parameter->type), value, parameter->local->slot);
+			} else
+				emit(&codegen, "\tstore%c %%p%zu, %%v%zu\n", qbe_store_size(parameter->type), parameter_index, parameter->local->slot);
+		}
 		parameter_index++;
 	}
 	/* Parameters have been spilled before any bound can read or update them. */
@@ -2489,6 +2508,8 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 			/* Byte slices preserve explicitly overridden scalar storage too;
 			 * target representation is Linux amd64 little endian. */
 			uint64_t bits = constant->bits;
+			if (type_is_bitint(entry->type) && type_integer_width(entry->type) < 64)
+				bits &= (UINT64_C(1) << type_integer_width(entry->type)) - 1;
 			for (size_t j = 0; j < entry->length; j++)
 				emit(codegen, "b %u, ", (unsigned)((bits >>
 					(8 * (entry->source_offset + j))) & UINT64_C(255)));

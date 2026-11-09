@@ -54,7 +54,7 @@ nested arrays and unions) is an eightbyte boundary. Other floating/barrier
 register records remain rejected by default: GCC 11 can pass a float/zero-width/float
 record differently from a classifier ignoring the barrier. Bounded 17–1024-byte
 MEMORY-class records can contain barriers, including nested and union members;
-the backend uses the whole object's size and alignment. Supported byte-width
+the backend uses the whole object's size and alignment. All supported
 bit-precise integer members use INTEGER classification, within the same limits.
 Pointer-based interoperation remains supported.
 
@@ -146,6 +146,6 @@ other hosts run self-calls. `tests/test_zero_width_gcc12_abi.py` runs the same
 cross-calls are only counted with a detected GCC 12+ host. In the default ABI,
 register records with unaligned
 effective barriers and floating members remain rejected. Records above 1024 bytes
-and unsupported bit-precise widths remain rejected in both modes.
+and out-of-range bit-precise widths remain rejected in both modes.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

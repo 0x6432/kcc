@@ -12,7 +12,7 @@ host = os.environ.get('HOST_CC', 'cc')
 with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as directory:
     path = Path(directory)
     source, il, asm, exe = [path / n for n in ('input.c', 'out.ssa', 'out.s', 'out')]
-    for test in ('bitint_values.c', 'bitint_narrow.c', 'bitint_arbitrary_values.c'):
+    for test in ('bitint_values.c', 'bitint_narrow.c', 'bitint_arbitrary_values.c', 'bitint_aggregate_values.c'):
         result = subprocess.run([str(compiler), str(root / 'tests' / test)], capture_output=True, text=True, timeout=20)
         assert result.returncode == 0 and not result.stderr, (test, result.stderr)
         il.write_text(result.stdout)

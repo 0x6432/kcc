@@ -108,6 +108,7 @@ fuzz-compile: build/fuzz_compile
 # Explicit native oracle: requires Clang with C2x _BitInt and x86-64 SysV QBE.
 test-bitint-native: export KCC_RUNTIME_LDFLAGS := $(LDFLAGS)
 test-bitint-native: build/kcc build/libkccrt.a
+	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_aggregate_native.py
 	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_variadic_native.py
 	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_arbitrary.py
 	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_conversions_native.py

@@ -23,12 +23,16 @@ register and stack parameters, mixed floating-point variadic arguments, `va_copy
 objects, arrays, and pointers to records. This is targeted evidence for the
 specified ABI, not a claim of full C23 or multi-platform conformance.
 
-The narrower ABI boundaries are intentional:
+Records and unions containing these members can also be passed and returned by
+value, including variadic arguments and `va_arg`, within the existing bounded
+aggregate ABI. Stores clear value padding bits, including static initializers,
+so Clang can consume the representation across separately compiled objects.
+Clang 15 tests cover all 127 types in both directions with unions, aligned and
+memory records, register pressure, updates and `va_copy`. All other aggregate
+ABI constraints still apply; this is not a general ABI guarantee.
 
-- Records or unions containing non-native-width members by value are rejected
-  at aggregate call/return boundaries, including nested/large records. Local
-  objects and pointers to records are supported. Existing aggregate ABI bounds
-  continue to apply to native-width members.
+The narrower boundaries are intentional:
+
 - Atomic bit-precise objects remain limited to 8/16/32/64. Their existing
   libatomic implementation has surrogate, not native atomic `_BitInt`,
   interoperability coverage. Atomic record members are rejected.
@@ -50,9 +54,9 @@ Linux x86-64 LP64 SysV model; invoke QBE with `-t amd64_sysv`.
 
 `make test-bitint-native QBE=/path/to/qbe CLANG=/path/to/clang` requires a
 Clang with C2x `_BitInt`. It checks scalar cross-object calls in both directions
-for all 127 valid signed/unsigned types, variadic cross-calls in both directions, a runtime cross-width conversion
+for all 127 valid signed/unsigned types, variadic and bounded aggregate cross-calls in both directions, a runtime cross-width conversion
 matrix, wb literal typing and focused arithmetic, and an independent Clang type
-oracle. `tests/test_bitint_rejection.py` checks the explicit ABI/atomic gates;
+oracle. `tests/test_bitint_rejection.py` checks the explicit type/atomic gates;
 `tests/test_bitint.c`, `tests/test_type.c`, and the existing BitInt tests cover
 other primitives and regressions. These do not replace a full conformance suite,
 fuzzing, other targets, aggregate ABI validation or atomic concurrency testing.

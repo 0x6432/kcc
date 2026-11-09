@@ -905,9 +905,6 @@ static bool aggregate_unverified(const struct type *type, unsigned depth,
 {
 	if (depth > 128 || !*budget) return true;
 	--*budget;
-	/* A semantic type alone is not evidence for a by-value ABI. */
-	if (type_is_bitint(type) && !type_bitint_width_native(type_integer_width(type)))
-		return true;
 	if (type_is_floating(type)) *floating = true;
 	if (type->kind == type_kind_array)
 		return aggregate_unverified(((const struct array_type *)type)->element,
