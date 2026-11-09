@@ -137,8 +137,8 @@ macro has only been compile-checked, not concurrency-tested.
 Byte-width atomic `_BitInt` uses the existing libatomic integer paths. Focused
 KCC execution and standard-integer surrogate cross-object checks are covered by
 `tests/test_bitint_abi_atomics.py`; native atomic `_BitInt` interoperability and
-concurrent stress for these types are not yet validated. Other bit-precise widths
-remain unsupported as values or atomic objects.
+concurrent stress for these types are not yet validated. Other bit-precise widths have scalar value support but remain unsupported as
+atomic objects.
 
 ## Compound-assignment regression coverage
 

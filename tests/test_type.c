@@ -286,10 +286,10 @@ static void test_runtime_array_qualification(struct arena *arena)
 	assert(!incomplete->runtime_bound && runtime->runtime_bound);
 }
 
-/* These semantic types are internal only: source and ABI lowering still reject
- * non-native widths. Exercise identity and C integer conversions independently. */
+/* Exercise semantic identity and C integer conversions independently of codegen. */
 static void test_bitint_width_types(struct arena *arena)
 {
+	assert(!type_bitint_width_lowerable(0) && !type_bitint_width_lowerable(65));
 	assert(!type_bitint(0, true) && !type_bitint(1, false));
 	assert(!type_bitint(65, true) && !type_bitint(65, false));
 	for (unsigned w = 1; w <= 64; w++) {
@@ -298,7 +298,8 @@ static void test_bitint_width_types(struct arena *arena)
 			if (w == 1 && !u) { assert(!t); continue; }
 			const struct type *q = type_qualified(arena, t, type_qualifier_const);
 			unsigned size = w <= 8 ? 1 : w <= 16 ? 2 : w <= 32 ? 4 : 8;
-			assert(type_bitint_width_lowerable(w) == (w == 8 || w == 16 || w == 32 || w == 64));
+			assert(type_bitint_width_lowerable(w));
+			assert(type_bitint_width_native(w) == (w == 8 || w == 16 || w == 32 || w == 64));
 			assert(t && q && type_is_bitint(t) && type_is_integer(t));
 			assert(type_integer_width(q) == w && type_is_unsigned(q) == (u != 0));
 			assert(type_object_size(q) == size && type_object_alignment(q) == size);

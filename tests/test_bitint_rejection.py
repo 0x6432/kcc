@@ -7,21 +7,30 @@ compiler = Path(__file__).resolve().parents[1] / 'build' / 'kcc'
 with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
     source = Path(directory) / 'input.c'
     cases = [
-        ('_BitInt(5) value;\n', 'only widths 8, 16, 32 and 64'),
-        ('unsigned _BitInt(1) value;\n', 'only widths 8, 16, 32 and 64'),
+        ('_BitInt(1) value;\n', 'outside the supported range'),
+        ('_BitInt(0) value;\n', 'outside the supported range'),
         ('_BitInt(65) value;\n', 'outside the supported range'),
-        ('_BitInt(3) f(_BitInt(3) x);\n', 'only widths 8, 16, 32 and 64'),
-        ('struct S { _BitInt(7) x; };\n', 'only widths 8, 16, 32 and 64'),
-        ('int main(void) { return 1wb; }\n', 'bit-precise integer literals are not supported yet'),
-        ('int main(void) { return 1UWB; }\n', 'bit-precise integer literals are not supported yet'),
-        ('#define T _BitInt\nT(7) value;\n', 'only widths 8, 16, 32 and 64'),
+        ('unsigned _BitInt(65) value;\n', 'outside the supported range'),
+        ('extern _BitInt(5) x; extern _BitInt(6) x;', 'incompatible'),
+        ('extern _BitInt(5) x; extern signed char x;', 'incompatible'),
+        ('_Atomic(_BitInt(5)) value;\n', 'unsupported atomic type'),
+        ('struct S { _BitInt(5) x; }; struct S f(struct S x) { return x; }', 'aggregate'),
+        ('struct S { unsigned _BitInt(5) x : 2; };', 'bit-field'),
+        ('void f(int, ...); void g(void) { f(0, (_BitInt(5))1); }', 'variadic arguments'),
+        ('#include <stdarg.h>\nint f(int x, ...) { va_list ap; va_start(ap,x); return va_arg(ap,_BitInt(5)); }', 'va_arg'),
+        ('enum E : _BitInt(5) { A };', 'fixed enum underlying type'),
     ]
-    # Every non-native width remains rejected until value lowering and ABI are implemented.
+    # A supported scalar type is not an atomic or aggregate ABI promise.
     for width in range(1, 65):
         if width in (8, 16, 32, 64):
             continue
         for sign in (['unsigned '] if width == 1 else ['', 'unsigned ']):
-            cases.append((f'{sign}_BitInt({width}) value;\n', 'only widths 8, 16, 32 and 64'))
+            cases.append((f'_Atomic({sign}_BitInt({width})) x;', 'unsupported atomic type'))
+    cases += [
+        ('struct A { unsigned _BitInt(33) x[3]; }; struct B { struct A a; }; struct B f(struct B x){return x;}', 'aggregate'),
+        ('struct A { _BitInt(17) x; }; struct A f(struct A); int g(void) { struct A a={1}; f(a); return 0; }', 'aggregate'),
+        ('void f(int, ...); void g(void) { f(0, (unsigned _BitInt(63))1); }', 'variadic arguments'),
+    ]
     for text, message in cases:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)

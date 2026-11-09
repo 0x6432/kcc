@@ -28,7 +28,7 @@ enum type_kind {
 	type_kind_ubitint32,
 	type_kind_bitint64,
 	type_kind_ubitint64,
-	/* Internal width-aware types; source lowering remains gated. */
+	/* Width-aware non-native types; ABI uses separate safety gates. */
 	type_kind_bitint_other,
 	type_kind_ubitint_other,
 	type_kind_bool,
@@ -184,10 +184,12 @@ extern const struct type type_ulong_long;
 extern const struct type type_bitint8, type_ubitint8, type_bitint16, type_ubitint16;
 extern const struct type type_bitint32, type_ubitint32, type_bitint64, type_ubitint64;
 /* Returns a canonical semantic type, or NULL for invalid widths.
- * Non-native widths are not yet accepted by source lowering or ABI code. */
+ * Non-native widths remain subject to operation and ABI safety gates. */
 const struct type *type_bitint(unsigned width, bool is_unsigned);
 /* Whether source values of this width currently have lowering support. */
 bool type_bitint_width_lowerable(unsigned width);
+/* Only native-sized BitInts use the existing aggregate and atomic paths. */
+bool type_bitint_width_native(unsigned width);
 bool type_is_bitint(const struct type *type);
 bool type_is_integer(const struct type *type);
 /* Includes a fixed enum compatible with bool. */

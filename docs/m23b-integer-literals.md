@@ -17,14 +17,11 @@ preprocessor conditions use the existing intmax/uintmax model. Both paths use
 the same spelling decoder. Integer typing and diagnostics remain subject to the
 compiler's existing target model and supported types.
 
-Bit-precise `wb`/`WB` literals now work in expressions only when their exact
-minimum C23 width is 8, 16, 32 or 64, corresponding to supported semantic
-`_BitInt` types. Other required widths and signed values requiring more than 64
-bits remain rejected in ordinary expressions. Preprocessing conditions and
-`#embed` limits accept `wb`/`WB` using the 64-bit intmax/uintmax model,
-including literals with other minimum widths; signed suffixes exceeding
-`INT64_MAX` and all values exceeding `UINT64_MAX` are rejected. The
-unsigned suffix is accepted before or after `wb`/`WB`. See
+Bit-precise `wb`/`WB` literals work in expressions with their exact minimum
+C23 width through 64; signed values requiring more than 64 bits remain
+rejected. Preprocessing conditions and `#embed` limits use the separate 64-bit
+intmax/uintmax model; signed suffixes exceeding `INT64_MAX` and all values
+exceeding `UINT64_MAX` are rejected. The unsigned suffix is accepted before or after `wb`/`WB`. See
 `m24-bitint-foundation.md`. Floating constants have separate bounded support
 in `m20-floating-foundation.md`. This is not full M23b or C23 literal support. The
 preprocessing lexer may legally form an invalid preprocessing number that the

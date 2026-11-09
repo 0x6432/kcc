@@ -1,7 +1,7 @@
 """Check internal BitInt type-model expectations against a native Clang oracle.
 
-Run with CLANG pointing to a Clang that supports C2x _BitInt. This does not
-assert that KCC can lower non-native widths; sema deliberately rejects them.
+Run with CLANG pointing to a Clang that supports C2x _BitInt. This independently
+checks the expected width/rank/conversion model, not KCC's own lowering.
 """
 import os
 import subprocess

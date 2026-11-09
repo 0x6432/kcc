@@ -1,4 +1,4 @@
-"""Bit-precise wb/WB literals with currently supported exact minimal widths."""
+"""Bit-precise wb/WB literals and 64-bit limit rejection."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -43,7 +43,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='bitint-literals-',dir=ROOT/'build') as tmp:
         d=Path(tmp); (d/'positive.c').write_text(SOURCE)
         object_file(d/'positive.c',d/'positive.o','kcc'); run([HOST,d/'positive.o','-o',d/'positive']); run([d/'positive'])
-        for literal in ('0wb','1wb','63wb','128wb','1uwb','127uwb','256uwb','32768wb','2147483648wb','0xffffffffffffffffwb'):
+        for literal in ('0xffffffffffffffffwb',):
             (d/'reject.c').write_text(f'int main(void){{return {literal};}}')
             r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             if r.returncode==0 or r.stdout or 'bit-precise integer literals are not supported yet for this required width' not in r.stderr:
@@ -53,6 +53,6 @@ def main():
             r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             if r.returncode==0 or r.stdout or 'unsupported integer suffix' not in r.stderr:
                 raise AssertionError((literal,r.returncode,r.stderr,r.stdout))
-    print('bit-precise literals: 8/16/32/64 exact-width execution and boundary rejections passed; host C23 comparison unavailable')
+    print('bit-precise literals: baseline widths and signed 65-bit rejection passed')
 
 if __name__=='__main__': main()

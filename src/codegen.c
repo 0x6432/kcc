@@ -57,18 +57,18 @@ static char qbe_type(const struct type *type)
 	/* Aggregate expression values are addresses of captured object bytes. */
 	if (type->kind == type_kind_float) return 's';
 	if (type->kind == type_kind_double) return 'd';
-	return type_is_record(type) || type_value_width(type) == 64 ? 'l' : 'w';
+	return type_is_record(type) || type_value_width(type) > 32 ? 'l' : 'w';
 }
 
 static const char *qbe_abi_type(const struct type *type)
 {
 	if (type->kind == type_kind_float) return "s";
 	if (type->kind == type_kind_double) return "d";
-	if (type_value_width(type) == 8)
+	if (type_object_size(type) == 1)
 		return type_is_unsigned(type) ? "ub" : "sb";
-	if (type_value_width(type) == 16)
+	if (type_object_size(type) == 2)
 		return type_is_unsigned(type) ? "uh" : "sh";
-	return type_value_width(type) == 64 ? "l" : "w";
+	return type_value_width(type) > 32 ? "l" : "w";
 }
 
 static void emit_abi_type(struct codegen *codegen, const struct type *type)
@@ -90,29 +90,41 @@ static const char *qbe_load_instruction(const struct type *type)
 {
 	if (type->kind == type_kind_float) return "loads";
 	if (type->kind == type_kind_double) return "loadd";
-	if (type_value_width(type) == 8)
+	if (type_object_size(type) == 1)
 		return type_is_unsigned(type) ? "loadub" : "loadsb";
-	if (type_value_width(type) == 16)
+	if (type_object_size(type) == 2)
 		return type_is_unsigned(type) ? "loaduh" : "loadsh";
-	return type_value_width(type) == 64 ? "loadl" : "loadw";
+	return type_value_width(type) > 32 ? "loadl" : "loadw";
 }
 
 static char qbe_store_size(const struct type *type)
 {
-	if (type_value_width(type) == 8)
+	if (type_object_size(type) == 1)
 		return 'b';
-	if (type_value_width(type) == 16)
+	if (type_object_size(type) == 2)
 		return 'h';
 	return qbe_type(type);
 }
 
-/* Sub-word ABI results have unspecified upper bits; normalize before use. */
+/* Establish a canonical word/long value after loads, calls, operations and
+ * conversions. Padding bits in stored and ABI representations are ignored. */
 static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	const struct type *type)
 {
 	size_t result;
 	const char *instruction;
 
+	if (type_is_bitint(type) && !type_bitint_width_native(type_integer_width(type))) {
+		unsigned width = type_integer_width(type);
+		unsigned carrier = width <= 32 ? 32 : 64;
+		size_t shifted = codegen->next_temporary++;
+		result = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c shl %%t%zu, %u\n", shifted,
+			carrier == 32 ? 'w' : 'l', value, carrier - width);
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %u\n", result,
+			carrier == 32 ? 'w' : 'l', type_is_unsigned(type) ? "shr" : "sar", shifted, carrier - width);
+		return result;
+	}
 	if (type_value_width(type) == 8)
 		instruction = type_is_unsigned(type) ? "extub" : "extsb";
 	else if (type_value_width(type) == 16)
@@ -170,7 +182,7 @@ static void codegen_volatile_store(struct codegen *codegen, size_t address, size
 static const char *binary_instruction(enum binary_operator operation, const struct type *operand_type)
 {
 	bool unsigned_operands;
-	bool wide = type_value_width(operand_type) == 64;
+	bool wide = type_value_width(operand_type) > 32;
 
 	if (type_is_floating(operand_type)) {
 		bool single = operand_type->kind == type_kind_float;
@@ -248,7 +260,7 @@ static size_t codegen_pointer_index(struct codegen *codegen,
 	size_t value = codegen_expression(codegen, index);
 	size_t result;
 
-	if (type_integer_width(index->type) == 64)
+	if (type_integer_width(index->type) > 32)
 		return value;
 	assert(type_integer_width(index->type) <= 32);
 	result = codegen->next_temporary++;
@@ -804,7 +816,7 @@ static size_t codegen_convert_value(struct codegen *codegen, size_t value,
 		return result;
 	}
 	if (type_is_integer(source) && type_is_floating(target)) {
-		bool wide = type_value_width(source) == 64;
+		bool wide = type_value_width(source) > 32;
 		result = codegen->next_temporary++;
 		instruction = wide ? (type_is_unsigned(source) ? "ultof" : "sltof") :
 			(type_is_unsigned(source) ? "uwtof" : "swtof");
@@ -812,21 +824,19 @@ static size_t codegen_convert_value(struct codegen *codegen, size_t value,
 		return result;
 	}
 	if (type_is_floating(source) && type_is_integer(target)) {
-		bool wide = type_value_width(target) == 64;
+		bool wide = type_value_width(target) > 32;
 		result = codegen->next_temporary++;
 		instruction = source->kind == type_kind_float ?
 			(type_is_unsigned(target) ? "stoui" : "stosi") :
 			(type_is_unsigned(target) ? "dtoui" : "dtosi");
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, wide ? 'l' : 'w', instruction, value);
-		return type_value_width(target) < 32 ? codegen_canonicalize(codegen, result, target) : result;
+		return codegen_canonicalize(codegen, result, target);
 	}
-	if (type_value_width(target) < 32)
-		return codegen_canonicalize(codegen, value, target);
 	result = codegen->next_temporary++;
-	if (type_value_width(target) == 64 && type_value_width(source) <= 32)
+	if (type_value_width(target) > 32 && type_value_width(source) <= 32)
 		instruction = type_is_unsigned(source) ? "extuw" : "extsw";
 	emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", result, qbe_type(target), instruction, value);
-	return result;
+	return codegen_canonicalize(codegen, result, target);
 }
 
 static size_t codegen_conversion(struct codegen *codegen, const struct ast_expression *operand,
@@ -843,7 +853,7 @@ static size_t codegen_shift_count(struct codegen *codegen, size_t value,
 {
 	size_t count;
 
-	if (type_value_width(type) != 64)
+	if (type_value_width(type) <= 32)
 		return value;
 	count = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =w copy %%t%zu\n", count, value);
@@ -951,6 +961,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", left, qbe_type(node->left->type),
 			qbe_load_instruction(node->left->type), address);
 	}
+	left = codegen_canonicalize(codegen, left, node->left->type);
 	left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
 	value = codegen->next_temporary++;
 	if (pointer)
@@ -1012,6 +1023,7 @@ static struct update_values codegen_update(struct codegen *codegen,
 	else
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", previous, qbe_type(calculation_type),
 			qbe_load_instruction(operand->type), address);
+	previous = codegen_canonicalize(codegen, previous, operand->type);
 	size_t arithmetic = previous;
 	bool wide_field = codegen_bit_field(operand) && type_value_width(operand->type) == 64;
 	if (wide_field)
@@ -1411,8 +1423,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c copy %ju\n", temporary, qbe_type(expression->type),
 			(uintmax_t)node->bits);
-		return type_value_width(expression->type) < 32 ?
-			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
+		return codegen_canonicalize(codegen, temporary, expression->type);
 	}
 	case expression_character: {
 		const struct ast_character_expression *node =
@@ -1588,7 +1599,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		}
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
-		return temporary;
+		return codegen_canonicalize(codegen, temporary, expression->type);
 	}
 	case expression_postfix_update: {
 		const struct ast_postfix_update_expression *node = (const struct ast_postfix_update_expression *)expression;
@@ -1640,7 +1651,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
-		return temporary;
+		return codegen_canonicalize(codegen, temporary, expression->type);
 	}
 	case expression_function_designator:
 	case expression_generic:
@@ -1787,13 +1798,13 @@ static bool codegen_switch(struct codegen *codegen,
 		uint64_t bits = label->bits;
 		unsigned width = type_integer_width(node->control->type);
 
-		/* Constant evaluation stores narrow values as masked bits, while
-		 * signed word values are sign-extended in QBE. */
-		if (width < 32 && !type_is_unsigned(node->control->type) &&
+		/* Constant evaluation stores low-width bits; signed QBE word/long
+		 * control values are sign-extended to their carrier width. */
+		if (width < 64 && !type_is_unsigned(node->control->type) &&
 			(bits & (UINT64_C(1) << (width - 1))))
-			bits |= (uint64_t)UINT32_MAX << width;
+			bits |= UINT64_MAX << width;
 		emit(codegen, "\t%%t%zu =w ceq%c %%t%zu, %llu\n", comparison,
-			qbe_type(node->control->type), control, (unsigned long long)(width < 32 ? (uint32_t)bits : bits));
+			qbe_type(node->control->type), control, (unsigned long long)(width <= 32 ? (uint32_t)bits : bits));
 		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", comparison, target, next_test);
 		emit_label(codegen, next_test);
 	}

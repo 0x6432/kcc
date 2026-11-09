@@ -1,4 +1,4 @@
-"""Bounded source-level bit-precise values, and explicit unsupported boundaries."""
+"""Baseline bit-precise values and explicit unsupported boundaries."""
 import os
 import subprocess
 import tempfile
@@ -12,7 +12,7 @@ host = os.environ.get('HOST_CC', 'cc')
 with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as directory:
     path = Path(directory)
     source, il, asm, exe = [path / n for n in ('input.c', 'out.ssa', 'out.s', 'out')]
-    for test in ('bitint_values.c', 'bitint_narrow.c'):
+    for test in ('bitint_values.c', 'bitint_narrow.c', 'bitint_arbitrary_values.c'):
         result = subprocess.run([str(compiler), str(root / 'tests' / test)], capture_output=True, text=True, timeout=20)
         assert result.returncode == 0 and not result.stderr, (test, result.stderr)
         il.write_text(result.stdout)
@@ -21,11 +21,6 @@ with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as
         result = subprocess.run([str(exe)], timeout=5)
         assert result.returncode == 0, (test, result.returncode)
     cases = [
-        ('_BitInt(31) x;', 'only widths 8, 16, 32 and 64'),
-        ('unsigned _BitInt(1) x;', 'only widths 8, 16, 32 and 64'),
-        ('_BitInt(17) x;', 'only widths 8, 16, 32 and 64'),
-        ('_BitInt(24) x;', 'only widths 8, 16, 32 and 64'),
-        ('unsigned _BitInt(33) x;', 'only widths 8, 16, 32 and 64'),
         ('_BitInt(65) x;', 'outside the supported range'),
         ('struct S { unsigned _BitInt(16) x : 2; };', 'bit-field'),
         ('static_assert((_BitInt(8))127 + (_BitInt(8))1);', 'signed overflow'),
@@ -51,4 +46,4 @@ with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as
         source.write_text(text + '\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode != 0 and not result.stdout and message in result.stderr, (text, result.stderr)
-print('BitInt 8/16/32/64 value execution and rejection checks passed')
+print('BitInt value execution and rejection checks passed')

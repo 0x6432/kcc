@@ -1310,7 +1310,7 @@ static const struct type *alignment_complete_type(const struct type *type)
 /* Only target types with implemented libatomic ABI paths are accepted. */
 static bool supported_atomic_type(const struct type *type)
 {
-	return (type_is_bitint(type) && type_bitint_width_lowerable(type_integer_width(type))) ||
+	return (type_is_bitint(type) && type_bitint_width_native(type_integer_width(type))) ||
 		type->kind == type_kind_char || type->kind == type_kind_schar ||
 		type->kind == type_kind_uchar || type->kind == type_kind_short ||
 		type->kind == type_kind_ushort || type->kind == type_kind_int || type->kind == type_kind_uint ||
@@ -1382,7 +1382,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		width = evaluate_integer_constant(node->width);
 		if (!type_bitint_width_lowerable((unsigned)width.bits)) {
 			diagnostic_error(sema->diagnostics, syntax->location,
-				"_BitInt value types support only widths 8, 16, 32 and 64; other widths are supported only in direct sizeof and alignof type queries or alignas");
+				"_BitInt value width cannot be lowered");
 			return NULL;
 		}
 		syntax->type = type_bitint((unsigned)width.bits, node->is_unsigned);
@@ -2705,6 +2705,11 @@ static bool sema_expression(struct sema *sema,
 			result_type = resolve_type_syntax(sema, node->type_syntax);
 			if (!result_type)
 				return false;
+			if (type_is_bitint(result_type) && !type_bitint_width_native(type_integer_width(result_type))) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"non-native _BitInt va_arg is not supported");
+				return false;
+			}
 			if (type_is_record(result_type)) {
 				if (result_type->qualifiers || !type_is_complete_object(result_type)) {
 					diagnostic_error(sema->diagnostics, expression->location,
@@ -2843,6 +2848,11 @@ static bool sema_expression(struct sema *sema,
 					return false;
 				parameter = parameter->next;
 			} else if (type_is_bitint(argument->value->type)) {
+				if (!type_bitint_width_native(type_integer_width(argument->value->type))) {
+					diagnostic_error(sema->diagnostics, argument->value->location,
+						"non-native _BitInt variadic arguments are not supported");
+					return false;
+				}
 				/* C23 bit-precise integers are not subject to integer promotions. */
 			} else if (type_is_floating(argument->value->type)) {
 				if (!convert_expression(sema, &argument->value, &type_double))

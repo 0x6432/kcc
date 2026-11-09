@@ -160,11 +160,11 @@ ordinary copied types and compatible signatures carry no register flag. Read
 docs/m15-register-parameters.md for source/AST/ABI/budget evidence and the explicit
 register-void subset refusal. Other storage/globals/linkage remain incomplete.
 
-M24: signed and unsigned `_BitInt(8)`, `_BitInt(16)`, `_BitInt(32)` and `_BitInt(64)` have distinct
-semantic types and bounded object/value support. Direct layout queries also
-support other widths through 64; bit-precise function value ABI remains
-unsupported. `wb` literals work only when their exact required widths are
-8, 16, 32 or 64. See `docs/m24-bitint-foundation.md` for details.
+M24: signed `_BitInt` widths 2–64 and unsigned widths 1–64 have distinct
+semantic types and scalar value support on x86-64 SysV, including fixed scalar
+calls and exact-width `wb` literals. Non-native-width variadic and aggregate
+by-value ABI, atomics, bit-fields and fixed enum bases remain rejected. See
+`docs/m24-bitint-foundation.md` for the support boundary and test evidence.
 
 M23b: Binary integer constants and digit separators use the shared integer
 spelling decoder in runtime expressions and preprocessing conditions. Existing

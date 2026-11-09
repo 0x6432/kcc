@@ -1,76 +1,60 @@
 # M24: bounded `_BitInt` values and layout
 
-On the Linux x86-64 LP64 target, direct type names in `sizeof`, `alignof` /
-`_Alignof`, and `alignas` / `_Alignas` accept `_BitInt(N)` and `signed` or
-`unsigned _BitInt(N)`. `N` must be an integer constant expression: 2–64 for
-signed, 1–64 for unsigned. The size and alignment in bytes are both 1 for
-widths 1–8, 2 for 9–16, 4 for 17–32, and 8 for 33–64. The query result is
-`unsigned long`. Direct queries also accept `const` and `volatile`; atomic
-queries are supported for the four byte-width value types below, but `restrict`
-is rejected. Widths outside the range are rejected.
+On the Linux x86-64 LP64 SysV target, `_BitInt(N)` supports signed widths
+2–64 and unsigned widths 1–64; N must be an integer constant expression.
+Types retain their declared width and signedness and are distinct from standard
+integer types. Size and alignment are both 1 byte for widths 1–8, 2 for 9–16,
+4 for 17–32, and 8 for 33–64. Widths outside the range are rejected.
 
-## Value slice
+Typedefs, qualification, `typeof`, generic associations, pointers, arrays,
+ordinary record members, automatic/static objects, casts, initializers,
+assignments, integer/floating conversions, operators and constant expressions
+use the declared width. Bit-precise values are not normally integer-promoted;
+rank and mixed arithmetic follow the target's C23 rules. QBE carriers are words
+or longs but every relevant operation, conversion and load normalizes to N
+bits, including signed extension. Unsigned values wrap modulo 2^N; signed
+out-of-range conversions use the target's two's-complement behavior. Signed
+overflow and invalid shifts remain undefined at runtime and are diagnosed in
+integer constant expressions. Padding bits are not part of the value.
 
-Only widths **8, 16, 32 and 64** have semantic types and values, both signed and
-unsigned. They are distinct from each other and from all standard integer
-types. Typedefs, qualifications, `typeof`, generic associations, pointers,
-arrays, ordinary record members, automatic and static objects, compound
-literals, casts, initialization, assignment, integer and floating conversion,
-operators and constant expressions use these types. Their rank is below the
-standard integer type of the same width and above types of smaller width;
-ordinary bit-precise values are not integer-promoted. Mixed arithmetic follows
-the usual arithmetic conversions. The byte-aligned representations use the
-existing 8-, 16-, 32- and 64-bit scalar load/store paths. Narrow bit-precise arithmetic, bitwise operations and
-conversions are normalized to their declared width after each operation; signed
-values are sign-extended for QBE word operations. Unsigned arithmetic wraps
-modulo 2^N and signed conversions use the target's two's-complement behavior.
-Normal C signed-overflow and invalid-shift rules still apply; invalid evaluated
-integer constant expressions are diagnosed, but dynamic undefined behavior is
-not generally checked. The target object layout (size/alignment) is 1/1, 2/2, 4/4 and 8/8 bytes, respectively.
+Fixed scalar parameters and results are lowered for every supported width.
+Native Clang 15 x86-64 cross-object tests exercise both calling directions,
+register and stack parameters, indirect calls, returned values, external
+objects, arrays, and pointers to records. This is targeted evidence for the
+specified ABI, not a claim of full C23 or multi-platform conformance.
 
-Other widths remain **layout-query only**: declarations, aliases, derived
-types and value expressions involving them are diagnosed, not lowered as a
-standard integer. For the four supported widths, scalar parameters, returns,
-variadic arguments and `va_arg` use the existing integer ABI without default
-integer promotion, with subword results normalized. Records containing these
-members can be passed or returned within the existing aggregate ABI bounds.
-Atomic objects of these four widths use the existing libatomic paths for loads,
-stores, exchange, compare-exchange and integer fetch operations. Atomic record
-members remain rejected. Bit-precise bit-fields and fixed enum underlying
-types remain unsupported.
-`wb`/`WB` literals are supported when their exact minimum required width is
-8, 16, 32 or 64 in ordinary expressions; other widths there are rejected.
-Preprocessing expressions use the separate 64-bit intmax/uintmax model and
-accept other minimal widths within that range. Existing
-aggregate-by-value and other compiler restrictions also apply. Widths above 64
-remain unsupported. The compiler emits IL for the Linux x86-64 LP64 SysV model only;
-its driver accepts no target selector. Invoke QBE with `-t amd64_sysv` and use
-a matching runtime and linker. Feeding the IL to another backend is outside
-the supported contract and cannot be diagnosed by the compiler. This is not a
-full C23 `_BitInt` implementation.
+The narrower ABI boundaries are intentional:
 
-The internal type model also represents signed widths 2–64 and unsigned
-widths 1–64, including width-aware identity, rank, conversions and layout.
-Lowering is explicitly gated to the four byte-aligned widths above; the wider
-type model does not enable source values or ABI support for other widths.
-`tests/test_bitint_type_oracle.py` independently checks the model's expectations
-against a Clang compiler with C23 bit-precise support.
+- Non-native-width bit-precise values are rejected as variadic arguments or
+  `va_arg` types; 8/16/32/64 retain the existing variadic implementation.
+- Records or unions containing non-native-width members by value are rejected
+  at aggregate call/return boundaries, including nested/large records. Local
+  objects and pointers to records are supported. Existing aggregate ABI bounds
+  continue to apply to native-width members.
+- Atomic bit-precise objects remain limited to 8/16/32/64. Their existing
+  libatomic implementation has surrogate, not native atomic `_BitInt`,
+  interoperability coverage. Atomic record members are rejected.
+- Bit-precise bit-fields and fixed enum underlying types remain unsupported.
 
-`src/bitint.c` also retains independent internal arithmetic building blocks
-for all validated widths through 64; they are not a source-value implementation
-for the layout-only widths. `tests/test_bitint_values.py` runs 8/16/32/64 value
-and rejection tests through QBE; `tests/test_bitint_layout.py` covers the entire
-layout-only range and can compare with a native compiler if available.
-`tests/test_bitint.c` checks the independent arithmetic helpers. These focused
-checks are not a substitute for full conformance tests, fuzzing or a host ABI
-oracle. `tests/test_bitint_abi_atomics.py` covers fixed and variadic scalar
-calls, small and MEMORY aggregates, packed and zero-width fields, and atomic
-operations. It tests both cross-object directions with native `_BitInt` when
-available; standard-integer ABI surrogates are used and labeled otherwise.
+`src/bitint.c` retains independent internal arithmetic building blocks through
+64 bits; `tests/test_bitint.c` checks them. `tests/test_bitint_abi_atomics.py`
+checks native-width fixed and variadic calls, bounded aggregates and atomics,
+using native `_BitInt` where available and labeled integer surrogates otherwise.
 Atomic cross-object checks use surrogates, not a native atomic `_BitInt` oracle.
-These focused checks do not establish full ABI or concurrent memory-model coverage.
 
-`tests/test_bitint_literals.py` checks exact signed/unsigned literal type and
-value selection, suffix spellings, macro pasting, arithmetic and rejection
-boundaries through QBE. The available host cannot independently compile the
-C23 literal syntax, so no native C23 literal agreement is claimed.
+`wb`/`WB` literals use their exact minimal valid width up to 64, including
+unsigned width 1 and signed width 2. Signed literals requiring 65 bits are
+rejected. Preprocessing uses its separate 64-bit intmax/uintmax model. Existing
+compiler restrictions continue to apply. The driver emits IL only for the
+Linux x86-64 LP64 SysV model; invoke QBE with `-t amd64_sysv`.
+
+## Focused tests
+
+`make test-bitint-native QBE=/path/to/qbe CLANG=/path/to/clang` requires a
+Clang with C2x `_BitInt`. It checks scalar cross-object calls in both directions
+for all 127 valid signed/unsigned types, a runtime cross-width conversion
+matrix, wb literal typing and focused arithmetic, and an independent Clang type
+oracle. `tests/test_bitint_rejection.py` checks the explicit ABI/atomic gates;
+`tests/test_bitint.c`, `tests/test_type.c`, and the existing BitInt tests cover
+other primitives and regressions. These do not replace a full conformance suite,
+fuzzing, other targets, aggregate ABI validation or atomic concurrency testing.

@@ -47,16 +47,6 @@ invalid = [
     ('int f(void) { return sizeof(_BitInt(8) int); }', 'cannot combine'),
     ('int f(void) { return sizeof(unsigned signed _BitInt(8)); }', 'duplicate or conflicting'),
     ('int f(void) { return sizeof(restrict _BitInt(8)); }', 'does not support atomic or restrict'),
-    ('typedef _BitInt(7) T;', 'only in direct sizeof'),
-    ('_BitInt(7) x;', 'only in direct sizeof'),
-    ('struct S { _BitInt(7) x; };', 'only in direct sizeof'),
-    ('_BitInt(7) f(_BitInt(7) x);', 'only in direct sizeof'),
-    ('int f(void) { return (int)(_BitInt(7))1; }', 'only in direct sizeof'),
-    ('int f(void) { return sizeof(_BitInt(7) *); }', 'only in direct sizeof'),
-    ('int f(void) { return sizeof(_BitInt(7)[2]); }', 'only in direct sizeof'),
-    ('int f(void) { return sizeof(typeof(_BitInt(7))); }', 'only in direct sizeof'),
-    ('int f(void) { return _Generic(0, _BitInt(7): 1, default: 0); }', 'only in direct sizeof'),
-    ('int f(void) { return sizeof((_BitInt(7)){1}); }', 'only in direct sizeof'),
     ('enum E : _BitInt(8) { A };', 'fixed enum underlying type'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc-bitint-layout-', dir=root / 'build') as directory:

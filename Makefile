@@ -6,6 +6,7 @@ LDLIBS =
 FUZZ_CC = clang
 FUZZ_SECONDS = 10
 QBE = qbe
+CLANG = clang
 .DEFAULT_GOAL := all
 
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
@@ -13,7 +14,7 @@ PREPROCESS_SOURCES = $(LEX_SOURCES) src/preprocess.c src/arena.c
 COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/bitint.c src/ast.c src/type.c src/parse.c src/sema.c src/consteval.c src/codegen.c
 HEADERS = $(wildcard src/*.h)
 
-.PHONY: all test test-codegen clean fuzz-lex fuzz-compile FORCE
+.PHONY: all test test-codegen test-bitint-native clean fuzz-lex fuzz-compile FORCE
 .DELETE_ON_ERROR:
 
 # A forced check updates each stamp only when its command-line configuration
@@ -103,6 +104,13 @@ fuzz-compile: build/fuzz_compile
 	mkdir -p build/corpus-compile build/fuzz-artifacts
 	cp tests/corpus/compile/* build/corpus-compile/
 	./build/fuzz_compile build/corpus-compile -max_total_time=$(FUZZ_SECONDS) -max_len=4096 -timeout=5 -rss_limit_mb=512 -artifact_prefix=build/fuzz-artifacts/
+
+# Explicit native oracle: requires Clang with C2x _BitInt and x86-64 SysV QBE.
+test-bitint-native: build/kcc build/libkccrt.a
+	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_arbitrary.py
+	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_conversions_native.py
+	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_arithmetic_native.py
+	CLANG="$(CLANG)" python3 tests/test_bitint_type_oracle.py
 
 test-codegen: export QBE := $(QBE)
 test-codegen: export KCC_SOURCE := $(CURDIR)

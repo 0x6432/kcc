@@ -29,7 +29,7 @@ const struct type type_bitint64 = { .kind = type_kind_bitint64 };
 const struct type type_ubitint64 = { .kind = type_kind_ubitint64 };
 
 /* Width is part of semantic identity, not the QBE storage class.  These
- * canonical types are deliberately not enabled by the parser/sema yet. */
+ * canonical types remain distinct from their storage carrier. */
 struct other_bitint_type {
 	struct type type;
 	unsigned width;
@@ -70,6 +70,11 @@ const struct type *type_bitint(unsigned width, bool is_unsigned)
 }
 
 bool type_bitint_width_lowerable(unsigned width)
+{
+	return width >= 1 && width <= 64;
+}
+
+bool type_bitint_width_native(unsigned width)
 {
 	return width == 8 || width == 16 || width == 32 || width == 64;
 }
@@ -905,7 +910,7 @@ static bool aggregate_unverified(const struct type *type, unsigned depth,
 	if (depth > 128 || !*budget) return true;
 	--*budget;
 	/* A semantic type alone is not evidence for a by-value ABI. */
-	if (type_is_bitint(type) && !type_bitint_width_lowerable(type_integer_width(type)))
+	if (type_is_bitint(type) && !type_bitint_width_native(type_integer_width(type)))
 		return true;
 	if (type_is_floating(type)) *floating = true;
 	if (type->kind == type_kind_array)
