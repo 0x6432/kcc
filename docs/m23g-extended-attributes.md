@@ -49,7 +49,8 @@ on declaration nodes for future warning support.
 The `noreturn` attribute is additionally accepted as a file- or block-scope prefix or declarator suffix on
 function identifier declarations; its other placements are rejected. Known
 standard attributes other than `maybe_unused`, `deprecated`, `fallthrough`,
-this bounded `nodiscard` and `noreturn` are still rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
+this bounded `nodiscard`, `noreturn`, and direct function-declarator contracts
+are still rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
 members, unnamed parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
 handling, including placement and token-grammar coverage. The focused attribute tests exercise the supported placements and diagnostic
@@ -116,3 +117,15 @@ Member expressions, `offsetof` paths, and designated initializers warn on the
 selected deprecated member, including through anonymous records. Positional
 initializers do not name members and do not warn. These warnings include uses in
 unevaluated expressions. Message text is not yet included.
+
+## Function-type optimization contracts
+
+Direct function declarators at file or block scope accept `[[unsequenced]]`
+and `[[reproducible]]`, including their double-underscore spellings, after the
+declarator. They take no arguments. These contracts permit optimizations but
+the compiler does not currently use them to transform calls, so generated
+code retains ordinary sequencing and call behavior. Other placements, typedef-
+derived function types and pointer-to-function attributes remain unsupported;
+the compiler does not advertise them through `__has_c_attribute`. The program
+is responsible for satisfying the contracts. This is a bounded subset, not full
+C23 type-attribute support.

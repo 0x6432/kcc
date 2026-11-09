@@ -74,6 +74,7 @@ struct parsed_attributes {
 	bool deprecated;
 	bool noreturn;
 	bool nodiscard;
+	bool function_contract;
 };
 
 static bool token_spells(struct token token, const char *name, size_t length)
@@ -132,7 +133,7 @@ static bool skip_unknown_attribute_arguments(struct parser *parser, unsigned *co
 	return true;
 }
 
-static bool parse_attributes(struct parser *parser, struct parsed_attributes *attributes)
+static bool parse_attributes_impl(struct parser *parser, struct parsed_attributes *attributes, bool allow_function_contract)
 {
 	unsigned count = 0;
 	*attributes = (struct parsed_attributes) { 0 };
@@ -195,8 +196,12 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 				known = message_argument = true;
 			} else if (!scoped && (standard_attribute_spells(token, "unsequenced", 11) ||
 				standard_attribute_spells(token, "reproducible", 12))) {
-				diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute");
-				return false;
+				if (!allow_function_contract) {
+					diagnostic_error(parser->diagnostics, token.location, "unsupported standard attribute placement");
+					return false;
+				}
+				attributes->function_contract = true;
+				known = true;
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
 				if (message_argument) {
@@ -248,6 +253,11 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 	return true;
 }
 
+static bool parse_attributes(struct parser *parser, struct parsed_attributes *attributes)
+{
+	return parse_attributes_impl(parser, attributes, false);
+}
+
 static bool parse_general_declaration_attributes(struct parser *parser, bool *present, bool *deprecated)
 {
 	struct parsed_attributes attributes;
@@ -277,11 +287,11 @@ static bool parse_general_declaration_attributes(struct parser *parser, bool *pr
 
 /* After an ordinary declarator, function attributes apply to that declarator
  * only. Semantic analysis checks the resolved identifier type. */
-static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated)
+static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated, bool *function_contract)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
-	if (!parse_attributes(parser, &attributes))
+	if (!parse_attributes_impl(parser, &attributes, true))
 		return false;
 	if (attributes.fallthrough) {
 		diagnostic_error(parser->diagnostics, location.location,
@@ -291,6 +301,7 @@ static bool parse_function_declarator_attributes(struct parser *parser, bool *no
 	*noreturn = attributes.noreturn;
 	*nodiscard = attributes.nodiscard;
 	*deprecated = attributes.deprecated;
+	*function_contract = attributes.function_contract;
 	return true;
 }
 
@@ -3688,7 +3699,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct ast_expression *initializer = NULL;
 		struct ast_initializer *initializer_syntax = NULL;
 		struct ast_local_declaration *node;
-		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated;
+		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated, function_contract;
 
 		if (!count_block_item(parser, head.inferred_name.kind == token_identifier ?
 			head.inferred_name.location : preprocess_peek(parser->preprocessor).location))
@@ -3699,7 +3710,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				name = head.inferred_name;
 			else if (!parse_inferred_identifier(parser, &name))
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
 				return NULL;
 			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
 				diagnostic_error(parser->diagnostics, name.location,
@@ -3710,8 +3721,13 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 			if (!type_syntax)
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
 				return NULL;
+		}
+		if (function_contract && type_syntax->kind != type_syntax_function) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"unsequenced and reproducible require a direct function declarator");
+			return NULL;
 		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
 			diagnostic_error(parser->diagnostics, name.location,
@@ -4385,7 +4401,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		struct token name;
 		struct ast_type_syntax *type_syntax;
 		struct ast_external_declaration *item;
-		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated;
+		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated, function_contract;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4396,8 +4412,13 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 		if (!type_syntax)
 			return NULL;
-		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated))
+		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
 			return NULL;
+		if (function_contract && type_syntax->kind != type_syntax_function) {
+			diagnostic_error(parser->diagnostics, name.location,
+				"unsequenced and reproducible require a direct function declarator");
+			return NULL;
+		}
 		/* Its scope starts after the complete declarator, before an
 		 * initializer or a later declarator in the same declaration.
 		 */

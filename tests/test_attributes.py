@@ -8,6 +8,9 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('int f(void) [[unsequenced]] {return 42;}', 'int f(void) {return 42;}'),
+    ('int f(void) [[__reproducible__]] {return 42;}', 'int f(void) {return 42;}'),
+    ('int main(void){int f(void) [[reproducible]]; return f();}', 'int main(void){int f(void); return f();}'),
     ('struct [[maybe_unused, vendor::hint(1)]] S { int x; } s;',
      'struct S { int x; } s;'),
     ('union [[__nodiscard__("check"), __deprecated__]] U { long x; double y; } u;',
@@ -75,6 +78,10 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
+    ('int x [[unsequenced]];', 'require a direct function declarator'),
+    ('int (*p)(void) [[reproducible]];', 'require a direct function declarator'),
+    ('int f(void) [[unsequenced(1)]];', 'take no arguments'),
+    ('int f(void) [[reproducible(1)]];', 'take no arguments'),
     ('struct [[nodiscard]] S;', 'require a record definition'),
     ('union [[maybe_unused]] U;', 'require a record definition'),
     ('struct [[fallthrough]] S { int x; };', 'not permitted on records'),
