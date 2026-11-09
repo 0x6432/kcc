@@ -330,15 +330,24 @@ static void test_bitint_width_types(struct arena *arena)
 			assert(type_compatible(type_usual_arithmetic(t, &type_ulong_long), &type_ulong_long));
 		}
 	}
-	/* Do not expose an aggregate ABI simply because a semantic type exists. */
-	struct record_member member = { .type = type_bitint(5, false) };
-	struct record_definition def = { .complete = true, .members = &member, .member_count = 1,
-		.size = 1, .alignment = 1 };
+	/* Supported widths classify as INTEGER, including MEMORY-size records. */
+	struct record_member member = {0};
+	struct record_definition def = { .complete = true, .members = &member, .member_count = 1 };
 	struct record_type record = { .type = { .kind = type_kind_struct }, .definition = &def };
 	struct aggregate_abi abi;
-	assert(!type_aggregate_abi(&record.type, &abi));
-	def.size = 24; /* MEMORY classification must not bypass the guard. */
-	assert(!type_aggregate_abi(&record.type, &abi));
+	for (unsigned w = 1; w <= 64; w++) {
+		for (unsigned u = 0; u < 2; u++) {
+			member.type = type_bitint(w, u != 0);
+			if (!member.type) continue;
+			def.size = type_object_size(member.type);
+			def.alignment = type_object_alignment(member.type);
+			assert(type_aggregate_abi(&record.type, &abi));
+			assert(abi.size == def.size && abi.classes[0] == aggregate_abi_integer);
+			def.size = 24;
+			assert(type_aggregate_abi(&record.type, &abi));
+			assert(abi.classes[0] == aggregate_abi_none && abi.classes[1] == aggregate_abi_none);
+		}
+	}
 }
 
 int main(void)
