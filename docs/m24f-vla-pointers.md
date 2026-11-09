@@ -31,12 +31,16 @@ stride. When two VM pointers participate, the left size is used. As in C, the
 program must satisfy pointer-subtraction and array-type compatibility rules,
 including equal evaluated bounds where required; this compiler does not check
 that equality at runtime. A pointer object may be reassigned, but its stride
-remains the size captured by its declaration.
+remains the size captured by its declaration. Direct addresses of supported VLA
+objects (`&a`) also carry the captured size through offsets, subscripting and
+pointer differences, for example `(&a + 1) - &a`. The ordinary C bounds and
+compatibility requirements still apply.
 
 `sizeof` of a tracked VM row uses its saved size and evaluates the row
 expression, including indices, calls, pointer updates and volatile or atomic
 accesses. Supported forms include `sizeof *p`, `sizeof p[i++]`,
-`sizeof *(p + i)`, and `sizeof *(p++)`. It is not an integer constant expression. It does
+`sizeof *(p + i)`, `sizeof *(p++)`, and `sizeof *(&a + i)` for a
+  supported VLA object. It is not an integer constant expression. It does
 not dereference the resulting pointer to read array elements. Nested unevaluated
 contexts, such as `sizeof(sizeof *p)`, do not perform that load. Ordinary
 pointer size, conversion, comparison, and calls retain the existing x86-64
@@ -65,8 +69,7 @@ The runtime bound is evaluated on each actual entry through the declaration.
   provenance: a direct supported local pointer, or an offset or update result
   rooted in one. Update lvalues must be the direct local identifier. Arithmetic
   and subtraction involving a conditional, cast, call, indirect, or other VM
-  expression without tracked provenance are rejected; arithmetic on `&vla`
-  still has no tracked size. A conditional combining a VM and a fixed array
+  expression without tracked provenance are rejected. A conditional combining a VM and a fixed array
   pointer keeps the runtime marker instead of assuming a fixed stride.
 - `sizeof` on a VLA expression supports existing direct VLA-object forms and
   tracked pointer indirection, offsets, subscripts and updates. Untracked

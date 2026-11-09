@@ -24,10 +24,10 @@ individual VLAs have ended their lifetimes.
 
 Other restrictions of the VLA object subset remain: no runtime inner
 dimensions, nonempty VLA initializers, general VM typedefs or
-parameters, or `typeof` of a VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
-the whole VLA remains rejected because runtime referent size is not modeled;
-`sizeof` accepts the array name or direct indirection/address pairs such as
-`sizeof *(&a)`; other VLA expressions remain unsupported. A `goto` may stay within or leave VLA scopes, or return to a point before a
+parameters, or `typeof` of a VLA. Taking a VLA's address and tracked arithmetic on that direct address are supported using the
+saved runtime size; untracked pointer forms remain restricted.
+`sizeof` accepts the array name, direct indirection/address pairs, and tracked
+VLA address and pointer expressions; see `m24f-vla-pointers.md` for the bounds. A `goto` may stay within or leave VLA scopes, or return to a point before a
 VLA declaration; it is rejected if its target enters the scope of a VLA absent
 at the source. Re-entering a declaration consumes the cumulative budget again. The focused
 VLA object regression has since been run through QBE.

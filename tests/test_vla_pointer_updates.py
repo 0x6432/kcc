@@ -10,6 +10,11 @@ kcc = Path(os.environ.get('KCC', root/'build/kcc'))
 qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 programs = [
+    'int main(void) { int n=3; int a[n]; a[2]=42; return (&a+1)-&a==1 && (&a)[0][2]==42 ? 42:1; }',
+    'int main(void) { int n=3; int a[n]; a[2]=42; int i=0; return (i+&a)[0][2]==42 && ((&a+1)-&a)==1 ? 42:1; }',
+    'int main(void) { int n=3; int a[n]; int i=0; unsigned long z=sizeof *(&a+(i++,0)); return z==12 && i==1 ? 42:1; }',
+    'int main(void) { int n=3; int a[n]; int i=0; unsigned long z=sizeof(sizeof *(&a+(i++,0))); return z==sizeof(unsigned long) && i==0 ? 42:1; }',
+    'int main(void) { int n=2; int a[n][3]; a[1][2]=42; return sizeof (&a)[0]==24 && (&a)[0][1][2]==42 ? 42:1; }',
     # Prefix and postfix results, both directions, after changing the bound.
     'int main(void) { int n=3,a[4][3]={{1},{2},{3},{42}}; int (*p)[n++]=a; n=9; if((*p++)[0]!=1 || (*++p)[0]!=3 || (*p--)[0]!=3 || (*--p)[0]!=1) return 1; return n==9 ? 42:1; }',
     'int main(void) { int n=3,a[3][3]={{0},{0,0,42},{0}}; int (*p)[n]=a; return (p++)[0][0]==0 && (++p)[-1][2]==42 ? 42:1; }',
@@ -45,7 +50,6 @@ rejected = [
     ('int f(int n) { int (*const p)[n]=0; p++; return 0; }', 'modifiable'),
     ('int f(int n) { int (*p)[n]=0; (*(&p))++; return 0; }', 'complete object'),
     ('int f(int n) { int (*p)[n]=0; (*(&p))+=1; return 0; }', 'complete object'),
-    ('int f(int n) { int a[n]; return &a-&a; }', 'complete object referents'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return (n?p:q)-p; }', 'complete object referents'),
     ('int f(int n) { int (*p)[n]=0; p*=2; return 0; }', 'only additive'),
     ('int f(int n) { int (*p)[n]=0; p+=1.0; return 0; }', 'integer right operand'),

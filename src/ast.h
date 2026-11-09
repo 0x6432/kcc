@@ -237,6 +237,7 @@ struct ast_sizeof_expression {
 	struct ast_expression *operand;
 	uint64_t size;
 	struct ast_local_declaration *vla_local;
+	bool evaluate_vla_operand;
 };
 
 struct ast_offset_step {

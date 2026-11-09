@@ -1467,9 +1467,8 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_sizeof: {
 		const struct ast_sizeof_expression *node = (const struct ast_sizeof_expression *)expression;
 		if (node->vla_local) {
-			/* A VLA operand is evaluated. For the supported direct pointer form, this
-			 * includes a volatile or atomic pointer load. */
-			if (node->vla_local->vm_pointer_bound)
+			/* Tracked row expressions evaluate their pointer and index effects. */
+			if (node->evaluate_vla_operand)
 				(void)codegen_address(codegen, node->operand);
 			size_t value = codegen->next_temporary++;
 			emit(codegen, "\t%%t%zu =l copy %%z%zu\n", value, node->vla_local->slot);

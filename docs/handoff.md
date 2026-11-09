@@ -73,7 +73,9 @@ on failed retries remains a documented limitation; see `m24c-atomic-subset.md`.
 Block-local pointers to a single runtime-bound array can capture their bound
 and use it for direct indexing, pointer offsets, updates and subtraction for
 tracked operands. `sizeof` supports tracked VM row expressions with evaluated
-indices, calls and pointer updates. General variably modified types, runtime inner array
+indices, calls and pointer updates. Direct addresses of VLA objects now carry
+their saved size through tracked offsets and pointer subtraction. General
+variably modified types, runtime inner array
 dimensions and untracked pointer expressions remain unsupported; see
 `m24f-vla-pointers.md`. Signed widths 2–64 and unsigned widths 1–64 of
 `_BitInt` support scalar values, fixed and variadic calls, bounded aggregate

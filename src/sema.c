@@ -2525,6 +2525,8 @@ static struct ast_local_declaration *vm_pointer_lvalue(struct ast_expression *ex
 static struct ast_local_declaration *vm_pointer_source(struct ast_expression *expression)
 {
 	switch (expression->kind) {
+	case expression_address:
+		return direct_vla_local(((struct ast_address_expression *)expression)->operand);
 	case expression_pointer_offset:
 		return ((struct ast_pointer_offset_expression *)expression)->vm_size_local;
 	case expression_prefix_update:
@@ -2551,6 +2553,14 @@ static struct ast_local_declaration *syntactic_vm_pointer(struct sema *sema,
 		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
 		struct ast_local_declaration *local = find_local(sema, name->name);
 		return local && local->vm_pointer_bound ? local : NULL;
+	}
+	case expression_address: {
+		const struct ast_expression *operand = ((const struct ast_address_expression *)expression)->operand;
+		if (operand->kind != expression_name)
+			return NULL;
+		const struct ast_name_expression *name = (const struct ast_name_expression *)operand;
+		struct ast_local_declaration *local = find_local(sema, name->name);
+		return local && local->vla_bound ? local : NULL;
 	}
 	case expression_prefix_update:
 		return syntactic_vm_pointer(sema, ((const struct ast_prefix_update_expression *)expression)->operand);
@@ -3250,6 +3260,7 @@ static bool sema_expression(struct sema *sema,
 				diagnostic_error(sema->diagnostics, expression->location, "sizeof variable-length array requires a direct object reference");
 				return false;
 			}
+			node->evaluate_vla_operand = vm_operand;
 			result_type = &type_ulong;
 			expression->depth = node->operand->depth + 1;
 			break;
