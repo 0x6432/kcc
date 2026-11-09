@@ -50,6 +50,13 @@ punctuation and literal quoted-name backslashes across `#include`, `#embed`,
 `__has_include` and `__has_embed`; see `m25-resource-names.md` for the remaining
 lexing and normalization limits.
 
+Ordinary objects and functions also support bounded `[[deprecated]]` use
+warnings, including local declarations and shadowing. Atomic arithmetic
+compound assignments use sequentially consistent compare-exchange loops where
+fetch operations cannot represent the computation; tests cover mixed numeric
+types, single evaluation and pthread contention. Floating-environment behavior
+on failed retries remains a documented limitation; see `m24c-atomic-subset.md`.
+
 These features do not complete C23 attributes, hosted C, general bit-fields,
 other `_BitInt` widths, or `long double`.
 
