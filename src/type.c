@@ -933,7 +933,7 @@ bool type_aggregate_abi_for_mode(const struct type *type, struct aggregate_abi *
 		type_record_definition(type)->has_flexible_array) return false;
 	uint64_t size = type_object_size(type);
 	unsigned alignment = type_object_alignment(type);
-	if (!size || size > type_max_abi_record_size || alignment > 8) return false;
+	if (!size || size > type_max_abi_record_size || alignment > 16) return false;
 	size_t member_budget = 65536;
 	bool barrier = false, floating = false;
 	if (aggregate_unverified(type, 0, &member_budget, &barrier, &floating)) return false;

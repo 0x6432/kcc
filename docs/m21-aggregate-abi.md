@@ -4,16 +4,16 @@
 
 On Linux x86-64 SysV with QBE 1.2, evaluated direct and indirect calls and
 function definitions can pass and return complete struct and union values of
-1–1024 bytes with alignment at most 8, provided they have no flexible array member
+1–1024 bytes with alignment at most 16, provided they have no flexible array member
 and each occupied ABI eightbyte has a representable class. Types may contain
 nested records, unions, fixed arrays, integers, enums, pointers, `float` and
 `double`, subject to the compiler's existing type and qualifier restrictions.
-Explicit alignment up to 8 is supported. Function prototypes and unevaluated
+Explicit alignment up to 16 is supported when the register eightbytes are representable. Function prototypes and unevaluated
 calls may describe larger or otherwise unsupported records, but an evaluated
 call or definition with such an ABI is diagnosed. Existing C type compatibility
 rules still apply; ABI shape alone never makes C types compatible.
 
-This is not the entire SysV ABI. Size 1025 or more, alignment above 8, flexible
+This is not the entire SysV ABI. Size 1025 or more, alignment above 16, flexible
 array members, unrepresentable/empty ABI eightbytes, unsupported types and
 unaligned scalar fields are refused rather than passed as pointers. Aggregate arguments after an ellipsis and `va_arg` of unqualified aggregate types
 are supported under the same limits. Fixed aggregate parameters of a variadic
@@ -96,7 +96,7 @@ existing ABI rules are still rejected. Token-dump modes cannot use the option.
 Arguments passed after an ellipsis use the same supported aggregate classifier as
 fixed arguments. `va_arg` for a complete, unqualified supported record fetches
 from the SysV 24-byte `va_list` register-save area when every required INTEGER
-and SSE slot is available, or from the overflow stack area otherwise. Register
+and SSE slot is available, or from the overflow stack area otherwise (with 16-byte alignment where required). Register
 allocation rolls back as a whole when either class is exhausted. The resulting
 record is copied into an entry-allocated rounded temporary, charged to the
 existing record-temporary and storage limits; `va_copy` preserves both cursors.
@@ -106,7 +106,7 @@ mode, field, alignment and representability restrictions.
 
 `tests/test_aggregate_varargs.py` checks cross-object calls in both directions
 with GCC 11 and Clang 15, including 1–16-byte records, 17–1024-byte memory
-records, mixed INTEGER/SSE and union shapes, va_copy, register exhaustion and
+records, mixed INTEGER/SSE and union shapes, 16-byte alignment, va_copy, register exhaustion and
 rollback, fixed aggregate parameters, and stack advancement. These are focused
 checks, not full ABI or C conformance.
 
@@ -114,7 +114,7 @@ checks, not full ABI or C conformance.
 
 `tests/test_aggregate_abi.py` links separately compiled GCC and kcc objects in
 both directions using pinned QBE 1.2. It exercises byte sizes 1–16, 24 and 64,
-INTEGER/SSE mixtures, unions, arrays, alignment 8, indirect calls, register
+INTEGER/SSE mixtures, unions, arrays, alignment 8 and 16, indirect calls, register
 exhaustion and rollback, memory returns, fixed parameters of variadic functions,
 `va_start`, recursion, discarded results, tail subobjects and limits/rejections.
 `tests/test_bitfield_aggregate_abi.py` additionally exercises 448 named signed

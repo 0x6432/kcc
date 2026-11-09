@@ -16,7 +16,7 @@ struct control_codegen {
 struct abi_registry {
 	bool legacy_clang_abi;
 	bool gcc12_zero_width_abi;
-	bool used[type_max_abi_record_size + 1][9][aggregate_abi_sse + 1][aggregate_abi_sse + 1];
+	bool used[type_max_abi_record_size + 1][17][aggregate_abi_sse + 1][aggregate_abi_sse + 1];
 };
 
 struct codegen {
@@ -1188,6 +1188,12 @@ static size_t codegen_va_record(struct codegen *codegen,
 	size_t pointer = codegen_byte_offset(codegen, list, 8);
 	size_t address = codegen->next_temporary++, next = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =l loadl %%t%zu\n", address, pointer);
+	if (abi.alignment > 8) {
+		size_t shifted = codegen->next_temporary++, aligned = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l add %%t%zu, 15\n", shifted, address);
+		emit(codegen, "\t%%t%zu =l and %%t%zu, -16\n", aligned, shifted);
+		address = aligned;
+	}
 	emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", next, address, (abi.size + 7) & ~7u);
 	emit(codegen, "\tstorel %%t%zu, %%t%zu\n", next, pointer);
 	codegen_record_copy(codegen, address, result, abi.size);
@@ -2199,12 +2205,15 @@ static bool codegen_function(FILE *stream, const struct ast_function *function, 
 	/* QBE loads complete eightbytes, including for small objects. Staging
 	 * buffers are rounded up so it never reads past a source subobject. */
 	if (type_is_record(function->return_type))
-		emit(&codegen, "\t%%retbuf =l alloc8 %ju\n", (uintmax_t)((type_object_size(function->return_type) + 7) & ~UINT64_C(7)));
+		emit(&codegen, "\t%%retbuf =l alloc%u %ju\n", type_object_alignment(function->return_type) > 8 ? 16 : 8,
+			(uintmax_t)((type_object_size(function->return_type) + 7) & ~UINT64_C(7)));
 	for (const struct ast_argument *argument = function->abi_arguments; argument; argument = argument->next_abi_argument)
-		emit(&codegen, "\t%%a%zu =l alloc8 %ju\n", argument->abi_slot,
+		emit(&codegen, "\t%%a%zu =l alloc%u %ju\n", argument->abi_slot,
+			type_object_alignment(argument->value->type) > 8 ? 16 : 8,
 			(uintmax_t)((type_object_size(argument->value->type) + 7) & ~UINT64_C(7)));
 	for (const struct ast_va_expression *node = function->record_va_args; node; node = node->next_record_va)
-		emit(&codegen, "\t%%q%zu =l alloc8 %ju\n", node->record_abi_slot,
+		emit(&codegen, "\t%%q%zu =l alloc%u %ju\n", node->record_abi_slot,
+			type_object_alignment(node->expression.type) > 8 ? 16 : 8,
 			(uintmax_t)((type_object_size(node->expression.type) + 7) & ~UINT64_C(7)));
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
@@ -2480,7 +2489,7 @@ bool codegen_translation_unit_with_options(FILE *stream, const struct ast_transl
 	if (!body) return false;
 	bool ok = codegen_translation_unit_body(body, unit, &abi);
 	for (unsigned size = 1; ok && size <= type_max_abi_record_size; size++)
-		for (unsigned align = 1; align <= 8; align *= 2)
+		for (unsigned align = 1; align <= 16; align *= 2)
 			for (unsigned c0 = 0; c0 < 3; c0++)
 				for (unsigned c1 = 0; c1 < 3; c1++) {
 					if (!abi.used[size][align][c0][c1]) continue;

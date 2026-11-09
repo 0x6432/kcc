@@ -342,8 +342,8 @@ static bool check_aggregate_abi(struct sema *sema, const struct type *type,
 	if (!type_aggregate_abi_for_mode(type, &abi, sema->legacy_clang_abi, sema->gcc12_zero_width_abi)) {
 		diagnostic_error(sema->diagnostics, location,
 			sema->legacy_clang_abi ?
-			"aggregate ABI unsupported (M21, legacy Clang mode): requires complete record without flexible array, size 1..1024, alignment <= 8 and representable eightbytes" :
-			"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 8 and representable eightbytes");
+			"aggregate ABI unsupported (M21, legacy Clang mode): requires complete record without flexible array, size 1..1024, alignment <= 16 and representable eightbytes" :
+			"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 16 and representable eightbytes");
 		return false;
 	}
 	if (sema->warn_legacy_clang_abi) {

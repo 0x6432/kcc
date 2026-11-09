@@ -81,6 +81,17 @@ def main():
             caller = (f'{tag} S transform({tag} S); int main(void) {{ {tag} S x={{0}}; {init} '
                       f'{tag} S (*p)({tag} S)=transform; {tag} S y=p(x); return !({check}); }}')
             test_pair(d, decl, body, caller)
+        # Explicit 16-byte alignment: small INTEGER/SSE and large MEMORY records.
+        for decl, init, change, check in [
+            ('struct S { _Alignas(16) long x; long y; }; ', '{40,7}', 'x.x+=2;', 'y.x==42 && y.y==7'),
+            ('struct S { _Alignas(16) double x; double y; }; ', '{1.5,2.5}', 'x.x+=2.;', 'y.x==3.5 && y.y==2.5'),
+            ('struct S { _Alignas(16) double d; long x; }; ', '{1.5,40}', 'x.x+=2;', 'y.x==42 && y.d==1.5'),
+            ('struct S { _Alignas(16) long x[5]; }; ', '{{40,2,3,4,7}}', 'x.x[0]+=2;', 'y.x[0]==42 && y.x[4]==7'),
+        ]:
+            body = f'struct S transform(struct S x) {{ {change} return x; }} '
+            caller = (f'struct S transform(struct S); int main(void) {{ struct S x={init}; '
+                      f'struct S y=transform(x); return !({check}); }}')
+            test_pair(d, decl, body, caller)
         # Record type attributes do not change layout or by-value calls.
         decl = 'struct [[nodiscard]] S { double d; long x; }; '
         body = 'struct S transform(struct S x) { x.x+=2; return x; } '
@@ -146,10 +157,11 @@ def main():
         run([HOST, d/'local.s', '-o', d/'local'])
         run([d/'local'])
         error = ('aggregate ABI unsupported (M21): requires complete record without flexible array, '
-                 'size 1..1024, alignment <= 8 and representable eightbytes')
+                 'size 1..1024, alignment <= 16 and representable eightbytes')
         for src in [
             'struct S { char a[1025]; }; int f(struct S x) { return x.a[0]; }',
             'struct S { _Alignas(16) int x; }; struct S f(void) { struct S s={0}; return s; }',
+            'struct S { _Alignas(32) long x[4]; }; int f(struct S x) { return x.x[0]; }',
             'struct S { int n; char a[]; }; int f(struct S x) { return x.n; }',
         ]:
             reject(d, src, error)

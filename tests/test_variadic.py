@@ -56,7 +56,7 @@ def main():
             'int f(int,...); int g(void){int (*p)(int)=f; return 0;}',
             'int f(void,...);', 'int f(int,...,int);', 'int f(...,...);',
             'int f(int ...);', 'int f(int, ...,);',
-            'struct S { int x; }; int f(int,...); int g(void){ struct S s; return f(1,s); }',
+            'struct S { char x[1025]; }; int f(int,...); int g(void){ struct S s; return f(1,s); }',
             'int f(int,...); void v(void); int g(void){return f(0,v());}',
             '#include <stdarg.h>\nenum E : unsigned short { A=7 }; int f(int n,...){va_list a;va_start(a);return va_arg(a,enum E);}',
             '#include <stdarg.h>\nenum E : bool { A=1 }; int f(int n,...){va_list a;va_start(a);return va_arg(a,enum E);}',

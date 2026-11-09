@@ -81,6 +81,35 @@ def main():
           return s.a[0]==40 && s.a[24]==4 && t.a[0]==2 && t.a[24]==9; }'''
         caller = 'int read(int,...); int main(void) { struct S s={0},t={0}; s.a[0]=40;s.a[24]=4;t.a[0]=2;t.a[24]=9;return !read(0,s,t); }'
         test_pair(d, decl, body, caller)
+        # Each syntactic va_arg has a stable entry slot across loop iterations;
+        # unevaluated sizeof does not advance the list or consume a slot at runtime.
+        decl = '#include <stdarg.h>\nstruct S { long x; double d; }; '
+        body = '''int read(int n,...) { va_list ap; va_start(ap,n); long sum=0; int i=0;
+          if(sizeof(va_arg(ap,struct S))!=sizeof(struct S)) return 0;
+          while(i<n) { struct S s=va_arg(ap,struct S); sum+=s.x+(long)s.d; i++; }
+          va_end(ap); return sum==42; }'''
+        caller = 'int read(int,...); int main(void) { struct S a={10,1.},b={20,2.},c={3,6.}; return !read(3,a,b,c); }'
+        test_pair(d, decl, body, caller)
+        # Six prior GP values place a scalar on the stack. The following
+        # 16-aligned memory record must round the overflow pointer up to 16.
+        decl = '#include <stdarg.h>\nstruct S { _Alignas(16) long x[5]; }; '
+        body = '''int read(int tag,...) { va_list ap; va_start(ap,tag);
+          int a=va_arg(ap,int), b=va_arg(ap,int), c=va_arg(ap,int);
+          int d=va_arg(ap,int), e=va_arg(ap,int), f=va_arg(ap,int);
+          struct S s=va_arg(ap,struct S); long tail=va_arg(ap,long); va_end(ap);
+          return a+b+c+d+e+f==21 && s.x[0]==40 && s.x[4]==9 && tail==2; }'''
+        caller = 'int read(int,...); int main(void) { struct S s={{40,0,0,0,9}}; return !read(0,1,2,3,4,5,6,s,2L); }'
+        test_pair(d, decl, body, caller)
+        # A 16-byte-aligned register record also rolls back atomically to a
+        # correctly aligned stack slot if one register class is exhausted.
+        decl = '#include <stdarg.h>\nstruct S { _Alignas(16) double d; long x; }; '
+        body = '''int read(int tag,...) { va_list ap; va_start(ap,tag);
+          int a=va_arg(ap,int), b=va_arg(ap,int), c=va_arg(ap,int);
+          int d=va_arg(ap,int), e=va_arg(ap,int), f=va_arg(ap,int);
+          struct S s=va_arg(ap,struct S); double tail=va_arg(ap,double); va_end(ap);
+          return a+b+c+d+e+f==21 && s.x==40 && s.d==1.5 && tail==2.5; }'''
+        caller = 'int read(int,...); int main(void) { struct S s={1.5,40}; return !read(0,1,2,3,4,5,6,s,2.5); }'
+        test_pair(d, decl, body, caller)
         # Static resource budget is charged even for discarded va_arg results.
         prefix = ('#include <stdarg.h>\nstruct S { int x; }; '
                   'int f(int n, ...) { va_list a; va_start(a,n); ')
@@ -91,10 +120,10 @@ def main():
                'function exceeds record value temporary limit (256)')
         reject(d, '#include <stdarg.h>\nstruct S {int n; char x[];}; '
                'void f(int n,...){va_list a;va_start(a,n);(void)va_arg(a,struct S);}',
-               'aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 8 and representable eightbytes')
+               'aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 16 and representable eightbytes')
         reject(d, '#include <stdarg.h>\nstruct S { _Alignas(16) int x; }; '
                'void f(int n,...){va_list a;va_start(a,n);(void)va_arg(a,struct S);}',
-               'aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 8 and representable eightbytes')
+               'aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 16 and representable eightbytes')
     print('Aggregate varargs: integer/SSE/mixed and memory records, va_copy, register rollback and stack advancement, both cross-object directions passed')
 
 if __name__ == '__main__':
