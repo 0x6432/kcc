@@ -1,0 +1,28 @@
+name: Temporary CI recipe diagnosis
+on:
+  push:
+    branches: [wip-ci-diagnosis-b4d08ea]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Identify failing test without publishing logs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for job in 129350676477 129350737005; do
+            curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/$job.log"
+            JOB="$job" LOG="$RUNNER_TEMP/$job.log" python3 - <<'PY2'
+          import os, re
+          log=open(os.environ['LOG'], errors='replace').read()
+          recipes=re.findall(r'python3 (tests/test_[a-z0-9_]+\.py)', log)
+          frames=re.findall(r'File "[^"\n]*/(tests/test_[a-z0-9_]+\.py)", line ([0-9]+)', log)
+          flags=[name for name,pattern in [('assertion','AssertionError'),('compiler_error','error:'),('asan','AddressSanitizer'),('ubsan','runtime error:'),('leak','LeakSanitizer'),('segfault','Segmentation fault'),('subprocess','CalledProcessError'),('unused_parameter','unused parameter'),('deadly_signal','DEADLYSIGNAL')] if re.search(pattern,log)]
+          print('::warning title=Failure '+os.environ['JOB']+'::recipe '+(recipes[-1] if recipes else 'none')+'; frames '+(', '.join(f'{file}:{line}' for file,line in frames[-8:]) or 'none')+'; categories '+','.join(flags))
+          PY2
+          done
