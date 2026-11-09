@@ -108,6 +108,7 @@ fuzz-compile: build/fuzz_compile
 # Explicit native oracle: requires Clang with C2x _BitInt and x86-64 SysV QBE.
 test-bitint-native: export KCC_RUNTIME_LDFLAGS := $(LDFLAGS)
 test-bitint-native: build/kcc build/libkccrt.a
+	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_variadic_native.py
 	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_arbitrary.py
 	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_conversions_native.py
 	QBE="$(QBE)" CLANG="$(CLANG)" python3 tests/test_bitint_arithmetic_native.py
@@ -135,6 +136,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_aggregate_abi.py
 	QBE="$(QBE)" python3 tests/test_aggregate_varargs.py
 	QBE="$(QBE)" python3 tests/test_bitint_values.py
+	QBE="$(QBE)" python3 tests/test_bitint_variadic.py
 	QBE="$(QBE)" python3 tests/test_bitint_abi_atomics.py
 	QBE="$(QBE)" python3 tests/test_bitint_literals.py
 	QBE="$(QBE)" python3 tests/test_bitint_layout.py
@@ -347,6 +349,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	./build/test_bitint
 	python3 tests/test_bitint_rejection.py
 	QBE="$(QBE)" python3 tests/test_bitint_values.py
+	QBE="$(QBE)" python3 tests/test_bitint_variadic.py
 	QBE="$(QBE)" python3 tests/test_bitint_abi_atomics.py
 	QBE="$(QBE)" python3 tests/test_bitint_literals.py
 	QBE="$(QBE)" python3 tests/test_bitint_layout.py

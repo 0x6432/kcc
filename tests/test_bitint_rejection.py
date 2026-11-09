@@ -16,8 +16,6 @@ with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
         ('_Atomic(_BitInt(5)) value;\n', 'unsupported atomic type'),
         ('struct S { _BitInt(5) x; }; struct S f(struct S x) { return x; }', 'aggregate'),
         ('struct S { unsigned _BitInt(5) x : 2; };', 'bit-field'),
-        ('void f(int, ...); void g(void) { f(0, (_BitInt(5))1); }', 'variadic arguments'),
-        ('#include <stdarg.h>\nint f(int x, ...) { va_list ap; va_start(ap,x); return va_arg(ap,_BitInt(5)); }', 'va_arg'),
         ('enum E : _BitInt(5) { A };', 'fixed enum underlying type'),
     ]
     # A supported scalar type is not an atomic or aggregate ABI promise.
@@ -29,7 +27,6 @@ with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
     cases += [
         ('struct A { unsigned _BitInt(33) x[3]; }; struct B { struct A a; }; struct B f(struct B x){return x;}', 'aggregate'),
         ('struct A { _BitInt(17) x; }; struct A f(struct A); int g(void) { struct A a={1}; f(a); return 0; }', 'aggregate'),
-        ('void f(int, ...); void g(void) { f(0, (unsigned _BitInt(63))1); }', 'variadic arguments'),
     ]
     for text, message in cases:
         source.write_text(text)

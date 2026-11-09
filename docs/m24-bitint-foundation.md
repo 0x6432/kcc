@@ -17,16 +17,14 @@ out-of-range conversions use the target's two's-complement behavior. Signed
 overflow and invalid shifts remain undefined at runtime and are diagnosed in
 integer constant expressions. Padding bits are not part of the value.
 
-Fixed scalar parameters and results are lowered for every supported width.
+Fixed scalar parameters and results, variadic arguments and `va_arg` are lowered for every supported width.
 Native Clang 15 x86-64 cross-object tests exercise both calling directions,
-register and stack parameters, indirect calls, returned values, external
+register and stack parameters, mixed floating-point variadic arguments, `va_copy`, indirect calls, returned values, external
 objects, arrays, and pointers to records. This is targeted evidence for the
 specified ABI, not a claim of full C23 or multi-platform conformance.
 
 The narrower ABI boundaries are intentional:
 
-- Non-native-width bit-precise values are rejected as variadic arguments or
-  `va_arg` types; 8/16/32/64 retain the existing variadic implementation.
 - Records or unions containing non-native-width members by value are rejected
   at aggregate call/return boundaries, including nested/large records. Local
   objects and pointers to records are supported. Existing aggregate ABI bounds
@@ -52,7 +50,7 @@ Linux x86-64 LP64 SysV model; invoke QBE with `-t amd64_sysv`.
 
 `make test-bitint-native QBE=/path/to/qbe CLANG=/path/to/clang` requires a
 Clang with C2x `_BitInt`. It checks scalar cross-object calls in both directions
-for all 127 valid signed/unsigned types, a runtime cross-width conversion
+for all 127 valid signed/unsigned types, variadic cross-calls in both directions, a runtime cross-width conversion
 matrix, wb literal typing and focused arithmetic, and an independent Clang type
 oracle. `tests/test_bitint_rejection.py` checks the explicit ABI/atomic gates;
 `tests/test_bitint.c`, `tests/test_type.c`, and the existing BitInt tests cover

@@ -1133,6 +1133,21 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 	for (const struct ast_argument *argument = node->arguments; argument;
 		argument = argument->next) {
 		size_t value_arg = codegen_expression(codegen, argument->value);
+		/* Clang reads the storage-width value for non-native bit-precise
+		 * ellipsis arguments; padding bits must not carry sign extension. */
+		if (node->signature->variadic && count >= node->signature->parameter_count &&
+			type_is_bitint(argument->value->type) &&
+			!type_bitint_width_native(type_integer_width(argument->value->type))) {
+			unsigned width = type_integer_width(argument->value->type);
+			unsigned carrier = width <= 32 ? 32 : 64;
+			size_t shifted = codegen->next_temporary++;
+			size_t masked = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =%c shl %%t%zu, %u\n", shifted,
+				carrier == 32 ? 'w' : 'l', value_arg, carrier - width);
+			emit(codegen, "\t%%t%zu =%c shr %%t%zu, %u\n", masked,
+				carrier == 32 ? 'w' : 'l', shifted, carrier - width);
+			value_arg = masked;
+		}
 		if (type_is_record(argument->value->type)) {
 			size_t destination = codegen->next_temporary++;
 			emit(codegen, "\t%%t%zu =l copy %%a%zu\n", destination, argument->abi_slot);
@@ -1164,7 +1179,13 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 		if (node->signature->variadic && count == node->signature->parameter_count)
 			emit(codegen, "%s...", count ? ", " : "");
 		emit(codegen, "%s", (count || (node->signature->variadic && !node->signature->parameter_count)) ? ", " : "");
-		emit_abi_type(codegen, argument->value->type);
+		if (node->signature->variadic && count >= node->signature->parameter_count &&
+			type_is_bitint(argument->value->type) &&
+			!type_bitint_width_native(type_integer_width(argument->value->type)) &&
+			type_object_size(argument->value->type) <= 2)
+			emit(codegen, "%s", type_object_size(argument->value->type) == 1 ? "ub" : "uh");
+		else
+			emit_abi_type(codegen, argument->value->type);
 		emit(codegen, " %%t%zu", arguments[count]);
 		count++;
 	}

@@ -2705,11 +2705,6 @@ static bool sema_expression(struct sema *sema,
 			result_type = resolve_type_syntax(sema, node->type_syntax);
 			if (!result_type)
 				return false;
-			if (type_is_bitint(result_type) && !type_bitint_width_native(type_integer_width(result_type))) {
-				diagnostic_error(sema->diagnostics, expression->location,
-					"non-native _BitInt va_arg is not supported");
-				return false;
-			}
 			if (type_is_record(result_type)) {
 				if (result_type->qualifiers || !type_is_complete_object(result_type)) {
 					diagnostic_error(sema->diagnostics, expression->location,
@@ -2848,11 +2843,6 @@ static bool sema_expression(struct sema *sema,
 					return false;
 				parameter = parameter->next;
 			} else if (type_is_bitint(argument->value->type)) {
-				if (!type_bitint_width_native(type_integer_width(argument->value->type))) {
-					diagnostic_error(sema->diagnostics, argument->value->location,
-						"non-native _BitInt variadic arguments are not supported");
-					return false;
-				}
 				/* C23 bit-precise integers are not subject to integer promotions. */
 			} else if (type_is_floating(argument->value->type)) {
 				if (!convert_expression(sema, &argument->value, &type_double))
