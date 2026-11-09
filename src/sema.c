@@ -368,9 +368,8 @@ static bool is_bit_field_expression(const struct ast_expression *expression)
 }
 
 /* GCC's SysV bit-field values retain their width through comma, assignment
- * and update expressions for subsequent integer promotions. A cast or an
- * arithmetic operation, by contrast, produces an ordinary value. */
-static const struct record_member *narrow_field_value(const struct ast_expression *expression)
+ * and update expressions. Explicit casts break this chain. */
+static const struct record_member *field_value(const struct ast_expression *expression)
 {
 	for (;;) {
 		switch (expression->kind) {
@@ -387,15 +386,36 @@ static const struct record_member *narrow_field_value(const struct ast_expressio
 		case expression_prefix_update:
 			expression = ((const struct ast_prefix_update_expression *)expression)->operand; break;
 		default:
-			if (is_bit_field_expression(expression)) {
-				const struct record_member *member = ((const struct ast_member_expression *)expression)->member;
-				if (member->bit_width && (member->bit_width < 32 ||
-					(member->bit_width == 32 && type_value_width(member->type) == 64)))
-					return member;
-			}
+			if (is_bit_field_expression(expression))
+				return ((const struct ast_member_expression *)expression)->member;
 			return NULL;
 		}
 	}
+}
+
+static const struct record_member *narrow_field_value(const struct ast_expression *expression)
+{
+	const struct record_member *member = field_value(expression);
+	return member && member->bit_width && (member->bit_width < 32 ||
+		(member->bit_width == 32 && type_value_width(member->type) == 64)) ? member : NULL;
+}
+
+/* GCC models these as width-specific extended integer types; Clang treats
+ * them as their declared base types. Until the former is represented, accept
+ * storage and conversion but diagnose operations that depend on their rank. */
+static bool wide_field_value(const struct ast_expression *expression)
+{
+	const struct record_member *member = field_value(expression);
+	return member && member->bit_width > 32 && member->bit_width < 64 &&
+		type_value_width(member->type) == 64;
+}
+
+static bool reject_wide_field_operation(struct sema *sema, const struct ast_expression *expression)
+{
+	if (!wide_field_value(expression)) return false;
+	diagnostic_error(sema->diagnostics, expression->location,
+		"wide bit-field operation requires an explicit cast");
+	return true;
 }
 
 static const struct type *expression_integer_promotion(const struct ast_expression *expression)
@@ -708,10 +728,6 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 					field_type->kind == type_kind_uchar) && width.bits > 8) ||
 				((field_type->kind == type_kind_short || field_type->kind == type_kind_ushort) &&
 					width.bits > 16) ||
-				/* Unnamed fields have no value/promotion semantics to model. */
-				((field_type->kind == type_kind_long || field_type->kind == type_kind_ulong ||
-					field_type->kind == type_kind_long_long || field_type->kind == type_kind_ulong_long) &&
-					member->name.length && width.bits > 32 && width.bits != 64) ||
 				(!width.bits && member->name.length)) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,
 					"bit-fields are not supported yet (M22)");
@@ -1474,6 +1490,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "typeof cannot be applied to a bit-field");
 			return NULL;
 		}
+		if (reject_wide_field_operation(sema, query->operand))
+			return NULL;
 		if (type_contains_vm(query->operand->type)) {
 			diagnostic_error(sema->diagnostics, syntax->location, "typeof of variable-length or variably modified type is not supported");
 			return NULL;
@@ -2218,6 +2236,8 @@ static struct ast_pointer_offset_expression *lower_pointer_offset(struct sema *s
 			"pointer offset/subscript requires one pointer and one integer operand");
 		return NULL;
 	}
+	if (reject_wide_field_operation(sema, index))
+		return NULL;
 	if (!convert_expression(sema, &index, expression_integer_promotion(index)))
 		return NULL;
 	pointer = (const struct pointer_type *)base->type;
@@ -2543,10 +2563,10 @@ static bool sema_expression(struct sema *sema,
 		if (!ok)
 			return false;
 		/* GCC and Clang disagree on the compatible type of unpromoted
-		 * narrow fields in generic selection. Do not guess. */
-		if (narrow_field_value(node->control)) {
+		 * partial-width fields in generic selection. Do not guess. */
+		if (narrow_field_value(node->control) || wide_field_value(node->control)) {
 			diagnostic_error(sema->diagnostics, node->control->location,
-				"generic selection of an unpromoted narrow bit-field is not supported");
+				"generic selection of an unpromoted bit-field is not supported");
 			return false;
 		}
 		for (struct ast_generic_association *item = node->associations; item; item = item->next) {
@@ -2842,6 +2862,8 @@ static bool sema_expression(struct sema *sema,
 				if (!convert_expression(sema, &argument->value, parameter->type))
 					return false;
 				parameter = parameter->next;
+			} else if (reject_wide_field_operation(sema, argument->value)) {
+				return false;
 			} else if (type_is_bitint(argument->value->type)) {
 				/* C23 bit-precise integers are not subject to integer promotions. */
 			} else if (type_is_floating(argument->value->type)) {
@@ -3371,6 +3393,7 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if (node->operation != unary_not) {
+			if (reject_wide_field_operation(sema, node->operand)) return false;
 			if (type_is_floating(node->operand->type) && node->operation != unary_complement) {
 				result_type = node->operand->type;
 			} else if (!type_is_integer(node->operand->type)) {
@@ -3397,6 +3420,8 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		if (!sema_expression(sema, &node->right, true))
 			return false;
+		if (reject_wide_field_operation(sema, node->left) ||
+			reject_wide_field_operation(sema, node->right)) return false;
 		if (!type_is_scalar(node->left->type) || !type_is_scalar(node->right->type)) {
 			diagnostic_error(sema->diagnostics, expression->location, "binary operator requires scalar operands");
 			return false;
@@ -3473,6 +3498,8 @@ static bool sema_expression(struct sema *sema,
 				"conditional expression requires a scalar condition");
 			return false;
 		}
+		if (reject_wide_field_operation(sema, node->then_value) ||
+			reject_wide_field_operation(sema, node->else_value)) return false;
 		a = node->then_value->type;
 		b = node->else_value->type;
 		if ((type_is_floating(a) || type_is_floating(b)) &&
@@ -3569,6 +3596,8 @@ static bool sema_expression(struct sema *sema,
 		}
 		if (!sema_expression(sema, &node->right, true))
 			return false;
+		if (reject_wide_field_operation(sema, node->left) ||
+			reject_wide_field_operation(sema, node->right)) return false;
 		if (!type_is_integer(node->right->type) && !type_is_floating(node->right->type)) {
 			diagnostic_error(sema->diagnostics, node->right->location,
 				"compound assignment requires an arithmetic right operand");
@@ -5639,6 +5668,8 @@ static bool sema_switch(struct sema *sema, struct ast_switch_statement *node)
 			"switch control requires an integer expression");
 		success = false;
 	}
+	if (success && reject_wide_field_operation(sema, node->control))
+		success = false;
 	if (success)
 		success = convert_expression(sema, &node->control,
 			expression_integer_promotion(node->control));

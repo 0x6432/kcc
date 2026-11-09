@@ -21,9 +21,9 @@ is signed on this target, and zero-width separators align to a byte. Named
 unnamed fields accept widths 0 through 16. They use two-byte allocation units
 and natural alignment, with zero-width separators aligning to a two-byte
 boundary. Named signed/unsigned `long` and `long long` fields accept widths
-1–32 or 64; unnamed fields accept 0–64. They use eight-byte allocation
+1–64; unnamed fields accept 0–64. They use eight-byte allocation
 units and natural alignment, with zero-width separators aligning to eight-byte
-boundaries. Named widths 33–63 remain unsupported for these base types. Enums
+boundaries. Named widths 33–63 have additional expression restrictions below. Enums
 compatible with `int` or `unsigned int`, including ordinary int-compatible enums
 and fixed-underlying enums, use the corresponding 32-bit unit and accept named
 widths 1–32 or unnamed widths 0–32. Unnamed fields and zero-width separators
@@ -52,7 +52,12 @@ bits. Narrow `unsigned int` fields and supported long-base fields below 32 bits
 promote to `int` in integer-promotion contexts; 32-bit signed long-base fields
 promote to `int`, and 32-bit unsigned long-base fields to `unsigned int`.
 Full 64-bit fields retain their declared long-base types. These rules apply to
-arithmetic, shifts, conditional operands and variadic calls.
+arithmetic, shifts, conditional operands and variadic calls. For named 33–63-bit
+long-base fields, direct storage, reads, conversions, assignment and updates
+are supported, but uncast arithmetic, comparisons, conditional operands,
+variadic arguments and other rank-sensitive operations are rejected. Cast to a
+standard integer type first. Unpromoted `_Generic` and `typeof` forms are also
+rejected: GCC and Clang differ on the compatible type of these fields.
 Within existing initializer limits, static and automatic, positional and
 designated initializers, scalar braces, record copies and pointer-based host
 interop are supported. Adjacent fields are merged bitwise; repeated field
@@ -75,7 +80,8 @@ supported. Ordinary expressions formed from fields follow existing rules.
 ## Explicit boundaries
 
 Enum base types other than `int`/`unsigned int`, `_BitInt` base types,
-named long/long-long widths 33–63, volatile and atomic fields are rejected. Known GNU
+volatile and atomic fields are rejected. The named long/long-long widths 33–63
+retain the rank-sensitive operation restrictions above. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
@@ -95,9 +101,11 @@ directions, using the selected host-compatible ABI mode, plus static and local i
 updates and 64-bit-unit zero-width pointer layout. `tests/test_unnamed_wide_bit_fields.py`
 checks 868 layouts with widths 33–63, prefixes 1–7 and signed/unsigned long and
 long-long base types in both host/KCC directions, plus union and nested records.
-Historical unsupported-long
-fixtures now use width 33; the original narrow example has a positive runtime
-check. `tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
+`tests/test_named_wide_bit_fields.py` checks 868 named width/prefix/base
+combinations in both host/KCC directions, plus unions, nested records, calls,
+updates and explicit semantic guards. Historical unsupported-long fixtures now
+use unsupported volatile fields; valid newly supported examples have positive
+coverage. `tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
 `tests/test_char_bit_fields.py` checks 112 signed/unsigned layouts across
 by-value calls in both host/KCC directions. `tests/test_bool_bit_fields.py` checks boolean conversion, packing,
 initialization and cross-compiler aggregate calls. `tests/test_bit_fields.py`,

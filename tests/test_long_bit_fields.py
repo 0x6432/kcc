@@ -107,7 +107,7 @@ def main():
             for field in ('long','llong','slong','sllong'): matrix_unnamed(d,typ,field,kcc_options)
         (d/'formerly-unsupported.c').write_text('struct S { unsigned long x:3; }; struct S s; int main(void){return (struct S){.x=2}.x!=2;}')
         object_file(d/'formerly-unsupported.c',d/'formerly-unsupported.o','kcc'); run([HOST,d/'formerly-unsupported.o','-o',d/'formerly-unsupported']); run([d/'formerly-unsupported'])
-        for source in ['struct S { long x:33; };', 'struct S { unsigned long long x:63; };',
+        for source in ['struct S { long x:65; };', 'struct S { unsigned long long x:65; };',
                        'struct S { long x:0; };',
                        'struct S { volatile long x:1; };']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)

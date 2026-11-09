@@ -95,7 +95,7 @@ def original(case):
 # These are valid C, deliberately separate from language constraints. They may
 # be rejected only as the stated future milestone, never native disagreements.
 UNSUPPORTED = {
-    'M22 bitfield': 'struct R { unsigned long x:33; }; struct R cell;',
+    'M22 bitfield': 'struct R { volatile unsigned long x:33; }; struct R cell;',
 }
 # Exact diagnostics supplied by the frozen implementation are intentionally not
 # inferred from baseline failures. Native signatures below are case-specific.

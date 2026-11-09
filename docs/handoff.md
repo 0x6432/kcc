@@ -72,6 +72,10 @@ dimensions and untracked pointer expressions remain unsupported; see
 `_BitInt` support scalar values and fixed calls. Variadic, aggregate-by-value
 and atomic operations for non-native widths remain explicitly unsupported.
 
+Named 33–63-bit long-base bit-fields support bounded storage, conversion,
+updates and aggregate interoperability. Rank-sensitive uses without an
+explicit cast are conservatively rejected; see `m22-bit-fields.md`.
+
 These features do not complete C23 attributes, hosted C, general bit-fields,
 bit-precise ABI and atomics, or `long double`.
 
