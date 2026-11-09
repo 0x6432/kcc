@@ -4,6 +4,7 @@ import signal
 import subprocess
 import tempfile
 from pathlib import Path
+from runtime_link import runtime_link_flags
 
 root = Path(__file__).resolve().parents[1]
 kcc = Path(os.environ.get('KCC', root / 'build/kcc'))
@@ -85,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='kcc vm pointer ') as d:
     def run_kcc(output, extra=()):
         il.write_text(output)
         subprocess.run([qbe,'-t','amd64_sysv','-o',str(asm),str(il)], check=True, timeout=10)
-        subprocess.run([host,str(asm),*map(str,extra),str(root/'build/libkccrt.a'),'-latomic','-o',str(exe)], check=True, timeout=10)
+        subprocess.run([host,str(asm),*map(str,extra),str(root/'build/libkccrt.a'),'-latomic',*runtime_link_flags(),'-o',str(exe)], check=True, timeout=10)
         return subprocess.run([str(exe)], capture_output=True, timeout=5).returncode
     for text in programs:
         out = compile_kcc(text)
