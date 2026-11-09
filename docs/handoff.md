@@ -28,6 +28,26 @@ library. Signed and unsigned 8/16/32/64-bit `_BitInt` types have bounded value
 support; other widths through 64 have direct layout queries only. See
 `m24-bitint-foundation.md`.
 
+## Aggregate varargs, larger records and record attributes
+
+On Linux x86-64 SysV, the bounded aggregate ABI now includes ellipsis arguments
+and `va_arg` for complete unqualified records, as well as records up to 1024
+bytes with alignment up to 16 when each register eightbyte is representable.
+Aggregate `va_arg` handles mixed GP/SSE register-save areas, all-or-stack
+rollback, 16-byte overflow alignment and entry-allocated result storage.
+`tests/test_aggregate_varargs.py` and `tests/test_aggregate_abi.py` checked
+fixed calls and varargs with GCC 11 and Clang 15 across separate object files
+in both directions, including register pressure, `va_copy`, memory records,
+and stack advancement. This does not remove other aggregate ABI limits.
+
+Record definitions accept `[[nodiscard]]` and `[[deprecated]]` after `struct`
+or `union`, with bounded discarded-result and direct tag-reference warnings;
+see `m23g-extended-attributes.md` for remaining diagnostic gaps. Hosted numeric
+headers add libc division-result types and functions, `atof`, and corrected
+float-specific classification dispatch. See `m25-builtin-headers.md`.
+These features do not complete C23 attributes, hosted C, general bit-fields,
+other `_BitInt` widths, or `long double`.
+
 ## Combined byte-width bit-precise ABI and atomic work
 
 Signed and unsigned `_BitInt(8/16/32/64)` values now support fixed and variadic
