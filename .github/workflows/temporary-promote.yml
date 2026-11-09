@@ -26,3 +26,5 @@ jobs:
           git push origin refs/remotes/origin/wip-check:refs/heads/development
           test "$(git ls-remote origin refs/heads/development | cut -f1)" = "636ff58f639002d2af1928e1036dea3fbf095997"
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref development || echo 'Could not dispatch CI; run it manually.'
+
+# Retry after GitHub Actions internal error
