@@ -22,11 +22,18 @@ with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Aggregate calls and returns have a bounded SysV
 implementation; see `m21-aggregate-abi.md`. Notable remaining work includes the
 rest of aggregate ABI, general bit-fields (the bounded subset is in
-`m22-bit-fields.md`), bit-precise variadic and aggregate ABI beyond native
-widths, `long double`, complete preprocessing and attributes, and a complete
+`m22-bit-fields.md`), bit-precise aggregate ABI beyond native widths, `long double`, complete preprocessing and attributes, and a complete
 hosted C library. Signed `_BitInt` widths 2–64 and unsigned widths 1–64 support
-scalar values and fixed calls within the target-specific limits; see
+scalar values, fixed calls and variadic arguments within the target-specific limits; see
 `m24-bitint-foundation.md`.
+
+## Bit-precise variadic ABI
+
+All supported `_BitInt` scalar widths now work in variadic arguments and
+`va_arg` on the x86-64 SysV target. Cross-object Clang 15 tests cover all 127
+signed/unsigned types, register and stack arguments, floating-point mixing,
+indirect calls and `va_copy`. Non-native-width bit-precise aggregate ABI,
+atomics and bit-fields remain unsupported. See `m24-bitint-foundation.md`.
 
 ## Aggregate varargs, larger records and record attributes
 
