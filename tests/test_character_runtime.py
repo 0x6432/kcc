@@ -11,6 +11,9 @@ qbe = os.environ.get('QBE')
 characters = [(f"'{chr(value)}'", value) for value in range(32, 127) if value not in (39, 92)]
 characters += [(f"'\\{value:03o}'", value if value < 128 else value-256) for value in range(256)]
 characters += [(f"'\\x{value:02x}'", value if value < 128 else value-256) for value in range(256)]
+characters += [("'ab'", 0x6162), ("'ABC'", 0x414243), ("'abcd'", 0x61626364),
+               (r"'\1234'", 0x5334), (r"'\377a'", 0xff61),
+               (r"'\377abc'", 0xff616263 - 0x100000000), (r"'a\0b'", 0x610062)]
 characters += [(r"'\a'", 7), (r"'\b'", 8), (r"'\f'", 12), (r"'\n'", 10),
                (r"'\r'", 13), (r"'\t'", 9), (r"'\v'", 11), (r"'\?'", 63),
                (r"'\''", 39), (r"'\\'", 92), (r''' '\"' '''.strip(), 34),
@@ -48,9 +51,9 @@ with tempfile.TemporaryDirectory(prefix='kcc runtime character ') as directory:
         subprocess.run([host, '-std=c2x', '-fsigned-char', str(source), '-o', str(executable)],
                        capture_output=True, check=True, timeout=10)
         assert subprocess.run([str(executable)], timeout=5).returncode == 42, text
-    rejected = [("''", 'expected one character'), ("'ab'", 'multicharacter'),
+    rejected = [("''", 'expected one character'), ("'abcde'", 'multicharacter'),
                 (r"'\x'", 'expected digits'), (r"'\x100'", 'exceeds one byte'),
-                (r"'\400'", 'exceeds one byte'), (r"'\1234'", 'multicharacter'),
+                (r"'\400'", 'exceeds one byte'),
                 (r"'\q'", 'unsupported character escape'), (r"'\u0041'", 'unsupported or invalid universal'),
                 ("'é'", 'non-ASCII'), ("L'ab'", 'multicharacter'), ("u'ab'", 'multicharacter'),
                 ("U'ab'", 'multicharacter'), ("u8'ab'", 'multicharacter')]

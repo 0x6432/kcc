@@ -39,7 +39,7 @@ The narrower boundaries are intentional:
   Atomic record members remain rejected; see `m24c-atomic-subset.md`.
 - Bit-precise bit-fields support widths up to the declared type width, with
   the existing bit-field and aggregate ABI limits; see `m22-bit-fields.md`.
-  Fixed enum underlying `_BitInt` types remain unsupported.
+  C23 does not permit bit-precise integer types as fixed enum underlying types.
 
 `src/bitint.c` retains independent internal arithmetic building blocks through
 64 bits; `tests/test_bitint.c` checks them. `tests/test_bitint_abi_atomics.py`

@@ -95,8 +95,14 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
     (directory / name).write_text('#define RESULT 42\n')
     source.write_text('#if !__has_include("' + name + '")\n#error not found\n#endif\n' +
                       '#include "' + name + '"\nint main(void){return RESULT;}\n')
-    for tool, flags in ((compiler, []), (host, ['-std=c2x', '-E', '-P'])):
-        result = subprocess.run([str(tool), *flags, str(source)], capture_output=True, text=True, timeout=10)
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    # GCC accepts this header-name spelling; Clang rejects it as an invalid
+    # preprocessing token, so it cannot be used as a universal host oracle.
+    host_version = subprocess.run([host, '--version'], capture_output=True, text=True, timeout=10)
+    assert host_version.returncode == 0, host_version.stderr
+    if 'clang' not in host_version.stdout.lower():
+        result = subprocess.run([host, '-std=c2x', '-E', '-P', str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode == 0 and not result.stderr, result.stderr
     # Child physical mappings remain available to sema after returning to root.
     common.write_bytes(b'int helper(void) { ret\\\r\nurn missing; }\r\n')

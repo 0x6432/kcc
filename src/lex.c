@@ -684,8 +684,47 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 	}
 	if (utf16 && value > 0xffff)
 		return "UTF-16 character requires more than one code unit";
-	if (offset != end)
-		return "multicharacter constants are not supported yet";
+	if (offset != end) {
+		uint32_t packed = value;
+		unsigned count = 1;
+		/* x86-64 ordinary multicharacter constants use the common GCC/Clang
+		 * policy: pack up to four decoded execution bytes left to right into
+		 * an int. Prefixed multicharacter constants remain unsupported. */
+		if (prefixed)
+			return "multicharacter constants with a prefix are not supported";
+		while (offset < end) {
+			unsigned byte = text[offset++];
+			if (++count > 4)
+				return "multicharacter constant exceeds four bytes";
+			if (byte == '\\' && offset < end && (text[offset] == 'u' || text[offset] == 'U')) {
+				unsigned digits = text[offset++] == 'u' ? 4 : 8;
+				byte = 0;
+				if (digits > end - offset)
+					return "incomplete universal character name";
+				for (unsigned i = 0; i < digits; i++) {
+					int digit = integer_digit(text[offset++]);
+					if (digit < 0)
+						return "invalid universal character name";
+					byte = (byte << 4) | (unsigned)digit;
+				}
+				if ((byte < 0xa0 && byte != 0x24 && byte != 0x40 && byte != 0x60) ||
+					byte > 0x10ffff || (byte >= 0xd800 && byte <= 0xdfff))
+					return "unsupported or invalid universal character name";
+				if (byte >= 128)
+					return "character requires more than one UTF-8 code unit";
+			} else if (byte == '\\') {
+				const char *error = parse_byte_escape(text, end, &offset, &byte);
+				if (error)
+					return error;
+			} else if (byte >= 128)
+				return "non-ASCII character constants are not supported yet";
+			else if (!byte || byte == '\n' || byte == '\r' || byte == '\'')
+				return "invalid source character in character constant";
+			packed = (packed << 8) | byte;
+		}
+		*result = packed & UINT32_C(0x80000000) ? (int64_t)packed - INT64_C(4294967296) : (int64_t)packed;
+		return NULL;
+	}
 	*result = prefixed || value < 128 ? (int64_t)value : (int64_t)value - 256;
 	return NULL;
 }
