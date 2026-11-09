@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
         ('#include ""', 'quoted name'), ('#include <x.h>', 'cannot load angle include'),
 
         ('#include "common.h" extra', 'expected end of include'),
-        (r'#include "a\"b.h"', 'quote inside'), ('#include u8"common.h"', 'quoted name'),
+        ('#define H "a\\\"b.h"\n#include H', 'quote inside'), ('#include u8"common.h"', 'quoted name'),
     ]:
         source.write_text(directive+'\nint main(void) { return 0; }\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
@@ -90,6 +90,14 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
         assert result.returncode == 0 and 'copy 42' in result.stdout, result.stderr
         result = subprocess.run([host, '-std=c2x', '-E', '-P', str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode == 0 and 'return 42' in result.stdout, result.stderr
+    # A direct header-name ends at the first quote, even after a backslash.
+    name = 'tail' + chr(92)
+    (directory / name).write_text('#define RESULT 42\n')
+    source.write_text('#if !__has_include("' + name + '")\n#error not found\n#endif\n' +
+                      '#include "' + name + '"\nint main(void){return RESULT;}\n')
+    for tool, flags in ((compiler, []), (host, ['-std=c2x', '-E', '-P'])):
+        result = subprocess.run([str(tool), *flags, str(source)], capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0 and not result.stderr, result.stderr
     # Child physical mappings remain available to sema after returning to root.
     common.write_bytes(b'int helper(void) { ret\\\r\nurn missing; }\r\n')
     source.write_text('#include "common.h"\nint main(void) { return helper(); }\n')

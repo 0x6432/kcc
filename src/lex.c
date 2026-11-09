@@ -293,6 +293,31 @@ struct pp_token pp_lexer_next(struct pp_lexer *lexer)
 	return read_pp_token(lexer);
 }
 
+/* An unprefixed direct quoted header-name ends at the first quote. Backslashes
+ * are filename bytes, not C string escapes. For other operands retain normal
+ * preprocessing tokenization, including prefix and macro handling. */
+struct pp_token pp_lexer_resource_next(struct pp_lexer *lexer)
+{
+	struct pp_token error;
+	const struct source *source = lexer->source;
+	size_t beginning;
+	assert(!lexer->has_lookahead);
+	if (!skip_pp_trivia(lexer, &error))
+		return error;
+	beginning = lexer->offset;
+	if (beginning == source->length || source->data[beginning] != '"')
+		return read_pp_token(lexer);
+	lexer->offset++;
+	while (lexer->offset < source->length && source->data[lexer->offset] != '\n') {
+		unsigned char byte = source->data[lexer->offset++];
+		if (!byte)
+			return invalid_pp_token(lexer, beginning, "NUL in quoted resource name");
+		if (byte == '"')
+			return make_pp_token(lexer, pp_string, beginning);
+	}
+	return invalid_pp_token(lexer, beginning, "unterminated quoted resource name");
+}
+
 /* In a direct resource name the source is a header-name, not ordinary
  * preprocessing tokens: in particular :> and %> must not swallow the closing
  * delimiter, and spaces and UTF-8 bytes remain part of the name. */

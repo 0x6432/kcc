@@ -229,6 +229,8 @@ struct pp_lexer {
 void pp_lexer_init(struct pp_lexer *lexer, const struct source *source,
 	struct diagnostics *diagnostics);
 struct pp_token pp_lexer_next(struct pp_lexer *lexer);
+/* Read a possible direct quoted resource name without string escape parsing. */
+struct pp_token pp_lexer_resource_next(struct pp_lexer *lexer);
 /* Next fragment within a directly written <...> resource name. */
 struct pp_token pp_lexer_header_next(struct pp_lexer *lexer);
 struct pp_token pp_lexer_peek(struct pp_lexer *lexer);

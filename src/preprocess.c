@@ -3866,6 +3866,7 @@ static bool read_condition_input(struct preprocessor *preprocessor,
 	unsigned header_state)
 {
 	*token = header_state == 3 ? pp_lexer_header_next(&preprocessor->input) :
+		header_state == 2 ? pp_lexer_resource_next(&preprocessor->input) :
 		pp_lexer_next(&preprocessor->input);
 	if (header_state == 2)
 		(void)split_direct_header_open(&preprocessor->input, token);
@@ -4194,6 +4195,7 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 		struct argument_token *copy;
 
 		token = in_header ? pp_lexer_header_next(&preprocessor->input) :
+			count == 0 ? pp_lexer_resource_next(&preprocessor->input) :
 			pp_lexer_next(&preprocessor->input);
 		if (token.kind == pp_invalid || token.has_non_directive_space) {
 			*error = reject_directive(preprocessor, marker, token,

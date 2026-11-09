@@ -13,10 +13,9 @@ continue to suppress identifier macro expansion.
 
 Quoted names retain backslashes as literal filename bytes, not C string escapes;
 this is an implementation-specific extension and is not portable ISO C usage.
-A quote inside a quoted name is rejected. The existing quoted-token lexer still
-interprets a backslash before a quote when locating the token's end, so some
-names (including a name ending in a backslash) cannot be represented. Source
-line splicing occurs first.
+Direct quoted names end at the first quote, so a filename may end in a
+backslash. Macro-computed quoted names still use ordinary string-token lexing;
+a quote inside the resulting name is rejected. Source line splicing occurs first.
 
 Direct angle names are now lexed contextually until the first `>`: opening and
 closing bytes are not absorbed into ordinary punctuators such as `<:`, `<=`,
