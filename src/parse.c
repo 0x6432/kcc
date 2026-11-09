@@ -1426,7 +1426,15 @@ static struct ast_type_syntax *parse_record_specifier(struct parser *parser, str
 {
 	struct token tag = { 0 };
 	struct ast_record_type_syntax *record;
+	struct parsed_attributes attributes;
 
+	if (!parse_attributes(parser, &attributes))
+		return NULL;
+	if (attributes.noreturn || attributes.fallthrough) {
+		diagnostic_error(parser->diagnostics, keyword.location,
+			"noreturn and fallthrough attributes are not permitted on records");
+		return NULL;
+	}
 	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
 		tag = preprocess_next(parser->preprocessor);
 	record = ast_new_record_type_syntax(parser->arena, keyword, tag);
@@ -1434,7 +1442,14 @@ static struct ast_type_syntax *parse_record_specifier(struct parser *parser, str
 		allocation_error(parser, keyword.location);
 		return NULL;
 	}
+	record->is_nodiscard = attributes.nodiscard;
+	record->is_deprecated = attributes.deprecated;
 	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
+		if (attributes.present) {
+			diagnostic_error(parser->diagnostics, keyword.location,
+				"attributes after struct or union require a record definition");
+			return NULL;
+		}
 		if (tag.kind != token_identifier) {
 			diagnostic_error(parser->diagnostics, keyword.location, "expected tag name or record definition");
 			return NULL;

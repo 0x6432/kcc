@@ -8,6 +8,11 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('struct [[maybe_unused, vendor::hint(1)]] S { int x; } s;',
+     'struct S { int x; } s;'),
+    ('union [[__nodiscard__("check"), __deprecated__]] U { long x; double y; } u;',
+     'union U { long x; double y; } u;'),
+    ('struct [[nodiscard]] { int x; } s;', 'struct { int x; } s;'),
     ('enum [[__nodiscard__, __deprecated__]] E { A [[__maybe_unused__]]=42 } x=A;',
      'enum [[nodiscard, deprecated]] E { A [[maybe_unused]]=42 } x=A;'),
     ('void stop(void) [[__noreturn__]];', 'void stop(void) [[noreturn]];'),
@@ -72,6 +77,11 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
+    ('struct [[nodiscard]] S;', 'require a record definition'),
+    ('union [[maybe_unused]] U;', 'require a record definition'),
+    ('struct [[fallthrough]] S { int x; };', 'not permitted on records'),
+    ('union [[noreturn]] U { int x; };', 'not permitted on records'),
+    ('struct [[gnu::packed]] S { int x; };', 'layout-altering GNU attribute'),
     ('[[__unsequenced__]] int f(void);', 'unsupported standard attribute'),
     ('[[__reproducible__]] int f(void);', 'unsupported standard attribute'),
     ('[[__maybe_unused__(1)]] int x;', 'take no arguments'),
@@ -178,6 +188,35 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
         result = compile(source)
         assert result.returncode == 0, result.stderr
         assert result.stderr.count('warning: use of deprecated enum type') == count, result.stderr
+    for source, count in [
+        ('struct [[nodiscard]] S {int x;}; struct S f(void); '
+         'void g(struct S (*p)(void)){f(); p(); (void)f();}', 2),
+        ('union [[__nodiscard__("use")]] U {int x;}; union U f(void); '
+         'void g(void){f(),f();}', 2),
+        ('struct S; struct S f(void); struct [[nodiscard]] S {int x;}; '
+         'void g(void){f(); (void)f();}', 1),
+        ('typedef struct [[nodiscard]] {int x;} S; S f(void); '
+         'void g(void){f();}', 1),
+        ('struct [[nodiscard]] S {int x;}; struct S *f(void); '
+         'void g(void){f();}', 0),
+        ('struct [[nodiscard]] S {int x;}; struct S f(void); '
+         'int g(void){return sizeof((f(),1));}', 0),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.count('warning: discarded result of function returning nodiscard record') == count, result.stderr
+    for source, count in [
+        ('struct [[deprecated("old")]] S {int x;}; struct S x; '
+         'int f(void){return sizeof(struct S);}', 2),
+        ('struct S; struct [[__deprecated__]] S {int x;}; struct S x;', 1),
+        ('union [[deprecated]] U {long x;}; typedef union U T; T v;', 1),
+        ('struct [[deprecated]] S {int x;}; int f(void){'
+         'struct S {int y;}; struct S x={2}; return x.y;}', 0),
+        ('struct [[deprecated]] S {int x;}; struct S; int f(void){return 0;}', 0),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.count('warning: use of deprecated record type') == count, result.stderr
     for count, success in [(256, True), (257, False)]:
         result = compile('[[]]' * count + ' int x;')
         assert (result.returncode == 0) == success, (count, result.stderr)

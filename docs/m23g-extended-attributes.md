@@ -5,16 +5,16 @@ prefixes and after object, function, typedef, parameter, and named member
 declarators; prefixes are accepted for named members and named parameters,
 for-declaration initializers, and labels in compound blocks. No unused-entity
 warnings are emitted, so the attribute does not change generated code.
-It is also accepted after the `enum` keyword in an enum definition and after
+It is also accepted after `struct`, `union`, and `enum` in definitions and after
 enumerator names; these are distinct from attributes on a declaration prefix.
 
 `[[deprecated]]` and `[[deprecated("message")]]` are accepted on the same
 supported declaration positions. Messages may contain adjacent ordinary
 string fragments. The compiler warns on uses of enumerators marked deprecated, including uses
-in later enumerator initializers. It also warns on direct references to a
-named enum after a deprecated enum definition (including one completing a
-fixed forward declaration). Standalone tag declarations, references through
-typedefs, and other deprecated entities and types do not yet produce warnings.
+in later enumerator initializers. It also warns on direct references to a named enum, struct, or union after a
+deprecated definition (including one completing a forward declaration).
+Standalone tag declarations, references through typedefs, and other deprecated
+entities and types do not yet produce warnings.
 The compiler does not advertise the attribute through `__has_c_attribute`. It is also accepted on enum definitions and enumerators
 in the positions above. Matching same-scope enum redefinitions can mark an
 existing enumerator deprecated for subsequent uses.
@@ -30,16 +30,16 @@ this is not yet a general preprocessing-token attribute parser. `[[nodiscard]]` 
 identifier declarations, at file and block scope, as declaration prefixes or
 declarator suffixes. Adjacent ordinary strings are accepted as a message. The
 compiler warns for a stand-alone direct call that discards the result of a
-visible nodiscard function. It also accepts `nodiscard` on an enum definition
-and warns for a stand-alone call returning that enum, including an indirect
+visible nodiscard function. It also accepts `nodiscard` on an enum, struct, or union definition
+and warns for a stand-alone call returning that type, including an indirect
 call. It also warns on discarded direct calls in comma operands, including the
 rightmost call when the entire comma expression is discarded. Unevaluated
 contexts and explicit void casts suppress these diagnostics. It does not warn for
 indirect calls to a nodiscard function, other nested discarded expressions,
 or all declaration-redeclaration scopes. `(void)` casts suppress this
 limited warning. It does not advertise partial support through `__has_c_attribute`. Typedef- and `typeof`-derived
-function identifiers are resolved semantically; objects, record definitions
-and other unsupported placements are currently rejected. The flag is retained
+function identifiers are resolved semantically; objects and other unsupported
+placements are currently rejected. The flag is retained
 on declaration nodes for future warning support.
 
 The `noreturn` attribute is additionally accepted as a file- or block-scope prefix or declarator suffix on
@@ -48,11 +48,13 @@ standard attributes other than `maybe_unused`, `deprecated`, `fallthrough`,
 this bounded `nodiscard` and `noreturn` are still rejected; arguments for `maybe_unused` and `fallthrough` are rejected. Attributes on anonymous
 members, unnamed parameters and static assertions are rejected. Parsing remains limited to 256
 attributes and attribute lists per sequence. This is not complete C23 attribute
-handling, including placement and token-grammar coverage. Expanded
-placements have been built but have not been regression-tested yet.
-Enum-specifier and enumerator positions accept the same bounded unknown
-attributes. `nodiscard` is supported on enum definitions but not enumerators;
-enum-reference or fixed-forward forms with an attribute after `enum` are rejected.
+handling, including placement and token-grammar coverage. The focused attribute tests exercise the supported placements and diagnostic
+behavior; they do not establish full C23 attribute coverage.
+Record-specifier, enum-specifier and enumerator positions accept the same
+bounded unknown attributes. `nodiscard` is supported on enum definitions but not enumerators;
+enum-reference or fixed-forward forms with an attribute after `enum` are rejected;
+record references or forward declarations with an attribute after `struct` or
+`union` are likewise rejected.
 Nodiscard and deprecated message text is not yet included in diagnostics.
 The supported unprefixed standard attributes also recognize their required
 double-underscore spellings, such as `[[__maybe_unused__]]` and
@@ -74,3 +76,15 @@ Comma-warning development check: the compiler rebuilt and ten focused direct,
 indirect-enum, nested, scoped and suppression examples produced the expected
 warning counts and lowered through pinned QBE 1.2. Added regression fixtures
 and generated-program execution remain pending.
+
+## Record type diagnostics
+
+`struct [[nodiscard]]` and `union [[nodiscard]]` definitions mark the nominal
+type so discarded calls returning it warn, including indirect calls and comma
+operands. `(void)` casts and unevaluated expressions suppress that warning.
+`[[deprecated]]` on a record definition warns on later direct named tag type
+references, not typedef-mediated references or standalone tag declarations.
+Forward-declaration completion, anonymous definitions, shadowing, standard
+`__name__` spellings and layout-altering vendor-attribute refusals are covered
+by `tests/test_attributes.py`. Record attributes do not change object layout.
+Messages are parsed but are not included in the warnings.

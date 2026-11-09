@@ -631,8 +631,12 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	assert(state);
 	/* Publish the identity before walking members, allowing recursive pointers. */
 	syntax->syntax.type = &record->type;
-	if (!syntax->has_definition)
+	if (!syntax->has_definition) {
+		if (!standalone && definition->is_deprecated)
+			diagnostic_warning(sema->diagnostics, syntax->syntax.location,
+				"use of deprecated record type");
 		return &record->type;
+	}
 	if (definition->complete || state->defining) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of record tag");
 		return NULL;
@@ -816,6 +820,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			"record must contain members and fit record layout storage limit (1 MiB)");
 		goto done;
 	}
+	definition->is_nodiscard = syntax->is_nodiscard;
+	definition->is_deprecated = syntax->is_deprecated;
 	success = true;
 done:
 	if (!success) {
@@ -2333,6 +2339,10 @@ static void warn_discarded_call(struct sema *sema, const struct ast_call_express
 		((const struct enum_type *)call->expression.type)->definition->is_nodiscard)
 		diagnostic_warning(sema->diagnostics, call->expression.location,
 			"discarded result of function returning nodiscard enum");
+	else if (type_is_record(call->expression.type) &&
+		type_record_definition(call->expression.type)->is_nodiscard)
+		diagnostic_warning(sema->diagnostics, call->expression.location,
+			"discarded result of function returning nodiscard record");
 	else if (marked && call->expression.type->kind != type_kind_void)
 		diagnostic_warning(sema->diagnostics, call->expression.location,
 			"discarded result of nodiscard function");

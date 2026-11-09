@@ -94,6 +94,8 @@ struct record_member {
 struct record_definition {
 	bool is_union;
 	bool complete;
+	bool is_nodiscard;
+	bool is_deprecated;
 	bool has_flexible_array;
 	struct record_member *members;
 	size_t member_count;

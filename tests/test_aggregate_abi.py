@@ -81,6 +81,12 @@ def main():
             caller = (f'{tag} S transform({tag} S); int main(void) {{ {tag} S x={{0}}; {init} '
                       f'{tag} S (*p)({tag} S)=transform; {tag} S y=p(x); return !({check}); }}')
             test_pair(d, decl, body, caller)
+        # Record type attributes do not change layout or by-value calls.
+        decl = 'struct [[nodiscard]] S { double d; long x; }; '
+        body = 'struct S transform(struct S x) { x.x+=2; return x; } '
+        caller = ('struct S transform(struct S); int main(void) { struct S s={1.5,40}; '
+                  'struct S t=transform(s); return t.x!=42 || t.d!=1.5; }')
+        test_pair(d, decl, body, caller)
         # Register exhaustion, mixed SSE/INTEGER, hidden sret pointer and stack arguments.
         decl = 'struct S { double d; long x; }; struct B { long a[3]; }; '
         body = '''struct B stress(int a,int b,int c,int d,int e,int f, double u,double v,double w,double x,double y,double z,double q,double r,struct S s,int last) {

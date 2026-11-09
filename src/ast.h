@@ -596,6 +596,8 @@ struct ast_record_type_syntax {
 	struct token tag;
 	bool is_union;
 	bool has_definition;
+	bool is_nodiscard;
+	bool is_deprecated;
 	struct ast_record_member_declaration *members;
 	size_t member_declaration_count;
 };
