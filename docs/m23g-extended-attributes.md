@@ -13,8 +13,9 @@ supported declaration positions. Messages may contain adjacent ordinary
 string fragments. The compiler warns on uses of enumerators marked deprecated, including uses
 in later enumerator initializers. It also warns on direct references to a named enum, struct, or union after a
 deprecated definition (including one completing a forward declaration).
-Standalone tag declarations, type references through typedefs, and deprecated
-typedefs, parameters and members do not yet produce warnings. Uses of
+Standalone tag declarations and type references through typedefs of a deprecated tag
+do not yet produce warnings. Deprecated typedef names, named parameters and members
+now warn on direct use. Uses of
 deprecated object and function declarations at file or block scope warn; the
 diagnostic follows visible bindings and respects local shadowing. Prefix and
 per-declarator suffix forms are supported for those identifiers.
@@ -102,5 +103,16 @@ retain the marker from earlier visible declarations; block-scope extern
 redeclarations retain earlier markers in the same scope and do not mark the
 file-scope entity merely because a block declaration is deprecated. Shadowing
 by a different local identifier suppresses the outer marker. Prefix attributes
-on for-declarations and declarator suffixes are covered. The parser still
-accepts but does not warn on deprecated typedefs, parameters and members.
+on for-declarations and declarator suffixes are covered. Deprecated typedef names warn on use in type syntax. Prefix and per-declarator
+suffix forms work at file and block scope; same-scope compatible redeclarations
+retain earlier deprecation, and a nearer typedef can shadow an outer one.
+
+## Deprecated parameters and members
+
+Prefix and declarator-suffix attributes mark named parameters and named members.
+References to a deprecated parameter warn in its prototype scope and function
+body; a separate definition controls its own parameter names and attributes.
+Member expressions, `offsetof` paths, and designated initializers warn on the
+selected deprecated member, including through anonymous records. Positional
+initializers do not name members and do not warn. These warnings include uses in
+unevaluated expressions. Message text is not yet included.

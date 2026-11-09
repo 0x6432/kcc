@@ -816,7 +816,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			goto done;
 		}
 		*resolved = (struct record_member) { .name = member->name, .type = type,
-			.anonymous = member->anonymous, .is_flexible = flexible,
+			.anonymous = member->anonymous, .is_deprecated = member->is_deprecated, .is_flexible = flexible,
 			.is_bit_field = member->bit_width != NULL, .bit_width = bit_width,
 			.alignment = member->alignments ? member->alignments->alignment : 0 };
 		*tail = resolved;
@@ -1422,6 +1422,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, alias->name.location, "unknown typedef name");
 			return NULL;
 		}
+		if (declaration->is_deprecated)
+			diagnostic_warning(sema->diagnostics, alias->name.location, "use of deprecated typedef");
 		syntax->type = declaration->type;
 		break;
 	}
@@ -1648,6 +1650,7 @@ static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *pa
 	local->type_syntax = parameter->type_syntax;
 	local->type = parameter->type;
 	local->is_register = parameter->is_register;
+	local->is_deprecated = parameter->is_deprecated;
 	local->alignment = parameter->alignments ? parameter->alignments->alignment : 0;
 	parameter->prototype_local = local;
 	*binding = (struct binding) { .declaration = local, .next = sema->scope->bindings };
@@ -2800,6 +2803,8 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, node->name.location, "no member with this name in struct or union");
 			return false;
 		}
+		if (node->member->is_deprecated)
+			diagnostic_warning(sema->diagnostics, node->name.location, "use of deprecated member");
 		result_type = type_qualified(sema->arena, node->member->type, qualifiers);
 		if (!result_type) {
 			diagnostic_error(sema->diagnostics, expression->location, "out of memory qualifying member type");
@@ -3264,6 +3269,8 @@ static bool sema_expression(struct sema *sema,
 							"offsetof cannot designate a bit-field");
 						return false;
 					}
+					if (member->is_deprecated)
+						diagnostic_warning(sema->diagnostics, step->member.location, "use of deprecated member");
 					offset += member_offset;
 					type = member->type;
 				} else {
@@ -4987,8 +4994,11 @@ static bool initializer_member_path(struct initializer_builder *builder,
 		return initializer_error(builder, location, "member designator requires a struct or union");
 	for (const struct record_member *member = type_record_definition(type)->members; member; member = member->next) {
 		uint64_t ignored;
-		if (!member->anonymous && same_name(member->name, *name))
+		if (!member->anonymous && same_name(member->name, *name)) {
+			if (member->is_deprecated)
+				diagnostic_warning(builder->sema->diagnostics, name->location, "use of deprecated member");
 			return initializer_child(builder, path, 0, member, location);
+		}
 		if (member->anonymous && type_record_find_member(member->type, name, &ignored)) {
 			if (!initializer_child(builder, path, 0, member, location))
 				return false;
@@ -7177,6 +7187,7 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 			return false;
 		}
 		declaration->type = previous->declaration->type;
+		previous->declaration->is_deprecated |= declaration->is_deprecated;
 		return true;
 	}
 

@@ -46,8 +46,6 @@ pairs = [
      '_Noreturn void stop(void); int f(void){stop(); return 1;}'),
     ('typedef void F(void); [[noreturn]] F stop;',
      'typedef void F(void); _Noreturn F stop;'),
-    ('int old(int x){return x;} int f([[deprecated]] int y){return old(y);}',
-     'int old(int x){return x;} int f(int y){return old(y);}'),
     ('int f(int x){ [[vendor::trace]] if(x) [[ignored(2)]] return 1; [[unknown]] return 0; }',
      'int f(int x){ if(x) return 1; return 0; }'),
     ('[[vendor::unknown(1, {2, [3]}), unknown, maybe_unused]] int x=42; int main(void){return x;}',
@@ -206,6 +204,42 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
         result = compile(source)
         assert result.returncode == 0, (source, result.stderr)
         assert result.stderr.count('warning: use of deprecated declaration') == count, (source, result.stderr)
+    for source, count in [
+        ('[[deprecated]] typedef int T; T x; T y;', 2),
+        ('typedef int T [[__deprecated__]]; int f(void){T x=1; return x;}', 1),
+        ('typedef int T; typedef int T [[deprecated]]; T x;', 1),
+        ('[[deprecated]] typedef int T; typedef int T; T x;', 1),
+        ('[[deprecated]] typedef int T; int f(void){typedef int T; T x=1; return x;}', 0),
+        ('int f(void){[[deprecated]] typedef int T; T x=1; return x;}', 1),
+        ('typedef int T, U [[deprecated]]; T x; U y;', 1),
+        ('[[deprecated]] typedef int T; int f(void){return sizeof(T);}', 1),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, (source, result.stderr)
+        assert result.stderr.count('warning: use of deprecated typedef') == count, (source, result.stderr)
+    for source, count in [
+        ('int f([[deprecated]] int x){return x+x;}', 2),
+        ('int f(int x [[__deprecated__]]){return x;}', 1),
+        ('int f([[deprecated]] int x){ {int x=1; return x;} }', 0),
+        ('int f([[deprecated]] int x); int f(int x){return x;}', 0),
+        ('int f([[deprecated]] int n, int a[n]){return n+a[0];}', 2),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, (source, result.stderr)
+        assert result.stderr.count('warning: use of deprecated declaration') == count, (source, result.stderr)
+    for source, count in [
+        ('struct S { [[deprecated]] int a,b; int c; }; int f(struct S *p){return p->a+p->b+p->c;}', 2),
+        ('struct S { int a [[__deprecated__]], b; }; int f(struct S s){return s.a+s.b;}', 1),
+        ('struct S { struct { int old [[deprecated]]; }; }; int f(struct S s){return s.old;}', 1),
+        ('struct S { int a [[deprecated]]; }; int f(struct S *p){return sizeof(p->a)+__kcc_offsetof(struct S,a);}', 2),
+        ('struct S { unsigned a [[deprecated]]:3; }; int f(struct S *p){return p->a++;}', 1),
+        ('struct S { int a [[deprecated]]; }; struct S x={1};', 0),
+        ('struct S { int a [[deprecated]]; }; struct S x={.a=1};', 1),
+        ('struct S { struct { int a [[deprecated]]; }; }; struct S x={.a=1};', 1),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, (source, result.stderr)
+        assert result.stderr.count('warning: use of deprecated member') == count, (source, result.stderr)
     for source, count in [
         ('struct [[nodiscard]] S {int x;}; struct S f(void); '
          'void g(struct S (*p)(void)){f(); p(); (void)f();}', 2),

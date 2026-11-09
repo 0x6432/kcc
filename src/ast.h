@@ -614,6 +614,7 @@ struct ast_record_member_declaration {
 	struct ast_alignment_group *alignments;
 	struct token name;
 	bool anonymous;
+	bool is_deprecated;
 	struct ast_record_member_declaration *next;
 	struct ast_static_assertion *static_assertion;
 };
@@ -968,6 +969,7 @@ struct ast_external_tag_declaration {
 };
 
 struct ast_typedef_declaration {
+	bool is_deprecated;
 	struct source_location location;
 	struct ast_type_syntax *type_syntax;
 	struct token name;
@@ -1036,6 +1038,7 @@ struct ast_parameter {
 	struct source_location location;
 	struct token name;
 	bool has_name;
+	bool is_deprecated;
 	bool is_register; /* Written storage, not part of the adjusted function type. */
 	bool is_void_marker; /* Checked sole unnamed void, not an ABI parameter. */
 	struct ast_local_declaration *local; /* NULL for prototypes and unnamed parameters. */

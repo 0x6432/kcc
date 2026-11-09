@@ -275,11 +275,6 @@ static bool parse_general_declaration_attributes(struct parser *parser, bool *pr
 	return true;
 }
 
-static bool parse_declaration_attributes(struct parser *parser, bool *present)
-{
-	return parse_general_declaration_attributes(parser, present, NULL);
-}
-
 /* After an ordinary declarator, function attributes apply to that declarator
  * only. Semantic analysis checks the resolved identifier type. */
 static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated)
@@ -1288,7 +1283,7 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 
 static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
 	struct ast_record_member_declaration ***tail, struct ast_type_syntax *syntax,
-	struct token name, bool anonymous, struct ast_alignment_group *alignments,
+	struct token name, bool anonymous, bool is_deprecated, struct ast_alignment_group *alignments,
 	struct ast_expression *bit_width, struct source_location bit_colon)
 {
 	struct ast_record_member_declaration *member;
@@ -1305,7 +1300,7 @@ static bool append_record_member(struct parser *parser, struct ast_record_type_s
 		return false;
 	}
 	*member = (struct ast_record_member_declaration) {
-		.type_syntax = syntax, .name = name, .anonymous = anonymous, .alignments = alignments,
+		.type_syntax = syntax, .name = name, .anonymous = anonymous, .is_deprecated = is_deprecated, .alignments = alignments,
 		.bit_width = bit_width, .bit_colon = bit_colon,
 	};
 	**tail = member;
@@ -1323,9 +1318,9 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 		struct token beginning;
 		struct ast_type_syntax *base;
 		struct declaration_head head = { 0 };
-		bool attributes;
+		bool attributes, deprecated;
 
-		if (!parse_declaration_attributes(parser, &attributes))
+		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated))
 			return false;
 		if (attributes && (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
 			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert)) {
@@ -1379,7 +1374,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name, true, head.alignments, NULL, beginning.location))
+			if (!append_record_member(parser, record, &tail, base, name, true, false, head.alignments, NULL, beginning.location))
 				return false;
 			continue;
 		}
@@ -1389,6 +1384,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			struct ast_type_syntax *syntax;
 			struct ast_expression *bit_width = NULL;
 			struct source_location bit_colon = beginning.location;
+			bool suffix_deprecated = false;
 
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
 				syntax = base;
@@ -1398,7 +1394,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 					return false;
 				{
 					bool suffix_attributes;
-					if (!parse_declaration_attributes(parser, &suffix_attributes))
+					if (!parse_general_declaration_attributes(parser, &suffix_attributes, &suffix_deprecated))
 						return false;
 				}
 			}
@@ -1412,7 +1408,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				diagnostic_error(parser->diagnostics, beginning.location, "expected member name");
 				return false;
 			}
-			if (!append_record_member(parser, record, &tail, syntax, name, false, head.alignments, bit_width, bit_colon))
+			if (!append_record_member(parser, record, &tail, syntax, name, false, deprecated || suffix_deprecated, head.alignments, bit_width, bit_colon))
 				return false;
 			if (preprocess_peek(parser->preprocessor).kind != token_comma)
 				break;
@@ -3873,6 +3869,7 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 		struct ast_type_syntax *type_syntax;
 		struct ast_typedef_declaration *declaration;
 		struct ast_block_typedef_declaration *item;
+		bool suffix_deprecated;
 
 		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
@@ -3881,12 +3878,13 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 			return NULL;
 		{
 			bool attributes;
-			if (!parse_declaration_attributes(parser, &attributes))
+			if (!parse_general_declaration_attributes(parser, &attributes, &suffix_deprecated))
 				return NULL;
 		}
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
+		declaration->is_deprecated = parser->declaration_deprecated || suffix_deprecated;
 		item = ast_new_block_typedef_declaration(parser->arena, declaration);
 		if (!item) {
 			allocation_error(parser, keyword.location);
@@ -4135,7 +4133,7 @@ static bool parse_parameters(struct parser *parser,
 		struct ast_type_syntax *type_syntax;
 		struct declaration_head head = { 0 };
 		bool has_name = false;
-		bool prefix_attributes, suffix_attributes;
+		bool prefix_attributes, suffix_attributes, prefix_deprecated, suffix_deprecated;
 
 		if (preprocess_peek(parser->preprocessor).kind == token_ellipsis) {
 			preprocess_next(parser->preprocessor);
@@ -4148,11 +4146,11 @@ static bool parse_parameters(struct parser *parser,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
-		if (!parse_declaration_attributes(parser, &prefix_attributes))
+		if (!parse_general_declaration_attributes(parser, &prefix_attributes, &prefix_deprecated))
 			return false;
 		type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
 		type_syntax = parse_derived_type(parser, type_syntax, &name, &has_name, declarator_parameter);
-		if (!type_syntax || !parse_declaration_attributes(parser, &suffix_attributes))
+		if (!type_syntax || !parse_general_declaration_attributes(parser, &suffix_attributes, &suffix_deprecated))
 			return false;
 		if ((prefix_attributes || suffix_attributes) && !has_name) {
 			diagnostic_error(parser->diagnostics, beginning.location,
@@ -4170,6 +4168,7 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		}
 		parameter->type_syntax = type_syntax;
+		parameter->is_deprecated = prefix_deprecated || suffix_deprecated;
 		parameter->alignments = head.alignments;
 		parameter->is_register = head.keyword.kind == token_register;
 		/* Nested function parameter lists restore parser names, so only
@@ -4284,7 +4283,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
  * Every name is visible to later declarators, not its own unfinished declarator.
  */
 static struct ast_external_declaration *parse_typedef_declaration_tail(struct parser *parser,
-	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base)
+	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base, bool is_deprecated)
 {
 	struct ast_external_declaration *declarations = NULL;
 	struct ast_external_declaration **tail = &declarations;
@@ -4297,6 +4296,7 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 		struct ast_type_syntax *type_syntax;
 		struct ast_typedef_declaration *declaration;
 		struct ast_external_typedef_declaration *external;
+		bool suffix_deprecated;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4309,12 +4309,13 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 			return NULL;
 		{
 			bool attributes;
-			if (!parse_declaration_attributes(parser, &attributes))
+			if (!parse_general_declaration_attributes(parser, &attributes, &suffix_deprecated))
 				return NULL;
 		}
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
 			return NULL;
+		declaration->is_deprecated = is_deprecated || suffix_deprecated;
 		external = ast_new_external_typedef_declaration(parser->arena, declaration);
 		if (!external) {
 			allocation_error(parser, keyword.location);
@@ -4590,7 +4591,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 				"function attribute requires a function identifier declaration");
 			return NULL;
 		}
-		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base);
+		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base, parsed.deprecated);
 	}
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,

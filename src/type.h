@@ -87,6 +87,7 @@ struct record_member {
 	uint64_t offset;
 	unsigned alignment; /* Explicit member alignment; zero means natural. */
 	bool anonymous;
+	bool is_deprecated;
 	bool is_flexible;
 	bool is_bit_field;
 	unsigned bit_width; /* 0..64; zero denotes an unnamed separator. */
