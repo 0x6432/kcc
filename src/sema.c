@@ -2540,16 +2540,55 @@ static struct ast_local_declaration *vm_pointer_source(struct ast_expression *ex
 	}
 }
 
+/* Before typing sizeof, recognize only syntax that must resolve to a tracked
+ * VM pointer. This selects evaluated semantic analysis without retyping an AST.
+ * Ambiguous expressions remain on the conservative, rejected path. */
+static struct ast_local_declaration *syntactic_vm_pointer(struct sema *sema,
+	const struct ast_expression *expression)
+{
+	switch (expression->kind) {
+	case expression_name: {
+		const struct ast_name_expression *name = (const struct ast_name_expression *)expression;
+		struct ast_local_declaration *local = find_local(sema, name->name);
+		return local && local->vm_pointer_bound ? local : NULL;
+	}
+	case expression_prefix_update:
+		return syntactic_vm_pointer(sema, ((const struct ast_prefix_update_expression *)expression)->operand);
+	case expression_postfix_update:
+		return syntactic_vm_pointer(sema, ((const struct ast_postfix_update_expression *)expression)->operand);
+	case expression_compound_assignment:
+		return syntactic_vm_pointer(sema, ((const struct ast_compound_assignment_expression *)expression)->left);
+	case expression_binary: {
+		const struct ast_binary_expression *node = (const struct ast_binary_expression *)expression;
+		if (node->operation != binary_add && node->operation != binary_subtract)
+			return NULL;
+		struct ast_local_declaration *left = syntactic_vm_pointer(sema, node->left);
+		struct ast_local_declaration *right = syntactic_vm_pointer(sema, node->right);
+		return left && right ? NULL : left ? left : right;
+	}
+	default:
+		return NULL;
+	}
+}
+
+static bool syntactic_vm_sizeof(struct sema *sema, const struct ast_expression *expression)
+{
+	if (expression->kind == expression_indirection)
+		return syntactic_vm_pointer(sema, ((const struct ast_indirection_expression *)expression)->operand) != NULL;
+	if (expression->kind == expression_subscript) {
+		const struct ast_subscript_expression *node = (const struct ast_subscript_expression *)expression;
+		bool left = syntactic_vm_pointer(sema, node->left) != NULL;
+		bool right = syntactic_vm_pointer(sema, node->right) != NULL;
+		return left != right;
+	}
+	return false;
+}
+
 static struct ast_local_declaration *direct_vm_pointer(struct ast_expression *expression)
 {
 	if (expression->kind != expression_indirection)
 		return NULL;
-	expression = ((struct ast_indirection_expression *)expression)->operand;
-	/* sizeof currently analyzes its operand as unevaluated. Restrict this
-	 * exception to a direct load so no evaluated index or call is lost. */
-	if (expression->kind != expression_load)
-		return NULL;
-	return vm_pointer_source(expression);
+	return vm_pointer_source(((struct ast_indirection_expression *)expression)->operand);
 }
 
 static bool sema_expression(struct sema *sema,
@@ -3192,8 +3231,11 @@ static bool sema_expression(struct sema *sema,
 	case expression_sizeof: {
 		struct ast_sizeof_expression *node = (struct ast_sizeof_expression *)expression;
 
-		/* No immediate load/array/function decay; constraints still apply inside. */
-		if (!sema_unevaluated_expression(sema, &node->operand))
+		/* A tracked VM array operand is evaluated; all other sizeof operands
+		 * remain unevaluated, including an enclosing sizeof of this expression. */
+		bool vm_operand = syntactic_vm_sizeof(sema, node->operand);
+		if (vm_operand ? !sema_expression(sema, &node->operand, false) :
+			!sema_unevaluated_expression(sema, &node->operand))
 			return false;
 		if (is_bit_field_expression(node->operand)) {
 			diagnostic_error(sema->diagnostics, expression->location, "sizeof cannot be applied to a bit-field");
@@ -3202,7 +3244,7 @@ static bool sema_expression(struct sema *sema,
 		if (node->operand->type->kind == type_kind_array &&
 			((const struct array_type *)node->operand->type)->runtime_bound) {
 			node->vla_local = direct_vla_local(node->operand);
-			if (!node->vla_local)
+			if (!node->vla_local && vm_operand)
 				node->vla_local = direct_vm_pointer(node->operand);
 			if (!node->vla_local) {
 				diagnostic_error(sema->diagnostics, expression->location, "sizeof variable-length array requires a direct object reference");

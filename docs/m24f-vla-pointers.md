@@ -33,8 +33,10 @@ including equal evaluated bounds where required; this compiler does not check
 that equality at runtime. A pointer object may be reassigned, but its stride
 remains the size captured by its declaration.
 
-`sizeof *p` uses that saved size, evaluates the direct pointer operand (including
-volatile or atomic loads), and is not an integer constant expression. It does
+`sizeof` of a tracked VM row uses its saved size and evaluates the row
+expression, including indices, calls, pointer updates and volatile or atomic
+accesses. Supported forms include `sizeof *p`, `sizeof p[i++]`,
+`sizeof *(p + i)`, and `sizeof *(p++)`. It is not an integer constant expression. It does
 not dereference the resulting pointer to read array elements. Nested unevaluated
 contexts, such as `sizeof(sizeof *p)`, do not perform that load. Ordinary
 pointer size, conversion, comparison, and calls retain the existing x86-64
@@ -66,11 +68,10 @@ The runtime bound is evaluated on each actual entry through the declaration.
   expression without tracked provenance are rejected; arithmetic on `&vla`
   still has no tracked size. A conditional combining a VM and a fixed array
   pointer keeps the runtime marker instead of assuming a fixed stride.
-- `sizeof` on a VLA expression supports the existing direct VLA-object forms
-  and direct `sizeof *p` only; `sizeof p[i]`, `sizeof *(p+i)` and
-  `sizeof *(p++)` are rejected rather than suppressing their side effects.
-  Other expressions requiring evaluated subexpressions are also rejected rather than
-  suppressing their side effects. `typeof` and inferred `auto` cannot rebind a
+- `sizeof` on a VLA expression supports existing direct VLA-object forms and
+  tracked pointer indirection, offsets, subscripts and updates. Untracked
+  expressions (including conditional and cast-based VM pointers) remain rejected
+  rather than suppressing side effects. `typeof` and inferred `auto` cannot rebind a
   VM type. This avoids losing captured size and jump-scope information.
 - The existing 1 MiB type-size and local-storage limits, cumulative VLA storage
   policy, and requirement to link `abort` and any used runtime helpers apply.

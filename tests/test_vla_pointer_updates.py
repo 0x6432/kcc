@@ -47,8 +47,6 @@ rejected = [
     ('int f(int n) { int (*p)[n]=0; (*(&p))+=1; return 0; }', 'complete object'),
     ('int f(int n) { int a[n]; return &a-&a; }', 'complete object referents'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return (n?p:q)-p; }', 'complete object referents'),
-    ('int f(int n) { int (*p)[n]=0; return sizeof *(p++); }', 'sizeof variable-length'),
-    ('int f(int n) { int (*p)[n]=0; return sizeof *(p+=1); }', 'sizeof variable-length'),
     ('int f(int n) { int (*p)[n]=0; p*=2; return 0; }', 'only additive'),
     ('int f(int n) { int (*p)[n]=0; p+=1.0; return 0; }', 'integer right operand'),
     ('int f(int n) { goto x; int (*p)[n]=0; x: p++; return 0; }', 'goto enters'),

@@ -12,6 +12,16 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 # C11 programs with defined behavior, also used as differential native tests.
 programs = [
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*p)[n]=a; int i=0; unsigned long z=sizeof p[i++]; return z==12 && i==1 ? 42:1; }',
+    'static int count; static int idx(void){count++;return 1;} int main(void){int n=3,a[3][3]={{0}};int (*p)[n]=a;return sizeof p[idx()]==12 && count==1 ? 42:1;}',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*p)[n]=a; unsigned long z=sizeof *(p++); return z==12 && p==a+1 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*p)[n]=a; unsigned long z=sizeof *(p+=2); return z==12 && p==a+2 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*p)[n]=a; int i=0; unsigned long z=sizeof *(p+(i++,1)); return z==12 && i==1 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*p)[n]=a; int i=0; unsigned long z=sizeof(sizeof p[i++]); return z==sizeof(unsigned long) && i==0 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}},b[2]={0}; int (*p)[n]=a; int i=0; unsigned long z=sizeof b[(p-p)+(i++)]; return z==sizeof(int) && i==0 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*volatile p)[n]=a; int i=0; return sizeof p[i++]==12 && i==1 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*_Atomic p)[n]=a; unsigned long z=sizeof *(p++); return z==12 && p==a+1 ? 42:1; }',
+    'int main(void) { int n=3,a[3][3]={{0}}; int (*p)[n]=a; int i=0; unsigned long z=sizeof p[i++][i++]; return z==sizeof(int) && i==0 ? 42:1; }',
     'int main(void) { int n=3,a[3]={1,2,42}; int (*p)[n++]=&a; n=9; return sizeof *p==12 && (*p)[2]==42 ? 42:1; }',
     'int main(void) { int n=2,a[2]={20,22}; int (*p)[n++]=&a, (*q)[n++]=0; return n==4 && sizeof *p==8 && sizeof *q==12 && (*p)[0]+(*p)[1]==42 ? 42:1; }',
     'int main(void) { int n=2,a[2][3]={{0,0,0},{0,0,42}}; int (*p)[n++][3]=&a; return n==3 && sizeof *p==24 && (*p)[1][2]==42 ? 42:1; }',
@@ -51,8 +61,6 @@ rejected = [
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return ((n?p:q)+1)!=0; }', 'complete object referent'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return ((n?q:p)+1)!=0; }', 'complete object referent'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return sizeof *(n?p:q); }', 'sizeof variable-length'),
-    ('int f(int n) { int (*p)[n]=0; return sizeof p[0]; }', 'sizeof variable-length'),
-    ('int f(int n) { int (*p)[n]=0; return sizeof *(p+1); }', 'sizeof variable-length'),
     ('int f(int n) { static int (*p)[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { extern int (*p)[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { int (**p)[n]; return 0; }', 'variable-length arrays'),
