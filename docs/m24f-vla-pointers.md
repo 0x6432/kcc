@@ -16,11 +16,22 @@ unsigned long bytes = sizeof *p; /* 12; does not evaluate n again */
 Each execution of the declaration evaluates its bound exactly once, before the
 initializer, and saves the byte size for the lifetime of that declaration.
 Re-entering a loop or jumping back before the declaration reevaluates it.
-`p + i`, `i + p`, `p - i`, `p[i]`, and chains of these operations rooted in
-that local pointer use its saved runtime stride; indexing within the resulting
-array uses the fixed element size. A pointer object may be reassigned, but its
-stride remains the size captured by its declaration. Normal C restrictions on
-compatible array sizes and pointer arithmetic still apply to the program.
+`p + i`, `i + p`, `p - i`, `p[i]`, prefix/postfix `++` and `--`, and
+`p += i` / `p -= i` use the saved runtime stride. Offset and update results can
+be indexed or used in further tracked offsets. Updates require the direct local
+pointer lvalue; they evaluate the lvalue and right operand once and return the
+correct old or new value. Volatile accesses use the existing helpers and atomic
+pointer updates use the existing sequentially consistent libatomic operations.
+Indexing within the resulting array uses the fixed element size.
+
+Pointer subtraction accepts tracked VM pointer expressions and compatible
+fixed-size array pointers, in either order, when every VM operand has tracked
+size provenance. It divides the signed byte difference by the saved runtime
+stride. When two VM pointers participate, the left size is used. As in C, the
+program must satisfy pointer-subtraction and array-type compatibility rules,
+including equal evaluated bounds where required; this compiler does not check
+that equality at runtime. A pointer object may be reassigned, but its stride
+remains the size captured by its declaration.
 
 `sizeof *p` uses that saved size, evaluates the direct pointer operand (including
 volatile or atomic loads), and is not an integer constant expression. It does
@@ -48,22 +59,34 @@ The runtime bound is evaluated on each actual entry through the declaration.
 - Runtime inner dimensions of VLA **objects**, multiple runtime dimensions,
   general VM typedefs, VM parameters, pointer chains, file-scope declarations,
   and static, thread-local or extern VM pointers remain unsupported.
-- Runtime-stride pointer arithmetic requires a direct supported local pointer or
-  an offset expression rooted in one. Updates (`++`, `--`, `+=`, `-=`), pointer
-  subtraction, and arithmetic on conditional, cast, call, indirect, or other
-  expressions lacking tracked size provenance are rejected. Arithmetic on
-  `&vla` still has no tracked size. A conditional combining a VM and a fixed
-  array pointer keeps the runtime marker instead of assuming a fixed stride.
+- Runtime-stride pointer arithmetic and subtraction require tracked VM pointer
+  provenance: a direct supported local pointer, or an offset or update result
+  rooted in one. Update lvalues must be the direct local identifier. Arithmetic
+  and subtraction involving a conditional, cast, call, indirect, or other VM
+  expression without tracked provenance are rejected; arithmetic on `&vla`
+  still has no tracked size. A conditional combining a VM and a fixed array
+  pointer keeps the runtime marker instead of assuming a fixed stride.
 - `sizeof` on a VLA expression supports the existing direct VLA-object forms
-  and direct `sizeof *p` only; `sizeof p[i]`, `sizeof *(p+i)`, and other
-  expressions requiring evaluated subexpressions are rejected rather than
+  and direct `sizeof *p` only; `sizeof p[i]`, `sizeof *(p+i)` and
+  `sizeof *(p++)` are rejected rather than suppressing their side effects.
+  Other expressions requiring evaluated subexpressions are also rejected rather than
   suppressing their side effects. `typeof` and inferred `auto` cannot rebind a
   VM type. This avoids losing captured size and jump-scope information.
 - The existing 1 MiB type-size and local-storage limits, cumulative VLA storage
   policy, and requirement to link `abort` and any used runtime helpers apply.
   This is not a claim of full C11/C23 VM or VLA conformance.
 
-`tests/test_vla_pointer.py` covers defined programs against GCC and Clang,
-QBE execution, mixed native/kcc pointer ABI in both directions, size/stride
+Runtime inner VLA object dimensions remain a separate architectural task: the
+current array type models a runtime bound as incomplete, while object allocation,
+size queries and indexing generally assume complete, fixed-size element types.
+Supporting them safely requires captured per-dimension sizes, checked products,
+stride propagation through expressions and VM scopes, and allocation/lifetime
+integration; this extension does not weaken those checks.
+
+`tests/test_vla_pointer.py` and `tests/test_vla_pointer_updates.py` cover defined
+programs against GCC and Clang, QBE execution, mixed native/kcc pointer ABI in both directions, size/stride
 capture, bounds failures, qualifiers, loops, jumps, switch, unsupported forms,
-and type-provenance safeguards. It is a focused regression, not a full suite.
+and type-provenance safeguards. Clang 15 rejects four atomic pointer compound
+assignment reference cases; they are explicitly counted as native oracle gaps,
+while kcc/QBE and GCC still run them. These are focused regressions, not a full
+suite.

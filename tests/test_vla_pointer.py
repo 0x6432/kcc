@@ -48,8 +48,6 @@ rejected = [
     ('int f(int n) { { int (*p)[n]=0; x:; } goto x; }', 'goto enters'),
     ('int f(int n) { switch(n) { int (*p)[n]=0; case 1: return 0; } return 0; }', 'switch label enters'),
     ('int f(int n) { switch(n) { case 1:; int (*p)[n]=0; default: return 0; } return 0; }', 'switch label enters'),
-    ('int f(int n) { int (*p)[n]=0; p++; return 0; }', 'complete object'),
-    ('int f(int n) { int (*p)[n]=0; int (*q)[n]=0; return p-q; }', 'complete object referents'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return ((n?p:q)+1)!=0; }', 'complete object referent'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return ((n?q:p)+1)!=0; }', 'complete object referent'),
     ('int f(int n) { int (*p)[n]=0; int (*q)[2]=0; return sizeof *(n?p:q); }', 'sizeof variable-length'),

@@ -2193,6 +2193,7 @@ static bool comparison_operator(enum binary_operator operation)
 }
 
 static struct ast_local_declaration *vm_pointer_source(struct ast_expression *expression);
+static struct ast_local_declaration *vm_pointer_lvalue(struct ast_expression *expression);
 
 /* Both operands are already analyzed/loaded. Only the integer is promoted;
  * the pointer type and the index's promoted signedness remain explicit.
@@ -2264,19 +2265,31 @@ static bool lower_pointer_arithmetic(struct sema *sema,
 				"pointer subtraction requires compatible pointer operands");
 			return false;
 		}
-		if (!type_is_complete_object(pointer->referent) ||
-			!type_is_complete_object(((const struct pointer_type *)right->type)->referent)) {
+		const struct type *other = ((const struct pointer_type *)right->type)->referent;
+		struct ast_local_declaration *left_vm = NULL, *right_vm = NULL;
+		if (!type_is_complete_object(pointer->referent) && pointer->referent->kind == type_kind_array &&
+			((const struct array_type *)pointer->referent)->runtime_bound)
+			left_vm = vm_pointer_source(left);
+		if (!type_is_complete_object(other) && other->kind == type_kind_array &&
+			((const struct array_type *)other)->runtime_bound)
+			right_vm = vm_pointer_source(right);
+		if ((!type_is_complete_object(pointer->referent) && !left_vm) ||
+			(!type_is_complete_object(other) && !right_vm)) {
 			diagnostic_error(sema->diagnostics, binary->expression.location,
-				"pointer subtraction requires complete object referents");
+				"pointer subtraction requires complete object referents or tracked VM pointers");
 			return false;
 		}
+		/* For well-defined C pointer subtraction the operand array types have
+		 * compatible runtime sizes, so either tracked size gives the stride. */
+		struct ast_local_declaration *vm_local = left_vm ? left_vm : right_vm;
 		difference = ast_new_pointer_difference(sema->arena, binary->expression.location,
-			left, right, type_object_size(pointer->referent));
+			left, right, vm_local ? 0 : type_object_size(pointer->referent));
 		if (!difference) {
 			diagnostic_error(sema->diagnostics, binary->expression.location,
 				"out of memory lowering pointer difference");
 			return false;
 		}
+		difference->vm_size_local = vm_local;
 		result = &difference->expression;
 		result->type = &type_long;
 	} else {
@@ -2299,11 +2312,13 @@ static bool lower_pointer_arithmetic(struct sema *sema,
 /* Both update forms keep one lvalue subtree, never a duplicated assignment. */
 static const struct type *sema_update_operand(struct sema *sema,
 	struct ast_expression *expression, struct ast_expression **operand,
-	const struct type **calculation_type, uint64_t *element_size)
+	const struct type **calculation_type, uint64_t *element_size,
+	struct ast_local_declaration **vm_size_local)
 {
 	const struct type *operand_type;
 	const struct type *result_type;
 
+	*vm_size_local = NULL;
 	if (!sema_expression(sema, operand, false))
 		return NULL;
 	operand_type = (*operand)->type;
@@ -2328,12 +2343,16 @@ static const struct type *sema_update_operand(struct sema *sema,
 		const struct type *referent = ((const struct pointer_type *)operand_type)->referent;
 
 		if (!type_is_complete_object(referent)) {
-			diagnostic_error(sema->diagnostics, expression->location,
-				"pointer update requires a complete object referent");
-			return NULL;
+			if (referent->kind == type_kind_array && ((const struct array_type *)referent)->runtime_bound)
+				*vm_size_local = vm_pointer_lvalue(*operand);
+			if (!*vm_size_local) {
+				diagnostic_error(sema->diagnostics, expression->location,
+					"pointer update requires a complete object referent or a direct VM pointer");
+				return NULL;
+			}
 		}
 		*calculation_type = result_type;
-		*element_size = type_object_size(referent);
+		*element_size = *vm_size_local ? 0 : type_object_size(referent);
 	} else if (type_is_floating(result_type)) {
 		*calculation_type = result_type;
 		*element_size = 0;
@@ -2464,19 +2483,33 @@ static struct ast_local_declaration *direct_vla_local(struct ast_expression *exp
 	return local && local->vla_bound ? local : NULL;
 }
 
-/* Track only a direct local pointer and offsets rooted in it. Conditional,
- * cast, call and other pointer expressions have no captured-size provenance. */
-static struct ast_local_declaration *vm_pointer_source(struct ast_expression *expression)
+/* Only a directly declared VM pointer has a size-bearing lvalue. */
+static struct ast_local_declaration *vm_pointer_lvalue(struct ast_expression *expression)
 {
-	if (expression->kind == expression_pointer_offset)
-		return ((struct ast_pointer_offset_expression *)expression)->vm_size_local;
-	if (expression->kind != expression_load)
-		return NULL;
-	expression = ((struct ast_load_expression *)expression)->operand;
 	if (expression->kind != expression_name)
 		return NULL;
 	struct ast_local_declaration *local = ((struct ast_name_expression *)expression)->declaration;
 	return local && local->vm_pointer_bound ? local : NULL;
+}
+
+/* Track offsets and update results rooted in a direct VM pointer. Conditional,
+ * cast, call and other expressions have no captured-size provenance. */
+static struct ast_local_declaration *vm_pointer_source(struct ast_expression *expression)
+{
+	switch (expression->kind) {
+	case expression_pointer_offset:
+		return ((struct ast_pointer_offset_expression *)expression)->vm_size_local;
+	case expression_prefix_update:
+		return ((struct ast_prefix_update_expression *)expression)->vm_size_local;
+	case expression_postfix_update:
+		return ((struct ast_postfix_update_expression *)expression)->vm_size_local;
+	case expression_compound_assignment:
+		return ((struct ast_compound_assignment_expression *)expression)->vm_size_local;
+	case expression_load:
+		return vm_pointer_lvalue(((struct ast_load_expression *)expression)->operand);
+	default:
+		return NULL;
+	}
 }
 
 static struct ast_local_declaration *direct_vm_pointer(struct ast_expression *expression)
@@ -3313,7 +3346,7 @@ static bool sema_expression(struct sema *sema,
 		struct ast_postfix_update_expression *node = (struct ast_postfix_update_expression *)expression;
 
 		result_type = sema_update_operand(sema, expression, &node->operand,
-			&node->calculation_type, &node->element_size);
+			&node->calculation_type, &node->element_size, &node->vm_size_local);
 		if (!result_type)
 			return false;
 		break;
@@ -3322,7 +3355,7 @@ static bool sema_expression(struct sema *sema,
 		struct ast_prefix_update_expression *node = (struct ast_prefix_update_expression *)expression;
 
 		result_type = sema_update_operand(sema, expression, &node->operand,
-			&node->calculation_type, &node->element_size);
+			&node->calculation_type, &node->element_size, &node->vm_size_local);
 		if (!result_type)
 			return false;
 		break;
@@ -3558,12 +3591,16 @@ static bool sema_expression(struct sema *sema,
 				return false;
 			}
 			if (!type_is_complete_object(referent)) {
-				diagnostic_error(sema->diagnostics, expression->location,
-					"pointer compound assignment requires a complete object referent");
-				return false;
+				if (referent->kind == type_kind_array && ((const struct array_type *)referent)->runtime_bound)
+					node->vm_size_local = vm_pointer_lvalue(node->left);
+				if (!node->vm_size_local) {
+					diagnostic_error(sema->diagnostics, expression->location,
+						"pointer compound assignment requires a complete object referent or a direct VM pointer");
+					return false;
+				}
 			}
 			node->calculation_type = result_type;
-			node->element_size = type_object_size(referent);
+			node->element_size = node->vm_size_local ? 0 : type_object_size(referent);
 			if (!convert_expression(sema, &node->right, expression_integer_promotion(node->right)))
 				return false;
 		} else if (type_is_floating(result_type) || type_is_floating(node->right->type)) {

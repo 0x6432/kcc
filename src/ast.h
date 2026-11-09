@@ -397,7 +397,8 @@ struct ast_postfix_update_expression {
 	enum update_operator operation;
 	struct ast_expression *operand;
 	const struct type *calculation_type;
-	uint64_t element_size; /* Zero for integers; checked stride for pointers. */
+	uint64_t element_size; /* Fixed pointer stride; zero for integers or VM. */
+	struct ast_local_declaration *vm_size_local;
 };
 
 struct ast_prefix_update_expression {
@@ -405,7 +406,8 @@ struct ast_prefix_update_expression {
 	enum update_operator operation;
 	struct ast_expression *operand;
 	const struct type *calculation_type;
-	uint64_t element_size; /* Zero for integers; checked stride for pointers. */
+	uint64_t element_size; /* Fixed pointer stride; zero for integers or VM. */
+	struct ast_local_declaration *vm_size_local;
 };
 
 enum unary_operator {
@@ -475,6 +477,7 @@ struct ast_pointer_difference_expression {
 	struct ast_expression *left;
 	struct ast_expression *right;
 	uint64_t element_size;
+	struct ast_local_declaration *vm_size_local;
 };
 
 enum logical_operator {
@@ -496,7 +499,7 @@ struct ast_assignment_expression {
 };
 
 /* The left remains one lvalue, not an expression duplicated into an assignment.
- * Sema records promoted arithmetic or a complete-pointer stride (zero for ints).
+ * Sema records promoted arithmetic, a fixed stride, or a saved VM stride.
  */
 struct ast_compound_assignment_expression {
 	struct ast_expression expression;
@@ -505,6 +508,7 @@ struct ast_compound_assignment_expression {
 	struct ast_expression *right;
 	const struct type *calculation_type;
 	uint64_t element_size;
+	struct ast_local_declaration *vm_size_local;
 };
 
 /* Inserted by sema, never by the parser. Operand denotes an object lvalue. */

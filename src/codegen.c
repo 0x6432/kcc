@@ -859,13 +859,17 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	size_t left;
 	size_t value;
 	const char *instruction;
+	bool pointer = node->left->type->kind == type_kind_pointer;
 
-	if (node->element_size) {
+	if (pointer) {
 		right = codegen_pointer_index(codegen, node->right);
-		if (node->element_size != 1) {
+		if (node->vm_size_local || node->element_size != 1) {
 			size_t scaled = codegen->next_temporary++;
 
-			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, right, (uintmax_t)node->element_size);
+			if (node->vm_size_local)
+				emit(codegen, "\t%%t%zu =l mul %%t%zu, %%z%zu\n", scaled, right, node->vm_size_local->slot);
+			else
+				emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, right, (uintmax_t)node->element_size);
 			right = scaled;
 		}
 	} else {
@@ -875,7 +879,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	}
 	address = codegen_address(codegen, node->left);
 	if ((node->left->type->qualifiers & type_qualifier_atomic) &&
-		!node->element_size &&
+		!pointer &&
 		(type_is_boolean(node->left->type) || node->left->type->kind == type_kind_enum ||
 		 type_is_floating(node->calculation_type) ||
 		 (node->operation != binary_add && node->operation != binary_subtract &&
@@ -949,7 +953,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	}
 	left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
 	value = codegen->next_temporary++;
-	if (node->element_size)
+	if (pointer)
 		instruction = node->operation == binary_add ? "add" : "sub";
 	else
 		instruction = binary_instruction(node->operation, node->calculation_type);
@@ -973,7 +977,8 @@ struct update_values {
 /* Address, load and store each occur once; the caller selects old or new. */
 static struct update_values codegen_update(struct codegen *codegen,
 	const struct ast_expression *operand, enum update_operator operation,
-	const struct type *calculation_type, uint64_t element_size)
+	const struct type *calculation_type, uint64_t element_size,
+	const struct ast_local_declaration *vm_size_local)
 {
 	size_t address = codegen_address(codegen, operand);
 	size_t previous = codegen->next_temporary++;
@@ -984,11 +989,18 @@ static struct update_values codegen_update(struct codegen *codegen,
 		unsigned width = (unsigned)type_object_size(operand->type);
 		bool wide = width == 8;
 
-		emit(codegen, "\t%%t%zu =%c call $__atomic_fetch_%s_%u(l %%t%zu, %c %ju, w 5)\n",
-			previous, wide ? 'l' : 'w', operation == update_increment ? "add" : "sub",
-			width, address, wide ? 'l' : 'w', (uintmax_t)step);
-		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %ju\n", value, wide ? 'l' : 'w',
-			operation == update_increment ? "add" : "sub", previous, (uintmax_t)step);
+		if (vm_size_local) {
+			emit(codegen, "\t%%t%zu =l call $__atomic_fetch_%s_%u(l %%t%zu, l %%z%zu, w 5)\n",
+				previous, operation == update_increment ? "add" : "sub", width, address, vm_size_local->slot);
+			emit(codegen, "\t%%t%zu =l %s %%t%zu, %%z%zu\n", value,
+				operation == update_increment ? "add" : "sub", previous, vm_size_local->slot);
+		} else {
+			emit(codegen, "\t%%t%zu =%c call $__atomic_fetch_%s_%u(l %%t%zu, %c %ju, w 5)\n",
+				previous, wide ? 'l' : 'w', operation == update_increment ? "add" : "sub",
+				width, address, wide ? 'l' : 'w', (uintmax_t)step);
+			emit(codegen, "\t%%t%zu =%c %s %%t%zu, %ju\n", value, wide ? 'l' : 'w',
+				operation == update_increment ? "add" : "sub", previous, (uintmax_t)step);
+		}
 		previous = codegen_canonicalize(codegen, previous, operand->type);
 		value = codegen_canonicalize(codegen, value, operand->type);
 		return (struct update_values) { .previous = previous, .current = value };
@@ -1008,6 +1020,9 @@ static struct update_values codegen_update(struct codegen *codegen,
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %s\n", value, qbe_type(calculation_type),
 			operation == update_increment ? "add" : "sub", arithmetic,
 			calculation_type->kind == type_kind_float ? "s_1.0" : "d_1.0");
+	else if (vm_size_local)
+		emit(codegen, "\t%%t%zu =l %s %%t%zu, %%z%zu\n", value,
+			operation == update_increment ? "add" : "sub", arithmetic, vm_size_local->slot);
 	else
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %llu\n", value, qbe_type(calculation_type),
 			operation == update_increment ? "add" : "sub", arithmetic, (unsigned long long)step);
@@ -1510,8 +1525,12 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		emit(codegen, "\t%%t%zu =l sub %%t%zu, %%t%zu\n", bytes, left, right);
 		temporary = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =l div %%t%zu, %ju\n", temporary, bytes,
-			(uintmax_t)node->element_size);
+		if (node->vm_size_local)
+			emit(codegen, "\t%%t%zu =l div %%t%zu, %%z%zu\n", temporary, bytes,
+				node->vm_size_local->slot);
+		else
+			emit(codegen, "\t%%t%zu =l div %%t%zu, %ju\n", temporary, bytes,
+				(uintmax_t)node->element_size);
 		return temporary;
 	}
 	case expression_cast: {
@@ -1574,14 +1593,14 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_postfix_update: {
 		const struct ast_postfix_update_expression *node = (const struct ast_postfix_update_expression *)expression;
 		struct update_values values = codegen_update(codegen, node->operand, node->operation,
-			node->calculation_type, node->element_size);
+			node->calculation_type, node->element_size, node->vm_size_local);
 
 		return values.previous;
 	}
 	case expression_prefix_update: {
 		const struct ast_prefix_update_expression *node = (const struct ast_prefix_update_expression *)expression;
 		struct update_values values = codegen_update(codegen, node->operand, node->operation,
-			node->calculation_type, node->element_size);
+			node->calculation_type, node->element_size, node->vm_size_local);
 
 		return values.current;
 	}

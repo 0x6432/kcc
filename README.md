@@ -303,8 +303,8 @@ are explicit; bool uses truth conversion after calculation. Other compound opera
 floats and atomics are later work.
 
 M24f (bounded VM pointer extension): block-local pointers directly to a
-runtime-bound array capture their bound once and support direct runtime-stride
-indexing. Existing VLA size and storage limits apply; VM typedefs, parameters,
+runtime-bound array capture their bound once and support tracked runtime-stride
+indexing, updates, and pointer subtraction. Existing VLA size and storage limits apply; VM typedefs, parameters,
 multiple runtime dimensions and general VM expressions remain unsupported.
 See [the detailed scope and restrictions](docs/m24f-vla-pointers.md).
 
