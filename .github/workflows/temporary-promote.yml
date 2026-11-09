@@ -20,9 +20,9 @@ jobs:
           set -euo pipefail
           git fetch origin development:refs/remotes/origin/dev-check
           git fetch origin wip-bitint-abi-atomics-f0d51bc:refs/remotes/origin/wip-check
-          test "$(git rev-parse refs/remotes/origin/dev-check)" = "48fa4b4d0bb2adb78d35ea806bf2bf1a0d61deca"
-          test "$(git rev-parse refs/remotes/origin/wip-check)" = "e557373f64f009308ad3b622616e937373a36877"
+          test "$(git rev-parse refs/remotes/origin/dev-check)" = "e557373f64f009308ad3b622616e937373a36877"
+          test "$(git rev-parse refs/remotes/origin/wip-check)" = "0b350be4b6628800814145aa4a7b6d9cb201e267"
           git merge-base --is-ancestor refs/remotes/origin/dev-check refs/remotes/origin/wip-check
           git push origin refs/remotes/origin/wip-check:refs/heads/development
-          test "$(git ls-remote origin refs/heads/development | cut -f1)" = "e557373f64f009308ad3b622616e937373a36877"
+          test "$(git ls-remote origin refs/heads/development | cut -f1)" = "0b350be4b6628800814145aa4a7b6d9cb201e267"
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref development || echo 'Could not dispatch CI; run it manually.'
