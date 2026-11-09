@@ -16,6 +16,12 @@ with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
         ('int main(void) { return 1UWB; }\n', 'bit-precise integer literals are not supported yet'),
         ('#define T _BitInt\nT(7) value;\n', 'only widths 8, 16, 32 and 64'),
     ]
+    # Every non-native width remains rejected until value lowering and ABI are implemented.
+    for width in range(1, 65):
+        if width in (8, 16, 32, 64):
+            continue
+        for sign in (['unsigned '] if width == 1 else ['', 'unsigned ']):
+            cases.append((f'{sign}_BitInt({width}) value;\n', 'only widths 8, 16, 32 and 64'))
     for text, message in cases:
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)

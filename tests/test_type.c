@@ -286,10 +286,65 @@ static void test_runtime_array_qualification(struct arena *arena)
 	assert(!incomplete->runtime_bound && runtime->runtime_bound);
 }
 
+/* These semantic types are internal only: source and ABI lowering still reject
+ * non-native widths. Exercise identity and C integer conversions independently. */
+static void test_bitint_width_types(struct arena *arena)
+{
+	assert(!type_bitint(0, true) && !type_bitint(1, false));
+	assert(!type_bitint(65, true) && !type_bitint(65, false));
+	for (unsigned w = 1; w <= 64; w++) {
+		for (unsigned u = 0; u < 2; u++) {
+			const struct type *t = type_bitint(w, u != 0);
+			if (w == 1 && !u) { assert(!t); continue; }
+			const struct type *q = type_qualified(arena, t, type_qualifier_const);
+			unsigned size = w <= 8 ? 1 : w <= 16 ? 2 : w <= 32 ? 4 : 8;
+			assert(type_bitint_width_lowerable(w) == (w == 8 || w == 16 || w == 32 || w == 64));
+			assert(t && q && type_is_bitint(t) && type_is_integer(t));
+			assert(type_integer_width(q) == w && type_is_unsigned(q) == (u != 0));
+			assert(type_object_size(q) == size && type_object_alignment(q) == size);
+			assert(type_integer_promotion(t) == t);
+			assert(!type_compatible(q, t) && type_unqualified_compatible(q, t));
+			assert(type_compatible(type_unqualified(arena, q), t));
+			for (unsigned v = 1; v <= 64; v++) {
+				for (unsigned z = 0; z < 2; z++) {
+					const struct type *other = type_bitint(v, z != 0);
+					if (!other) continue;
+					assert(type_compatible(t, other) == (w == v && u == z));
+					const struct type *expected = w > v ? t : v > w ? other :
+						type_bitint(w, u || z);
+					assert(type_compatible(type_usual_arithmetic(t, other), expected));
+				}
+			}
+			/* Mixed with int and unsigned int after integer promotions. */
+			const struct type *si = w > 32 ? t : &type_int;
+			if (w == 32 && u) si = &type_uint;
+			const struct type *ui = w > 32 ? t : &type_uint;
+			assert(type_compatible(type_usual_arithmetic(t, &type_int), si));
+			assert(type_compatible(type_usual_arithmetic(&type_uint, t), ui));
+			assert(type_compatible(type_usual_arithmetic(t, &type_long),
+				w == 64 && u ? &type_ulong : &type_long));
+			assert(type_compatible(type_usual_arithmetic(t, &type_ulong), &type_ulong));
+			assert(type_compatible(type_usual_arithmetic(t, &type_long_long),
+				w == 64 && u ? &type_ulong_long : &type_long_long));
+			assert(type_compatible(type_usual_arithmetic(t, &type_ulong_long), &type_ulong_long));
+		}
+	}
+	/* Do not expose an aggregate ABI simply because a semantic type exists. */
+	struct record_member member = { .type = type_bitint(5, false) };
+	struct record_definition def = { .complete = true, .members = &member, .member_count = 1,
+		.size = 1, .alignment = 1 };
+	struct record_type record = { .type = { .kind = type_kind_struct }, .definition = &def };
+	struct aggregate_abi abi;
+	assert(!type_aggregate_abi(&record.type, &abi));
+	def.size = 24; /* MEMORY classification must not bypass the guard. */
+	assert(!type_aggregate_abi(&record.type, &abi));
+}
+
 int main(void)
 {
 	struct arena arena = {0};
 
+	test_bitint_width_types(&arena);
 	test_enum_types(&arena);
 	test_runtime_array_qualification(&arena);
 	test_nullptr_type(&arena);

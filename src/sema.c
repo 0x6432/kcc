@@ -1310,7 +1310,8 @@ static const struct type *alignment_complete_type(const struct type *type)
 /* Only target types with implemented libatomic ABI paths are accepted. */
 static bool supported_atomic_type(const struct type *type)
 {
-	return type_is_bitint(type) || type->kind == type_kind_char || type->kind == type_kind_schar ||
+	return (type_is_bitint(type) && type_bitint_width_lowerable(type_integer_width(type))) ||
+		type->kind == type_kind_char || type->kind == type_kind_schar ||
 		type->kind == type_kind_uchar || type->kind == type_kind_short ||
 		type->kind == type_kind_ushort || type->kind == type_kind_int || type->kind == type_kind_uint ||
 		type->kind == type_kind_long || type->kind == type_kind_ulong ||
@@ -1379,15 +1380,12 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		if (!bitint_query_layout(sema, node, 0, &size, &alignment))
 			return NULL;
 		width = evaluate_integer_constant(node->width);
-		if (width.bits != 8 && width.bits != 16 && width.bits != 32 && width.bits != 64) {
+		if (!type_bitint_width_lowerable((unsigned)width.bits)) {
 			diagnostic_error(sema->diagnostics, syntax->location,
 				"_BitInt value types support only widths 8, 16, 32 and 64; other widths are supported only in direct sizeof and alignof type queries or alignas");
 			return NULL;
 		}
-		syntax->type = width.bits == 8 ? (node->is_unsigned ? &type_ubitint8 : &type_bitint8) :
-			width.bits == 16 ? (node->is_unsigned ? &type_ubitint16 : &type_bitint16) :
-			width.bits == 32 ? (node->is_unsigned ? &type_ubitint32 : &type_bitint32) :
-			(node->is_unsigned ? &type_ubitint64 : &type_bitint64);
+		syntax->type = type_bitint((unsigned)width.bits, node->is_unsigned);
 		break;
 	}
 	case type_syntax_enum:
@@ -2961,19 +2959,12 @@ static bool sema_expression(struct sema *sema,
 		if (node->bit_precise_suffix) {
 			struct bitint_type literal_type;
 			if (bitint_literal_type(node->value, node->unsigned_suffix, &literal_type) != bitint_ok ||
-				(literal_type.width != 8 && literal_type.width != 16 &&
-				literal_type.width != 32 && literal_type.width != 64)) {
+				!type_bitint_width_lowerable(literal_type.width)) {
 				diagnostic_error(sema->diagnostics, expression->location,
 					"bit-precise integer literals are not supported yet for this required width");
 				return false;
 			}
-			result_type = literal_type.width == 8 ?
-				(node->unsigned_suffix ? &type_ubitint8 : &type_bitint8) :
-				literal_type.width == 16 ?
-				(node->unsigned_suffix ? &type_ubitint16 : &type_bitint16) :
-				literal_type.width == 32 ?
-				(node->unsigned_suffix ? &type_ubitint32 : &type_bitint32) :
-				(node->unsigned_suffix ? &type_ubitint64 : &type_bitint64);
+			result_type = type_bitint(literal_type.width, literal_type.is_unsigned);
 		} else
 			result_type = type_integer_literal(node->value, node->base ? node->base : 10,
 				node->unsigned_suffix, node->long_suffix);

@@ -146,8 +146,36 @@ static void test_unary_and_shifts(void)
 	assert(bitint_shift(s5, bitint_shift_right, 2, 5, &out) == bitint_invalid_shift && out == 4);
 }
 
+/* Boundary-pattern conversions across every valid width, with independent
+ * target-mask and sign-extension expectations, including 1 and 64 bits. */
+static void test_all_width_conversions(void)
+{
+	for (unsigned from_width = 1; from_width <= 64; from_width++) {
+		uint64_t mask = from_width == 64 ? UINT64_MAX : (UINT64_C(1) << from_width) - 1;
+		uint64_t sign = UINT64_C(1) << (from_width - 1);
+		uint64_t inputs[] = {0, 1, sign - 1, sign, mask};
+		for (unsigned from_unsigned = 0; from_unsigned < 2; from_unsigned++) {
+			if (from_width == 1 && !from_unsigned) continue;
+			for (unsigned to_width = 1; to_width <= 64; to_width++) {
+				uint64_t target_mask = to_width == 64 ? UINT64_MAX : (UINT64_C(1) << to_width) - 1;
+				for (unsigned to_unsigned = 0; to_unsigned < 2; to_unsigned++) {
+					if (to_width == 1 && !to_unsigned) continue;
+					for (unsigned i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++) {
+						uint64_t value = inputs[i], result = 0;
+						uint64_t extended = !from_unsigned && (value & sign) ? value | ~mask : value;
+						assert(bitint_convert((struct bitint_type){from_width, from_unsigned},
+							(struct bitint_type){to_width, to_unsigned}, value, &result) == bitint_ok);
+						assert(result == (extended & target_mask));
+					}
+				}
+			}
+		}
+	}
+}
+
 int main(void)
 {
+	test_all_width_conversions();
 	test_layout();
 	test_literal_width();
 	test_conversions();

@@ -28,9 +28,55 @@ const struct type type_ubitint32 = { .kind = type_kind_ubitint32 };
 const struct type type_bitint64 = { .kind = type_kind_bitint64 };
 const struct type type_ubitint64 = { .kind = type_kind_ubitint64 };
 
+/* Width is part of semantic identity, not the QBE storage class.  These
+ * canonical types are deliberately not enabled by the parser/sema yet. */
+struct other_bitint_type {
+	struct type type;
+	unsigned width;
+};
+#define BITINT_WIDTHS(X) \
+	X(1) X(2) X(3) X(4) X(5) X(6) X(7) X(8) \
+	X(9) X(10) X(11) X(12) X(13) X(14) X(15) X(16) \
+	X(17) X(18) X(19) X(20) X(21) X(22) X(23) X(24) \
+	X(25) X(26) X(27) X(28) X(29) X(30) X(31) X(32) \
+	X(33) X(34) X(35) X(36) X(37) X(38) X(39) X(40) \
+	X(41) X(42) X(43) X(44) X(45) X(46) X(47) X(48) \
+	X(49) X(50) X(51) X(52) X(53) X(54) X(55) X(56) \
+	X(57) X(58) X(59) X(60) X(61) X(62) X(63) X(64)
+#define SIGNED_ENTRY(n) [n] = { { .kind = type_kind_bitint_other }, n },
+#define UNSIGNED_ENTRY(n) [n] = { { .kind = type_kind_ubitint_other }, n },
+static const struct other_bitint_type signed_bitints[65] = { BITINT_WIDTHS(SIGNED_ENTRY) };
+static const struct other_bitint_type unsigned_bitints[65] = { BITINT_WIDTHS(UNSIGNED_ENTRY) };
+#undef SIGNED_ENTRY
+#undef UNSIGNED_ENTRY
+#undef BITINT_WIDTHS
+
+static bool type_is_other_bitint(const struct type *type)
+{
+	return type->kind == type_kind_bitint_other || type->kind == type_kind_ubitint_other;
+}
+
+const struct type *type_bitint(unsigned width, bool is_unsigned)
+{
+	if (width > 64 || width < (is_unsigned ? 1u : 2u))
+		return NULL;
+	switch (width) {
+	case 8: return is_unsigned ? &type_ubitint8 : &type_bitint8;
+	case 16: return is_unsigned ? &type_ubitint16 : &type_bitint16;
+	case 32: return is_unsigned ? &type_ubitint32 : &type_bitint32;
+	case 64: return is_unsigned ? &type_ubitint64 : &type_bitint64;
+	default: return is_unsigned ? &unsigned_bitints[width].type : &signed_bitints[width].type;
+	}
+}
+
+bool type_bitint_width_lowerable(unsigned width)
+{
+	return width == 8 || width == 16 || width == 32 || width == 64;
+}
+
 bool type_is_bitint(const struct type *type)
 {
-	return type->kind == type_kind_bitint8 || type->kind == type_kind_ubitint8 ||
+	return type_is_other_bitint(type) || type->kind == type_kind_bitint8 || type->kind == type_kind_ubitint8 ||
 		type->kind == type_kind_bitint16 || type->kind == type_kind_ubitint16 ||
 		type->kind == type_kind_bitint32 || type->kind == type_kind_ubitint32 ||
 		type->kind == type_kind_bitint64 || type->kind == type_kind_ubitint64;
@@ -44,34 +90,35 @@ struct integer_properties {
 	const struct type *unsigned_counterpart;
 };
 
-/* Target LP64 properties, independent of the compiler host's long width. */
+/* Ranks order bit-precise widths between adjacent standard widths;
+ * standard types outrank bit-precise types of the same width on LP64. */
 static const struct integer_properties integer_properties[] = {
 	/* Bool has eight storage bits but only the values 0 and 1. */
 	{ type_kind_bool, 8, 0, true, &type_bool },
-	{ type_kind_bitint8, 8, 1, false, &type_ubitint8 },
-	{ type_kind_ubitint8, 8, 1, true, &type_ubitint8 },
-	{ type_kind_bitint16, 16, 3, false, &type_ubitint16 },
-	{ type_kind_ubitint16, 16, 3, true, &type_ubitint16 },
-	{ type_kind_bitint32, 32, 5, false, &type_ubitint32 },
-	{ type_kind_ubitint32, 32, 5, true, &type_ubitint32 },
-	{ type_kind_bitint64, 64, 7, false, &type_ubitint64 },
-	{ type_kind_ubitint64, 64, 7, true, &type_ubitint64 },
-	{ type_kind_char, 8, 2, false, &type_uchar },
-	{ type_kind_schar, 8, 2, false, &type_uchar },
-	{ type_kind_uchar, 8, 2, true, &type_uchar },
-	{ type_kind_short, 16, 4, false, &type_ushort },
-	{ type_kind_ushort, 16, 4, true, &type_ushort },
-	{ type_kind_int, 32, 6, false, &type_uint },
-	{ type_kind_uint, 32, 6, true, &type_uint },
-	{ type_kind_long, 64, 8, false, &type_ulong },
-	{ type_kind_ulong, 64, 8, true, &type_ulong },
-	{ type_kind_long_long, 64, 10, false, &type_ulong_long },
-	{ type_kind_ulong_long, 64, 10, true, &type_ulong_long },
+	{ type_kind_bitint8, 8, 16, false, &type_ubitint8 },
+	{ type_kind_ubitint8, 8, 16, true, &type_ubitint8 },
+	{ type_kind_bitint16, 16, 32, false, &type_ubitint16 },
+	{ type_kind_ubitint16, 16, 32, true, &type_ubitint16 },
+	{ type_kind_bitint32, 32, 64, false, &type_ubitint32 },
+	{ type_kind_ubitint32, 32, 64, true, &type_ubitint32 },
+	{ type_kind_bitint64, 64, 128, false, &type_ubitint64 },
+	{ type_kind_ubitint64, 64, 128, true, &type_ubitint64 },
+	{ type_kind_char, 8, 17, false, &type_uchar },
+	{ type_kind_schar, 8, 17, false, &type_uchar },
+	{ type_kind_uchar, 8, 17, true, &type_uchar },
+	{ type_kind_short, 16, 33, false, &type_ushort },
+	{ type_kind_ushort, 16, 33, true, &type_ushort },
+	{ type_kind_int, 32, 65, false, &type_uint },
+	{ type_kind_uint, 32, 65, true, &type_uint },
+	{ type_kind_long, 64, 129, false, &type_ulong },
+	{ type_kind_ulong, 64, 129, true, &type_ulong },
+	{ type_kind_long_long, 64, 130, false, &type_ulong_long },
+	{ type_kind_ulong_long, 64, 130, true, &type_ulong_long },
 };
 
 bool type_is_integer(const struct type *type)
 {
-	if (type->kind == type_kind_enum)
+	if (type->kind == type_kind_enum || type_is_other_bitint(type))
 		return true;
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
@@ -134,6 +181,10 @@ uint64_t type_object_size(const struct type *type)
 
 		return type_object_size(array->element) * array->count;
 	}
+	if (type_is_bitint(type)) {
+		unsigned width = type_integer_width(type);
+		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
+	}
 	return type_value_width(type) / 8;
 }
 
@@ -144,6 +195,10 @@ unsigned type_object_alignment(const struct type *type)
 		return type_record_definition(type)->alignment;
 	if (type->kind == type_kind_array)
 		return type_object_alignment(((const struct array_type *)type)->element);
+	if (type_is_bitint(type)) {
+		unsigned width = type_integer_width(type);
+		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
+	}
 	return type_value_width(type) / 8;
 }
 
@@ -192,27 +247,32 @@ struct pointer_type *type_new_pointer(struct arena *arena, const struct type *re
 	return pointer;
 }
 
-static const struct integer_properties *integer_properties_for(const struct type *type)
+static struct integer_properties integer_properties_for(const struct type *type)
 {
 	if (type->kind == type_kind_enum) {
 		const struct type *underlying = ((const struct enum_type *)type)->definition->underlying;
 		return integer_properties_for(underlying ? underlying : &type_int);
 	}
+	if (type_is_other_bitint(type)) {
+		unsigned width = ((const struct other_bitint_type *)type)->width;
+		return (struct integer_properties) { type->kind, width, 2 * width,
+			type->kind == type_kind_ubitint_other, type_bitint(width, true) };
+	}
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
-			return &integer_properties[i];
+			return integer_properties[i];
 	assert(0 && "integer properties requested for noninteger type");
-	return NULL;
+	return (struct integer_properties) {0};
 }
 
 bool type_is_unsigned(const struct type *type)
 {
-	return integer_properties_for(type)->unsigned_type;
+	return integer_properties_for(type).unsigned_type;
 }
 
 unsigned type_integer_width(const struct type *type)
 {
-	return integer_properties_for(type)->width;
+	return integer_properties_for(type).width;
 }
 
 /* All implemented types below int fit in int, including unsigned char/short. */
@@ -231,28 +291,28 @@ const struct type *type_integer_promotion(const struct type *type)
 
 const struct type *type_usual_arithmetic(const struct type *left, const struct type *right)
 {
-	const struct integer_properties *a;
-	const struct integer_properties *b;
+	struct integer_properties a;
+	struct integer_properties b;
 	const struct type *unsigned_type;
 	const struct type *signed_type;
-	const struct integer_properties *unsigned_properties;
-	const struct integer_properties *signed_properties;
+	struct integer_properties unsigned_properties;
+	struct integer_properties signed_properties;
 
 	left = type_integer_promotion(left);
 	right = type_integer_promotion(right);
 	a = integer_properties_for(left);
 	b = integer_properties_for(right);
-	if (a->unsigned_type == b->unsigned_type)
-		return a->rank >= b->rank ? left : right;
-	unsigned_type = a->unsigned_type ? left : right;
-	signed_type = a->unsigned_type ? right : left;
+	if (a.unsigned_type == b.unsigned_type)
+		return a.rank >= b.rank ? left : right;
+	unsigned_type = a.unsigned_type ? left : right;
+	signed_type = a.unsigned_type ? right : left;
 	unsigned_properties = integer_properties_for(unsigned_type);
 	signed_properties = integer_properties_for(signed_type);
-	if (unsigned_properties->rank >= signed_properties->rank)
+	if (unsigned_properties.rank >= signed_properties.rank)
 		return unsigned_type;
-	if (signed_properties->width > unsigned_properties->width)
+	if (signed_properties.width > unsigned_properties.width)
 		return signed_type;
-	return signed_properties->unsigned_counterpart;
+	return signed_properties.unsigned_counterpart;
 }
 
 static bool integer_literal_fits(uint64_t value, const struct type *type)
@@ -354,6 +414,14 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 		copy->type.qualifiers = qualifiers;
 		return &copy->type;
 	}
+	if (type_is_other_bitint(type)) {
+		struct other_bitint_type *copy = arena_alloc(arena, sizeof(*copy));
+		if (copy) {
+			*copy = *(const struct other_bitint_type *)type;
+			copy->type.qualifiers = qualifiers;
+		}
+		return copy ? &copy->type : NULL;
+	}
 	if (type->kind == type_kind_enum) {
 		struct enum_type *copy = arena_alloc(arena, sizeof(*copy));
 		if (copy) {
@@ -443,6 +511,8 @@ static bool compatible_types(const struct type *left, const struct type *right,
 		const struct enum_definition *b = ((const struct enum_type *)right)->definition;
 		return a == b || (!require_same_type && enum_definitions_compatible(a, b));
 	}
+	if (type_is_other_bitint(left))
+		return type_integer_width(left) == type_integer_width(right);
 	if (type_is_record(left))
 		return type_record_definition(left) == type_record_definition(right);
 	if (type_is_integer(left) || type_is_floating(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
@@ -834,6 +904,9 @@ static bool aggregate_unverified(const struct type *type, unsigned depth,
 {
 	if (depth > 128 || !*budget) return true;
 	--*budget;
+	/* A semantic type alone is not evidence for a by-value ABI. */
+	if (type_is_bitint(type) && !type_bitint_width_lowerable(type_integer_width(type)))
+		return true;
 	if (type_is_floating(type)) *floating = true;
 	if (type->kind == type_kind_array)
 		return aggregate_unverified(((const struct array_type *)type)->element,

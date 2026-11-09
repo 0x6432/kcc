@@ -28,6 +28,9 @@ enum type_kind {
 	type_kind_ubitint32,
 	type_kind_bitint64,
 	type_kind_ubitint64,
+	/* Internal width-aware types; source lowering remains gated. */
+	type_kind_bitint_other,
+	type_kind_ubitint_other,
 	type_kind_bool,
 	type_kind_float,
 	type_kind_double,
@@ -180,6 +183,11 @@ extern const struct type type_long_long;
 extern const struct type type_ulong_long;
 extern const struct type type_bitint8, type_ubitint8, type_bitint16, type_ubitint16;
 extern const struct type type_bitint32, type_ubitint32, type_bitint64, type_ubitint64;
+/* Returns a canonical semantic type, or NULL for invalid widths.
+ * Non-native widths are not yet accepted by source lowering or ABI code. */
+const struct type *type_bitint(unsigned width, bool is_unsigned);
+/* Whether source values of this width currently have lowering support. */
+bool type_bitint_width_lowerable(unsigned width);
 bool type_is_bitint(const struct type *type);
 bool type_is_integer(const struct type *type);
 /* Includes a fixed enum compatible with bool. */
@@ -188,7 +196,8 @@ bool type_is_floating(const struct type *type);
 bool type_is_scalar(const struct type *type);
 bool type_is_object(const struct type *type);
 bool type_is_complete_object(const struct type *type);
-/* QBE scalar value width is separate from target object storage size. */
+/* Semantic value width is separate from target object storage size.
+ * Codegen only supports widths for which source lowering is enabled. */
 unsigned type_value_width(const struct type *type);
 /* Target layout for implemented complete object types, not host sizeof. */
 uint64_t type_object_size(const struct type *type);
