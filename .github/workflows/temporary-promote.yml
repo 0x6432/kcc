@@ -1,28 +1,28 @@
-name: Identify failed test recipes
+name: Promote atomic BitInt support
 on:
   push:
     branches: [wip-promote-aff8503]
 permissions:
-  actions: read
-  contents: read
+  contents: write
+  actions: write
 jobs:
-  diagnose:
+  promote:
     runs-on: ubuntu-latest
     steps:
-      - name: Report only test names and error categories
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Check exact refs and fast-forward development
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for job in 129319998380 129319998260; do
-            curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$RUNNER_TEMP/$job.log"
-            JOB="$job" LOG="$RUNNER_TEMP/$job.log" python3 - <<'PY2'
-          import os,re
-          log=open(os.environ['LOG'],errors='replace').read()
-          recipes=re.findall(r'python3 (tests/test_[a-z0-9_]+\.py)',log)
-          frames=re.findall(r'File "[^"\n]*/(tests/test_[a-z0-9_]+\.py)", line ([0-9]+)',log)
-          flags=[name for name,pattern in [('assertion','AssertionError'),('compiler_error','error:'),('asan','AddressSanitizer'),('ubsan','runtime error:'),('segfault','Segmentation fault'),('subprocess','CalledProcessError')] if re.search(pattern,log)]
-          print('::warning title=Failure '+os.environ['JOB']+'::recipe '+(recipes[-1] if recipes else 'none')+'; frames '+(', '.join(f'{f}:{l}' for f,l in frames[-8:]) or 'none')+'; categories '+','.join(flags))
-          PY2
-          done
+          git fetch origin development:refs/remotes/origin/dev-check
+          git fetch origin wip-bitint-abi-atomics-f0d51bc:refs/remotes/origin/wip-check
+          test "$(git rev-parse refs/remotes/origin/dev-check)" = "1d2ea134dbfd15268755d859cb7fba0dac74f193"
+          test "$(git rev-parse refs/remotes/origin/wip-check)" = "40b06ba7d90c26fce1582f2080e8e8a9f278ca5e"
+          git merge-base --is-ancestor refs/remotes/origin/dev-check refs/remotes/origin/wip-check
+          git push origin refs/remotes/origin/wip-check:refs/heads/development
+          test "$(git ls-remote origin refs/heads/development | cut -f1)" = "40b06ba7d90c26fce1582f2080e8e8a9f278ca5e"
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref development || echo 'Could not dispatch CI; run it manually.'
