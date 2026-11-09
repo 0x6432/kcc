@@ -1,0 +1,30 @@
+name: Temporary milestone bundle transfer
+on:
+  push:
+    branches: [wip-transfer-04020cb]
+permissions:
+  contents: write
+  actions: write
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Verify and publish WIP
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base64 --decode .transfer/wip.bundle.b64 > "$RUNNER_TEMP/wip.bundle"
+          git fetch origin wip-bitint-abi-atomics-f0d51bc:refs/remotes/origin/wip-base
+          test "$(git rev-parse refs/remotes/origin/wip-base)" = "aff8503179dc4f1f1095e8c2eef1a0b674d1aa4a"
+          git bundle verify "$RUNNER_TEMP/wip.bundle"
+          git fetch "$RUNNER_TEMP/wip.bundle" refs/heads/milestone-bitint-abi-atomics:refs/heads/wip-bundle-tip
+          test "$(git rev-parse refs/heads/wip-bundle-tip)" = "04020cb830bdb3e1e935aa0bc9b3a95a2a00f5bf"
+          git merge-base --is-ancestor refs/remotes/origin/wip-base refs/heads/wip-bundle-tip
+          git push origin refs/heads/wip-bundle-tip:refs/heads/wip-bitint-abi-atomics-f0d51bc
+          test "$(git ls-remote origin refs/heads/wip-bitint-abi-atomics-f0d51bc | cut -f1)" = "04020cb830bdb3e1e935aa0bc9b3a95a2a00f5bf"
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref wip-bitint-abi-atomics-f0d51bc || echo 'Could not dispatch CI; run it manually.'
