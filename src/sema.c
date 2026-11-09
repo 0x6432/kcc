@@ -1250,6 +1250,42 @@ static struct ast_type_syntax *query_array_syntax(struct ast_type_syntax *syntax
 	return syntax->kind == type_syntax_array ? syntax : NULL;
 }
 
+/* Only a single pointer directly to one runtime-bound array is supported in
+ * declarations. In particular, do not silently accept pointer chains or VM
+ * function types, whose captured size provenance is not represented. */
+static struct ast_type_syntax *vm_pointer_array_syntax(struct ast_type_syntax *syntax)
+{
+	while (syntax->kind == type_syntax_qualified)
+		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	if (syntax->kind != type_syntax_pointer)
+		return NULL;
+	syntax = ((struct ast_pointer_type_syntax *)syntax)->referent;
+	while (syntax->kind == type_syntax_qualified)
+		syntax = ((struct ast_qualified_type_syntax *)syntax)->base;
+	return syntax->kind == type_syntax_array ? syntax : NULL;
+}
+
+/* VM types cannot yet be rebound through typeof or inferred auto: doing so
+ * would create an identifier without a captured bound or VM jump scope. */
+static bool type_contains_vm(const struct type *type)
+{
+	if (type->kind == type_kind_pointer)
+		return type_contains_vm(((const struct pointer_type *)type)->referent);
+	if (type->kind == type_kind_array) {
+		const struct array_type *array = (const struct array_type *)type;
+		return array->runtime_bound || type_contains_vm(array->element);
+	}
+	if (type->kind == type_kind_function) {
+		const struct function_type *function = (const struct function_type *)type;
+		if (type_contains_vm(function->return_type))
+			return true;
+		for (const struct function_parameter_type *p = function->parameters; p; p = p->next)
+			if (type_contains_vm(p->type))
+				return true;
+	}
+	return false;
+}
+
 /* A VLA bound in an alignment or pointer-size type-name is checked but never
  * evaluated. Keep incomplete array types distinguishable from this case. */
 static const struct type *resolve_alignment_type_syntax(struct sema *sema,
@@ -1419,6 +1455,10 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 
 		if (!operand)
 			return NULL;
+		if (type_contains_vm(operand)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "typeof of variable-length or variably modified type is not supported");
+			return NULL;
+		}
 		syntax->type = query->unqualify ? unqualified_type(sema, operand, syntax->location) : operand;
 		if (!syntax->type)
 			return NULL;
@@ -1428,7 +1468,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 		struct ast_typeof_expression_syntax *query = (struct ast_typeof_expression_syntax *)syntax;
 
 		/* Preserve only the root load/decay boundary; children keep their constraints.
-		 * Direct VLA operands are explicitly rejected; no operand evaluation occurs.
+		 * VM operands are explicitly rejected; no operand evaluation occurs.
 		 */
 		if (!sema_unevaluated_expression(sema, &query->operand))
 			return NULL;
@@ -1436,9 +1476,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "typeof cannot be applied to a bit-field");
 			return NULL;
 		}
-		if (query->operand->type->kind == type_kind_array &&
-			((const struct array_type *)query->operand->type)->runtime_bound) {
-			diagnostic_error(sema->diagnostics, syntax->location, "typeof of variable-length array is not supported");
+		if (type_contains_vm(query->operand->type)) {
+			diagnostic_error(sema->diagnostics, syntax->location, "typeof of variable-length or variably modified type is not supported");
 			return NULL;
 		}
 		syntax->type = query->unqualify ?
@@ -2155,6 +2194,8 @@ static bool comparison_operator(enum binary_operator operation)
 	}
 }
 
+static struct ast_local_declaration *vm_pointer_source(struct ast_expression *expression);
+
 /* Both operands are already analyzed/loaded. Only the integer is promoted;
  * the pointer type and the index's promoted signedness remain explicit.
  */
@@ -2181,16 +2222,23 @@ static struct ast_pointer_offset_expression *lower_pointer_offset(struct sema *s
 	if (!convert_expression(sema, &index, expression_integer_promotion(index)))
 		return NULL;
 	pointer = (const struct pointer_type *)base->type;
+	struct ast_local_declaration *vm_local = NULL;
 	if (!type_is_complete_object(pointer->referent)) {
-		diagnostic_error(sema->diagnostics, location, "pointer arithmetic requires a complete object referent");
-		return NULL;
+		if (pointer->referent->kind == type_kind_array &&
+			((const struct array_type *)pointer->referent)->runtime_bound)
+			vm_local = vm_pointer_source(base);
+		if (!vm_local) {
+			diagnostic_error(sema->diagnostics, location, "pointer arithmetic requires a complete object referent or a direct VM pointer");
+			return NULL;
+		}
 	}
 	offset = ast_new_pointer_offset(sema->arena, location,
-		base, index, type_object_size(pointer->referent), subtract);
+		base, index, vm_local ? 0 : type_object_size(pointer->referent), subtract);
 	if (!offset) {
 		diagnostic_error(sema->diagnostics, location, "out of memory lowering pointer offset");
 		return NULL;
 	}
+	offset->vm_size_local = vm_local;
 	offset->expression.type = base->type;
 	if (!check_expression_depth(sema, &offset->expression))
 		return NULL;
@@ -2416,6 +2464,33 @@ static struct ast_local_declaration *direct_vla_local(struct ast_expression *exp
 		return NULL;
 	struct ast_local_declaration *local = ((struct ast_name_expression *)expression)->declaration;
 	return local && local->vla_bound ? local : NULL;
+}
+
+/* Track only a direct local pointer and offsets rooted in it. Conditional,
+ * cast, call and other pointer expressions have no captured-size provenance. */
+static struct ast_local_declaration *vm_pointer_source(struct ast_expression *expression)
+{
+	if (expression->kind == expression_pointer_offset)
+		return ((struct ast_pointer_offset_expression *)expression)->vm_size_local;
+	if (expression->kind != expression_load)
+		return NULL;
+	expression = ((struct ast_load_expression *)expression)->operand;
+	if (expression->kind != expression_name)
+		return NULL;
+	struct ast_local_declaration *local = ((struct ast_name_expression *)expression)->declaration;
+	return local && local->vm_pointer_bound ? local : NULL;
+}
+
+static struct ast_local_declaration *direct_vm_pointer(struct ast_expression *expression)
+{
+	if (expression->kind != expression_indirection)
+		return NULL;
+	expression = ((struct ast_indirection_expression *)expression)->operand;
+	/* sizeof currently analyzes its operand as unevaluated. Restrict this
+	 * exception to a direct load so no evaluated index or call is lost. */
+	if (expression->kind != expression_load)
+		return NULL;
+	return vm_pointer_source(expression);
 }
 
 static bool sema_expression(struct sema *sema,
@@ -3066,6 +3141,8 @@ static bool sema_expression(struct sema *sema,
 		if (node->operand->type->kind == type_kind_array &&
 			((const struct array_type *)node->operand->type)->runtime_bound) {
 			node->vla_local = direct_vla_local(node->operand);
+			if (!node->vla_local)
+				node->vla_local = direct_vm_pointer(node->operand);
 			if (!node->vla_local) {
 				diagnostic_error(sema->diagnostics, expression->location, "sizeof variable-length array requires a direct object reference");
 				return false;
@@ -5222,6 +5299,11 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if (!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true))
 		return false;
 	type = local->initializer->type;
+	if (type_contains_vm(type)) {
+		diagnostic_error(sema->diagnostics, local->name.location,
+			"inferred auto with variably modified type is not supported");
+		return false;
+	}
 	if ((!type_is_scalar(type) && !type_is_record(type)) || !type_is_complete_object(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"inferred auto requires a complete scalar or aggregate initializer type");
@@ -5377,16 +5459,27 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 			return false;
 		local->alignment = local->alignments->alignment;
 	}
-	/* Declarations allocate each time control reaches them. Goto and switch
-	 * entry are checked separately, and the runtime budget is cumulative. */
-	if (sema->function && sema->scope &&
-		local->type_syntax->kind == type_syntax_array && !local->is_static &&
-		!local->is_extern && !local->is_thread_local)
-		sema->vla_candidate = local->type_syntax;
+	/* Runtime bounds are evaluated each time control reaches a declaration.
+	 * VLA object allocations use a cumulative budget; VM pointers do not. */
+	struct ast_type_syntax *vm_array = NULL;
+	if (sema->function && sema->scope && !local->is_static &&
+		!local->is_extern && !local->is_thread_local) {
+		if (local->type_syntax->kind == type_syntax_array)
+			sema->vla_candidate = local->type_syntax;
+		else {
+			vm_array = vm_pointer_array_syntax(local->type_syntax);
+			sema->vla_candidate = vm_array;
+		}
+	}
 	type = resolve_type_syntax(sema, local->type_syntax);
 	sema->vla_candidate = NULL;
 	if (!type)
 		return false;
+	if (vm_array && vm_array->type && vm_array->type->kind == type_kind_array &&
+		((const struct array_type *)vm_array->type)->runtime_bound) {
+		local->vm_pointer_bound = ((struct ast_array_type_syntax *)vm_array)->bound;
+		local->vm_pointer_element_size = type_object_size(((const struct array_type *)vm_array->type)->element);
+	}
 	if (local->is_nodiscard && type->kind != type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location, "nodiscard requires a function declaration");
 		return false;
@@ -5589,15 +5682,15 @@ static bool sema_for(struct sema *sema, struct ast_for_statement *node)
 	return success;
 }
 
-/* Capture the currently active VLA declarations while block scopes still
- * exist. A goto target cannot introduce any VLA absent at the source. */
+/* Capture active variably modified identifiers while block scopes still
+ * exist. A goto target cannot introduce one absent at the source. */
 static void capture_vla_scopes(const struct sema *sema, uint64_t bits[vla_scope_words])
 {
 	memset(bits, 0, vla_scope_words * sizeof(*bits));
 	for (const struct scope *scope = sema->scope; scope; scope = scope->parent)
 		for (const struct binding *binding = scope->bindings; binding; binding = binding->next) {
 			const struct ast_local_declaration *local = binding->declaration;
-			if (local->vla_bound) {
+			if (local->vla_bound || local->vm_pointer_bound) {
 				assert(local->slot < ast_max_locals);
 				bits[local->slot / 64] |= UINT64_C(1) << (local->slot % 64);
 			}
@@ -5668,7 +5761,7 @@ static bool resolve_gotos(struct sema *sema)
 		for (size_t i = 0; i < vla_scope_words; i++)
 			if (binding->vla_scopes[i] & ~reference->vla_scopes[i]) {
 				diagnostic_error(sema->diagnostics, node->statement.location,
-					"goto enters the scope of a variable-length array");
+					"goto enters the scope of a variably modified declaration");
 				return false;
 			}
 		node->target = binding->label;
@@ -5712,9 +5805,9 @@ static bool check_switch_vla_scope(struct sema *sema, struct source_location loc
 	assert(context);
 	for (struct scope *scope = sema->scope; scope && scope != context->scope->parent; scope = scope->parent)
 		for (struct binding *binding = scope->bindings; binding; binding = binding->next)
-			if (binding->declaration->vla_bound) {
+			if (binding->declaration->vla_bound || binding->declaration->vm_pointer_bound) {
 				diagnostic_error(sema->diagnostics, location,
-					"switch label enters the scope of a variable-length array");
+					"switch label enters the scope of a variably modified declaration");
 				return false;
 			}
 	return true;

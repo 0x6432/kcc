@@ -54,7 +54,7 @@ conformance is not claimed.
 | M24c | Atomic types/load/store | Memory model, alignment, target code inspection | in progress (bounded integer, bool, enum, floating and pointer loads/stores via libatomic; aggregate atomics and validation remain) |
 | M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | in progress (bounded integer and pointer RMW, arithmetic atomic compound assignments via compare-exchange, exchange/compare-exchange, fences and partial header; operations and validation remain) |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |
-| M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (bounded automatic outer VLAs, loop/switch/goto scope checks and empty initialization; broader VM types remain unsupported) |
+| M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (bounded automatic outer VLAs and direct block-local pointers to runtime-bound arrays with tracked strides; loop/switch/goto scope checks and empty initialization; broader VM types remain unsupported) |
 | M24g | long double, floating environment and remaining backend gaps | Correct target representation and runtime/ABI tests | planned |
 | M25a | Predefined macros and translation/environment audit | Standard clause matrix and implementation-defined docs | planned |
 | M25b | Compiler-provided headers and runtime helpers | Header compile tests and link resolution | planned |

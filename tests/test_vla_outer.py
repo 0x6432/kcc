@@ -57,7 +57,6 @@ rejected = [
     ('int f(int n) { goto done; int a[n]; done: return 0; }', 'goto enters the scope'),
     ('int f(int n) { int a[n]; typeof(a) b; return 0; }', 'typeof of variable-length'),
     ('int f(int n) { int a[n]; static_assert(sizeof a, "x"); return 0; }', 'constant expression'),
-    ('int f(int n) { int (*p)[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { typedef int A[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { static int a[n]; return 0; }', 'variable-length arrays'),
     ('int f(int n) { int a[2][n]; return 0; }', 'variable-length arrays'),

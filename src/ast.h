@@ -466,6 +466,7 @@ struct ast_pointer_offset_expression {
 	struct ast_expression *base;
 	struct ast_expression *index;
 	uint64_t element_size;
+	struct ast_local_declaration *vm_size_local; /* Saved runtime stride, if any. */
 	bool subtract;
 };
 
@@ -925,6 +926,9 @@ struct ast_local_declaration {
 	struct ast_local_declaration *next_local;
 	struct ast_expression *vla_bound;
 	uint64_t vla_max_count;
+	/* A block-scope pointer to one runtime-bound array, not a VLA object. */
+	struct ast_expression *vm_pointer_bound;
+	uint64_t vm_pointer_element_size;
 };
 
 struct ast_statement_item {

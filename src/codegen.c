@@ -1339,6 +1339,10 @@ static size_t codegen_expression(struct codegen *codegen,
 	case expression_sizeof: {
 		const struct ast_sizeof_expression *node = (const struct ast_sizeof_expression *)expression;
 		if (node->vla_local) {
+			/* A VLA operand is evaluated. For the supported direct pointer form, this
+			 * includes a volatile or atomic pointer load. */
+			if (node->vla_local->vm_pointer_bound)
+				(void)codegen_address(codegen, node->operand);
 			size_t value = codegen->next_temporary++;
 			emit(codegen, "\t%%t%zu =l copy %%z%zu\n", value, node->vla_local->slot);
 			return value;
@@ -1486,8 +1490,12 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t index = codegen_pointer_index(codegen, node->index);
 		size_t scaled = codegen->next_temporary++;
 
-		emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, index,
-			(uintmax_t)node->element_size);
+		if (node->vm_size_local)
+			emit(codegen, "\t%%t%zu =l mul %%t%zu, %%z%zu\n", scaled, index,
+				node->vm_size_local->slot);
+		else
+			emit(codegen, "\t%%t%zu =l mul %%t%zu, %ju\n", scaled, index,
+				(uintmax_t)node->element_size);
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =l %s %%t%zu, %%t%zu\n", temporary,
 			node->subtract ? "sub" : "add", base, scaled);
@@ -1886,6 +1894,27 @@ static void codegen_fixed_slot(struct codegen *codegen, char name, size_t slot,
 	emit(codegen, "\t%%%c%zu =l and %%t%zu, -%u\n", name, slot, biased, alignment);
 }
 
+/* A VM pointer owns only a saved type size, not dynamic array storage. Its
+ * bound is checked against the same 1 MiB type limit as sizeof(type VLA). */
+static void codegen_vm_pointer_bound(struct codegen *codegen, const struct ast_local_declaration *local)
+{
+	size_t bound = codegen_expression(codegen, local->vm_pointer_bound);
+	size_t wide = codegen_convert_value(codegen, bound, local->vm_pointer_bound->type, &type_ulong);
+	size_t positive = codegen->next_temporary++, within = codegen->next_temporary++;
+	size_t valid = codegen->next_temporary++;
+	size_t good = new_label(codegen), bad = new_label(codegen);
+	emit(codegen, "\t%%t%zu =w cnel %%t%zu, 0\n", positive, wide);
+	emit(codegen, "\t%%t%zu =w culel %%t%zu, %ju\n", within, wide,
+		(uintmax_t)(ast_max_local_storage / local->vm_pointer_element_size));
+	emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", valid, positive, within);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", valid, good, bad);
+	emit_label(codegen, bad);
+	emit(codegen, "\tcall $abort()\n\thlt\n");
+	emit_label(codegen, good);
+	emit(codegen, "\t%%z%zu =l mul %%t%zu, %ju\n", local->slot, wide,
+		(uintmax_t)local->vm_pointer_element_size);
+}
+
 /* Each execution allocates from a cumulative runtime budget; storage is not
  * reclaimed until return. Invalid bounds terminate before allocation. */
 static void codegen_vla(struct codegen *codegen, const struct ast_local_declaration *local)
@@ -2156,8 +2185,11 @@ static bool codegen_block_items(struct codegen *codegen,
 			}
 			if (local->vla_bound)
 				codegen_vla(codegen, local);
-			else if (!local->object_symbol && !local->function_symbol)
+			else if (!local->object_symbol && !local->function_symbol) {
+				if (local->vm_pointer_bound)
+					codegen_vm_pointer_bound(codegen, local);
 				codegen_local_initializer(codegen, local);
+			}
 			break;
 		}
 		case block_item_statement: {

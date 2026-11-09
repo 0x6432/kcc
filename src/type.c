@@ -524,8 +524,11 @@ const struct type *type_composite(struct arena *arena, const struct type *left,
 		const struct array_type *a = (const struct array_type *)left;
 		const struct array_type *b = (const struct array_type *)right;
 		const struct type *element = type_composite(arena, a->element, b->element);
-		uint64_t count = a->count ? a->count : b->count;
-		bool runtime_bound = !count && (a->runtime_bound || b->runtime_bound);
+		/* Do not erase runtime provenance when a conditional expression
+		 * combines a VLA pointer with a fixed-array pointer. A fixed stride
+		 * would be unsound for the runtime-sized branch. */
+		bool runtime_bound = a->runtime_bound || b->runtime_bound;
+		uint64_t count = runtime_bound ? 0 : (a->count ? a->count : b->count);
 		struct array_type *array;
 
 		if (!element)

@@ -22,17 +22,17 @@ after a nested block ends; storage is reclaimed on function return. This is a
 conservative implementation limit: a loop can exhaust the budget even when its
 individual VLAs have ended their lifetimes.
 
-Other restrictions of the existing outermost VLA subset remain: no runtime inner
+Other restrictions of the VLA object subset remain: no runtime inner
 dimensions, nonempty VLA initializers, general VM typedefs or
 parameters, or `typeof` of a VLA. Taking a VLA's address is supported, but pointer arithmetic on a pointer to
 the whole VLA remains rejected because runtime referent size is not modeled;
 `sizeof` accepts the array name or direct indirection/address pairs such as
 `sizeof *(&a)`; other VLA expressions remain unsupported. A `goto` may stay within or leave VLA scopes, or return to a point before a
 VLA declaration; it is rejected if its target enters the scope of a VLA absent
-at the source. Re-entering a declaration consumes the cumulative budget again. The compiler was built;
-the added regression cases and runtime behavior have not been tested.
+at the source. Re-entering a declaration consumes the cumulative budget again. The focused
+VLA object regression has since been run through QBE.
 Runtime-bound markers are retained when array qualification is copied or when
-two unknown-bound array types are combined.
+array types are combined, including a fixed-bound and a runtime-bound array.
 `alignof` and alignment specifiers accept a direct outer variable-bound array
 type-name with a complete fixed-size element type. Its bound is checked but
 not evaluated; the result is the element alignment. More general variably
@@ -48,5 +48,5 @@ still unsupported. This path has not been runtime-tested.
 `sizeof` and `alignof` also accept pointer type-names pointing through pointer
 and qualifier layers to one outer variable-bound array with fixed-size elements.
 The result is the pointer layout; this implementation chooses not to evaluate
-the bound in those queries. General pointer-to-VLA declarations and runtime
-pointer arithmetic are still unsupported. This path has not been runtime-tested.
+the bound in those queries. A later, limited block-local pointer-to-VLA and runtime-stride arithmetic
+subset is documented in [m24f-vla-pointers.md](m24f-vla-pointers.md).

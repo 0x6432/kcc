@@ -302,6 +302,12 @@ lvalue address/load/store, usual arithmetic conversions and stored-type results
 are explicit; bool uses truth conversion after calculation. Other compound operators are now supported for integers;
 floats and atomics are later work.
 
+M24f (bounded VM pointer extension): block-local pointers directly to a
+runtime-bound array capture their bound once and support direct runtime-stride
+indexing. Existing VLA size and storage limits apply; VM typedefs, parameters,
+multiple runtime dimensions and general VM expressions remain unsupported.
+See [the detailed scope and restrictions](docs/m24f-vla-pointers.md).
+
 M19c1/c2: prefix and postfix `++`/`--` update integer and complete-object pointer
 lvalues. Operand addresses are evaluated once; narrow/bool conversion and pointer
 strides are explicit. Postfix yields the old value, prefix the new. Additive compound
