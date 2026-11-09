@@ -79,7 +79,7 @@ def main():
                     pair(d, kd+decl, hd+decl, body, caller)
                 if native:
                     decl = '#include <stdarg.h>\n'
-                    body = ('int var(int n, ...) { va_list ap; va_start(ap,n); '
+                    body = ('int var(int n, ...) { va_list ap; va_start(ap,n); (void)n; '
                             'T x=va_arg(ap,T); va_end(ap); return (int)x; }\n')
                     value = '-42' if signed else '42'
                     caller = f'int var(int,...); int main(void) {{ return var(1,(T)({value})) != ({value}); }}\n'
@@ -97,7 +97,7 @@ def main():
                 pair(d, decl+kd, decl+atomic_hd, body, caller)
                 source = kd + f'static_assert(sizeof(_Atomic({sign}_BitInt({width}))) == {width//8});\n' + '''#include <stdarg.h>
 #include <stdatomic.h>
-int var(int n, ...) { va_list ap; va_start(ap,n); T x=va_arg(ap,T); va_end(ap); return (int)x; }
+int var(int n, ...) { va_list ap; va_start(ap,n); (void)n; T x=va_arg(ap,T); va_end(ap); return (int)x; }
 int main(void) { _Atomic(T) x=(T)40; T expected=(T)40;
     if (sizeof(_Atomic(T)) != sizeof(T)) return 1;
     if (atomic_fetch_add(&x,(T)1)!=(T)40) return 2;
