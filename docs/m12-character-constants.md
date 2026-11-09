@@ -1,4 +1,7 @@
-# M12g: ordinary character constants (design before implementation)
+# M12g: ordinary character constants
+
+The original design below is historical; the multicharacter extension at the
+end supersedes its earlier rejection of ordinary multicharacter constants.
 
 Add ordinary single-byte character constants to runtime expressions, independently
 of the upcoming char/short declaration types. An ordinary character constant has
@@ -27,3 +30,12 @@ AST units, shared decoder boundary tests, both-host full-value runtime oracles,
 macro/normalization regressions and fuzz corpus/invariants. Run all old conditional
 character oracles, full regressions, QBE, sanitizers, bounded fuzz and exact-source
 CI before calling the milestone fully verified.
+
+## Ordinary multicharacter constants
+
+Ordinary constants containing two to four supported execution bytes pack their
+bytes left to right into a signed 32-bit `int`, matching GCC and Clang on the
+Linux x86-64 target. Escape sequences each contribute one byte; e.g. `'ab'`
+is `0x6162` and `'\1234'` is `0x5334`. This policy is implementation-defined
+in C. More than four bytes, prefixed multicharacter constants, and non-ASCII
+ordinary source characters remain rejected. The same policy applies in `#if`.

@@ -455,8 +455,8 @@ static void test_legacy_integer_token_metadata(void)
 
 static void test_character_spellings(void)
 {
-	const char *bad[] = { "", "'", "''", "'''", "'ab'", "'a", "a'", "'\\'",
-		"'\\x'", "'\\x100'", "'\\400'", "'\\1234'", "'\\q'", "'\\u0041'",
+	const char *bad[] = { "", "'", "''", "'''", "'abcde'", "'a", "a'", "'\\'",
+		"'\\x'", "'\\x100'", "'\\400'", "'\\q'", "'\\u0041'",
 		"L'ab'", "u'ab'", "U'ab'", "u8'ab'", "'\n'", "'\r'", "'\200'" };
 	const unsigned char slice[] = { '\'', 'a', '\'', 'z' };
 	const unsigned char nul[] = { '\'', 0, '\'' };

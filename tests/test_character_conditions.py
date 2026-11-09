@@ -19,6 +19,8 @@ characters += [
     (r"'\r'", 13), (r"'\t'", 9), (r"'\v'", 11), (r"'\?'", 63),
     (r"'\''", 39), (r"'\\'", 92), (r''' '\"' '''.strip(), 34),
 ]
+characters += [("'ab'", 0x6162), ("'abcd'", 0x61626364), (r"'\1234'", 0x5334),
+               (r"'\377abc'", 0xff616263 - 0x100000000)]
 expressions = [(f'{text} == {value}', True) for text, value in characters]
 expressions += [
     (r"'\xff' < 0", True), (r"'\xff' < 0U", False),
@@ -41,13 +43,13 @@ with tempfile.TemporaryDirectory(prefix='kcc-pp-char-') as directory:
         reference = subprocess.run([host, '-std=c2x', '-E', '-P', str(source)], capture_output=True, text=True, timeout=10)
         assert reference.returncode == 0 and reference.stdout.split() == [expected], (text, reference.stderr)
     for text, message in [
-        ("''", 'expected one character'), ("'ab'", 'multicharacter'),
-        (r"'\1234'", 'multicharacter'), (r"'\x'", 'expected digits'),
+        ("''", 'expected one character'), ("'abcde'", 'multicharacter'),
+        (r"'\x'", 'expected digits'),
         (r"'\x100'", 'exceeds one byte'), (r"'\400'", 'exceeds one byte'),
         (r"'\777'", 'exceeds one byte'), (r"'\q'", 'unsupported character escape'),
         (r"'\u00ff'", 'more than one UTF-8 code unit'),
         ("L'ab'", 'multicharacter'), ("u'ab'", 'multicharacter'), ("U'ab'", 'multicharacter'), ("u8'ab'", 'multicharacter'),
-        ("'é'", 'non-ASCII'), ("0 && 'ab'", 'multicharacter'),
+        ("'é'", 'non-ASCII'), ("0 && 'abcde'", 'multicharacter'),
     ]:
         source.write_text(f'#if {text}\n#endif\nint main(void) {{ return 0; }}\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
