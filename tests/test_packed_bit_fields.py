@@ -87,7 +87,7 @@ REJECT = [
  ('struct S { unsigned a:3,b:4; }; int a[__kcc_offsetof(struct S,b)];', 'bit-field'),
  ('struct S { unsigned a:3; const unsigned b:4; } s; void f(void){s.b=2;}', 'modifiable lvalue'),
  ('struct S { unsigned a:3,b:4; } s; int f(void){return _Generic(s.b,int:1,default:0);}', 'bit-field'),
- ('struct S { _BitInt(32) a:3; unsigned b:4; };', 'bit-field'),
+ ('struct S { _BitInt(32) a:33; unsigned b:4; };', 'bit-field'),
  # A whole-record copy followed by a partial bit write is not representable by the bounded plan.
  ('struct S { unsigned a:3,b:4; }; struct O { struct S s; }; int f(struct S p) { struct O x = { .s=p, .s.b=3 }; return x.s.a; }', 'initializer'),
 ]

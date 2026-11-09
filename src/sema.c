@@ -396,7 +396,7 @@ static const struct record_member *field_value(const struct ast_expression *expr
 static const struct record_member *narrow_field_value(const struct ast_expression *expression)
 {
 	const struct record_member *member = field_value(expression);
-	return member && member->bit_width && (member->bit_width < 32 ||
+	return member && !type_is_bitint(member->type) && member->bit_width && (member->bit_width < 32 ||
 		(member->bit_width == 32 && type_value_width(member->type) == 64)) ? member : NULL;
 }
 
@@ -406,7 +406,7 @@ static const struct record_member *narrow_field_value(const struct ast_expressio
 static bool wide_field_value(const struct ast_expression *expression)
 {
 	const struct record_member *member = field_value(expression);
-	return member && member->bit_width > 32 && member->bit_width < 64 &&
+	return member && !type_is_bitint(member->type) && member->bit_width > 32 && member->bit_width < 64 &&
 		type_value_width(member->type) == 64;
 }
 
@@ -718,7 +718,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				field_type->kind != type_kind_schar && field_type->kind != type_kind_uchar &&
 				field_type->kind != type_kind_short && field_type->kind != type_kind_ushort &&
 				field_type->kind != type_kind_long && field_type->kind != type_kind_ulong &&
-				field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long) ||
+				field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long &&
+				!type_is_bitint(field_type)) ||
+				(type_is_bitint(field_type) && width.bits > type_integer_width(field_type)) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 64 ||

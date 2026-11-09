@@ -35,7 +35,8 @@ signed/unsigned types, register and stack arguments, floating-point mixing,
 indirect calls and `va_copy`. Records containing all supported widths now
 participate in the bounded aggregate ABI; cross-object Clang 15 checks include
 unions, 16-byte alignment, memory records, variadics and stack pressure. Atomic non-native-width scalars now use width-aware compare-exchange loops;
-bit-precise bit-fields remain unsupported. See
+bit-precise bit-fields now support widths up to the declared type width;
+Clang 15 cross-object tests cover all 127 types at representative widths. See
 `m24-bitint-foundation.md`.
 
 ## Aggregate varargs, larger records and record attributes
@@ -88,8 +89,8 @@ Signed and unsigned `_BitInt(8/16/32/64)` values now support fixed and variadic
 function arguments and returns, `va_arg`, bounded by-value aggregate members,
 and atomic operations through the existing libatomic paths. Other widths now
 support scalar operations, fixed and variadic calls, bounded aggregate ABI,
-and atomic scalar operations; bit-precise bit-fields and atomic record members remain
-rejected.
+and atomic scalar operations; bit-precise bit-fields are supported within the
+existing field limits, while atomic record members remain rejected.
 The new regression exercises KCC self-execution, GCC standard-integer surrogates,
 and actual Clang 15 `_BitInt` cross-object scalar/aggregate/variadic calls in
 both directions. Atomic cross-object checks use surrogates, not native atomic

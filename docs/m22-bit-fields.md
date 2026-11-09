@@ -28,7 +28,9 @@ compatible with `int` or `unsigned int`, including ordinary int-compatible enums
 and fixed-underlying enums, use the corresponding 32-bit unit and accept named
 widths 1–32 or unnamed widths 0–32. Unnamed fields and zero-width separators
 can use either a direct enum tag, such as `enum E : 0`, or an enum typedef.
-Other enum base types remain unsupported. Structs,
+Other enum base types remain unsupported. Signed and unsigned `_BitInt(N)`
+bit-fields accept widths up to N (zero only for unnamed fields), using the
+allocation unit and alignment of the declared bit-precise type. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
 retain the existing record restrictions.
 
@@ -58,6 +60,8 @@ are supported, but uncast arithmetic, comparisons, conditional operands,
 variadic arguments and other rank-sensitive operations are rejected. Cast to a
 standard integer type first. Unpromoted `_Generic` and `typeof` forms are also
 rejected: GCC and Clang differ on the compatible type of these fields.
+Bit-precise fields retain their declared `_BitInt` type and are exempt from
+integer promotion; ordinary arithmetic conversions still apply.
 Within existing initializer limits, static and automatic, positional and
 designated initializers, scalar braces, record copies and pointer-based host
 interop are supported. Adjacent fields are merged bitwise; repeated field
@@ -79,8 +83,8 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Enum base types other than `int`/`unsigned int`, `_BitInt` base types,
-volatile and atomic fields are rejected. The named long/long-long widths 33–63
+Enum base types other than `int`/`unsigned int`, volatile and atomic fields
+are rejected. The named long/long-long widths 33–63
 retain the rank-sensitive operation restrictions above. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
@@ -91,6 +95,9 @@ can share the legacy M22 diagnostic.
 
 ## Validation
 
+`tests/test_bitint_fields_native.py` checks all 127 supported bit-precise
+types at representative field widths, including static initialization and
+by-value aggregate calls in both Clang/KCC directions.
 `tests/test_enum_bit_fields.py` checks 288 ordinary-enum layouts with matching
 GCC/KCC declarations in both call directions, plus 448 fixed-enum layouts
 against separately compiled representation-compatible primitive-field

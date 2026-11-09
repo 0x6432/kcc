@@ -364,7 +364,7 @@ static const struct record_member *codegen_bit_field(const struct ast_expression
 		return NULL;
 	const struct record_member *member = ((const struct ast_member_expression *)expression)->member;
 	return member && member->is_bit_field && member->bit_width &&
-		(member->bit_width < 32 || type_value_width(member->type) == 64) ? member : NULL;
+		(member->bit_width < 32 || type_is_bitint(member->type) || type_value_width(member->type) == 64) ? member : NULL;
 }
 
 static size_t codegen_field_value(struct codegen *codegen, size_t value,
@@ -461,7 +461,7 @@ static size_t codegen_wide_field_store(struct codegen *codegen, size_t address,
 static size_t codegen_field_load(struct codegen *codegen, size_t address,
 	const struct record_member *member)
 {
-	if (type_value_width(member->type) == 64)
+	if (type_value_width(member->type) > 32)
 		return codegen_wide_field_load(codegen, address, member);
 	size_t value = codegen_field_storage_load(codegen, address, (member->bit_offset + member->bit_width + 7) / 8);
 	if (member->bit_offset) {
@@ -475,7 +475,7 @@ static size_t codegen_field_load(struct codegen *codegen, size_t address,
 static size_t codegen_field_store(struct codegen *codegen, size_t address, size_t value,
 	const struct record_member *member)
 {
-	if (type_value_width(member->type) == 64)
+	if (type_value_width(member->type) > 32)
 		return codegen_wide_field_store(codegen, address, value, member);
 	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
 	uint32_t mask = UINT32_MAX >> (32 - member->bit_width);
@@ -740,7 +740,7 @@ static void codegen_initializer_plan(struct codegen *codegen,
 			continue;
 		address = codegen_byte_offset(codegen, destination, entry->offset);
 		if (entry->kind == ast_initializer_write_zero) {
-			if (entry->bit_field && (entry->bit_field->bit_width < 32 ||
+			if (entry->bit_field && (entry->bit_field->bit_width < 32 || type_is_bitint(entry->bit_field->type) ||
 				type_value_width(entry->bit_field->type) == 64)) {
 				size_t zero = codegen->next_temporary++;
 				emit(codegen, "\t%%t%zu =%c copy 0\n", zero,
@@ -763,7 +763,7 @@ static void codegen_initializer_plan(struct codegen *codegen,
 			assert(entry->kind == ast_initializer_write_expression);
 			assert(entry->bit_field || entry->length == type_object_size(entry->type));
 			if (entry->bit_field && entry->bit_field->bit_width &&
-				(entry->bit_field->bit_width < 32 || type_value_width(entry->bit_field->type) == 64))
+				(entry->bit_field->bit_width < 32 || type_is_bitint(entry->bit_field->type) || type_value_width(entry->bit_field->type) == 64))
 				(void)codegen_field_store(codegen, address, value, entry->bit_field);
 			else
 				emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), codegen_storage_bits(codegen, value, entry->type), address);
@@ -1094,7 +1094,7 @@ static struct update_values codegen_update(struct codegen *codegen,
 			qbe_load_instruction(operand->type), address);
 	previous = codegen_canonicalize(codegen, previous, operand->type);
 	size_t arithmetic = previous;
-	bool wide_field = codegen_bit_field(operand) && type_value_width(operand->type) == 64;
+	bool wide_field = codegen_bit_field(operand) && type_value_width(operand->type) > 32;
 	if (wide_field)
 		arithmetic = codegen_convert_value(codegen, previous, operand->type, calculation_type);
 	if (type_is_floating(calculation_type))

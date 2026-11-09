@@ -12,7 +12,7 @@ host = os.environ.get('HOST_CC', 'cc')
 with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as directory:
     path = Path(directory)
     source, il, asm, exe = [path / n for n in ('input.c', 'out.ssa', 'out.s', 'out')]
-    for test in ('bitint_values.c', 'bitint_narrow.c', 'bitint_arbitrary_values.c', 'bitint_aggregate_values.c'):
+    for test in ('bitint_values.c', 'bitint_narrow.c', 'bitint_arbitrary_values.c', 'bitint_aggregate_values.c', 'bitint_field_values.c'):
         result = subprocess.run([str(compiler), str(root / 'tests' / test)], capture_output=True, text=True, timeout=20)
         assert result.returncode == 0 and not result.stderr, (test, result.stderr)
         il.write_text(result.stdout)
@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as
         assert result.returncode == 0, (test, result.returncode)
     cases = [
         ('_BitInt(65) x;', 'outside the supported range'),
-        ('struct S { unsigned _BitInt(16) x : 2; };', 'bit-field'),
+        ('struct S { unsigned _BitInt(16) x : 17; };', 'bit-field'),
         ('static_assert((_BitInt(8))127 + (_BitInt(8))1);', 'signed overflow'),
         ('static_assert(-(_BitInt(16))-32768);', 'signed overflow'),
         ('static_assert((unsigned _BitInt(8))1 << 8);', 'invalid shift'),
@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='bitint-values-', dir=root / 'build') as
         ('static_assert((_BitInt(8))-128 / (_BitInt(8))-1);', 'signed overflow'),
         ('static_assert((_BitInt(8))1 << 7);', 'signed overflow'),
         ('typedef _BitInt(32) T; enum E : T { A };', 'fixed enum underlying type'),
-        ('struct S { _BitInt(32) x : 3; };', 'bit-field'),
+        ('struct S { _BitInt(32) x : 33; };', 'bit-field'),
         ('static_assert((_BitInt(32))2147483647 + (_BitInt(32))1);', 'signed overflow'),
         ('extern _BitInt(32) x; extern int x;', 'incompatible'),
         ('extern _BitInt(32) x; extern unsigned _BitInt(32) x;', 'incompatible'),

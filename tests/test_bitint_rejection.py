@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-bitint-rejection-') as directory:
         ('unsigned _BitInt(65) value;\n', 'outside the supported range'),
         ('extern _BitInt(5) x; extern _BitInt(6) x;', 'incompatible'),
         ('extern _BitInt(5) x; extern signed char x;', 'incompatible'),
-        ('struct S { unsigned _BitInt(5) x : 2; };', 'bit-field'),
+        ('struct S { unsigned _BitInt(5) x : 6; };', 'bit-field'),
         ('enum E : _BitInt(5) { A };', 'fixed enum underlying type'),
     ]
     for text, message in cases:

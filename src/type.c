@@ -759,7 +759,9 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			field_type->kind != type_kind_schar && field_type->kind != type_kind_uchar &&
 			field_type->kind != type_kind_short && field_type->kind != type_kind_ushort &&
 			field_type->kind != type_kind_long && field_type->kind != type_kind_ulong &&
-			field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long) ||
+			field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long &&
+			!type_is_bitint(field_type)) ||
+			(type_is_bitint(field_type) && member->bit_width > type_integer_width(field_type)) ||
 			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 64 ||
 			((field_type->kind == type_kind_int || field_type->kind == type_kind_uint) &&
 			member->bit_width > 32) ||
