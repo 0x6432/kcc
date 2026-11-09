@@ -120,12 +120,13 @@ unevaluated expressions. Message text is not yet included.
 
 ## Function-type optimization contracts
 
-Direct function declarators at file or block scope accept `[[unsequenced]]`
-and `[[reproducible]]`, including their double-underscore spellings, after the
-declarator. They take no arguments. These contracts permit optimizations but
+Direct function declarators and single-level function-pointer declarators at
+file or block scope, including typedefs, named parameters, and members, accept
+`[[unsequenced]]` and `[[reproducible]]`, including their double-underscore
+spellings, after the function declarator. They take no arguments. These contracts permit optimizations but
 the compiler does not currently use them to transform calls, so generated
-code retains ordinary sequencing and call behavior. Other placements, typedef-
-derived function types and pointer-to-function attributes remain unsupported;
+code retains ordinary sequencing and call behavior. Other placements, typedef-derived function type specifiers, and more complex
+function-pointer declarators remain unsupported;
 the compiler does not advertise them through `__has_c_attribute`. The program
 is responsible for satisfying the contracts. This is a bounded subset, not full
 C23 type-attribute support.
