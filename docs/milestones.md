@@ -50,7 +50,7 @@ conformance is not claimed.
 | M23g | Attributes | Placement, supported effects and unknown-attribute policy | in progress (bounded maybe_unused, deprecated, nodiscard, fallthrough and noreturn placements and warnings; full coverage remains) |
 | M23h | constexpr objects, expanded record compatibility/redefinitions and residual C23 declaration/preprocessor changes | Constant evaluation and clause-mapped gap tests | planned |
 | M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | in progress (8/16/32/64-bit semantic types and objects; direct layout queries through 64 bits) |
-| M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (8/16/32/64-bit source arithmetic and conversion; by-value function and variadic ABI rejected) |
+| M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (8/16/32/64-bit arithmetic, conversions, scalar and bounded aggregate call/return and variadic ABI; other value widths and broader ABI validation remain) |
 | M24c | Atomic types/load/store | Memory model, alignment, target code inspection | in progress (bounded integer, bool, enum, floating and pointer loads/stores via libatomic; aggregate atomics and validation remain) |
 | M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | in progress (bounded integer and pointer RMW, arithmetic atomic compound assignments via compare-exchange, exchange/compare-exchange, fences and partial header; operations and validation remain) |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |
