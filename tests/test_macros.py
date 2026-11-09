@@ -29,6 +29,10 @@ examples = [
     "#define X (\nX 1 )\n",
 ]
 examples += [
+    "#define F() 7\nF\n#define X 2\nX\n",
+    "#define F() 7\nF\n#define X 2\n() X\n",
+    "#define F() 7\n#define A F\nA\n#undef F\n()\n",
+    "#define F() 7\nF\n#if 0\nhidden\n#endif\n42\n",
     "#define F() 7\nF F() F (\n)\n",
     "#define F()\nF() F() F\n",
     "#define F()7\n#define F( /**/ ) 7\nF()\n",

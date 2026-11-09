@@ -2833,8 +2833,18 @@ static bool read_invocation(struct preprocessor *preprocessor, struct expansion_
 	size_t argument_count = macro->parameter_count + (macro->variadic ? 1 : 0);
 
 	*invoked = false;
-	if (!read_rescan_token(preprocessor, cursor, &next, error) ||
-		!check_invocation_input(preprocessor, next, error))
+	if (!read_rescan_token(preprocessor, cursor, &next, error))
+		return false;
+	/* A source directive ends the lookahead without starting an invocation.
+	 * Defer the marker so the ordinary expansion loop executes the directive
+	 * after returning this macro name. Directives inside an actual argument
+	 * list remain rejected. */
+	if (next.from_source && next.token.at_line_start && is_directive_marker(next.token)) {
+		cursor->pending = next;
+		cursor->has_pending = true;
+		return true;
+	}
+	if (!check_invocation_input(preprocessor, next, error))
 		return false;
 	if (!is_punctuator(next.token, "(")) {
 		cursor->pending = next;

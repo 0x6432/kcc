@@ -58,3 +58,11 @@ and zero-parameter regressions. This is not full M10 or C23 completion; variadic
 are M10d and macro operators/directive integration remain M11. Source directives
 inside invocation probing remain a tracked subset policy, not a blanket C23 UB
 claim. Allocation-failure paths are handled but not fault-injection tested.
+
+## Directive boundary in invocation lookahead
+
+A source directive encountered after a function-like macro name but before an
+opening parenthesis ends invocation lookahead. The name is emitted unchanged,
+and the directive is processed normally before later tokens. This includes
+macro-produced names and conditional directives. A directive occurring after
+the opening parenthesis, inside an actual invocation, remains rejected.

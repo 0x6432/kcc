@@ -567,8 +567,11 @@ static void test_function_invocation_errors(void)
 	check_stream("#define F() 7\n#define E\nF(E)", invalid_name, 2, 1,
 		"requires no arguments");
 	check_stream("#define F() 7\nF(,)", invalid_name, 2, 1, "requires no arguments");
-	check_stream("#define F() 7\nF\n#\n()", invalid_marker, 2, 1,
-		"directives during macro invocation lookahead");
+	const struct expected_token deferred[] = {
+		{ token_identifier, "F" }, { token_left_paren, "(" },
+		{ token_right_paren, ")" }, { token_integer, "2" }, { token_eof, "" },
+	};
+	check_stream("#define F() 7\nF\n#\n()\n#define X 2\nX", deferred, 5, 0, NULL);
 	check_stream("#define F() 7\nF(\n#undef F\n)", invalid_marker, 2, 1,
 		"directives during macro invocation lookahead");
 	check_stream("#define F() 7\nF \"bad", raw_invalid, 2, 1, "unterminated quoted");
