@@ -13,8 +13,11 @@ supported declaration positions. Messages may contain adjacent ordinary
 string fragments. The compiler warns on uses of enumerators marked deprecated, including uses
 in later enumerator initializers. It also warns on direct references to a named enum, struct, or union after a
 deprecated definition (including one completing a forward declaration).
-Standalone tag declarations, references through typedefs, and other deprecated
-entities and types do not yet produce warnings.
+Standalone tag declarations, type references through typedefs, and deprecated
+typedefs, parameters and members do not yet produce warnings. Uses of
+deprecated object and function declarations at file or block scope warn; the
+diagnostic follows visible bindings and respects local shadowing. Prefix and
+per-declarator suffix forms are supported for those identifiers.
 The compiler does not advertise the attribute through `__has_c_attribute`. It is also accepted on enum definitions and enumerators
 in the positions above. Matching same-scope enum redefinitions can mark an
 existing enumerator deprecated for subsequent uses.
@@ -55,6 +58,8 @@ bounded unknown attributes. `nodiscard` is supported on enum definitions but not
 enum-reference or fixed-forward forms with an attribute after `enum` are rejected;
 record references or forward declarations with an attribute after `struct` or
 `union` are likewise rejected.
+Deprecated declaration warnings are published after a successful declaration;
+self-references in its own initializer are not diagnosed by this subset.
 Nodiscard and deprecated message text is not yet included in diagnostics.
 The supported unprefixed standard attributes also recognize their required
 double-underscore spellings, such as `[[__maybe_unused__]]` and
@@ -88,3 +93,14 @@ Forward-declaration completion, anonymous definitions, shadowing, standard
 `__name__` spellings and layout-altering vendor-attribute refusals are covered
 by `tests/test_attributes.py`. Record attributes do not change object layout.
 Messages are parsed but are not included in the warnings.
+
+## Deprecated object and function declarations
+
+A direct use of a deprecated ordinary object or function warns, including
+address-taking and references in unevaluated expressions. File-scope redeclarations
+retain the marker from earlier visible declarations; block-scope extern
+redeclarations retain earlier markers in the same scope and do not mark the
+file-scope entity merely because a block declaration is deprecated. Shadowing
+by a different local identifier suppresses the outer marker. Prefix attributes
+on for-declarations and declarator suffixes are covered. The parser still
+accepts but does not warn on deprecated typedefs, parameters and members.

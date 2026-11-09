@@ -35,6 +35,7 @@ struct external_object_symbol {
 	struct token name;
 	const struct type *type;
 	const struct type *file_type; /* NULL until declared at file scope. */
+	bool file_deprecated;
 	bool is_thread_local;
 	bool is_block_static; /* Local object has no C linkage, despite private emission. */
 	bool is_internal;
@@ -51,6 +52,7 @@ struct external_object_symbol {
 struct function_symbol {
 	bool has_inline_declaration;
 	bool file_nodiscard;
+	bool file_deprecated;
 	bool has_noninline_file_declaration;
 	bool is_inline_only;
 	struct token name;

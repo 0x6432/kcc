@@ -36,6 +36,7 @@ struct parser {
 	bool declaration_attributes;
 	bool declaration_noreturn;
 	bool declaration_nodiscard;
+	bool declaration_deprecated;
 	bool builtin_declaration;
 	unsigned parameter_nesting;
 	size_t record_declarations;
@@ -281,7 +282,7 @@ static bool parse_declaration_attributes(struct parser *parser, bool *present)
 
 /* After an ordinary declarator, function attributes apply to that declarator
  * only. Semantic analysis checks the resolved identifier type. */
-static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard)
+static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
@@ -294,6 +295,7 @@ static bool parse_function_declarator_attributes(struct parser *parser, bool *no
 	}
 	*noreturn = attributes.noreturn;
 	*nodiscard = attributes.nodiscard;
+	*deprecated = attributes.deprecated;
 	return true;
 }
 
@@ -3287,8 +3289,8 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 	if (!expect_token(parser, token_left_paren, "expected '(' after for", NULL))
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
-		bool attributes;
-		if (!parse_declaration_attributes(parser, &attributes))
+		bool attributes, deprecated;
+		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated))
 			return NULL;
 		if (!begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -3296,8 +3298,10 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 			return NULL;
 		}
 		parser->declaration_attributes = attributes;
+		parser->declaration_deprecated = deprecated;
 		initializer_declarations = parse_local_declaration(parser);
 		parser->declaration_attributes = false;
+		parser->declaration_deprecated = false;
 		if (!initializer_declarations)
 			return NULL;
 	} else if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
@@ -3688,7 +3692,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct ast_expression *initializer = NULL;
 		struct ast_initializer *initializer_syntax = NULL;
 		struct ast_local_declaration *node;
-		bool declarator_noreturn, declarator_nodiscard;
+		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated;
 
 		if (!count_block_item(parser, head.inferred_name.kind == token_identifier ?
 			head.inferred_name.location : preprocess_peek(parser->preprocessor).location))
@@ -3699,7 +3703,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				name = head.inferred_name;
 			else if (!parse_inferred_identifier(parser, &name))
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated))
 				return NULL;
 			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
 				diagnostic_error(parser->diagnostics, name.location,
@@ -3710,7 +3714,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 			if (!type_syntax)
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated))
 				return NULL;
 		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
@@ -3739,6 +3743,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		node->is_noreturn = head.noreturn_keyword.kind == token_noreturn ||
 			parser->declaration_noreturn || declarator_noreturn;
 		node->is_nodiscard = parser->declaration_nodiscard || declarator_nodiscard;
+		node->is_deprecated = parser->declaration_deprecated || declarator_deprecated;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
 		node->is_extern = head.keyword.kind == token_extern;
@@ -4077,10 +4082,12 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 		parser->declaration_attributes = attributes.present;
 		parser->declaration_noreturn = attributes.noreturn;
 		parser->declaration_nodiscard = attributes.nodiscard;
+		parser->declaration_deprecated = attributes.deprecated;
 		item = parse_block_item(parser);
 		parser->declaration_attributes = false;
 		parser->declaration_noreturn = false;
 		parser->declaration_nodiscard = false;
+		parser->declaration_deprecated = false;
 		if (!item)
 			return NULL;
 		*tail = item;
@@ -4210,7 +4217,7 @@ static bool parse_external_initializer(struct parser *parser,
 /* object-declaration-tail ::= declarator [ "=" initializer ] */
 static struct ast_external_declaration *new_external_object_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated)
 {
 	struct ast_external_object_declaration *declaration;
 	struct ast_expression *initializer = NULL;
@@ -4226,6 +4233,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
 		declaration->is_inline = is_inline;
 		declaration->is_noreturn = is_noreturn;
 		declaration->is_nodiscard = is_nodiscard;
+		declaration->is_deprecated = is_deprecated;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->initializer = initializer;
@@ -4239,7 +4247,7 @@ static struct ast_external_declaration *new_external_object_declaration(struct p
  */
 static struct ast_external_declaration *new_external_type_declaration(struct parser *parser,
 	struct ast_type_syntax *type_syntax, struct token beginning, struct token name,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard)
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated)
 {
 	struct ast_type_syntax *base = type_syntax;
 	struct ast_external_type_declaration *declaration;
@@ -4250,7 +4258,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		base = ((struct ast_qualified_type_syntax *)base)->base;
 	if (base->kind != type_syntax_typeof_type && base->kind != type_syntax_typeof_expression &&
 		base->kind != type_syntax_typedef_name)
-		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn, is_nodiscard);
+		return new_external_object_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn, is_nodiscard, is_deprecated);
 	if (!parse_external_initializer(parser, &initializer, &initializer_syntax))
 		return NULL;
 	declaration = ast_new_external_type_declaration(parser->arena,
@@ -4261,6 +4269,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
 		declaration->is_inline = is_inline;
 		declaration->is_noreturn = is_noreturn;
 		declaration->is_nodiscard = is_nodiscard;
+		declaration->is_deprecated = is_deprecated;
 		declaration->is_thread_local = is_thread_local;
 		declaration->is_static = is_static;
 		declaration->is_extern = is_extern;
@@ -4364,7 +4373,7 @@ done:
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard,
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated,
 	struct ast_alignment_group *alignments)
 {
 	struct ast_external_declaration *items = NULL;
@@ -4375,7 +4384,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		struct token name;
 		struct ast_type_syntax *type_syntax;
 		struct ast_external_declaration *item;
-		bool declarator_noreturn, declarator_nodiscard;
+		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4386,7 +4395,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
 		if (!type_syntax)
 			return NULL;
-		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard))
+		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated))
 			return NULL;
 		/* Its scope starts after the complete declarator, before an
 		 * initializer or a later declarator in the same declaration.
@@ -4394,7 +4403,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		if (!publish_parser_name(parser, name, parser_name_object))
 			return NULL;
 		if (type_syntax->kind != type_syntax_function)
-			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn || declarator_noreturn, is_nodiscard || declarator_nodiscard);
+			item = new_external_type_declaration(parser, type_syntax, beginning, name, is_static, is_extern, is_thread_local, is_inline, is_noreturn || declarator_noreturn, is_nodiscard || declarator_nodiscard, is_deprecated || declarator_deprecated);
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
@@ -4412,6 +4421,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			declaration->is_inline = is_inline;
 			declaration->is_noreturn = is_noreturn || declarator_noreturn;
 			declaration->is_nodiscard = is_nodiscard || declarator_nodiscard;
+			declaration->is_deprecated = is_deprecated || declarator_deprecated;
 			declaration->is_thread_local = is_thread_local;
 			declaration->is_static = is_static;
 			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
@@ -4585,7 +4595,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
 		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
-		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, head.alignments);
+		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.alignments);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

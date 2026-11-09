@@ -46,7 +46,7 @@ pairs = [
      '_Noreturn void stop(void); int f(void){stop(); return 1;}'),
     ('typedef void F(void); [[noreturn]] F stop;',
      'typedef void F(void); _Noreturn F stop;'),
-    ('[[deprecated("use " "new")]] int old(int x){return x;} int f([[deprecated]] int y){return old(y);}',
+    ('int old(int x){return x;} int f([[deprecated]] int y){return old(y);}',
      'int old(int x){return x;} int f(int y){return old(y);}'),
     ('int f(int x){ [[vendor::trace]] if(x) [[ignored(2)]] return 1; [[unknown]] return 0; }',
      'int f(int x){ if(x) return 1; return 0; }'),
@@ -188,6 +188,24 @@ with tempfile.TemporaryDirectory(prefix='kcc-attributes-') as directory:
         result = compile(source)
         assert result.returncode == 0, result.stderr
         assert result.stderr.count('warning: use of deprecated enum type') == count, result.stderr
+    for source, count in [
+        ('[[deprecated("old")]] int x; int f(void){return x+x;}', 2),
+        ('int x [[__deprecated__]]; int f(void){return x;}', 1),
+        ('[[deprecated]] int f(void); int g(void){return f();}', 1),
+        ('int f(void) [[deprecated]]; int g(void){return f();}', 1),
+        ('typedef int F(void); [[deprecated]] F f; int g(void){return f();}', 1),
+        ('int x; int a(void){return x;} int x [[deprecated]]; int b(void){return x;}', 1),
+        ('int f(void){[[deprecated]] int x=1; return x;}', 1),
+        ('int f(void){int x [[deprecated]]=1; return x;}', 1),
+        ('[[deprecated]] int x; int f(void){int x=1; return x;} int g(void){return x;}', 1),
+        ('int x; int f(void){[[deprecated]] extern int x; return x;} int g(void){return x;}', 1),
+        ('int f(void){[[deprecated]] extern int x; extern int x; return x;}', 1),
+        ('int f(void){for([[deprecated]] int x=0;x<1;x++){} return 0;}', 2),
+        ('int f(void){[[deprecated]] static int x; return x;}', 1),
+    ]:
+        result = compile(source)
+        assert result.returncode == 0, (source, result.stderr)
+        assert result.stderr.count('warning: use of deprecated declaration') == count, (source, result.stderr)
     for source, count in [
         ('struct [[nodiscard]] S {int x;}; struct S f(void); '
          'void g(struct S (*p)(void)){f(); p(); (void)f();}', 2),

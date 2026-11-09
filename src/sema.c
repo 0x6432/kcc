@@ -2995,6 +2995,15 @@ static bool sema_expression(struct sema *sema,
 		}
 		object = node->declaration ? node->declaration->object_symbol :
 			visible_file_object(sema, node->name);
+		if (!node->declaration || !node->declaration->enum_constant) {
+			struct function_symbol *referenced_function = node->declaration ?
+				node->declaration->function_symbol : visible_file_function(sema, node->name);
+			if ((node->declaration && node->declaration->is_deprecated) ||
+				(object && object->file_type && object->file_deprecated) ||
+				(referenced_function && referenced_function->file_type && referenced_function->file_deprecated))
+				diagnostic_warning(sema->diagnostics, expression->location,
+					"use of deprecated declaration");
+		}
 		if (sema->function && object && object->is_internal && !object->is_block_static) {
 				sema->function->inline_has_internal_reference = true;
 				sema->function->inline_reference_location = expression->location;
@@ -6652,6 +6661,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 	}
 	local->type = type;
 	if (same) {
+		local->is_deprecated |= same->is_deprecated;
 		struct binding *binding = arena_alloc(sema->arena, sizeof(*binding));
 		if (!binding)
 			goto allocation_failure;
@@ -6804,6 +6814,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 		group ? group->alignment : 0);
 	if (!declaration->symbol)
 		return false;
+	declaration->symbol->file_deprecated |= declaration->is_deprecated;
 	declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
 	return true;
 }
@@ -6841,6 +6852,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 			group ? group->alignment : 0);
 		if (!declaration->object_symbol)
 			return false;
+		declaration->object_symbol->file_deprecated |= declaration->is_deprecated;
 		declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
 		return true;
 	}
@@ -6861,6 +6873,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 		true, declaration->name.location))
 		return false;
 	declaration->symbol->file_nodiscard |= declaration->is_nodiscard;
+	declaration->symbol->file_deprecated |= declaration->is_deprecated;
 	declaration->type = type;
 	return true;
 }
@@ -6901,6 +6914,7 @@ static bool sema_function_declaration(struct sema *sema,
 		true, declaration->name.location))
 		return false;
 	symbol->file_nodiscard |= declaration->is_nodiscard;
+	symbol->file_deprecated |= declaration->is_deprecated;
 	if (!definition)
 		return true;
 	const struct function_type *signature = (const struct function_type *)resolved;
