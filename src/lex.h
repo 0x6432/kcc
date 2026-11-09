@@ -229,6 +229,8 @@ struct pp_lexer {
 void pp_lexer_init(struct pp_lexer *lexer, const struct source *source,
 	struct diagnostics *diagnostics);
 struct pp_token pp_lexer_next(struct pp_lexer *lexer);
+/* Next fragment within a directly written <...> resource name. */
+struct pp_token pp_lexer_header_next(struct pp_lexer *lexer);
 struct pp_token pp_lexer_peek(struct pp_lexer *lexer);
 const char *pp_token_kind_name(enum pp_token_kind kind);
 /* Input must not be pp_newline. Raw-invalid diagnostics are not repeated. */

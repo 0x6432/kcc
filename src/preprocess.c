@@ -3846,19 +3846,36 @@ static struct condition_value parse_condition_expression(struct condition_parser
 	return value;
 }
 
+/* The first byte of a direct angle resource starts header-name lexing, even
+ * when ordinary maximal munch would form <: or <=. Revisit remaining bytes in
+ * contextual mode; this function is used only on raw source tokens. */
+static bool split_direct_header_open(struct pp_lexer *lexer, struct pp_token *token)
+{
+	if (token->kind != pp_punctuator || !token->length ||
+		token->location.source != lexer->source ||
+		lexer->source->data[token->location.offset] != '<')
+		return false;
+	lexer->offset = token->location.offset + 1;
+	token->length = 1;
+	return true;
+}
+
 /* A raw directive is bounded independently of its expanded macro stream. */
 static bool read_condition_input(struct preprocessor *preprocessor,
 	struct pp_token marker, struct pp_token *token, size_t *count, struct token *error,
-	bool in_direct_header)
+	unsigned header_state)
 {
-	*token = pp_lexer_next(&preprocessor->input);
+	*token = header_state == 3 ? pp_lexer_header_next(&preprocessor->input) :
+		pp_lexer_next(&preprocessor->input);
+	if (header_state == 2)
+		(void)split_direct_header_open(&preprocessor->input, token);
 	if (token->kind == pp_invalid || token->has_non_directive_space) {
 		*error = reject_directive(preprocessor, marker, *token,
 			token->kind == pp_invalid ? NULL :
 			"only space and tab are allowed in a preprocessing directive");
 		return false;
 	}
-	if (!in_direct_header && is_variadic_identifier(*token)) {
+	if (header_state != 3 && is_variadic_identifier(*token)) {
 		*error = reject_directive(preprocessor, marker, *token,
 			"variadic identifiers require a variadic macro replacement list");
 		return false;
@@ -3936,7 +3953,7 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 	for (;;) {
 		struct argument_token *copy;
 
-		if (!read_condition_input(preprocessor, marker, &token, &count, error, direct_header_state == 3))
+		if (!read_condition_input(preprocessor, marker, &token, &count, error, direct_header_state))
 			return false;
 		if (is_directive_end(token))
 			break;
@@ -4017,6 +4034,16 @@ static bool append_include_piece(struct preprocessor *preprocessor,
 	}
 	for (size_t i = 0; !closing && i < piece.length; i++) {
 		unsigned char c = text[i];
+		if (direct && piece.kind == pp_other) {
+			if (c == 0 || c == '\v' || c == '\f' || c == '\r' ||
+				(c == '/' && i + 1 < piece.length && (text[i + 1] == '/' || text[i + 1] == '*'))) {
+				diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
+					"unsupported byte or comments inside angle include name");
+				*error = invalid_token(name->invocation);
+				return false;
+			}
+			continue;
+		}
 		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 			(c >= '0' && c <= '9') || c == '_' || c == '.' || c == '/' ||
 			c == '-' || c == '+' || c == '@' || c == '~' || c == ':' ||
@@ -4160,13 +4187,14 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 	struct expansion_cursor *cursor;
 	struct pp_token token;
 	size_t count = 0;
-	bool direct = false;
+	bool direct = false, in_header = false;
 	bool success;
 
 	for (;;) {
 		struct argument_token *copy;
 
-		token = pp_lexer_next(&preprocessor->input);
+		token = in_header ? pp_lexer_header_next(&preprocessor->input) :
+			pp_lexer_next(&preprocessor->input);
 		if (token.kind == pp_invalid || token.has_non_directive_space) {
 			*error = reject_directive(preprocessor, marker, token,
 				token.kind == pp_invalid ? NULL :
@@ -4180,8 +4208,11 @@ static bool expand_include_operand(struct preprocessor *preprocessor,
 				"include operand token limit (1024) exceeded");
 			return false;
 		}
-		if (count == 1)
-			direct = token.kind == pp_punctuator && pp_spelling_is(token, "<");
+		if (count == 1) {
+			direct = split_direct_header_open(&preprocessor->input, &token);
+			in_header = direct;
+		} else if (in_header && is_punctuator(token, ">"))
+			in_header = false;
 		if (!direct && is_variadic_identifier(token)) {
 			*error = reject_directive(preprocessor, marker, token,
 				"variadic identifiers require a variadic macro replacement list");

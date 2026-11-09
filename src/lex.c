@@ -293,6 +293,26 @@ struct pp_token pp_lexer_next(struct pp_lexer *lexer)
 	return read_pp_token(lexer);
 }
 
+/* In a direct resource name the source is a header-name, not ordinary
+ * preprocessing tokens: in particular :> and %> must not swallow the closing
+ * delimiter, and spaces and UTF-8 bytes remain part of the name. */
+struct pp_token pp_lexer_header_next(struct pp_lexer *lexer)
+{
+	const struct source *source = lexer->source;
+	size_t beginning = lexer->offset;
+	assert(!lexer->has_lookahead);
+	if (beginning == source->length || source->data[beginning] == '\n')
+		return pp_lexer_next(lexer);
+	if (source->data[beginning] == '>') {
+		lexer->offset++;
+		return make_pp_token(lexer, pp_punctuator, beginning);
+	}
+	while (lexer->offset < source->length && source->data[lexer->offset] != '>' &&
+		source->data[lexer->offset] != '\n')
+		lexer->offset++;
+	return make_pp_token(lexer, pp_other, beginning);
+}
+
 struct pp_token pp_lexer_peek(struct pp_lexer *lexer)
 {
 	if (!lexer->has_lookahead) {

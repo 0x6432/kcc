@@ -56,8 +56,9 @@ or `union`, with bounded discarded-result and direct tag-reference warnings;
 see `m23g-extended-attributes.md` for remaining diagnostic gaps. Hosted numeric
 headers add libc division-result types and functions, `atof`, and corrected
 float-specific classification dispatch. See `m25-builtin-headers.md`.
-Preprocessing resource-name handling also accepts bounded angle-name whitespace,
-punctuation and literal quoted-name backslashes across `#include`, `#embed`,
+Preprocessing resource-name handling also contextually lexes directly written
+angle names, including UTF-8 and punctuation adjacent to delimiters, and accepts
+literal quoted-name backslashes across `#include`, `#embed`,
 `__has_include` and `__has_embed`; see `m25-resource-names.md` for the remaining
 lexing and normalization limits.
 

@@ -13,6 +13,7 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
     path = Path(directory)
     (path / 'asset.bin').write_bytes(bytes([0, 10, 42, 255]))
     (path / 'empty.bin').write_bytes(b'')
+    (path / ':raw%').write_bytes(bytes([42]))
     (path / 'special@asset.bin').write_bytes(bytes([42]))
     (path / ' space  asset.bin ').write_bytes(bytes([42]))
     (path / 'a(b)[c]{d}$.bin').write_bytes(bytes([42]))
@@ -67,6 +68,12 @@ unsigned char g[] = {
 };
 int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==255 && sizeof b==1 && sizeof c==3 && c[2]==42 && sizeof d==2 && sizeof e==4 && e[0]==7 && e[1]==0 && e[2]==10 && e[3]==8 && sizeof f==2 && f[0]==9 && f[1]==10 && sizeof g==1 && g[0]==7 ? b[0] : 1; }
 ''')
+    original_source = source.read_text()
+    source.write_text('#if __has_embed(<:raw%>) != __STDC_EMBED_FOUND__\n#error query\n#endif\nunsigned char contextual[]={\n#embed <:raw%>\n};\nint main(void){return contextual[0];}\n')
+    check = subprocess.run([str(compiler), '-I'+str(path), str(source)], capture_output=True, text=True, timeout=10)
+    assert check.returncode == 0 and not check.stderr, check.stderr
+    # Restore the broader execution fixture after the contextual-name check.
+    source.write_text(original_source)
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
     if qbe:

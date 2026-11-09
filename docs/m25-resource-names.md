@@ -18,14 +18,18 @@ interprets a backslash before a quote when locating the token's end, so some
 names (including a name ending in a backslash) cannot be represented. Source
 line splicing occurs first.
 
-This is not general contextual header-name lexing: direct angle names are still
-formed from ordinary preprocessing tokens. Comment sequences in direct angle
-names are rejected; quote and backslash bytes there, non-ASCII/UCN spelling,
-and cases where maximal-munch tokenization absorbs a closing `>` are not
-supported. Newlines and vertical-tab/form-feed directive whitespace are rejected
-as before. Empty names are rejected. Name paths (including whitespace and the
-terminating NUL) retain the 4096-byte bound, and existing include-attempt,
-source-byte and expansion limits still apply. Missing and unreadable files remain
+Direct angle names are now lexed contextually until the first `>`: opening and
+closing bytes are not absorbed into ordinary punctuators such as `<:`, `<=`,
+`:>` or `%>`. UTF-8 and other non-control filename bytes are preserved literally,
+as are quote and backslash bytes (the latter are a nonportable implementation
+policy). Comment sequences inside direct angle names are rejected. Newlines,
+NUL, vertical-tab and form-feed bytes are rejected. Computed angle names still
+use ordinary preprocessing tokens and their existing restricted spelling rules;
+this is not complete resource-name conformance. The separate `--pp-tokens` mode
+remains a context-free lexer and does not accept arbitrary non-ASCII bytes.
+Empty names are rejected. Name paths (including whitespace and the terminating
+NUL) retain the 4096-byte bound, and existing include-attempt, source-byte and
+expansion limits still apply. Missing and unreadable files remain
 indistinguishable through the loader. There are no default system include paths;
 compiler-provided fallback headers apply only to includes and include queries.
 

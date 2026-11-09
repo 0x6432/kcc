@@ -31,6 +31,8 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
     for name in (' a  b.h ', 'tab\tname.h', 'a(b)[c]{d}$.h'):
         (first/name).write_text('#define VALUE 42\n')
     (first/'a@b~c:d=e%f!g^h&i|j?k,l;m.h').write_text('#define VALUE 42\n')
+    for name in (':header', '=header', 'tail:', 'tail%', 'hash#file', 'café.h', '<header'):
+        (first/name).write_text('#define VALUE 42\n')
     (first/'sub').mkdir()
     (first/'sub'/'n-1+.h').write_text('#define VALUE 42\n')
     source, reference = app/'root.c', base/'reference.c'
@@ -52,6 +54,14 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
         ('#include <a(b)[c]{d}$.h>', [first], 42),
         ('#define H <space    name.h>\n#include H', [first], 42),
         ('#include <sub/n-1+.h>', [first], 42),
+        ('#include <:header>', [first], 42),
+        ('#include <=header>', [first], 42),
+        ('#include <tail:>', [first], 42),
+        ('#include <tail%>', [first], 42),
+        ('#include <hash#file>', [first], 42),
+        ('#include <café.h>', [first], 42),
+        ('#include <<header>', [first], 42),
+
         ('#include <a@b~c:d=e%f!g^h&i|j?k,l;m.h>', [first], 42),
         ('#define SPECIAL <a@b~c:d=e%f!g^h&i|j?k,l;m.h>\n#include SPECIAL', [first], 42),
         (f'#include "{first}/local.h"', [second], 42),
@@ -72,7 +82,9 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
             assert result.returncode == 0 and not result.stderr, result.stderr
             assert f'copy {value}' in result.stdout
             assert run(compiler, [source, '--tokens', *options]).returncode == 0
-            assert run(compiler, [*options, '--pp-tokens', source]).returncode == 0
+            # Raw pp-token mode is context-free and does not accept UTF-8 identifiers.
+            if 'café.h' not in directive:
+                assert run(compiler, [*options, '--pp-tokens', source]).returncode == 0
             agreements += 1
             if qbe:
                 il, assembly, executable = [base/name for name in ('p.ssa', 'p.s', 'p')]
@@ -89,6 +101,19 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
         absolute.write_text('#define VALUE 42\n')
         source.write_text(f'#include <{absolute}>\nint main(void) {{ return VALUE; }}\n')
         assert run(compiler, [source]).returncode == 0
+    # Direct queries share contextual lexing, including an opening/closing
+    # byte that ordinary tokenization would absorb into a digraph or operator.
+    source.write_text('#if !__has_include(<:header>) || !__has_include(<tail:>) || !__has_include(<tail%>) || !__has_include(<café.h>)\n#error missing\n#endif\n#include <=header>\nint main(void){return VALUE;}\n')
+    result = run(compiler, ['-I'+str(first), source])
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    result = run(host, ['-std=c2x', '-E', '-P', '-I'+str(first), source])
+    assert result.returncode == 0, result.stderr
+    # Nonportable bytes have a documented literal filename policy in direct names.
+    for name in (r'back\slash.h', 'quote"name.h'):
+        (first/name).write_text('#define VALUE 42\n')
+        source.write_text(f'#if !__has_include(<{name}>)\n#error missing\n#endif\n#include <{name}>\nint main(void){{return VALUE;}}\n')
+        result = run(compiler, ['-I'+str(first), source])
+        assert result.returncode == 0 and not result.stderr, (name, result.stderr)
     # Empty directory explicitly means cwd. No implicit cwd search for angles.
     source.write_text('#include <local.h>\nint main(void) { return VALUE; }\n')
     assert run(compiler, ['-I', '', source], app).returncode == 0
@@ -107,7 +132,7 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
                              ('<local.h >', 'cannot load angle'), ('<local/**/.h>', 'comments'),
                              ('<local.h', "expected '>'"), ('<local.h> extra', 'expected end of include or supported embed operand'),
                              ('<missing-header.h>', 'cannot load angle'),
-                             ('<bad#name>', 'unsupported byte')]:
+                             ('<bad#name>', 'cannot load angle')]:
         source.write_text(f'#include {operand}\nint main(void) {{ return 0; }}\n')
         result = run(compiler, ['-I'+str(first), source])
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
