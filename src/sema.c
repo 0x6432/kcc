@@ -2354,15 +2354,10 @@ static const struct type *sema_update_operand(struct sema *sema,
 			"update requires a modifiable arithmetic or pointer lvalue");
 		return NULL;
 	}
-	if ((operand_type->qualifiers & type_qualifier_atomic) &&
+	if ((operand_type->qualifiers & type_qualifier_atomic) && sema->function &&
 		(type_is_boolean(operand_type) || type_is_floating(operand_type) ||
-		 operand_type->kind == type_kind_enum)) {
-		diagnostic_error(sema->diagnostics, expression->location,
-			"atomic bool, enum or floating update is not supported yet");
-		return NULL;
-	}
-	if ((operand_type->qualifiers & type_qualifier_atomic) && type_is_bitint(operand_type) &&
-		!type_bitint_width_native(type_integer_width(operand_type)) && sema->function)
+		 operand_type->kind == type_kind_enum ||
+		 (type_is_bitint(operand_type) && !type_bitint_width_native(type_integer_width(operand_type)))))
 		sema->function->atomic_compound_scratch = true;
 	result_type = unqualified_type(sema, operand_type, expression->location);
 	if (!result_type)

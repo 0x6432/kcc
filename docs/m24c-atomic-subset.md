@@ -37,8 +37,8 @@ zero-extended according to their C type. Prefix, postfix and compound expression
 appropriate new or old value, and the object address is evaluated once. Atomic
 compound assignments also support multiplication, division, remainder and shifts
 for supported integer types, and arithmetic with floating operands. Supported
-atomic `_Bool` and enum objects accept integer compound assignments; supported
-atomic `float` and `double` objects accept `+=`, `-=`, `*=` and `/=`. The usual
+atomic `_Bool` and enum objects accept increment, decrement and integer compound assignments; supported
+atomic `float` and `double` objects accept increment, decrement, `+=`, `-=`, `*=` and `/=`. The usual
 promotions, arithmetic conversions and final conversion to the object type apply.
 These additional forms use an initial sequentially consistent load and a strong
 sequentially consistent compare-exchange retry loop, not an ordinary load/store.
@@ -107,20 +107,20 @@ The built-in header provides atomic character and short typedefs and `atomic_lon
 `atomic_ullong` alongside `atomic_int` and `atomic_uint`.
 
 `atomic_bool` supports loads, stores, exchange, compare-exchange and lock-free
-queries, with scalar values converted to `_Bool`. Atomic bool increment and fetch
-arithmetic/bitwise intrinsics remain rejected; compound assignments are supported
-as described above.
+queries, with scalar values converted to `_Bool`. Increment, decrement and compound
+assignments are supported as described above; fetch arithmetic/bitwise intrinsics
+remain rejected.
 
 Complete atomic enum objects support loads, stores, exchange, compare-exchange,
 and lock-free queries using the underlying integer representation. Atomic enum
-increment/decrement and fetch arithmetic/bitwise intrinsics remain rejected;
-compound assignments are supported as described above.
+increment/decrement and compound assignments are supported as described above;
+fetch arithmetic/bitwise intrinsics remain rejected.
 
 Atomic `float` and `double` support loads, stores, exchange, compare-exchange,
 and lock-free queries. Values are bitcast to/from the libatomic integer ABI, so
 compare-exchange compares representations. Floating atomic increment/decrement
-and fetch arithmetic intrinsics remain rejected; compound assignments are supported
-as described above.
+and compound assignments are supported as described above; fetch arithmetic
+intrinsics remain rejected.
 
 The fallback header also declares C23 `atomic_char8_t` and
 `ATOMIC_CHAR8_T_LOCK_FREE` for the target unsigned 8-bit `char8_t`. It declares
@@ -141,8 +141,8 @@ macro has only been compile-checked, not concurrency-tested.
 Byte-width atomic `_BitInt` uses the existing libatomic integer paths. Focused
 KCC execution and standard-integer surrogate cross-object checks are covered by
 `tests/test_bitint_abi_atomics.py`; native atomic `_BitInt` interoperability and
-concurrent stress for these types are not yet validated. Other bit-precise widths have scalar value support but remain unsupported as
-atomic objects.
+concurrent stress for these types are not yet validated. Non-native widths are
+supported as described below.
 
 ## Compound-assignment regression coverage
 

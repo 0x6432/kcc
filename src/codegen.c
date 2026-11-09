@@ -1047,6 +1047,42 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	return value;
 }
 
+/* Floating, boolean and enum updates need the same representation-aware
+ * compare-exchange loop as compound assignments, with the old value retained
+ * for postfix results. The operand address has already been evaluated once. */
+static struct update_values codegen_atomic_scalar_update(struct codegen *codegen,
+	size_t address, const struct type *type, const struct type *calculation_type,
+	enum update_operator operation)
+{
+	unsigned width = (unsigned)type_object_size(type);
+	char bits_type = width == 8 ? 'l' : 'w';
+	char store_size = width == 1 ? 'b' : width == 2 ? 'h' : bits_type;
+	size_t initial = codegen->next_temporary++, loop = new_label(codegen), done = new_label(codegen);
+	emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n", initial, bits_type, width, address);
+	emit(codegen, "\tstore%c %%t%zu, %%atomic_compound_expected\n", store_size, initial);
+	emit(codegen, "\tjmp @b%zu\n", loop);
+	emit_label(codegen, loop);
+	size_t previous = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c %s %%atomic_compound_expected\n", previous,
+		qbe_type(type), qbe_load_instruction(type));
+	previous = codegen_canonicalize(codegen, previous, type);
+	size_t arithmetic = codegen_convert_value(codegen, previous, type, calculation_type);
+	size_t value = codegen->next_temporary++;
+	const char *one = type_is_floating(calculation_type) ?
+		(calculation_type->kind == type_kind_float ? "s_1.0" : "d_1.0") : "1";
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %s\n", value, qbe_type(calculation_type),
+		operation == update_increment ? "add" : "sub", arithmetic, one);
+	value = codegen_convert_value(codegen, value, calculation_type, type);
+	size_t desired = atomic_to_bits(codegen, value, type);
+	size_t success = codegen->next_temporary++, flag = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_%u(l %%t%zu, l %%atomic_compound_expected, %c %%t%zu, w 5, w 5)\n",
+		success, width, address, bits_type, desired);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, 1\n", flag, success);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", flag, done, loop);
+	emit_label(codegen, done);
+	return (struct update_values) { .previous = previous, .current = value };
+}
+
 /* Address, load and store each occur once; the caller selects old or new. */
 static struct update_values codegen_update(struct codegen *codegen,
 	const struct ast_expression *operand, enum update_operator operation,
@@ -1058,6 +1094,10 @@ static struct update_values codegen_update(struct codegen *codegen,
 	size_t value = codegen->next_temporary++;
 	uint64_t step = element_size ? element_size : 1;
 
+	if ((operand->type->qualifiers & type_qualifier_atomic) &&
+		(type_is_boolean(operand->type) || type_is_floating(operand->type) ||
+		 operand->type->kind == type_kind_enum))
+		return codegen_atomic_scalar_update(codegen, address, operand->type, calculation_type, operation);
 	if ((operand->type->qualifiers & type_qualifier_atomic) && type_is_bitint(operand->type) &&
 		!type_bitint_width_native(type_integer_width(operand->type))) {
 		size_t one = codegen->next_temporary++;

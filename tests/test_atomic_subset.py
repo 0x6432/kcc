@@ -11,6 +11,12 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    'int main(void) { _Atomic _Bool b=0; int x=b++; int y=++b; int z=b--; return x==0 && y==1 && z==1 && b==0 ? 42 : 1; }',
+    'int main(void) { _Atomic float x=40.5F; float a=x++; float b=++x; float c=x--; return a==40.5F && b==42.5F && c==42.5F && x==41.5F ? 42 : 1; }',
+    'int main(void) { volatile _Atomic double a[2]={0,42}; int i=1; double old=a[i--]--; return old==42.0 && a[1]==41.0 && i==0 ? 42 : 1; }',
+    'enum E { A=40, B=42 }; int main(void) { _Atomic(enum E) e=A; enum E a=e++; enum E b=++e; return a==40 && b==42 && e==42 ? 42 : 1; }',
+    'union U { unsigned long bits; double d; }; int main(void) { union U u; u.bits=9221120237041090561UL; _Atomic double x=u.d; double old=x++; return old!=old && x!=x ? 42 : 1; }',
+    'int main(void) { _Atomic double x=1.0; return sizeof(x++)==8 && x==1.0 ? 42 : 1; }',
     'int main(void) { _Atomic int n=1; int a[(n*=2)]; a[1]=42; return sizeof a==8 && n==2 ? a[1] : 1; }',
     'union U { unsigned long bits; double d; }; int main(void) { union U u; u.bits=9221120237041090561UL; _Atomic double x=u.d; x+=1.0; return x!=x ? 42 : 1; }',
     'int main(void) { _Atomic long x=-84; long y=(x/=2); x%=5; return y==-42 && x==-2 ? 42 : 1; }',
@@ -76,11 +82,11 @@ positive = [
     'int main(void) { _Atomic unsigned x=63; x &= 42; x |= 1; x ^= 1; return x; }',
 ]
 negative = [
-    'int f(void) { _Atomic(float) x=1.0F; x++; return 0; }',
+    'int main(void) { const _Atomic _Bool b=0; return ++b; }',
+    'int main(void) { const _Atomic float x=0; return ++x; }',
+    'enum E { A=0 }; int main(void) { const _Atomic(enum E) x=A; return ++x; }',
     '#include <stdatomic.h>\nint f(_Atomic(float) *p) { return atomic_fetch_add(p,1); }',
-    'enum E { A=0 }; int f(void) { _Atomic(enum E) e=A; e++; return 0; }',
     '#include <stdatomic.h>\nenum E { A=0 }; int f(_Atomic(enum E) *p) { return atomic_fetch_add(p,1); }',
-    'int f(void) { _Atomic _Bool b=1; b++; return 0; }',
     '#include <stdatomic.h>\nint f(atomic_bool *p) { return atomic_fetch_add(p,1); }',
     '#include <stdatomic.h>\nint f(_Atomic(int *) *p) { return atomic_fetch_and(p,1)!=0; }',
     '#include <stdatomic.h>\nint f(_Atomic(void *) *p) { return atomic_fetch_add(p,1)!=0; }',
