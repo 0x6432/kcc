@@ -68,7 +68,8 @@ Source provenance, not a filename, determines which budget is charged.
   a small selection of Linux error constants; other error codes are not provided.
 - `math.h` declares a subset of float/double math functions and uses glibc
   classification functions for `isfinite`, `isinf`, `isnan` and `signbit`,
-  evaluating each argument once after conversion to double. `fpclassify`,
+  dispatching float arguments to float helpers and double or integer arguments
+  to double helpers, with single evaluation. `fpclassify`,
   `isnormal`, `issubnormal`, `iszero` and `issignaling` dispatch float and
   double to glibc helpers, preserving float subnormal classification. The six ordered/unordered comparison macros evaluate each argument once,
   dispatch to float or double helpers, and link through `build/libkccrt.a`.
@@ -162,7 +163,7 @@ Source provenance, not a filename, determines which budget is charged.
   later. Other time interfaces remain omitted.
 
 These are partial target-specific headers, not a complete hosted C library.
-Regression coverage has been added but not run.
+Earlier validation notes below describe the checks performed at the time.
 The fallback `stdio.h` also supplies an x86-64 glibc-shaped `fpos_t` and
 `fgetpos`/`fsetpos` declarations. The fallback `stdlib.h` exposes `system` and
 implements the locale-dependent `MB_CUR_MAX` through glibc's
@@ -205,3 +206,29 @@ The compiler rebuilt; all eight float/double calls were checked in generated IL,
 lowered with pinned QBE 1.2, assembled and linked to the local libm without
 executing the output. Four invalid argument cases were rejected. Regression
 fixtures and generated-program runtime remain unrun.
+
+## Numeric library compatibility additions
+
+The fallback `stdlib.h` declares `atof`, `div`, `ldiv`, and `lldiv` with
+glibc x86-64 `div_t`, `ldiv_t`, and `lldiv_t` result layouts. The fallback
+`inttypes.h` supplies `imaxdiv_t` and `imaxdiv`, with `intmax_t` represented
+as target `long`. These functions use the linked libc; division by zero and
+unrepresentable quotients remain undefined. Their return types are distinct
+structs, even where their target layouts match. `math.h` classification macros
+select the glibc float helpers for float arguments, avoiding the previous
+float-to-double conversion; integer arguments still use the double helpers.
+These are bounded float/double and LP64 glibc interfaces, not long-double or
+complete hosted-library support. Floating-environment behavior is not promised
+by the compiler.
+
+`tests/test_hosted_numeric.py` exercises signatures, both header inclusion
+orders, integer quotient/remainder signs, aggregate returns from libc, numeric
+conversion and float/double classification at runtime with QBE, and rejects
+pointer classification operands. It is registered in both `make test` and `make test-codegen`.
+
+Validation for this batch: the standalone numeric test passed with QBE 1.2
+and the local glibc/libm; the existing builtin-header, math and header-budget
+tests also passed in `make test`. The full `make test` stopped in
+`test_thread_storage.py` because no available host compiler supported an exact
+pthread companion for the `_Thread_local` bool case. Tests after that failure
+were not run.

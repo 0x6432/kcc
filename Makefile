@@ -131,6 +131,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_bitint_layout.py
 	QBE="$(QBE)" python3 tests/test_variadic.py
 	QBE="$(QBE)" python3 tests/test_builtin_headers.py
+	QBE="$(QBE)" python3 tests/test_hosted_numeric.py
 	QBE="$(QBE)" python3 tests/test_wide_library_declarations.py
 	QBE="$(QBE)" python3 tests/test_embed.py
 	QBE="$(QBE)" python3 tests/test_generic_selection.py
@@ -360,6 +361,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	QBE="$(QBE)" python3 tests/test_aggregate_varargs.py
 	python3 tests/test_variadic.py
 	python3 tests/test_builtin_headers.py
+	python3 tests/test_hosted_numeric.py
 	python3 tests/test_wide_library_declarations.py
 	python3 tests/test_embed.py
 	python3 tests/test_generic_selection.py
