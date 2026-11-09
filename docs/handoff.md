@@ -57,8 +57,14 @@ fetch operations cannot represent the computation; tests cover mixed numeric
 types, single evaluation and pthread contention. Floating-environment behavior
 on failed retries remains a documented limitation; see `m24c-atomic-subset.md`.
 
+Block-local pointers to a single runtime-bound array can capture their bound
+and use it for direct indexing and pointer offsets. General variably modified
+types, runtime inner array dimensions, pointer updates and subtraction remain
+unsupported; see `m24f-vla-pointers.md`. The internal `_BitInt` type model now
+represents additional widths, but lowering remains restricted to 8/16/32/64.
+
 These features do not complete C23 attributes, hosted C, general bit-fields,
-other `_BitInt` widths, or `long double`.
+other `_BitInt` value widths, or `long double`.
 
 ## Combined byte-width bit-precise ABI and atomic work
 

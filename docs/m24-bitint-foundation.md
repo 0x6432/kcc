@@ -49,6 +49,13 @@ a matching runtime and linker. Feeding the IL to another backend is outside
 the supported contract and cannot be diagnosed by the compiler. This is not a
 full C23 `_BitInt` implementation.
 
+The internal type model also represents signed widths 2–64 and unsigned
+widths 1–64, including width-aware identity, rank, conversions and layout.
+Lowering is explicitly gated to the four byte-aligned widths above; the wider
+type model does not enable source values or ABI support for other widths.
+`tests/test_bitint_type_oracle.py` independently checks the model's expectations
+against a Clang compiler with C23 bit-precise support.
+
 `src/bitint.c` also retains independent internal arithmetic building blocks
 for all validated widths through 64; they are not a source-value implementation
 for the layout-only widths. `tests/test_bitint_values.py` runs 8/16/32/64 value
