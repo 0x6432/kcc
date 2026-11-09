@@ -33,8 +33,8 @@ Source provenance, not a filename, determines which budget is charged.
   glibc. The target `WCHAR_MIN`, `WCHAR_MAX`, `WINT_MIN` and `WINT_MAX` macros are also provided. Other standard macros are not yet provided.
 - `limits.h` supplies ordinary integer limits and C23 integer width macros for
   the target's 8-bit signed `char`, 16-bit short, 32-bit int and 64-bit long
-  and long long. `MB_LEN_MAX` is 16, matching glibc. Bit-precise limits are
-  not provided.
+  and long long. `MB_LEN_MAX` is 16, matching glibc, and `BITINT_MAXWIDTH`
+  is 64, matching the compiler’s supported maximum `_BitInt` width.
 - `float.h` supplies radix, evaluation, rounding and common binary32/binary64
   precision, exponent and normalized-range macros for the default
   round-to-nearest environment, including binary32/binary64 true-minimum and
@@ -65,7 +65,8 @@ Source provenance, not a filename, determines which budget is charged.
   buffering controls. It omits other standard stdio interfaces and relies on glibc and the
   compiler's limited variadic ABI.
 - `errno.h` exposes glibc thread-local `errno` through `__errno_location` and
-  a small selection of Linux error constants; other error codes are not provided.
+  the Linux x86-64/glibc error constants and aliases, including common POSIX
+  networking, filesystem and process errors. Their values are target-specific.
 - `math.h` declares a subset of float/double math functions and uses glibc
   classification functions for `isfinite`, `isinf`, `isnan` and `signbit`,
   dispatching float arguments to float helpers and double or integer arguments

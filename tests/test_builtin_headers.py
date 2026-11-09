@@ -1,5 +1,6 @@
 """Bounded compiler-provided headers for the amd64 SysV target."""
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -34,6 +35,7 @@ static_assert(sizeof(int8_t)==1 && sizeof(uint16_t)==2);
 static_assert(sizeof(int32_t)==4 && sizeof(uint64_t)==8);
 static_assert(INT8_MIN == -128 && UINT32_MAX == 4294967295U);
 static_assert(CHAR_BIT==8 && CHAR_MIN == -128 && INT_WIDTH==32 && LONG_WIDTH==64);
+static_assert(BITINT_MAXWIDTH==64 && sizeof(_BitInt(BITINT_MAXWIDTH))==8);
 static_assert(sizeof(int_least16_t)==2 && sizeof(int_fast32_t)==8);
 static_assert(INT64_C(42)==42L && UINT32_C(42)==42U && UINT_FAST32_MAX==UINT64_MAX);
 static_assert(INT8_WIDTH==8 && UINT64_WIDTH==64 && INT_LEAST16_WIDTH==16);
@@ -430,3 +432,32 @@ int main(void) {
     source.write_text('#define __LINE__ 4\nint main(void) { return 0; }\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
     assert result.returncode == 1 and 'reserved macro' in result.stderr, result.stderr
+
+    # Linux/glibc errno values and aliases match the host target, including
+    # less common filesystem, networking and process errors.
+    macros = subprocess.run([host, '-dM', '-E', '-x', 'c', '-'],
+                            input='#include <errno.h>\n', capture_output=True,
+                            text=True, check=True, timeout=10)
+    definitions = dict(re.findall(r'^#define (E[A-Z0-9_]*) ([A-Z0-9_]+)$', macros.stdout, re.M))
+    assert {'ENOENT', 'EAGAIN', 'EWOULDBLOCK', 'ECONNRESET', 'ERANGE'} <= definitions.keys()
+    def numeric(value):
+        seen = set()
+        while not value.isdigit():
+            assert value not in seen and value in definitions, value
+            seen.add(value)
+            value = definitions[value]
+        return value
+    checks = ''.join('#if !defined(' + name + ') || ' + name + ' != ' + numeric(value) +
+                     '\n#error errno mismatch\n#endif\n'
+                     for name, value in sorted(definitions.items()))
+    source.write_text('#include <errno.h>\n#include <stdlib.h>\n#include <stdio.h>\n' + checks +
+                      'int main(void){errno=0; strtol("999999999999999999999999999",0,10);'
+                      'return errno==ERANGE ? 42 : 1;}\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    if qbe:
+        il, asm, exe = [path / name for name in ('errno.ssa', 'errno.s', 'errno-test')]
+        il.write_text(result.stdout)
+        subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), '-o', str(exe)], check=True)
+        assert subprocess.run([str(exe)], timeout=5).returncode == 42
