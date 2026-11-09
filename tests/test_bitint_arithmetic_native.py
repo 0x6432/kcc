@@ -1,5 +1,6 @@
 """Focused runtime and constant arithmetic cases checked by KCC and Clang."""
 from pathlib import Path
+from runtime_link import runtime_link_flags
 import subprocess
 import tempfile
 from test_bitint_arbitrary import ROOT, KCC, CLANG, compile_clang, compile_kcc, run
@@ -16,7 +17,7 @@ def main():
         d = Path(tmp)
         for compiler in (compile_kcc, compile_clang):
             obj = compiler(d, SOURCE, 'arithmetic')
-            exe = d/'arithmetic'; run([CLANG, obj, ROOT/'build/libkccrt.a', '-o', exe]); run([exe])
+            exe = d/'arithmetic'; run([CLANG, obj, ROOT/'build/libkccrt.a', *runtime_link_flags(), '-o', exe]); run([exe])
         for text, expected in REJECT:
             source = d/'reject.c'; source.write_text(text)
             p = subprocess.run([KCC, source], capture_output=True, text=True, timeout=10)

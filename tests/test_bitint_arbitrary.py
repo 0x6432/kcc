@@ -5,6 +5,7 @@ side. Non-native aggregate and variadic ABI and atomics remain rejected.
 """
 import os
 from pathlib import Path
+from runtime_link import runtime_link_flags
 import subprocess
 import tempfile
 
@@ -73,7 +74,7 @@ def main():
                 ko = compile_kcc(d, body if side == 0 else caller, f'k{side}')
                 co = compile_clang(d, caller if side == 0 else body, f'c{side}')
                 exe = d/f'exe{side}'
-                run([CLANG, ko, co, ROOT/'build/libkccrt.a', '-o', exe])
+                run([CLANG, ko, co, ROOT/'build/libkccrt.a', *runtime_link_flags(), '-o', exe])
                 result = subprocess.run([str(exe)], timeout=10)
                 if result.returncode:
                     raise AssertionError(('group', start, 'side', side, 'type', group[result.returncode-1]))

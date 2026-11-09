@@ -1,5 +1,6 @@
 """Differential constant typing and runtime BitInt conversion boundary matrix."""
 from pathlib import Path
+from runtime_link import runtime_link_flags
 import tempfile
 import subprocess
 from test_bitint_arbitrary import ROOT, CLANG, compile_clang, compile_kcc, run
@@ -51,7 +52,7 @@ def main():
             for compiler in (compile_kcc, compile_clang):
                 obj = compiler(d, src, 'conversion')
                 exe = d/'conversion'
-                run([CLANG, obj, ROOT/'build/libkccrt.a', '-o', exe])
+                run([CLANG, obj, ROOT/'build/libkccrt.a', *runtime_link_flags(), '-o', exe])
                 result = subprocess.run([str(exe)], timeout=10)
                 if result.returncode:
                     raise AssertionError((compiler.__name__, 'source type', group[result.returncode-1]))

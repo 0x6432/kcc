@@ -22,10 +22,10 @@ with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Aggregate calls and returns have a bounded SysV
 implementation; see `m21-aggregate-abi.md`. Notable remaining work includes the
 rest of aggregate ABI, general bit-fields (the bounded subset is in
-`m22-bit-fields.md`), most `_BitInt` widths and broader bit-precise ABI validation,
-`long double`, complete preprocessing and attributes, and a complete hosted C
-library. Signed and unsigned 8/16/32/64-bit `_BitInt` types have bounded value
-support; other widths through 64 have direct layout queries only. See
+`m22-bit-fields.md`), bit-precise variadic and aggregate ABI beyond native
+widths, `long double`, complete preprocessing and attributes, and a complete
+hosted C library. Signed `_BitInt` widths 2–64 and unsigned widths 1–64 support
+scalar values and fixed calls within the target-specific limits; see
 `m24-bitint-foundation.md`.
 
 ## Aggregate varargs, larger records and record attributes
@@ -61,18 +61,21 @@ Block-local pointers to a single runtime-bound array can capture their bound
 and use it for direct indexing, pointer offsets, updates and subtraction for
 tracked operands. General variably modified types, runtime inner array
 dimensions and untracked pointer expressions remain unsupported; see
-`m24f-vla-pointers.md`. The internal `_BitInt` type model now
-represents additional widths, but lowering remains restricted to 8/16/32/64.
+`m24f-vla-pointers.md`. Signed widths 2–64 and unsigned widths 1–64 of
+`_BitInt` support scalar values and fixed calls. Variadic, aggregate-by-value
+and atomic operations for non-native widths remain explicitly unsupported.
 
 These features do not complete C23 attributes, hosted C, general bit-fields,
-other `_BitInt` value widths, or `long double`.
+bit-precise ABI and atomics, or `long double`.
 
 ## Combined byte-width bit-precise ABI and atomic work
 
 Signed and unsigned `_BitInt(8/16/32/64)` values now support fixed and variadic
 function arguments and returns, `va_arg`, bounded by-value aggregate members,
-and atomic operations through the existing libatomic paths. Other widths remain
-layout-only; bit-precise bit-fields and atomic record members remain rejected.
+and atomic operations through the existing libatomic paths. Other widths now
+support scalar operations and fixed calls, but not variadic or aggregate ABI
+or atomic operations; bit-precise bit-fields and atomic record members remain
+rejected.
 The new regression exercises KCC self-execution, GCC standard-integer surrogates,
 and actual Clang 15 `_BitInt` cross-object scalar/aggregate/variadic calls in
 both directions. Atomic cross-object checks use surrogates, not native atomic
