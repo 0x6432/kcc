@@ -20,10 +20,10 @@ jobs:
           set -euo pipefail
           base64 --decode .transfer/wip.bundle.b64 > "$RUNNER_TEMP/wip.bundle"
           git fetch origin wip-bitint-abi-atomics-f0d51bc:refs/remotes/origin/wip-base
-          test "$(git rev-parse refs/remotes/origin/wip-base)" = "04020cb830bdb3e1e935aa0bc9b3a95a2a00f5bf"
+          test "$(git rev-parse refs/remotes/origin/wip-base)" = "1d2ea134dbfd15268755d859cb7fba0dac74f193"
           git bundle verify "$RUNNER_TEMP/wip.bundle"
           git fetch "$RUNNER_TEMP/wip.bundle" refs/heads/milestone-bitint-abi-atomics:refs/heads/wip-bundle-tip
-          test "$(git rev-parse refs/heads/wip-bundle-tip)" = "1d2ea134dbfd15268755d859cb7fba0dac74f193"
+          test "$(git rev-parse refs/heads/wip-bundle-tip)" = "40b06ba7d90c26fce1582f2080e8e8a9f278ca5e"
           git merge-base --is-ancestor refs/remotes/origin/wip-base refs/heads/wip-bundle-tip
           git push origin refs/heads/wip-bundle-tip:refs/heads/wip-bitint-abi-atomics-f0d51bc
-          test "$(git ls-remote origin refs/heads/wip-bitint-abi-atomics-f0d51bc | cut -f1)" = "1d2ea134dbfd15268755d859cb7fba0dac74f193"
+          test "$(git ls-remote origin refs/heads/wip-bitint-abi-atomics-f0d51bc | cut -f1)" = "40b06ba7d90c26fce1582f2080e8e8a9f278ca5e"
