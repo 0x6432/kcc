@@ -285,6 +285,43 @@ static bool parse_general_declaration_attributes(struct parser *parser, bool *pr
 	return true;
 }
 
+/* A final function suffix may belong to an identifier or a single pointer
+ * declarator. Typedef aliases, arrays, and more elaborate derived types stay
+ * conservative until attributes are represented on full function types. */
+static bool function_contract_target(const struct ast_type_syntax *syntax)
+{
+	while (syntax->kind == type_syntax_qualified)
+		syntax = ((const struct ast_qualified_type_syntax *)syntax)->base;
+	if (syntax->kind == type_syntax_pointer) {
+		syntax = ((const struct ast_pointer_type_syntax *)syntax)->referent;
+		while (syntax->kind == type_syntax_qualified)
+			syntax = ((const struct ast_qualified_type_syntax *)syntax)->base;
+	}
+	return syntax->kind == type_syntax_function;
+}
+
+/* For typedefs, members and parameters, only function-type contracts and
+ * ordinary declaration attributes are valid in this bounded suffix path. */
+static bool parse_type_declarator_attributes(struct parser *parser,
+	bool *present, bool *deprecated, bool *function_contract)
+{
+	struct parsed_attributes attributes;
+	struct token location = preprocess_peek(parser->preprocessor);
+	if (!parse_attributes_impl(parser, &attributes, true))
+		return false;
+	if (attributes.nodiscard || attributes.noreturn || attributes.fallthrough) {
+		diagnostic_error(parser->diagnostics, location.location,
+			attributes.nodiscard ? "nodiscard is only supported on function identifier declarations" :
+			attributes.noreturn ? "noreturn attribute is only supported on function identifier declarations" :
+			"fallthrough is only supported on a null statement in a switch");
+		return false;
+	}
+	*present = attributes.present;
+	*deprecated = attributes.deprecated;
+	*function_contract = attributes.function_contract;
+	return true;
+}
+
 /* After an ordinary declarator, function attributes apply to that declarator
  * only. Semantic analysis checks the resolved identifier type. */
 static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated, bool *function_contract)
@@ -1404,9 +1441,14 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				if (!syntax)
 					return false;
 				{
-					bool suffix_attributes;
-					if (!parse_general_declaration_attributes(parser, &suffix_attributes, &suffix_deprecated))
+					bool suffix_attributes, function_contract;
+					if (!parse_type_declarator_attributes(parser, &suffix_attributes, &suffix_deprecated, &function_contract))
 						return false;
+					if (function_contract && !function_contract_target(syntax)) {
+						diagnostic_error(parser->diagnostics, name.location,
+							"unsequenced and reproducible require a supported function declarator");
+						return false;
+					}
 				}
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
@@ -3724,9 +3766,9 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
 				return NULL;
 		}
-		if (function_contract && type_syntax->kind != type_syntax_function) {
+		if (function_contract && !function_contract_target(type_syntax)) {
 			diagnostic_error(parser->diagnostics, name.location,
-				"unsequenced and reproducible require a direct function declarator");
+				"unsequenced and reproducible require a supported function declarator");
 			return NULL;
 		}
 		if (head.auto_keyword.kind == token_auto && type_syntax->kind == type_syntax_function) {
@@ -3893,9 +3935,14 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 		if (!type_syntax)
 			return NULL;
 		{
-			bool attributes;
-			if (!parse_general_declaration_attributes(parser, &attributes, &suffix_deprecated))
+			bool attributes, function_contract;
+			if (!parse_type_declarator_attributes(parser, &attributes, &suffix_deprecated, &function_contract))
 				return NULL;
+			if (function_contract && !function_contract_target(type_syntax)) {
+				diagnostic_error(parser->diagnostics, name.location,
+					"unsequenced and reproducible require a supported function declarator");
+				return NULL;
+			}
 		}
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
@@ -4149,7 +4196,7 @@ static bool parse_parameters(struct parser *parser,
 		struct ast_type_syntax *type_syntax;
 		struct declaration_head head = { 0 };
 		bool has_name = false;
-		bool prefix_attributes, suffix_attributes, prefix_deprecated, suffix_deprecated;
+		bool prefix_attributes, suffix_attributes, prefix_deprecated, suffix_deprecated, function_contract;
 
 		if (preprocess_peek(parser->preprocessor).kind == token_ellipsis) {
 			preprocess_next(parser->preprocessor);
@@ -4166,8 +4213,13 @@ static bool parse_parameters(struct parser *parser,
 			return false;
 		type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
 		type_syntax = parse_derived_type(parser, type_syntax, &name, &has_name, declarator_parameter);
-		if (!type_syntax || !parse_general_declaration_attributes(parser, &suffix_attributes, &suffix_deprecated))
+		if (!type_syntax || !parse_type_declarator_attributes(parser, &suffix_attributes, &suffix_deprecated, &function_contract))
 			return false;
+		if (function_contract && !function_contract_target(type_syntax)) {
+			diagnostic_error(parser->diagnostics, beginning.location,
+				"unsequenced and reproducible require a supported function declarator");
+			return false;
+		}
 		if ((prefix_attributes || suffix_attributes) && !has_name) {
 			diagnostic_error(parser->diagnostics, beginning.location,
 				"attributes on unnamed parameters are not supported");
@@ -4324,9 +4376,14 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 		if (!type_syntax)
 			return NULL;
 		{
-			bool attributes;
-			if (!parse_general_declaration_attributes(parser, &attributes, &suffix_deprecated))
+			bool attributes, function_contract;
+			if (!parse_type_declarator_attributes(parser, &attributes, &suffix_deprecated, &function_contract))
 				return NULL;
+			if (function_contract && !function_contract_target(type_syntax)) {
+				diagnostic_error(parser->diagnostics, name.location,
+					"unsequenced and reproducible require a supported function declarator");
+				return NULL;
+			}
 		}
 		declaration = new_typedef_declaration(parser, keyword, type_syntax, name);
 		if (!declaration)
@@ -4414,9 +4471,9 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			return NULL;
 		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
 			return NULL;
-		if (function_contract && type_syntax->kind != type_syntax_function) {
+		if (function_contract && !function_contract_target(type_syntax)) {
 			diagnostic_error(parser->diagnostics, name.location,
-				"unsequenced and reproducible require a direct function declarator");
+				"unsequenced and reproducible require a supported function declarator");
 			return NULL;
 		}
 		/* Its scope starts after the complete declarator, before an

@@ -8,6 +8,12 @@ root = Path(__file__).resolve().parents[1]
 compiler = Path(os.environ.get('KCC', root / 'build' / 'kcc'))
 
 pairs = [
+    ('int (*p)(void) [[unsequenced]];', 'int (*p)(void);'),
+    ('int (*const p)(int) [[reproducible]]=0;', 'int (*const p)(int)=0;'),
+    ('typedef int F(int) [[unsequenced]]; F f;', 'typedef int F(int); F f;'),
+    ('typedef int (*F)(int) [[reproducible]]; F p;', 'typedef int (*F)(int); F p;'),
+    ('int f(int (*p)(int) [[unsequenced]]){return p(42);}', 'int f(int (*p)(int)){return p(42);}'),
+    ('struct S { int (*p)(int) [[reproducible]]; };', 'struct S { int (*p)(int); };'),
     ('int f(void) [[unsequenced]] {return 42;}', 'int f(void) {return 42;}'),
     ('int f(void) [[__reproducible__]] {return 42;}', 'int f(void) {return 42;}'),
     ('int main(void){int f(void) [[reproducible]]; return f();}', 'int main(void){int f(void); return f();}'),
@@ -78,8 +84,10 @@ pairs = [
      'int f(void){for (int i=0; i<1; i++) {} return 0;}'),
 ]
 invalid = [
-    ('int x [[unsequenced]];', 'require a direct function declarator'),
-    ('int (*p)(void) [[reproducible]];', 'require a direct function declarator'),
+    ('typedef int T [[unsequenced]];', 'require a supported function declarator'),
+    ('struct S { int x [[reproducible]]; };', 'require a supported function declarator'),
+    ('int f(int x [[unsequenced]]);', 'require a supported function declarator'),
+    ('int x [[unsequenced]];', 'require a supported function declarator'),
     ('int f(void) [[unsequenced(1)]];', 'take no arguments'),
     ('int f(void) [[reproducible(1)]];', 'take no arguments'),
     ('struct [[nodiscard]] S;', 'require a record definition'),
