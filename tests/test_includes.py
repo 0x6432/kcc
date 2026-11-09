@@ -77,11 +77,19 @@ with tempfile.TemporaryDirectory(prefix='kcc includes ') as directory:
         ('#include ""', 'quoted name'), ('#include <x.h>', 'cannot load angle include'),
 
         ('#include "common.h" extra', 'expected end of include'),
-        (r'#include "a\b.h"', 'backslashes'), ('#include u8"common.h"', 'quoted name'),
+        (r'#include "a\"b.h"', 'quote inside'), ('#include u8"common.h"', 'quoted name'),
     ]:
         source.write_text(directive+'\nint main(void) { return 0; }\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
+    # Backslashes are literal filename bytes, not C string escapes.
+    (directory / r'a\b.h').write_text('#define RESULT 42\n')
+    for directive in (r'#include "a\b.h"', '#define H "a\\b.h"\n#include H'):
+        source.write_text(directive + '\nint main(void) { return RESULT; }\n')
+        result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=5)
+        assert result.returncode == 0 and 'copy 42' in result.stdout, result.stderr
+        result = subprocess.run([host, '-std=c2x', '-E', '-P', str(source)], capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0 and 'return 42' in result.stdout, result.stderr
     # Child physical mappings remain available to sema after returning to root.
     common.write_bytes(b'int helper(void) { ret\\\r\nurn missing; }\r\n')
     source.write_text('#include "common.h"\nint main(void) { return helper(); }\n')

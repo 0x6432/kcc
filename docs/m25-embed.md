@@ -31,10 +31,6 @@ parameters are macro-expanded within the isolated directive and rescanned on
 output; duplicate parameters are rejected. Queries accept these parameters.
 Implementation-defined parameters remain unsupported: directives reject them,
 while syntactically valid queries return `__STDC_EMBED_NOT_FOUND__`.
-Balanced parameter tokens are limited to 128 levels. Existing include-name
-restrictions, including quoted backslashes and whitespace in angle names, apply.
-The same bounded additional ASCII filename punctuation accepted by `#include`
-is accepted in angle resource names.
-
-The compiler builds with this feature; the added positive, negative, search and
-optional runtime checks have not been run. This is not full C23 embed support.
+Balanced parameter tokens are limited to 128 levels. The resource-name policy
+and its remaining restrictions are shared with `#include` and documented in
+`docs/m25-resource-names.md`. This is not full C23 embed support.

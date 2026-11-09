@@ -12,6 +12,15 @@ sequentially consistent loads, stores and selected read-modify-write operations 
 and atomic record members remain unsupported. See `docs/m24c-atomic-subset.md`
 for the safety boundary and pending validation.
 
+## Preprocessing resource names
+
+`#include`, `#embed`, `__has_include` and `__has_embed` share bounded resource
+name handling. Direct angle names preserve spaces and tabs; macro-computed angle
+names normalize each whitespace boundary to one space. More filename punctuation
+is supported, and quoted names retain backslashes as literal bytes. This is a
+bounded policy, not complete contextual header-name lexing or full C23
+preprocessing. See `docs/m25-resource-names.md` for restrictions and tests.
+
 ## Current checkpoint
 
 The development branch includes bounded initializers, enums, alignment,

@@ -3428,7 +3428,8 @@ static bool parse_embed_parameters(struct condition_parser *parser,
 }
 
 static bool append_include_piece(struct preprocessor *preprocessor,
-	struct include_name *name, struct pp_token piece, size_t *length, struct token *error);
+	struct include_name *name, struct pp_token piece, struct pp_token previous,
+	bool direct, size_t *length, struct token *error);
 
 /* Preserve a directly written angle header from identifier macro expansion;
  * computed names are expanded using the ordinary conditional cursor. */
@@ -3454,6 +3455,7 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	struct preprocessor *preprocessor = parser->preprocessor;
 	struct include_name name = { .invocation = operator };
 	struct rescan_token first;
+	struct pp_token previous;
 	struct source source = { 0 };
 	size_t length = 0;
 	bool direct, found = false, supported = true;
@@ -3475,20 +3477,28 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 	advance_include_condition(parser, direct);
 	if (is_punctuator(parser->token, "<")) {
 		name.angled = true;
+		previous = parser->token;
 		advance_include_condition(parser, direct);
 		while (!parser->failed && !is_punctuator(parser->token, ">")) {
-			if (parser->token.kind == pp_eof || is_punctuator(parser->token, ")")) {
+			if (parser->token.kind == pp_eof) {
 				condition_error(parser, parser->token, "expected '>' in resource availability operator");
 				return signed_condition(0);
 			}
-			if (!append_include_piece(preprocessor, &name, parser->token, &length, parser->error)) {
+			if (!append_include_piece(preprocessor, &name, parser->token, previous, direct, &length, parser->error)) {
 				parser->failed = true;
 				return signed_condition(0);
 			}
+			previous = parser->token;
 			advance_include_condition(parser, direct);
 		}
-		if (!length || parser->token.leading_space) {
-			condition_error(parser, parser->token, "angle include name must be nonempty with no internal whitespace");
+		if (parser->failed)
+			return signed_condition(0);
+		if (!append_include_piece(preprocessor, &name, parser->token, previous, direct, &length, parser->error)) {
+			parser->failed = true;
+			return signed_condition(0);
+		}
+		if (!length) {
+			condition_error(parser, parser->token, "angle include name must be nonempty");
 			return signed_condition(0);
 		}
 	} else {
@@ -3504,8 +3514,8 @@ static struct condition_value parse_has_include(struct condition_parser *parser,
 			return signed_condition(0);
 		}
 		for (size_t i = 1; i <= length; i++) {
-			if (text[i] == '\\') {
-				condition_error(parser, token, "backslashes in quoted include names are not supported yet");
+			if (text[i] == '"') {
+				condition_error(parser, token, "quote inside resource name is not supported");
 				return signed_condition(0);
 			}
 		}
@@ -3978,40 +3988,64 @@ static bool read_expression_condition(struct preprocessor *preprocessor,
 	return true;
 }
 
-/* header-name = string-literal | '<' path-token+ '>'
- * The angle subset has no internal whitespace and uses bounded ASCII filename bytes.
- */
+/* Construct the implementation-defined angle-name spelling. Direct names retain
+ * exact horizontal whitespace between tokens; computed names use one space for
+ * each whitespace boundary. Comments in direct names remain unsupported. */
 static bool append_include_piece(struct preprocessor *preprocessor,
-	struct include_name *name, struct pp_token piece, size_t *length, struct token *error)
+	struct include_name *name, struct pp_token piece, struct pp_token previous,
+	bool direct, size_t *length, struct token *error)
 {
 	const unsigned char *text = piece.location.source->data + piece.location.offset;
+	size_t spaces = 0;
+	const unsigned char *gap = NULL;
+	bool closing = is_punctuator(piece, ">");
 
 	if (piece.leading_space) {
-		diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
-			"whitespace inside angle include names is not supported yet");
-		*error = invalid_token(name->invocation);
-		return false;
+		if (direct && previous.location.source == piece.location.source &&
+			previous.location.offset + previous.length <= piece.location.offset) {
+			gap = previous.location.source->data + previous.location.offset + previous.length;
+			spaces = piece.location.offset - previous.location.offset - previous.length;
+			for (size_t i = 0; i < spaces; i++)
+				if (gap[i] != ' ' && gap[i] != '\t') {
+					diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
+						"comments inside angle include names are not supported");
+					*error = invalid_token(name->invocation);
+					return false;
+				}
+		} else
+			spaces = 1;
 	}
-	for (size_t i = 0; i < piece.length; i++) {
+	for (size_t i = 0; !closing && i < piece.length; i++) {
 		unsigned char c = text[i];
-
 		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 			(c >= '0' && c <= '9') || c == '_' || c == '.' || c == '/' ||
 			c == '-' || c == '+' || c == '@' || c == '~' || c == ':' ||
 			c == '=' || c == '%' || c == '!' || c == '^' || c == '&' ||
-			c == '|' || c == '?' || c == ',' || c == ';')) {
+			c == '|' || c == '?' || c == ',' || c == ';' || c == '(' ||
+			c == ')' || c == '[' || c == ']' || c == '{' || c == '}' ||
+			c == '*' || c == '$')) {
 			diagnostic_error(preprocessor->diagnostics, piece.expansion_location,
 				"unsupported byte in angle include name");
 			*error = invalid_token(name->invocation);
 			return false;
 		}
 	}
-	if (piece.length >= sizeof(name->path) - *length) {
+	if (spaces >= sizeof(name->path) - *length ||
+		(!closing && piece.length >= sizeof(name->path) - *length - spaces)) {
 		*error = stop_preprocessing(preprocessor, piece, "include path limit exceeded");
 		return false;
 	}
-	memcpy(name->path + *length, text, piece.length);
-	*length += piece.length;
+	if (spaces) {
+		if (gap)
+			memcpy(name->path + *length, gap, spaces);
+		else
+			name->path[*length] = ' ';
+		*length += spaces;
+	}
+	if (!closing) {
+		memcpy(name->path + *length, text, piece.length);
+		*length += piece.length;
+	}
 	name->path[*length] = 0;
 	return true;
 }
@@ -4036,7 +4070,7 @@ static bool read_include_name(struct preprocessor *preprocessor,
 	struct embed_parameters *params)
 {
 	struct rescan_token input;
-	struct pp_token first;
+	struct pp_token first, previous;
 	size_t length = 0;
 
 	if (!read_include_token(preprocessor, cursor, direct, &input, error))
@@ -4045,6 +4079,7 @@ static bool read_include_name(struct preprocessor *preprocessor,
 	*header = (struct include_name) { .invocation = first };
 	if (first.kind == pp_punctuator && pp_spelling_is(first, "<")) {
 		header->angled = true;
+		previous = first;
 		for (;;) {
 			if (!read_include_token(preprocessor, cursor, direct, &input, error))
 				return false;
@@ -4055,15 +4090,18 @@ static bool read_include_name(struct preprocessor *preprocessor,
 				return false;
 			}
 			if (input.token.kind == pp_punctuator && pp_spelling_is(input.token, ">")) {
-				if (!input.token.leading_space && length)
+				if (!append_include_piece(preprocessor, header, input.token, previous, direct, &length, error))
+					return false;
+				if (length)
 					break;
 				diagnostic_error(preprocessor->diagnostics, input.token.expansion_location,
-					"angle include name must be nonempty with no internal whitespace");
+					"angle include name must be nonempty");
 				*error = invalid_token(first);
 				return false;
 			}
-			if (!append_include_piece(preprocessor, header, input.token, &length, error))
+			if (!append_include_piece(preprocessor, header, input.token, previous, direct, &length, error))
 				return false;
+			previous = input.token;
 		}
 	} else {
 		const unsigned char *text = first.location.source->data + first.location.offset;
@@ -4080,9 +4118,9 @@ static bool read_include_name(struct preprocessor *preprocessor,
 			return false;
 		}
 		for (size_t i = 1; i <= length; i++)
-			if (text[i] == '\\') {
+			if (text[i] == '"') {
 				diagnostic_error(preprocessor->diagnostics, first.expansion_location,
-					"backslashes in quoted include names are not supported yet");
+					"quote inside resource name is not supported");
 				*error = invalid_token(first);
 				return false;
 			}

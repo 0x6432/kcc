@@ -14,10 +14,6 @@ limits. A failed lookup yields zero without an include-not-found diagnostic;
 malformed names and resource errors are diagnosed. Queries in short-circuited
 operands are syntax-checked but do not load a source. The loader's boolean
 interface does not distinguish missing files from other read failures, so such
-failures yield zero. Angle names additionally allow `@`, `~`, `:`, `=`, `%`, `!`, `^`, `&`, `|`,
-`?`, `,` and `;` in the existing no-whitespace subset, in both direct and
-computed operands. Quoted backslashes, whitespace and other punctuation inside
-angle names remain unsupported, as for ordinary includes.
-
-The compiler build succeeds with this implementation. Its added checks have not
-been run; this is not a claim of complete preprocessing conformance.
+failures yield zero. For the current angle and quoted name policy, including whitespace, punctuation,
+backslashes, and contextual-lexing restrictions, see `docs/m25-resource-names.md`.
+This is not a claim of complete preprocessing conformance.

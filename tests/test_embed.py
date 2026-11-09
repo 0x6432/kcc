@@ -14,6 +14,10 @@ with tempfile.TemporaryDirectory(prefix='kcc-embed-') as directory:
     (path / 'asset.bin').write_bytes(bytes([0, 10, 42, 255]))
     (path / 'empty.bin').write_bytes(b'')
     (path / 'special@asset.bin').write_bytes(bytes([42]))
+    (path / ' space  asset.bin ').write_bytes(bytes([42]))
+    (path / 'a(b)[c]{d}$.bin').write_bytes(bytes([42]))
+    (path / 'space asset.bin').write_bytes(bytes([42]))
+    (path / r'a\b.bin').write_bytes(bytes([42]))
     (path / 'oversized.bin').write_bytes(bytes(4097))
     source = path / 'main.c'
     source.write_text('''
@@ -78,9 +82,27 @@ int main(void) { return sizeof a==4 && a[0]==0 && a[1]==10 && a[2]==42 && a[3]==
     source.write_text('#if __has_embed("asset.bin" vendor::unsupported((1,[2]))) != __STDC_EMBED_NOT_FOUND__\n#error unsupported parameter was advertised\n#endif\nint main(void) { return 0; }\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
+    for expression, message in ((r'__has_embed("a\"b.bin")', 'quote inside'),
+                                ('__has_embed(<a/**/b.bin>)', 'comments')):
+        source.write_text('#if ' + expression + '\n#endif\n')
+        result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+        assert result.returncode != 0 and message in result.stderr, (expression, result.stderr)
     source.write_text('#if __has_embed("asset.bin" prefix([1)))\n#endif\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode != 0 and result.stderr, 'malformed embed query must fail'
+    for operand in ('< space  asset.bin >', '<a(b)[c]{d}$.bin>', 'COMPUTED', r'"a\b.bin"'):
+        source.write_text('#define COMPUTED <space asset.bin>\n#define a not_a\n'
+                          f'#if __has_embed({operand}) != __STDC_EMBED_FOUND__\n#error unavailable\n#endif\n'
+                          'unsigned char a[] = {\n' + f'#embed {operand}\n' +
+                          '};\nint main(void){return a[0];}\n')
+        result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0 and not result.stderr, (operand, result.stderr)
+        if qbe:
+            il, asm, exe = (path / n for n in ('out.ssa', 'out.s', 'out'))
+            il.write_text(result.stdout)
+            subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
+            subprocess.run([host, str(asm), '-o', str(exe)], check=True)
+            assert subprocess.run([str(exe)], timeout=5).returncode == 42
     source.write_text('#if __has_embed(<special@asset.bin>) != __STDC_EMBED_FOUND__\n#error special asset unavailable\n#endif\nunsigned char a[] = {\n#embed <special@asset.bin>\n};\nint main(void){return a[0];}\n')
     result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr

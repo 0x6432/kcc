@@ -28,6 +28,8 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
     (second/'nested.h').write_text('#define VALUE 42\n')
     (first/'__VA_ARGS__').write_text('#define VALUE 42\n')
     (first/'space name.h').write_text('#define VALUE 42\n')
+    for name in (' a  b.h ', 'tab\tname.h', 'a(b)[c]{d}$.h'):
+        (first/name).write_text('#define VALUE 42\n')
     (first/'a@b~c:d=e%f!g^h&i|j?k,l;m.h').write_text('#define VALUE 42\n')
     (first/'sub').mkdir()
     (first/'sub'/'n-1+.h').write_text('#define VALUE 42\n')
@@ -44,6 +46,11 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
         ('#define A(x) <x>\n#include A(local.h)', [first], 42),
         ('#define Q "fallback.h"\n#include Q', [second], 42),
         ('#include "space name.h"', [first], 42),
+        ('#include <space name.h>', [first], 42),
+        ('#include < a  b.h >', [first], 42),
+        ('#include <tab\tname.h>', [first], 42),
+        ('#include <a(b)[c]{d}$.h>', [first], 42),
+        ('#define H <space    name.h>\n#include H', [first], 42),
         ('#include <sub/n-1+.h>', [first], 42),
         ('#include <a@b~c:d=e%f!g^h&i|j?k,l;m.h>', [first], 42),
         ('#define SPECIAL <a@b~c:d=e%f!g^h&i|j?k,l;m.h>\n#include SPECIAL', [first], 42),
@@ -96,11 +103,11 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
                  ['--help', source], ['--version', '-I'+str(first)], ['--bad', source]):
         result = run(compiler, args)
         assert result.returncode == 1 and not result.stdout and 'error:' in result.stderr
-    for operand, message in [('<>', 'nonempty'), ('< local.h>', 'whitespace'),
-                             ('<local.h >', 'whitespace'), ('<local/**/.h>', 'whitespace'),
+    for operand, message in [('<>', 'nonempty'), ('< local.h>', 'cannot load angle'),
+                             ('<local.h >', 'cannot load angle'), ('<local/**/.h>', 'comments'),
                              ('<local.h', "expected '>'"), ('<local.h> extra', 'expected end of include or supported embed operand'),
-                             ('<a[b>', 'unsupported byte'), ('<missing-header.h>', 'cannot load angle'),
-                             (f'<{first}/local.h>', 'whitespace')]:
+                             ('<missing-header.h>', 'cannot load angle'),
+                             ('<bad#name>', 'unsupported byte')]:
         source.write_text(f'#include {operand}\nint main(void) {{ return 0; }}\n')
         result = run(compiler, ['-I'+str(first), source])
         assert result.returncode == 1 and not result.stdout and message in result.stderr, result.stderr
@@ -113,6 +120,15 @@ with tempfile.TemporaryDirectory(prefix='kcc include search ') as temporary:
     source.write_text('#include <bad.h>\nint main(void) { return 0; }\n')
     result = run(compiler, ['-I'+str(first), source])
     assert result.returncode == 1 and not result.stdout and 'bad.h:1:2: error:' in result.stderr
+    # Direct whitespace is preserved exactly, rather than collapsed.
+    source.write_text('#include <space  name.h>\n')
+    result = run(compiler, ['-I'+str(first), source])
+    assert result.returncode == 1 and 'cannot load angle' in result.stderr
+    # Name construction must check the same bound for tokens and whitespace.
+    for operand in ('<' + 'a'*4096 + '>', '<x' + ' '*4096 + '>'):
+        source.write_text('#include ' + operand + '\n')
+        result = run(compiler, ['-I'+str(first), source])
+        assert result.returncode == 1 and 'path limit exceeded' in result.stderr, result.stderr
     # A too-long candidate stops instead of trying a later directory.
     source.write_text('#include <local.h>\nint main(void) { return VALUE; }\n')
     result = run(compiler, ['-I'+'a'*4095, '-I'+str(first), source])

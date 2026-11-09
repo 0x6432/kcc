@@ -128,6 +128,32 @@ int main(void) { return 0; }
     source.write_text('#if !__has_include(<special@header.h>)\n#error special header unavailable\n#endif\n#include <special@header.h>\nint main(void){return SPECIAL_VALUE;}\n')
     result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result.stderr
+    for name in (' spaced  header.h ', 'a(b)[c]{d}$.h', 'space name.h'):
+        (path / name).write_text('#define AVAILABLE 42\n')
+    for operand in ('< spaced  header.h >', '<a(b)[c]{d}$.h>', '<space name.h>', 'COMPUTED'):
+        source.write_text('#define COMPUTED <space name.h>\n#define a not_a\n'
+                          f'#if !__has_include({operand})\n#error not found\n#endif\n'
+                          f'#include {operand}\nint main(void){{return AVAILABLE;}}\n')
+        result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0 and not result.stderr, (operand, result.stderr)
+        check = subprocess.run([host, '-std=c2x', '-E', '-P', '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+        assert check.returncode == 0, (operand, check.stderr)
+    source.write_text('#if __has_include(<space  name.h>)\n#error unexpected normalization\n#endif\nint main(void){return 0;}\n')
+    result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    (path / r'a\b.h').write_text('#define AVAILABLE 42\n')
+    source.write_text(r'#if !__has_include("a\b.h")' + '\n#error not found\n#endif\n' +
+                      r'#include "a\b.h"' + '\nint main(void){return AVAILABLE;}\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and 'copy 42' in result.stdout, result.stderr
+    check = subprocess.run([host, '-std=c2x', '-E', '-P', str(source)], capture_output=True, text=True, timeout=10)
+    assert check.returncode == 0, check.stderr
+    for expression, message in (('__has_include(<a/**/b.h>)', 'comments'),
+                                ('__has_include(<a(b.h)', "expected '>'"),
+                                ('__has_include(<x' + ' '*4096 + '>)', 'path limit exceeded')):
+        source.write_text('#if ' + expression + '\n#endif\nint main(void){return 0;}\n')
+        result = subprocess.run([str(compiler), '-I', str(path), str(source)], capture_output=True, text=True, timeout=10)
+        assert result.returncode != 0 and message in result.stderr, (expression, result.stderr)
     source.write_text('#if __has_include("")\n#endif\n')
     result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True)
     assert result.returncode != 0, "empty header names must be rejected"
