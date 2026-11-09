@@ -52,7 +52,7 @@ conformance is not claimed.
 | M24a | _BitInt types and representation | Width/signedness/layout/constraint tests; documented limits | in progress (8/16/32/64-bit semantic types and objects; direct layout queries through 64 bits) |
 | M24b | _BitInt arithmetic/conversions/ABI | Wide lowering/runtime tests and host interoperability where supported | in progress (8/16/32/64-bit source arithmetic and conversion; by-value function and variadic ABI rejected) |
 | M24c | Atomic types/load/store | Memory model, alignment, target code inspection | in progress (bounded integer, bool, enum, floating and pointer loads/stores via libatomic; aggregate atomics and validation remain) |
-| M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | in progress (bounded integer and pointer RMW, exchange/compare-exchange, fences and partial header; operations and validation remain) |
+| M24d | Atomic RMW/fences/library interface | Ordering constraints and multithreaded stress tests | in progress (bounded integer and pointer RMW, arithmetic atomic compound assignments via compare-exchange, exchange/compare-exchange, fences and partial header; operations and validation remain) |
 | M24e | Complex types/arithmetic | Representation, operations and ABI; explicit runtime dependencies | planned |
 | M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (bounded automatic outer VLAs, loop/switch/goto scope checks and empty initialization; broader VM types remain unsupported) |
 | M24g | long double, floating environment and remaining backend gaps | Correct target representation and runtime/ABI tests | planned |

@@ -1054,6 +1054,7 @@ struct ast_function_declaration {
 
 struct ast_function {
 	struct ast_external_declaration external;
+	bool atomic_compound_scratch;
 	bool inline_has_internal_reference;
 	bool inline_has_modifiable_static;
 	struct source_location inline_reference_location;

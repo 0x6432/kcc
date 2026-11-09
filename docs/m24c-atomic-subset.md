@@ -32,8 +32,21 @@ on the supported atomic integer types use the corresponding 1-, 2-, 4-, or
 8-byte libatomic read-modify-write operations (except `_Bool`, enums and floating types). Subword results are sign- or
 zero-extended according to their C type. Prefix, postfix and compound expressions yield the
 appropriate new or old value, and the object address is evaluated once. Atomic
-compound multiplication, division, remainder, shifts and floating right operands
-are rejected rather than expanded as a non-atomic load and store. Atomic pointers
+compound assignments also support multiplication, division, remainder and shifts
+for supported integer types, and arithmetic with floating operands. Supported
+atomic `_Bool` and enum objects accept integer compound assignments; supported
+atomic `float` and `double` objects accept `+=`, `-=`, `*=` and `/=`. The usual
+promotions, arithmetic conversions and final conversion to the object type apply.
+These additional forms use an initial sequentially consistent load and a strong
+sequentially consistent compare-exchange retry loop, not an ordinary load/store.
+The lvalue address and RHS are evaluated once, before retries; the successful
+stored value is the expression result. Comparison is by representation, including
+for NaNs. An entry-allocated, invocation-local expected-value buffer is reused
+across expressions, so repeated execution does not grow the stack. As elsewhere
+in the floating subset, floating-environment semantics are not modeled: failed
+retries do not restore floating exceptions or the environment. Normal C arithmetic
+constraints and undefined cases (such as division by zero or invalid shifts) apply.
+Atomic pointers
 to complete object types support `++`, `--`, `+=`, and `-=` via the corresponding
 8-byte libatomic read-modify-write functions. Integer offsets are scaled by the
 referent size before the call. Pointer bounds and lifetime rules still apply.
@@ -45,7 +58,7 @@ and explicit loads/stores also accept a runtime `memory_order`, evaluated once
 and passed to libatomic. The six order values follow GCC/libatomic's 0–5 ABI;
 invalid values, release or acquire-release loads, and consume, acquire or
 acquire-release stores are outside the supported contract. These additions are
-not yet tested. Strong and weak compare-exchange, including explicit-order
+subject to the existing runtime and interoperability tests. Strong and weak compare-exchange, including explicit-order
 variants, use the matching `__atomic_compare_exchange_N` for the object size. The weak form is implemented as
 strong and may therefore never fail spuriously. The expected argument must point
 to a mutable matching non-atomic integer or pointer; failure updates that object. All
@@ -71,8 +84,7 @@ for supported integer and pointer atomic objects, evaluating
 its pointer once. Pointer fetch-add/subtract and explicit-order variants accept
 an integer offset for a complete object referent, convert it to the target’s
 `ptrdiff_t` representation, scale it by the referent size, and return the old
-pointer. Pointer bitwise intrinsics are rejected. These pointer intrinsics have
-not been runtime-tested.
+pointer. Pointer bitwise intrinsics are rejected.
 Atomic record or
 union members, including arrays of atomic members, are rejected because existing
 aggregate copies are bytewise. Pointers *to* atomic objects may be members.
@@ -83,30 +95,28 @@ resource limits still apply; nested atomic type specifiers share the 64-deep typ
 query limit. The libatomic ABI's reserved function names must not be redefined by
 user programs.
 
-Tests are added for compiler output, negative cases, runtime values and a
-cross-compiler pthread sequential-consistency litmus; they have not been run in
-this implementation lane. The litmus is a regression check, not a proof of the
-memory model. Run normal, sanitizer, QBE and concurrency tests independently
-before integration; no conformance claim follows from this bounded subset.
+Tests cover compiler output, negative cases, runtime values and a cross-compiler
+pthread sequential-consistency litmus. The litmus is a regression check, not a
+proof of the memory model; no conformance claim follows from this bounded subset.
 
 The built-in header provides atomic character and short typedefs and `atomic_long`, `atomic_ulong`, `atomic_llong`, and
-`atomic_ullong` alongside `atomic_int` and `atomic_uint`. The new 8-byte integer
-and narrow integer paths have not been runtime- or concurrency-tested.
+`atomic_ullong` alongside `atomic_int` and `atomic_uint`.
 
 `atomic_bool` supports loads, stores, exchange, compare-exchange and lock-free
-queries, with scalar values converted to `_Bool`. Atomic bool increment, compound
-assignment, and fetch arithmetic/bitwise intrinsics are currently rejected.
-These paths have not been runtime- or concurrency-tested.
+queries, with scalar values converted to `_Bool`. Atomic bool increment and fetch
+arithmetic/bitwise intrinsics remain rejected; compound assignments are supported
+as described above.
 
 Complete atomic enum objects support loads, stores, exchange, compare-exchange,
 and lock-free queries using the underlying integer representation. Atomic enum
-updates and fetch arithmetic/bitwise intrinsics are currently rejected. These
-paths have not been runtime- or concurrency-tested.
+increment/decrement and fetch arithmetic/bitwise intrinsics remain rejected;
+compound assignments are supported as described above.
 
 Atomic `float` and `double` support loads, stores, exchange, compare-exchange,
 and lock-free queries. Values are bitcast to/from the libatomic integer ABI, so
-compare-exchange compares representations. Floating atomic updates and fetch
-arithmetic are rejected. These paths have not been runtime- or concurrency-tested.
+compare-exchange compares representations. Floating atomic increment/decrement
+and fetch arithmetic intrinsics remain rejected; compound assignments are supported
+as described above.
 
 The fallback header also declares C23 `atomic_char8_t` and
 `ATOMIC_CHAR8_T_LOCK_FREE` for the target unsigned 8-bit `char8_t`. It declares
@@ -129,3 +139,14 @@ KCC execution and standard-integer surrogate cross-object checks are covered by
 `tests/test_bitint_abi_atomics.py`; native atomic `_BitInt` interoperability and
 concurrent stress for these types are not yet validated. Other bit-precise widths
 remain unsupported as values or atomic objects.
+
+## Compound-assignment regression coverage
+
+`tests/test_atomic_subset.py` is already registered in both `make test` and
+`make test-codegen`. It covers compound operations, signed and unsigned widths,
+`_BitInt`, bool, enum, float and double, conversions, volatile objects, nested and
+side-effecting operands, unevaluated contexts, NaN representations, repeated
+execution and invalid constraints. Pthread tests combine KCC double `+=` and
+unsigned long `*=` with native C compare-exchange against the same objects.
+These stress checks are not a proof of concurrency correctness or full C
+atomic/floating-environment support.

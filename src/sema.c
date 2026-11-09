@@ -3473,16 +3473,6 @@ static bool sema_expression(struct sema *sema,
 				"compound assignment requires an arithmetic right operand");
 			return false;
 		}
-		if ((left_type->qualifiers & type_qualifier_atomic) &&
-			(type_is_boolean(left_type) || type_is_floating(left_type) || left_type->kind == type_kind_enum ||
-			 !type_is_integer(node->right->type) ||
-			 (node->operation != binary_add && node->operation != binary_subtract &&
-			  node->operation != binary_bit_and && node->operation != binary_bit_or &&
-			  node->operation != binary_bit_xor))) {
-			diagnostic_error(sema->diagnostics, expression->location,
-				"unsupported atomic read-modify-write operation");
-			return false;
-		}
 		result_type = unqualified_type(sema, left_type, expression->location);
 		if (!result_type)
 			return false;
@@ -3533,6 +3523,10 @@ static bool sema_expression(struct sema *sema,
 			if (!convert_expression(sema, &node->right, node->calculation_type))
 				return false;
 		}
+		/* One entry-allocated scratch slot is shared by compound updates: all
+		 * operand evaluation finishes before a retry loop begins. */
+		if ((left_type->qualifiers & type_qualifier_atomic) && sema->function)
+			sema->function->atomic_compound_scratch = true;
 		depth = node->left->depth > node->right->depth ? node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
 		break;

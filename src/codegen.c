@@ -874,6 +874,45 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 			right = codegen_shift_count(codegen, right, node->right->type);
 	}
 	address = codegen_address(codegen, node->left);
+	if ((node->left->type->qualifiers & type_qualifier_atomic) &&
+		!node->element_size &&
+		(type_is_boolean(node->left->type) || node->left->type->kind == type_kind_enum ||
+		 type_is_floating(node->calculation_type) ||
+		 (node->operation != binary_add && node->operation != binary_subtract &&
+		  node->operation != binary_bit_and && node->operation != binary_bit_or &&
+		  node->operation != binary_bit_xor))) {
+		unsigned width = (unsigned)type_object_size(node->left->type);
+		char bits_type = width == 8 ? 'l' : 'w';
+		char store_size = width == 1 ? 'b' : width == 2 ? 'h' : bits_type;
+		size_t loop = new_label(codegen), done = new_label(codegen);
+		size_t initial = codegen->next_temporary++;
+		size_t success, flag, desired;
+
+		/* The expected buffer is private to this invocation. On failure the
+		 * library replaces it with the observed representation for retry. */
+		emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 5)\n",
+			initial, bits_type, width, address);
+		emit(codegen, "\tstore%c %%t%zu, %%atomic_compound_expected\n", store_size, initial);
+		emit(codegen, "\tjmp @b%zu\n", loop);
+		emit_label(codegen, loop);
+		left = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c %s %%atomic_compound_expected\n", left,
+			qbe_type(node->left->type), qbe_load_instruction(node->left->type));
+		left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
+		value = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", value,
+			qbe_type(node->calculation_type), binary_instruction(node->operation, node->calculation_type), left, right);
+		value = codegen_convert_value(codegen, value, node->calculation_type, node->expression.type);
+		desired = atomic_to_bits(codegen, value, node->left->type);
+		success = codegen->next_temporary++;
+		flag = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_%u(l %%t%zu, l %%atomic_compound_expected, %c %%t%zu, w 5, w 5)\n",
+			success, width, address, bits_type, desired);
+		emit(codegen, "\t%%t%zu =w and %%t%zu, 1\n", flag, success);
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", flag, done, loop);
+		emit_label(codegen, done);
+		return value;
+	}
 	if (node->left->type->qualifiers & type_qualifier_atomic) {
 		const char *atomic_op;
 		unsigned width = (unsigned)type_object_size(node->left->type);
@@ -2173,6 +2212,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function, 
 		emit(&codegen, "%s...", parameter_index ? ", " : "");
 	emit(&codegen, ") {\n");
 	emit_label(&codegen, 0);
+	if (function->atomic_compound_scratch)
+		emit(&codegen, "\t%%atomic_compound_expected =l alloc8 8\n");
 	for (const struct ast_local_declaration *vla = function->locals; vla; vla = vla->next_local) {
 		if (vla->vla_bound) {
 			emit(&codegen, "\t%%vla_budget =l alloc8 8\n");

@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from runtime_link import runtime_link_flags
 
 root = Path(__file__).resolve().parents[1]
 compiler = root / 'build' / 'kcc'
@@ -10,6 +11,25 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 positive = [
+    'int main(void) { _Atomic int n=1; int a[(n*=2)]; a[1]=42; return sizeof a==8 && n==2 ? a[1] : 1; }',
+    'union U { unsigned long bits; double d; }; int main(void) { union U u; u.bits=9221120237041090561UL; _Atomic double x=u.d; x+=1.0; return x!=x ? 42 : 1; }',
+    'int main(void) { _Atomic long x=-84; long y=(x/=2); x%=5; return y==-42 && x==-2 ? 42 : 1; }',
+    'int main(void) { _Atomic unsigned long x=18446744073709551600UL; x/=2; return x==9223372036854775800UL ? 42 : 1; }',
+    'enum E : unsigned char { A=20, B=42 }; int main(void) { _Atomic(enum E) e=A; e+=22; return e==B ? 42 : 1; }',
+    'int main(void) { _Atomic int x=84; int a=(x/=2); x*=2; x%=43; x<<=1; x>>=1; return a==42 && x==41 ? 42 : 1; }',
+    'int main(void) { _Atomic signed char x=-100; x/=4L; x*=2; x%=17; return x==-16 ? 42 : 1; }',
+    'int main(void) { _Atomic unsigned short x=65535; x>>=1UL; x*=2; return x==65534 ? 42 : 1; }',
+    'int main(void) { _Atomic int x=-8; x/=2UL; return x==-4 ? 42 : 1; }',
+    'int main(void) { _Atomic int x=40; x+=2.75; return x==42 ? 42 : 1; }',
+    'int main(void) { volatile _Atomic double x=80.0; double v=(x/=2.0); x+=2; return v==40.0 && x==42.0 ? 42 : 1; }',
+    'int main(void) { _Atomic float x=21.0F; x*=2.0F; x-=1.0; return x==41.0F ? 42 : 1; }',
+    'int main(void) { _Atomic _Bool b=1; int v=(b*=2); b-=1; return v==1 && b==0 ? 42 : 1; }',
+    'enum E { A=20, B=42 }; int main(void) { _Atomic(enum E) e=A; e*=2; e+=2; return e==B ? 42 : 1; }',
+    'int main(void) { _Atomic unsigned _BitInt(8) x=200; x/=2; x%=58; return x==42 ? 42 : 1; }',
+    'int main(void) { _Atomic int a[2]={21,0}, b=4; int i=0; int v=(a[i++] *= (b/=2)); return i==1 && v==42 && a[0]==42 && b==2 ? 42 : 1; }',
+    'int main(void) { _Atomic int a[2]={21,0}; int i=0, j=1; int v=(a[i++] *= (j++ + 1)); return i==1 && j==2 && v==42 ? 42 : 1; }',
+    'int main(void) { _Atomic int x=84; for(int i=0;i<200000;i++) x/=1; return x/2; }',
+    'int main(void) { _Atomic double x=1.0; return sizeof(x*=2.0)==8 && x==1.0 ? 42 : 1; }',
     '#include <stdatomic.h>\nint main(void){int x=41; int y=kill_dependency(x++); return y==41 && x==42 ? 42 : 1;}',
     '#include <stdatomic.h>\n#include <uchar.h>\nstatic_assert(sizeof(atomic_char8_t)==sizeof(char8_t)); static_assert(ATOMIC_CHAR8_T_LOCK_FREE==2); int main(void){atomic_char8_t x=40; return atomic_fetch_add(&x,2)==40 && atomic_load(&x)==42 ? 42 : 1;}',
     '#include <stdatomic.h>\nstatic_assert(ATOMIC_BOOL_LOCK_FREE==2 && ATOMIC_CHAR_LOCK_FREE==2 && ATOMIC_CHAR16_T_LOCK_FREE==2 && ATOMIC_CHAR32_T_LOCK_FREE==2 && ATOMIC_WCHAR_T_LOCK_FREE==2 && ATOMIC_SHORT_LOCK_FREE==2 && ATOMIC_INT_LOCK_FREE==2 && ATOMIC_LONG_LOCK_FREE==2 && ATOMIC_LLONG_LOCK_FREE==2 && ATOMIC_POINTER_LOCK_FREE==2); int main(void) { return 42; }',
@@ -57,12 +77,10 @@ positive = [
 ]
 negative = [
     'int f(void) { _Atomic(float) x=1.0F; x++; return 0; }',
-    'int f(void) { _Atomic(double) x=1.0; x+=1; return 0; }',
     '#include <stdatomic.h>\nint f(_Atomic(float) *p) { return atomic_fetch_add(p,1); }',
     'enum E { A=0 }; int f(void) { _Atomic(enum E) e=A; e++; return 0; }',
     '#include <stdatomic.h>\nenum E { A=0 }; int f(_Atomic(enum E) *p) { return atomic_fetch_add(p,1); }',
     'int f(void) { _Atomic _Bool b=1; b++; return 0; }',
-    'int f(void) { _Atomic _Bool b=1; b+=1; return 0; }',
     '#include <stdatomic.h>\nint f(atomic_bool *p) { return atomic_fetch_add(p,1); }',
     '#include <stdatomic.h>\nint f(_Atomic(int *) *p) { return atomic_fetch_and(p,1)!=0; }',
     '#include <stdatomic.h>\nint f(_Atomic(void *) *p) { return atomic_fetch_add(p,1)!=0; }',
@@ -73,9 +91,6 @@ negative = [
     '_Atomic void x;', '_Atomic(int[2]) x;',
     '_Atomic(const int) x;', '_Atomic(_Atomic(int)) x;',
     'struct S { _Atomic int x; };', 'struct S { _Atomic int x[2]; };',
-    'int main(void) { _Atomic int x=1; x*=2; return x; }',
-    'int main(void) { _Atomic int x=1; x<<=2; return x; }',
-    'int main(void) { _Atomic int x=1; x+=2.0; return x; }',
     'int main(void) { const _Atomic int x=1; return ++x; }',
     'int main(void) { const _Atomic int x=1; x=2; return x; }',
     'typedef int A[2]; _Atomic A x;',
@@ -99,9 +114,18 @@ with tempfile.TemporaryDirectory(prefix='kcc-atomics-') as tmp:
         if qbe and 'main(void)' in text:
             il.write_text(output)
             subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True, timeout=10)
-            subprocess.run([host, str(asm), '-latomic', '-o', str(exe)], check=True, timeout=10)
+            subprocess.run([host, str(asm), str(root / 'build' / 'libkccrt.a'), '-latomic', *runtime_link_flags(), '-o', str(exe)], check=True, timeout=10)
             assert subprocess.run([str(exe)], timeout=5).returncode == 42, text
     for text in negative:
+        compile_kcc(text, False)
+
+    cas_output = compile_kcc('int f(_Atomic int *p,int v) { return *p/=v; }')
+    assert '$__atomic_compare_exchange_4' in cas_output and '$__atomic_load_4' in cas_output
+    assert 'alloc8 8' in cas_output and 'w 5, w 5' in cas_output
+    # These are invalid even though the CAS path accepts arithmetic types.
+    for text in ('int f(void) { _Atomic double x=1; x%=2; return 0; }',
+                 'int f(void) { _Atomic int x=1; x<<=2.0; return 0; }',
+                 'int f(void) { const _Atomic int x=1; x*=2; return 0; }'):
         compile_kcc(text, False)
 
     narrow_output = compile_kcc('#include <stdatomic.h>\nint f(atomic_schar *p,atomic_ushort *q) { (*p)++; *q=42; return atomic_load(p)+atomic_fetch_add(q,1); }')
@@ -149,5 +173,57 @@ int main(void) { pthread_t x,y; pthread_barrier_init(&start,0,3); pthread_barrie
   pthread_join(x,0); pthread_join(y,0); return 42; }
 ''')
         subprocess.run([host, '-std=c11', '-D_XOPEN_SOURCE=700', '-pthread', str(helper), str(asm), '-latomic', '-o', str(exe)], check=True, timeout=10)
+        assert subprocess.run([str(exe)], timeout=15).returncode == 42
+    # Exercise a CAS-only floating update against native compare-exchange on
+    # the same object. Exactly representable increments detect lost updates.
+    output = compile_kcc('void step(_Atomic double *p, int *count) { *p+=(++*count, 1.0); }')
+    if qbe:
+        il.write_text(output)
+        subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True, timeout=10)
+        helper.write_text(r"""
+#include <stdatomic.h>
+#include <pthread.h>
+extern void step(_Atomic double *, int *);
+static _Atomic double x;
+static int counts[2];
+static void *kcc_thread(void *arg) { for(int i=0;i<20000;i++) step(&x, (int *)arg); return 0; }
+static void *native_thread(void *unused) { (void)unused; for(int i=0;i<20000;i++) {
+  double expected=atomic_load(&x);
+  while(!atomic_compare_exchange_weak(&x,&expected,expected+1.0)) { }
+} return 0; }
+int main(void) { pthread_t a,b,c,d; pthread_create(&a,0,kcc_thread,&counts[0]); pthread_create(&b,0,kcc_thread,&counts[1]);
+  pthread_create(&c,0,native_thread,0); pthread_create(&d,0,native_thread,0);
+  pthread_join(a,0); pthread_join(b,0); pthread_join(c,0); pthread_join(d,0);
+  return atomic_load(&x)==80000.0 && counts[0]==20000 && counts[1]==20000 ? 42 : 1; }
+""")
+        subprocess.run([host, '-std=c11', '-O2', '-pthread', str(helper), str(asm), '-latomic', '-o', str(exe)], check=True, timeout=10)
+        assert subprocess.run([str(exe)], timeout=15).returncode == 42
+    # Multiply has no libatomic fetch primitive: race KCC's 64-bit CAS loop
+    # against a native CAS loop, with repeated synchronized rounds.
+    output = compile_kcc('void scale(_Atomic unsigned long *p) { *p*=2; }')
+    if qbe:
+        il.write_text(output)
+        subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True, timeout=10)
+        helper.write_text(r"""
+#include <stdatomic.h>
+#include <pthread.h>
+extern void scale(_Atomic unsigned long *);
+static _Atomic unsigned long x;
+static pthread_barrier_t start, end;
+static void *kcc_thread(void *unused) { (void)unused; for(int r=0;r<100;r++) {
+  pthread_barrier_wait(&start); for(int i=0;i<15;i++) scale(&x); pthread_barrier_wait(&end);
+} return 0; }
+static void *native_thread(void *unused) { (void)unused; for(int r=0;r<100;r++) {
+  pthread_barrier_wait(&start); for(int i=0;i<15;i++) { unsigned long expected=atomic_load(&x);
+    while(!atomic_compare_exchange_weak(&x,&expected,expected*2)) { } }
+  pthread_barrier_wait(&end);
+} return 0; }
+int main(void) { pthread_t a,b; int bad=0; pthread_barrier_init(&start,0,3); pthread_barrier_init(&end,0,3);
+  pthread_create(&a,0,kcc_thread,0); pthread_create(&b,0,native_thread,0);
+  for(int r=0;r<100;r++) { atomic_store(&x,1); pthread_barrier_wait(&start); pthread_barrier_wait(&end);
+    if(atomic_load(&x)!=(1UL<<30)) bad=1; }
+  pthread_join(a,0); pthread_join(b,0); return bad ? 1 : 42; }
+""")
+        subprocess.run([host, '-std=c11', '-D_XOPEN_SOURCE=700', '-O2', '-pthread', str(helper), str(asm), '-latomic', '-o', str(exe)], check=True, timeout=10)
         assert subprocess.run([str(exe)], timeout=15).returncode == 42
 print('atomic subset compile checks' + (' and QBE/host interoperability' if qbe else ''))
