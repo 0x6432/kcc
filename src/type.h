@@ -114,7 +114,7 @@ static inline unsigned type_stack_alignment_padding(unsigned alignment)
 	return alignment > 16 ? alignment - 16 : 0;
 }
 /* Bounded x86-64 SysV/QBE aggregate calling convention. */
-enum { type_max_abi_record_size = 64 };
+enum { type_max_abi_record_size = 1024 };
 enum aggregate_abi_class { aggregate_abi_none, aggregate_abi_integer, aggregate_abi_sse };
 struct aggregate_abi {
 	unsigned size, alignment;

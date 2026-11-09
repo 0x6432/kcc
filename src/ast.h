@@ -357,6 +357,8 @@ struct ast_va_expression {
 	struct ast_expression *list;
 	struct ast_expression *source; /* va_copy only */
 	struct ast_type_syntax *type_syntax; /* va_arg only */
+	struct ast_va_expression *next_record_va;
+	size_t record_abi_slot;
 };
 
 enum ast_atomic_operation {
@@ -1060,6 +1062,7 @@ struct ast_function {
 	size_t switch_label_count;
 	struct ast_argument *abi_arguments;
 	struct ast_load_expression *record_temporaries;
+	struct ast_va_expression *record_va_args;
 	size_t record_temporary_count;
 };
 

@@ -342,8 +342,8 @@ static bool check_aggregate_abi(struct sema *sema, const struct type *type,
 	if (!type_aggregate_abi_for_mode(type, &abi, sema->legacy_clang_abi, sema->gcc12_zero_width_abi)) {
 		diagnostic_error(sema->diagnostics, location,
 			sema->legacy_clang_abi ?
-			"aggregate ABI unsupported (M21, legacy Clang mode): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes" :
-			"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..64, alignment <= 8 and representable eightbytes");
+			"aggregate ABI unsupported (M21, legacy Clang mode): requires complete record without flexible array, size 1..1024, alignment <= 8 and representable eightbytes" :
+			"aggregate ABI unsupported (M21): requires complete record without flexible array, size 1..1024, alignment <= 8 and representable eightbytes");
 		return false;
 	}
 	if (sema->warn_legacy_clang_abi) {
@@ -2589,7 +2589,21 @@ static bool sema_expression(struct sema *sema,
 			result_type = resolve_type_syntax(sema, node->type_syntax);
 			if (!result_type)
 				return false;
-			if ((result_type->qualifiers != 0) ||
+			if (type_is_record(result_type)) {
+				if (result_type->qualifiers || !type_is_complete_object(result_type)) {
+					diagnostic_error(sema->diagnostics, expression->location,
+						"va_arg record type must be complete and unqualified");
+					return false;
+				}
+				if (!sema->unevaluated &&
+					(!check_aggregate_abi(sema, result_type, expression->location) ||
+					 !reserve_aggregate_abi_storage(sema, result_type, expression->location, &node->record_abi_slot)))
+					return false;
+				if (!sema->unevaluated && sema->function) {
+					node->next_record_va = sema->function->record_va_args;
+					sema->function->record_va_args = node;
+				}
+			} else if ((result_type->qualifiers != 0) ||
 				!(result_type->kind == type_kind_int || result_type->kind == type_kind_uint ||
 				result_type->kind == type_kind_long || result_type->kind == type_kind_ulong ||
 				result_type->kind == type_kind_long_long || result_type->kind == type_kind_ulong_long ||
@@ -2723,9 +2737,9 @@ static bool sema_expression(struct sema *sema,
 					return false;
 			} else if (argument->value->type->kind != type_kind_pointer &&
 				argument->value->type->kind != type_kind_nullptr &&
-				!(sema->unevaluated && type_is_record(argument->value->type))) {
+				!type_is_record(argument->value->type)) {
 				diagnostic_error(sema->diagnostics, argument->value->location,
-					"unsupported variadic argument type (aggregate varargs are not supported yet)");
+					"unsupported variadic argument type");
 				return false;
 			}
 			if (!sema->unevaluated && type_is_record(argument->value->type)) {

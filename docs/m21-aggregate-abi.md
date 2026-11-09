@@ -4,7 +4,7 @@
 
 On Linux x86-64 SysV with QBE 1.2, evaluated direct and indirect calls and
 function definitions can pass and return complete struct and union values of
-1–64 bytes with alignment at most 8, provided they have no flexible array member
+1–1024 bytes with alignment at most 8, provided they have no flexible array member
 and each occupied ABI eightbyte has a representable class. Types may contain
 nested records, unions, fixed arrays, integers, enums, pointers, `float` and
 `double`, subject to the compiler's existing type and qualifier restrictions.
@@ -13,12 +13,11 @@ calls may describe larger or otherwise unsupported records, but an evaluated
 call or definition with such an ABI is diagnosed. Existing C type compatibility
 rules still apply; ABI shape alone never makes C types compatible.
 
-This is not the entire SysV ABI. Size 65 or more, alignment above 8, flexible
+This is not the entire SysV ABI. Size 1025 or more, alignment above 8, flexible
 array members, unrepresentable/empty ABI eightbytes, unsupported types and
-unaligned scalar fields are refused rather than passed as pointers. Aggregate
-arguments after an ellipsis and `va_arg` of aggregate type remain unsupported.
-Fixed aggregate parameters of a variadic function are supported alongside the
-existing scalar variadic subset. Supported named int, short, char, boolean, bounded long-base and int-compatible enum bit-fields are documented
+unaligned scalar fields are refused rather than passed as pointers. Aggregate arguments after an ellipsis and `va_arg` of unqualified aggregate types
+are supported under the same limits. Fixed aggregate parameters of a variadic
+function are also supported alongside the existing scalar variadic subset. Supported named int, short, char, boolean, bounded long-base and int-compatible enum bit-fields are documented
 in `m22-bit-fields.md`; their actual occupied bits are classified as INTEGER,
 including fields starting at byte offsets not aligned for `int`. Other bit-field base types, vectors,
 `long double`, complex types and aggregate atomics are not added by this slice.
@@ -30,7 +29,7 @@ and ignoring padding. Up to 16 bytes, each eightbyte is INTEGER if any part is
 integer-class, otherwise SSE if it contains floating data. A compact synthetic
 QBE aggregate preserves the exact size, alignment and per-eightbyte classes;
 QBE performs register assignment, all-or-stack rollback and return lowering.
-Records of 17–64 bytes use a QBE opaque MEMORY type of the real size and
+Records of 17–1024 bytes use a QBE opaque MEMORY type of the real size and
 alignment. QBE chooses the hidden return pointer and stack layout. This is not
 a pointer ABI approximation.
 
@@ -42,7 +41,7 @@ allocates call-result storage. Rounding protects small objects and tail
 subobjects from QBE 1.2's whole-eightbyte loads. Record call results, parameter
 materializations, argument staging and return staging are conservatively charged
 to the existing 256 record-temporary and 1 MiB per-function storage limits.
-The 64-byte ceiling also bounds QBE's proportional aggregate-copy expansion.
+The 1024-byte ceiling bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
 Nonzero unnamed int, short, char, boolean, supported long-base and int-compatible enum bit-fields contribute INTEGER classes for their occupied
@@ -53,7 +52,7 @@ do not count their referents. In the default ABI, register-class records combini
 and barriers are supported only when every barrier's effective offset (including
 nested arrays and unions) is an eightbyte boundary. Other floating/barrier
 register records remain rejected by default: GCC 11 can pass a float/zero-width/float
-record differently from a classifier ignoring the barrier. Bounded 17–64-byte
+record differently from a classifier ignoring the barrier. Bounded 17–1024-byte
 MEMORY-class records can contain barriers, including nested and union members;
 the backend uses the whole object's size and alignment. Supported byte-width
 bit-precise integer members use INTEGER classification, within the same limits.
@@ -92,6 +91,25 @@ option changes no target ABI, emitted QBE or success status; the absence of a
 warning is not a general interoperability guarantee. Records rejected by the
 existing ABI rules are still rejected. Token-dump modes cannot use the option.
 
+## Aggregate variadic arguments
+
+Arguments passed after an ellipsis use the same supported aggregate classifier as
+fixed arguments. `va_arg` for a complete, unqualified supported record fetches
+from the SysV 24-byte `va_list` register-save area when every required INTEGER
+and SSE slot is available, or from the overflow stack area otherwise. Register
+allocation rolls back as a whole when either class is exhausted. The resulting
+record is copied into an entry-allocated rounded temporary, charged to the
+existing record-temporary and storage limits; `va_copy` preserves both cursors.
+QBE's scalar-only `vaarg` instruction is not used for records. These paths are
+specific to the existing Linux x86-64 SysV target and inherit the existing ABI
+mode, field, alignment and representability restrictions.
+
+`tests/test_aggregate_varargs.py` checks cross-object calls in both directions
+with GCC 11 and Clang 15, including 1–16-byte records, 17–1024-byte memory
+records, mixed INTEGER/SSE and union shapes, va_copy, register exhaustion and
+rollback, fixed aggregate parameters, and stack advancement. These are focused
+checks, not full ABI or C conformance.
+
 ## Focused validation and remaining gates
 
 `tests/test_aggregate_abi.py` links separately compiled GCC and kcc objects in
@@ -127,7 +145,7 @@ other hosts run self-calls. `tests/test_zero_width_gcc12_abi.py` runs the same
 216 separator, 119 unnamed-field and 480 nested layouts in GCC 12 mode; native
 cross-calls are only counted with a detected GCC 12+ host. In the default ABI,
 register records with unaligned
-effective barriers and floating members remain rejected. Records above 64 bytes
+effective barriers and floating members remain rejected. Records above 1024 bytes
 and unsupported bit-precise widths remain rejected in both modes.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

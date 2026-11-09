@@ -52,6 +52,14 @@ def main():
                       f'x.a[0]=40; x.a[{n-1}]=40; struct S y=transform(x); '
                       'return y.a[0]!=42 || x.a[0]!=40; }')
             test_pair(d, decl, body, caller)
+        # Bounded MEMORY records above the former 64-byte ceiling.
+        for n in (65, 127, 128, 255, 256, 1024):
+            decl = f'struct S {{ unsigned char a[{n}]; }}; '
+            body = 'struct S transform(struct S x) { x.a[0]+=2; return x; } '
+            caller = ('struct S transform(struct S); int main(void) { struct S x={0}; '
+                      f'x.a[0]=40; x.a[{n-1}]=9; struct S y=transform(x); '
+                      f'return y.a[0]!=42 || y.a[{n-1}]!=9 || x.a[0]!=40; }}')
+            test_pair(d, decl, body, caller)
         shapes = [
             ('struct S { float a; };', 'x.a=1.5f;', 'y.a==3.5f', 'x.a+=2.0f;'),
             ('struct S { double a; double b; };', 'x.a=1.5; x.b=9.0;', 'y.a==3.5 && y.b==9.0', 'x.a+=2.0;'),
@@ -132,14 +140,13 @@ def main():
         run([HOST, d/'local.s', '-o', d/'local'])
         run([d/'local'])
         error = ('aggregate ABI unsupported (M21): requires complete record without flexible array, '
-                 'size 1..64, alignment <= 8 and representable eightbytes')
+                 'size 1..1024, alignment <= 8 and representable eightbytes')
         for src in [
-            'struct S { char a[65]; }; int f(struct S x) { return x.a[0]; }',
+            'struct S { char a[1025]; }; int f(struct S x) { return x.a[0]; }',
             'struct S { _Alignas(16) int x; }; struct S f(void) { struct S s={0}; return s; }',
             'struct S { int n; char a[]; }; int f(struct S x) { return x.n; }',
         ]:
             reject(d, src, error)
-        reject(d, 'struct S { int x; }; int f(int,...); int g(void) { struct S s={0}; return f(1,s); }', 'unsupported variadic argument type (aggregate varargs are not supported yet)')
         # Aggregate call results count toward the existing per-function limit,
         # even when discarded; the 257th is diagnosed before emitting IL.
         prefix = 'struct S { int x; }; struct S f(void); void g(void) {'
@@ -149,7 +156,7 @@ def main():
         reject(d, 'struct S { int x; }; struct S f(void); void g(void) { char a[1048576]; f(); }',
                'function exceeds local object and record temporary storage limit (1 MiB)')
         # Unevaluated aggregate signatures stay representable even outside this slice.
-        (d/'query.c').write_text('struct S { char x[65]; }; struct S f(void); int g(void) { return sizeof(f())==65; }')
+        (d/'query.c').write_text('struct S { char x[1025]; }; struct S f(void); int g(void) { return sizeof(f())==1025; }')
         query = run([KCC, d/'query.c'])
         assert ':kcc_abi_' not in query.stdout
     print('M21 aggregate ABI tests passed with', HOST)

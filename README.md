@@ -15,7 +15,7 @@ for the safety boundary and pending validation.
 ## Current checkpoint
 
 The development branch includes bounded initializers, enums, alignment,
-float/double operations, scalar variadic calls and `va_list` access, flexible
+float/double operations, bounded scalar and aggregate variadic calls and `va_list` access, flexible
 arrays, outermost VLAs, preprocessing location features and partial standard
 headers, bounded volatile access and C23 checked integer arithmetic. Linking
 programs using the runtime-backed features requires `build/libkccrt.a` after
@@ -40,9 +40,8 @@ Alternatively, `--warn-legacy-clang-abi` flags potentially
 affected by-value definitions and evaluated calls under the default ABI. This
 conservative warning does not change code generation or prove compatibility;
 declarations without a call or definition are not checked. The two options are
-mutually exclusive. Aggregate variadic
-arguments, general bit-fields, full C23 types and the complete standard library
-remain unsupported. Recent integrated changes have been built but have not been
+mutually exclusive. General bit-fields, full C23 types, unrestricted aggregate
+ABI and the complete standard library remain unsupported. Recent integrated changes have been built but have not been
 fully tested. M17 approval and ISO C23 conformance are not claimed.
 
 ### Previous checkpoint

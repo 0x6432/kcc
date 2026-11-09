@@ -110,7 +110,7 @@ automatic initialization,
 field updates and single-evaluation bases, promotions (including variadic calls),
 layout, unions, flexible arrays, small and memory-class aggregate calls,
 `_BitInt` integration boundaries, and unsupported cases. The unnamed-field test also covers 231 layouts with separators and padding in
-both host/KCC pointer-interoperation directions; bounded 17–64-byte MEMORY-class
+both host/KCC pointer-interoperation directions; bounded 17–1024-byte MEMORY-class
 aggregates containing zero-width barriers are supported by value. Register-class
 aggregates with barriers are supported when their recursively contained by-value
 members have no floating types, subject to the existing ABI limits; floating

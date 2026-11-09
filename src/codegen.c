@@ -1121,6 +1121,81 @@ static size_t codegen_layout_constant(struct codegen *codegen, uint64_t value)
 	return result;
 }
 
+/* SysV va_list exposes separate GP and FP register cursors. Aggregate fetches
+ * consume all required registers atomically or fall back to the overflow area.
+ * QBE's vaarg handles only scalar base types, so materialize record bytes in
+ * a rounded entry slot from the ABI register-save area or stack. */
+static size_t codegen_va_record(struct codegen *codegen,
+	const struct ast_va_expression *node, size_t list)
+{
+	struct aggregate_abi abi;
+	bool valid = type_aggregate_abi_for_mode(node->expression.type, &abi,
+		codegen->abi->legacy_clang_abi, codegen->abi->gcc12_zero_width_abi);
+	assert(valid);
+	(void)valid;
+	size_t result = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l copy %%q%zu\n", result, node->record_abi_slot);
+	size_t overflow = new_label(codegen), done = new_label(codegen);
+	if (abi.size <= 16) {
+		unsigned gp_count = 0, fp_count = 0;
+		for (unsigned i = 0; i < (abi.size + 7) / 8; i++) {
+			gp_count += abi.classes[i] == aggregate_abi_integer;
+			fp_count += abi.classes[i] == aggregate_abi_sse;
+		}
+		size_t gp = codegen->next_temporary++, fp = codegen->next_temporary++;
+		size_t fp_addr = codegen_byte_offset(codegen, list, 4);
+		size_t gp_ok = codegen->next_temporary++, fp_ok = codegen->next_temporary++;
+		size_t both = codegen->next_temporary++, registers = new_label(codegen);
+		emit(codegen, "\t%%t%zu =w loadw %%t%zu\n", gp, list);
+		emit(codegen, "\t%%t%zu =w loadw %%t%zu\n", fp, fp_addr);
+		emit(codegen, "\t%%t%zu =w culew %%t%zu, %u\n", gp_ok, gp, 48 - 8 * gp_count);
+		emit(codegen, "\t%%t%zu =w culew %%t%zu, %u\n", fp_ok, fp, 176 - 16 * fp_count);
+		emit(codegen, "\t%%t%zu =w and %%t%zu, %%t%zu\n", both, gp_ok, fp_ok);
+		emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", both, registers, overflow);
+		emit_label(codegen, registers);
+		size_t save_ptr = codegen_byte_offset(codegen, list, 16);
+		size_t save = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =l loadl %%t%zu\n", save, save_ptr);
+		unsigned gp_index = 0, fp_index = 0;
+		for (unsigned i = 0; i < (abi.size + 7) / 8; i++) {
+			bool integer = abi.classes[i] == aggregate_abi_integer;
+			size_t base = integer ? gp : fp;
+			unsigned increment = integer ? 8 * gp_index++ : 16 * fp_index++;
+			size_t off = codegen->next_temporary++, address = codegen->next_temporary++;
+			size_t bits = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l extuw %%t%zu\n", off, base);
+			emit(codegen, "\t%%t%zu =l add %%t%zu, %%t%zu\n", address, save, off);
+			if (increment) address = codegen_byte_offset(codegen, address, increment);
+			emit(codegen, "\t%%t%zu =l loadl %%t%zu\n", bits, address);
+			size_t target = codegen_byte_offset(codegen, result, i * 8);
+			emit(codegen, "\tstorel %%t%zu, %%t%zu\n", bits, target);
+		}
+		if (gp_count) {
+			size_t next = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =w add %%t%zu, %u\n", next, gp, gp_count * 8);
+			emit(codegen, "\tstorew %%t%zu, %%t%zu\n", next, list);
+		}
+		if (fp_count) {
+			size_t next = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =w add %%t%zu, %u\n", next, fp, fp_count * 16);
+			emit(codegen, "\tstorew %%t%zu, %%t%zu\n", next, fp_addr);
+		}
+		emit(codegen, "\tjmp @b%zu\n", done);
+	} else {
+		emit(codegen, "\tjmp @b%zu\n", overflow);
+	}
+	emit_label(codegen, overflow);
+	size_t pointer = codegen_byte_offset(codegen, list, 8);
+	size_t address = codegen->next_temporary++, next = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =l loadl %%t%zu\n", address, pointer);
+	emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", next, address, (abi.size + 7) & ~7u);
+	emit(codegen, "\tstorel %%t%zu, %%t%zu\n", next, pointer);
+	codegen_record_copy(codegen, address, result, abi.size);
+	emit(codegen, "\tjmp @b%zu\n", done);
+	emit_label(codegen, done);
+	return result;
+}
+
 /* Return the temporary containing the value; operands are emitted first. */
 static size_t codegen_expression(struct codegen *codegen,
 	const struct ast_expression *expression)
@@ -1207,6 +1282,8 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t list = codegen_expression(codegen, node->list);
 
 		assert(node->operation == ast_va_arg);
+		if (type_is_record(expression->type))
+			return codegen_va_record(codegen, node, list);
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c vaarg %%t%zu\n", temporary,
 			qbe_type(expression->type), list);
@@ -2126,6 +2203,9 @@ static bool codegen_function(FILE *stream, const struct ast_function *function, 
 	for (const struct ast_argument *argument = function->abi_arguments; argument; argument = argument->next_abi_argument)
 		emit(&codegen, "\t%%a%zu =l alloc8 %ju\n", argument->abi_slot,
 			(uintmax_t)((type_object_size(argument->value->type) + 7) & ~UINT64_C(7)));
+	for (const struct ast_va_expression *node = function->record_va_args; node; node = node->next_record_va)
+		emit(&codegen, "\t%%q%zu =l alloc8 %ju\n", node->record_abi_slot,
+			(uintmax_t)((type_object_size(node->expression.type) + 7) & ~UINT64_C(7)));
 	parameter_index = 0;
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
