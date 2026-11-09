@@ -33,9 +33,10 @@ ABI constraints still apply; this is not a general ABI guarantee.
 
 The narrower boundaries are intentional:
 
-- Atomic bit-precise objects remain limited to 8/16/32/64. Their existing
-  libatomic implementation has surrogate, not native atomic `_BitInt`,
-  interoperability coverage. Atomic record members are rejected.
+- Atomic bit-precise objects support all declared widths through 64 using
+  libatomic; non-native-width RMW operations use width-aware compare-exchange
+  loops. Native atomic `_BitInt` interoperability has not been established.
+  Atomic record members remain rejected; see `m24c-atomic-subset.md`.
 - Bit-precise bit-fields and fixed enum underlying types remain unsupported.
 
 `src/bitint.c` retains independent internal arithmetic building blocks through
@@ -56,7 +57,7 @@ Linux x86-64 LP64 SysV model; invoke QBE with `-t amd64_sysv`.
 Clang with C2x `_BitInt`. It checks scalar cross-object calls in both directions
 for all 127 valid signed/unsigned types, variadic and bounded aggregate cross-calls in both directions, a runtime cross-width conversion
 matrix, wb literal typing and focused arithmetic, and an independent Clang type
-oracle. `tests/test_bitint_rejection.py` checks the explicit type/atomic gates;
+oracle. `tests/test_bitint_rejection.py` checks the explicit unsupported type gates;
 `tests/test_bitint.c`, `tests/test_type.c`, and the existing BitInt tests cover
 other primitives and regressions. These do not replace a full conformance suite,
 fuzzing, other targets, aggregate ABI validation or atomic concurrency testing.

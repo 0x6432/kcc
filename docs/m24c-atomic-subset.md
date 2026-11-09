@@ -3,7 +3,7 @@
 This is an intentionally small x86-64 SysV subset, not full C atomic support.
 Atomic complete enum types, `_Bool`, `float`, `double`, `char`, signed and
 unsigned `char`, `short`, `int`, `long`, `long long`, and signed/unsigned
-`_BitInt` widths 8, 16, 32 and 64 are recognized using
+`_BitInt` widths 2–64 signed and 1–64 unsigned are recognized using
 both qualifier and type-specifier syntax, including typedefs, const, pointers
 to these types, arrays of them,
 `sizeof`, `alignof`, and the existing `typeof` facilities. Each has the same size and alignment as its non-atomic integer counterpart:
@@ -29,7 +29,10 @@ non-atomic accesses to the same object and data races are not made safe by casts
 
 Sequentially consistent atomic `++`, `--`, `+=`, `-=`, `&=`, `|=` and `^=`
 on the supported atomic integer types use the corresponding 1-, 2-, 4-, or
-8-byte libatomic read-modify-write operations (except `_Bool`, enums and floating types). Subword results are sign- or
+8-byte libatomic read-modify-write operations (except `_Bool`, enums, floating
+types and non-native-width `_BitInt`). Non-native-width `_BitInt` uses
+width-aware compare-exchange loops instead, so results wrap to the declared
+width and storage padding remains zero. Subword results are sign- or
 zero-extended according to their C type. Prefix, postfix and compound expressions yield the
 appropriate new or old value, and the object address is evaluated once. Atomic
 compound assignments also support multiplication, division, remainder and shifts
@@ -52,7 +55,8 @@ to complete object types support `++`, `--`, `+=`, and `-=` via the correspondin
 referent size before the call. Pointer bounds and lifetime rules still apply.
 
 The partial `stdatomic.h` also offers sequentially consistent exchange and
-fetch-add/subtract/and/or/xor via libatomic; each evaluates its pointer and
+fetch-add/subtract/and/or/xor via libatomic (non-native-width `_BitInt` fetches
+use compare-exchange loops); each evaluates its pointer and
 integer operand once and returns the previous value. Their `_explicit` forms
 and explicit loads/stores also accept a runtime `memory_order`, evaluated once
 and passed to libatomic. The six order values follow GCC/libatomic's 0–5 ABI;
@@ -150,3 +154,17 @@ execution and invalid constraints. Pthread tests combine KCC double `+=` and
 unsigned long `*=` with native C compare-exchange against the same objects.
 These stress checks are not a proof of concurrency correctness or full C
 atomic/floating-environment support.
+
+## Non-native-width bit-precise atomics
+
+Signed widths 2–64 and unsigned widths 1–64 support the atomic operations
+above within the same size, alignment, memory-order and target limits. For
+non-native widths the RMW loop normalizes the result and clears padding;
+explicit release and acquire-release orders use relaxed and acquire failure
+orders respectively. The compiler evaluates operands once before retries.
+`tests/test_bitint_atomic_non_native.py` covers all 119 non-native types,
+explicit orders, compare-exchange, wraparound and pthread contention. Clang 15
+rejects atomic `_BitInt`, so these tests are not a native `_BitInt` atomic
+interoperability oracle. Bytewise access that modifies atomic representation
+padding and cross-implementation atomic `_BitInt` compatibility are outside
+this bounded contract. Aggregate atomic members and other gaps above remain.

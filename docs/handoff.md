@@ -34,8 +34,8 @@ All supported `_BitInt` scalar widths now work in variadic arguments and
 signed/unsigned types, register and stack arguments, floating-point mixing,
 indirect calls and `va_copy`. Records containing all supported widths now
 participate in the bounded aggregate ABI; cross-object Clang 15 checks include
-unions, 16-byte alignment, memory records, variadics and stack pressure. Atomic
-non-native widths and bit-precise bit-fields remain unsupported. See
+unions, 16-byte alignment, memory records, variadics and stack pressure. Atomic non-native-width scalars now use width-aware compare-exchange loops;
+bit-precise bit-fields remain unsupported. See
 `m24-bitint-foundation.md`.
 
 ## Aggregate varargs, larger records and record attributes
@@ -72,8 +72,8 @@ and use it for direct indexing, pointer offsets, updates and subtraction for
 tracked operands. General variably modified types, runtime inner array
 dimensions and untracked pointer expressions remain unsupported; see
 `m24f-vla-pointers.md`. Signed widths 2–64 and unsigned widths 1–64 of
-`_BitInt` support scalar values, fixed and variadic calls, and bounded aggregate
-ABI. Atomic operations for non-native widths remain explicitly unsupported.
+`_BitInt` support scalar values, fixed and variadic calls, bounded aggregate
+ABI, and atomic scalar operations through libatomic.
 
 Named 33–63-bit long-base bit-fields support bounded storage, conversion,
 updates and aggregate interoperability. Rank-sensitive uses without an
@@ -87,8 +87,8 @@ bit-precise ABI and atomics, or `long double`.
 Signed and unsigned `_BitInt(8/16/32/64)` values now support fixed and variadic
 function arguments and returns, `va_arg`, bounded by-value aggregate members,
 and atomic operations through the existing libatomic paths. Other widths now
-support scalar operations, fixed and variadic calls and bounded aggregate ABI,
-but not atomic operations; bit-precise bit-fields and atomic record members remain
+support scalar operations, fixed and variadic calls, bounded aggregate ABI,
+and atomic scalar operations; bit-precise bit-fields and atomic record members remain
 rejected.
 The new regression exercises KCC self-execution, GCC standard-integer surrogates,
 and actual Clang 15 `_BitInt` cross-object scalar/aggregate/variadic calls in

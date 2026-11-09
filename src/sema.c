@@ -1326,7 +1326,7 @@ static const struct type *alignment_complete_type(const struct type *type)
 /* Only target types with implemented libatomic ABI paths are accepted. */
 static bool supported_atomic_type(const struct type *type)
 {
-	return (type_is_bitint(type) && type_bitint_width_native(type_integer_width(type))) ||
+	return type_is_bitint(type) ||
 		type->kind == type_kind_char || type->kind == type_kind_schar ||
 		type->kind == type_kind_uchar || type->kind == type_kind_short ||
 		type->kind == type_kind_ushort || type->kind == type_kind_int || type->kind == type_kind_uint ||
@@ -2356,6 +2356,9 @@ static const struct type *sema_update_operand(struct sema *sema,
 			"atomic bool, enum or floating update is not supported yet");
 		return NULL;
 	}
+	if ((operand_type->qualifiers & type_qualifier_atomic) && type_is_bitint(operand_type) &&
+		!type_bitint_width_native(type_integer_width(operand_type)) && sema->function)
+		sema->function->atomic_compound_scratch = true;
 	result_type = unqualified_type(sema, operand_type, expression->location);
 	if (!result_type)
 		return NULL;
@@ -2639,6 +2642,11 @@ static bool sema_expression(struct sema *sema,
 				"unsupported atomic object type or operation");
 			return false;
 		}
+		if (type_is_bitint(referent) && !type_bitint_width_native(type_integer_width(referent)) &&
+			(node->operation == ast_atomic_fetch_add || node->operation == ast_atomic_fetch_sub ||
+			 node->operation == ast_atomic_fetch_and || node->operation == ast_atomic_fetch_or ||
+			 node->operation == ast_atomic_fetch_xor) && sema->function)
+			sema->function->atomic_compound_scratch = true;
 		result_type = unqualified_type(sema, referent, expression->location);
 		if (!result_type)
 			return false;

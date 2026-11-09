@@ -159,7 +159,7 @@ static size_t atomic_to_bits(struct codegen *codegen, size_t value, const struct
 			type->kind == type_kind_float ? 'w' : 'l', value);
 		return bits;
 	}
-	return value;
+	return codegen_storage_bits(codegen, value, type);
 }
 
 static size_t atomic_from_bits(struct codegen *codegen, size_t bits, const struct type *type)
@@ -875,6 +875,56 @@ static size_t codegen_shift_count(struct codegen *codegen, size_t value,
 	return count;
 }
 
+struct update_values {
+	size_t previous;
+	size_t current;
+};
+
+/* Non-native _BitInt arithmetic must wrap at the declared width, not the
+ * storage width. Retry a representation-correct libatomic compare-exchange.
+ * The initial relaxed load only seeds expected; the RMW gives the ordering. */
+static struct update_values codegen_atomic_bitint_rmw(struct codegen *codegen,
+	size_t address, size_t right, const struct type *type, const char *instruction,
+	bool explicit_order, size_t order)
+{
+	unsigned width = (unsigned)type_object_size(type);
+	char carrier = width == 8 ? 'l' : 'w';
+	char store = width == 1 ? 'b' : width == 2 ? 'h' : carrier;
+	size_t initial = codegen->next_temporary++, loop = new_label(codegen), done = new_label(codegen);
+	size_t failure = 0;
+	if (explicit_order) {
+		size_t release = codegen->next_temporary++, acqrel = codegen->next_temporary++;
+		size_t r = codegen->next_temporary++, a = codegen->next_temporary++, t = codegen->next_temporary++;
+		failure = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w ceqw %%t%zu, 3\n", release, order);
+		emit(codegen, "\t%%t%zu =w ceqw %%t%zu, 4\n", acqrel, order);
+		emit(codegen, "\t%%t%zu =w mul %%t%zu, 3\n", r, release);
+		emit(codegen, "\t%%t%zu =w mul %%t%zu, 2\n", a, acqrel);
+		emit(codegen, "\t%%t%zu =w sub %%t%zu, %%t%zu\n", t, order, r);
+		emit(codegen, "\t%%t%zu =w sub %%t%zu, %%t%zu\n", failure, t, a);
+	}
+	emit(codegen, "\t%%t%zu =%c call $__atomic_load_%u(l %%t%zu, w 0)\n", initial, carrier, width, address);
+	emit(codegen, "\tstore%c %%t%zu, %%atomic_compound_expected\n", store, initial);
+	emit(codegen, "\tjmp @b%zu\n", loop);
+	emit_label(codegen, loop);
+	size_t loaded = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c %s %%atomic_compound_expected\n", loaded, carrier, qbe_load_instruction(type));
+	size_t previous = codegen_canonicalize(codegen, loaded, type);
+	size_t arithmetic = codegen->next_temporary++;
+	emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", arithmetic, carrier, instruction, previous, right);
+	size_t current = codegen_canonicalize(codegen, arithmetic, type);
+	size_t desired = codegen_storage_bits(codegen, current, type);
+	size_t success = codegen->next_temporary++, flag = codegen->next_temporary++;
+	if (explicit_order)
+		emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_%u(l %%t%zu, l %%atomic_compound_expected, %c %%t%zu, w %%t%zu, w %%t%zu)\n", success, width, address, carrier, desired, order, failure);
+	else
+		emit(codegen, "\t%%t%zu =w call $__atomic_compare_exchange_%u(l %%t%zu, l %%atomic_compound_expected, %c %%t%zu, w 5, w 5)\n", success, width, address, carrier, desired);
+	emit(codegen, "\t%%t%zu =w and %%t%zu, 1\n", flag, success);
+	emit(codegen, "\tjnz %%t%zu, @b%zu, @b%zu\n", flag, done, loop);
+	emit_label(codegen, done);
+	return (struct update_values) { .previous = previous, .current = current };
+}
+
 /* RHS-first is a permitted operand order; the lvalue address is never repeated. */
 static size_t codegen_compound_assignment(struct codegen *codegen,
 	const struct ast_compound_assignment_expression *node)
@@ -906,6 +956,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	if ((node->left->type->qualifiers & type_qualifier_atomic) &&
 		!pointer &&
 		(type_is_boolean(node->left->type) || node->left->type->kind == type_kind_enum ||
+		 (type_is_bitint(node->left->type) && !type_bitint_width_native(type_integer_width(node->left->type))) ||
 		 type_is_floating(node->calculation_type) ||
 		 (node->operation != binary_add && node->operation != binary_subtract &&
 		  node->operation != binary_bit_and && node->operation != binary_bit_or &&
@@ -927,6 +978,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		left = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%atomic_compound_expected\n", left,
 			qbe_type(node->left->type), qbe_load_instruction(node->left->type));
+		left = codegen_canonicalize(codegen, left, node->left->type);
 		left = codegen_convert_value(codegen, left, node->left->type, node->calculation_type);
 		value = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", value,
@@ -995,11 +1047,6 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 	return value;
 }
 
-struct update_values {
-	size_t previous;
-	size_t current;
-};
-
 /* Address, load and store each occur once; the caller selects old or new. */
 static struct update_values codegen_update(struct codegen *codegen,
 	const struct ast_expression *operand, enum update_operator operation,
@@ -1011,6 +1058,13 @@ static struct update_values codegen_update(struct codegen *codegen,
 	size_t value = codegen->next_temporary++;
 	uint64_t step = element_size ? element_size : 1;
 
+	if ((operand->type->qualifiers & type_qualifier_atomic) && type_is_bitint(operand->type) &&
+		!type_bitint_width_native(type_integer_width(operand->type))) {
+		size_t one = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =%c copy 1\n", one, qbe_type(operand->type));
+		return codegen_atomic_bitint_rmw(codegen, address, one, operand->type,
+			operation == update_increment ? "add" : "sub", false, 0);
+	}
 	if (operand->type->qualifiers & type_qualifier_atomic) {
 		unsigned width = (unsigned)type_object_size(operand->type);
 		bool wide = width == 8;
@@ -1366,6 +1420,17 @@ static size_t codegen_expression(struct codegen *codegen,
 			else
 				emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n", width, object, value_type, argument_bits);
 			return argument;
+		}
+		if (type_is_bitint(referent) && !type_bitint_width_native(type_integer_width(referent)) &&
+			(node->operation == ast_atomic_fetch_add || node->operation == ast_atomic_fetch_sub ||
+			 node->operation == ast_atomic_fetch_and || node->operation == ast_atomic_fetch_or ||
+			 node->operation == ast_atomic_fetch_xor)) {
+			const char *op = node->operation == ast_atomic_fetch_add ? "add" :
+				node->operation == ast_atomic_fetch_sub ? "sub" :
+				node->operation == ast_atomic_fetch_and ? "and" :
+				node->operation == ast_atomic_fetch_or ? "or" : "xor";
+			return codegen_atomic_bitint_rmw(codegen, object, argument, referent, op,
+				node->order != NULL, order).previous;
 		}
 		switch (node->operation) {
 		case ast_atomic_fetch_add: operation = "fetch_add"; break;
