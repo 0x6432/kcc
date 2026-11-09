@@ -22,11 +22,23 @@ with limitations in `m23g-extended-attributes.md`. See each feature's
 documentation for boundaries. Aggregate calls and returns have a bounded SysV
 implementation; see `m21-aggregate-abi.md`. Notable remaining work includes the
 rest of aggregate ABI, general bit-fields (the bounded subset is in
-`m22-bit-fields.md`), most `_BitInt` widths and bit-precise function ABI,
+`m22-bit-fields.md`), most `_BitInt` widths and broader bit-precise ABI validation,
 `long double`, complete preprocessing and attributes, and a complete hosted C
 library. Signed and unsigned 8/16/32/64-bit `_BitInt` types have bounded value
 support; other widths through 64 have direct layout queries only. See
 `m24-bitint-foundation.md`.
+
+## Combined byte-width bit-precise ABI and atomic work
+
+Signed and unsigned `_BitInt(8/16/32/64)` values now support fixed and variadic
+function arguments and returns, `va_arg`, bounded by-value aggregate members,
+and atomic operations through the existing libatomic paths. Other widths remain
+layout-only; bit-precise bit-fields and atomic record members remain rejected.
+The new regression exercises KCC self-execution, GCC standard-integer surrogates,
+and actual Clang 15 `_BitInt` cross-object scalar/aggregate/variadic calls in
+both directions. Atomic cross-object checks use surrogates, not native atomic
+`_BitInt`; concurrency and broader host/ABI matrices remain validation gaps.
+The full C23/hosted-library roadmap is not complete.
 
 ## CI regression repairs (2026-11-07)
 

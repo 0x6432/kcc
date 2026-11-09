@@ -85,10 +85,9 @@ if(pressure(1,1,1,1,1,1,1,1,1,1,1,1,1,1,x,5,z,6)!=35) return 2; return 0; }}'''
                 object_file(d/'companion.c', d/'companion.o', b, options)
                 run([HOST, d/'owner.o', d/'companion.o', '-o', d/'test'])
                 run([d/'test'])
-        # Floating register-class barriers and bit-precise members remain rejected.
+        # Floating register-class barriers and records beyond the size limit remain rejected.
         for src in ('struct S { float a; unsigned :0; float b; }; struct S f(struct S x){return x;}',
-                    'struct S { char a[64]; unsigned :0; int x; }; struct S f(struct S x){return x;}',
-                    'struct S { _BitInt(8) x; unsigned :0; char a[24]; }; struct S f(struct S x){return x;}'):
+                    'struct S { char a[64]; unsigned :0; int x; }; struct S f(struct S x){return x;}'):
             (d/'reject.c').write_text(src)
             options_to_reject = ((),) if 'float a;' in src else ((), ('--legacy-clang-abi',))
             for options in options_to_reject:

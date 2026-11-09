@@ -7,8 +7,8 @@ priority over compile-time performance.
 ## M24c atomic subset
 
 On x86-64 SysV, atomic enum, `_Bool`, `float`, `double`, `char`, `short`, `int`, `long`, `long long` (signed and unsigned), and
-pointer objects support ordinary sequentially consistent loads, stores and
-selected read-modify-write operations via libatomic. Link generated assembly with `-latomic`. Other atomic operations
+pointer objects and byte-width signed/unsigned `_BitInt` objects support ordinary
+sequentially consistent loads, stores and selected read-modify-write operations via libatomic. Link generated assembly with `-latomic`. Other atomic operations
 and atomic record members remain unsupported. See `docs/m24c-atomic-subset.md`
 for the safety boundary and pending validation.
 

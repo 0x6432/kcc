@@ -84,23 +84,21 @@ return 0;}
             for options in ((), ('--legacy-clang-abi',)):
                 result = subprocess.run([str(KCC), *options, str(d/'source.c')], capture_output=True, text=True, timeout=15)
                 assert result.returncode == 0, (source, options, result.stderr)
-        # Mixed floating and barrier records and bit-precise members stay unsupported.
+        # Mixed floating and unaligned barrier records stay unsupported in default mode.
         rejects = [
             'struct S { float a; unsigned :0; float b; }; struct S f(struct S x){return x;}',
             'struct I {float a; unsigned :0; float b;}; struct S { struct I a; }; struct S f(struct S x){return x;}',
             'union S { struct { int x; unsigned :0; } a; float b; }; union S f(union S x){return x;}',
             'struct I {float a; unsigned :0; float b;}; struct S { struct I a[1]; }; struct S f(struct S x){return x;}',
-            'struct S { _BitInt(8) x; unsigned :0; char a[24]; }; struct S f(struct S x){return x;}',
         ]
         for source in rejects:
             (d/'source.c').write_text(source)
-            options_to_reject = ((), ('--legacy-clang-abi',)) if '_BitInt' in source else ((),)
+            options_to_reject = ((),)
             for options in options_to_reject:
                 result = subprocess.run([str(KCC), *options, str(d/'source.c')], capture_output=True, text=True, timeout=15)
                 assert result.returncode == 1 and not result.stdout and 'aggregate ABI unsupported' in result.stderr, (source, options, result.stderr)
-            if '_BitInt' not in source:
-                result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'source.c')], capture_output=True, text=True, timeout=15)
-                assert result.returncode == 0, (source, result.stderr)
+            result = subprocess.run([str(KCC), '--legacy-clang-abi', str(d/'source.c')], capture_output=True, text=True, timeout=15)
+            assert result.returncode == 0, (source, result.stderr)
         # Pointers do not recursively contain their referents by value.
         (d/'source.c').write_text('struct S { _BitInt(8) *p; unsigned :0; int x; }; struct S f(struct S x){return x;}')
         for options in ((), ('--legacy-clang-abi',)):

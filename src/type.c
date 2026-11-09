@@ -824,15 +824,13 @@ const struct record_member *type_record_find_member(const struct type *type,
 	return member;
 }
 
-/* Track barriers and floating members for the bounded register ABI. Bit-precise
- * values remain unverified even for MEMORY-class records. Pointers do not
+/* Track barriers and floating members for the bounded register ABI. Pointers do not
  * contain referents by value; bound the walk for shared union trees. */
 static bool aggregate_unverified(const struct type *type, unsigned depth,
 	size_t *budget, bool *barrier, bool *floating)
 {
 	if (depth > 128 || !*budget) return true;
 	--*budget;
-	if (type_is_bitint(type)) return true;
 	if (type_is_floating(type)) *floating = true;
 	if (type->kind == type_kind_array)
 		return aggregate_unverified(((const struct array_type *)type)->element,

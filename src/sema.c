@@ -1268,7 +1268,7 @@ static const struct type *alignment_complete_type(const struct type *type)
 /* Only target types with implemented libatomic ABI paths are accepted. */
 static bool supported_atomic_type(const struct type *type)
 {
-	return type->kind == type_kind_char || type->kind == type_kind_schar ||
+	return type_is_bitint(type) || type->kind == type_kind_char || type->kind == type_kind_schar ||
 		type->kind == type_kind_uchar || type->kind == type_kind_short ||
 		type->kind == type_kind_ushort || type->kind == type_kind_int || type->kind == type_kind_uint ||
 		type->kind == type_kind_long || type->kind == type_kind_ulong ||
@@ -1776,10 +1776,6 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 
 	if (!return_type || !sema_parameter_names(sema, function->parameters))
 		return NULL;
-	if (type_is_bitint(return_type)) {
-		diagnostic_error(sema->diagnostics, function->syntax.location, "_BitInt function return ABI is not supported yet");
-		return NULL;
-	}
 	if (!type_is_scalar(return_type) && !type_is_record(return_type) && return_type->kind != type_kind_void) {
 		diagnostic_error(sema->diagnostics, function->syntax.location,
 			"function return type must be void or an implemented scalar type");
@@ -1832,10 +1828,6 @@ static const struct type *resolve_function_syntax(struct sema *sema,
 			goto done;
 		}
 		parameter->type = adjust_parameter_type(sema, declared, parameter->location);
-		if (parameter->type && type_is_bitint(parameter->type)) {
-			diagnostic_error(sema->diagnostics, parameter->location, "_BitInt parameter ABI is not supported yet");
-			goto done;
-		}
 		if (!parameter->type)
 			goto done;
 		if (parameter->type_syntax->kind == type_syntax_array) {
@@ -2602,7 +2594,7 @@ static bool sema_expression(struct sema *sema,
 				result_type->kind == type_kind_long || result_type->kind == type_kind_ulong ||
 				result_type->kind == type_kind_long_long || result_type->kind == type_kind_ulong_long ||
 				result_type->kind == type_kind_double || result_type->kind == type_kind_pointer ||
-				result_type->kind == type_kind_nullptr ||
+				result_type->kind == type_kind_nullptr || type_is_bitint(result_type) ||
 				(result_type->kind == type_kind_enum && type_is_complete_object(result_type) &&
 				 type_compatible(result_type, type_integer_promotion(result_type))))) {
 				diagnostic_error(sema->diagnostics, expression->location,
@@ -2721,8 +2713,7 @@ static bool sema_expression(struct sema *sema,
 					return false;
 				parameter = parameter->next;
 			} else if (type_is_bitint(argument->value->type)) {
-				diagnostic_error(sema->diagnostics, argument->value->location, "_BitInt variadic ABI is not supported yet");
-				return false;
+				/* C23 bit-precise integers are not subject to integer promotions. */
 			} else if (type_is_floating(argument->value->type)) {
 				if (!convert_expression(sema, &argument->value, &type_double))
 					return false;
@@ -3066,7 +3057,7 @@ static bool sema_expression(struct sema *sema,
 		unsigned qualifiers, size, alignment;
 		struct ast_bitint_type_syntax *bitint = direct_bitint_query(node->type_syntax, &qualifiers);
 
-		if (!node->is_offsetof && bitint) {
+		if (!node->is_offsetof && bitint && !(qualifiers & type_qualifier_atomic)) {
 			if (!bitint_query_layout(sema, bitint, qualifiers, &size, &alignment))
 				return false;
 			node->size = size;
@@ -3169,7 +3160,7 @@ static bool sema_expression(struct sema *sema,
 		unsigned qualifiers, size, alignment;
 		struct ast_bitint_type_syntax *bitint = direct_bitint_query(node->type_syntax, &qualifiers);
 
-		if (bitint) {
+		if (bitint && !(qualifiers & type_qualifier_atomic)) {
 			if (!bitint_query_layout(sema, bitint, qualifiers, &size, &alignment))
 				return false;
 			node->alignment = alignment;
@@ -5256,7 +5247,7 @@ static bool sema_alignment_group(struct sema *sema, struct ast_alignment_group *
 		if (a->type_syntax) {
 			unsigned qualifiers, size, alignment;
 			struct ast_bitint_type_syntax *bitint = direct_bitint_query(a->type_syntax, &qualifiers);
-			if (bitint) {
+			if (bitint && !(qualifiers & type_qualifier_atomic)) {
 				if (!bitint_query_layout(sema, bitint, qualifiers, &size, &alignment))
 					return false;
 				value = alignment;

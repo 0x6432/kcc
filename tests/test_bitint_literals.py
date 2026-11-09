@@ -5,6 +5,8 @@ import tempfile
 from test_bit_fields import ROOT, HOST, KCC, object_file, run
 
 SOURCE = r'''
+#include <stdarg.h>
+int var(int n, ...) { va_list ap; va_start(ap,n); unsigned _BitInt(8) x=va_arg(ap,unsigned _BitInt(8)); va_end(ap); return x; }
 #define CAT_(a,b) a##b
 #define CAT(a,b) CAT_(a,b)
 #define I8 CAT(64,wb)
@@ -31,7 +33,7 @@ int main(void) {
  if(s8!=64 || u8!=128 || s16!=16384 || u16!=32768) return 1;
  if(s32!=1073741824 || u32!=2147483648U || s64!=4611686018427387904L || u64!=9223372036854775808UL) return 2;
  if ((unsigned _BitInt(8))(u8+128uwb)!=0 || ~s8!=-65) return 3;
- if (_Generic(I8,_BitInt(8):1,default:0)!=1) return 4;
+ if (_Generic(I8,_BitInt(8):1,default:0)!=1 || var(1,128uwb)!=128) return 4;
  return 0;
 }
 '''
@@ -46,11 +48,6 @@ def main():
             r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             if r.returncode==0 or r.stdout or 'bit-precise integer literals are not supported yet for this required width' not in r.stderr:
                 raise AssertionError((literal,r.returncode,r.stderr,r.stdout))
-        for source, diagnostic in [('int f(int, ...); int g(void){return f(1,128uwb);}', 'variadic ABI')]:
-            (d/'reject.c').write_text(source)
-            r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
-            if r.returncode==0 or r.stdout or diagnostic not in r.stderr:
-                raise AssertionError((source,r.returncode,r.stderr,r.stdout))
         for literal in ('64wB','64Wb','64wbL','64uwbu'):
             (d/'reject.c').write_text(f'int main(void){{return {literal};}}')
             r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)

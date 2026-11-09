@@ -2,8 +2,8 @@
 
 This is an intentionally small x86-64 SysV subset, not full C atomic support.
 Atomic complete enum types, `_Bool`, `float`, `double`, `char`, signed and
-unsigned `char`, `short`, `int`, `long`, and `long long`
-are recognized using
+unsigned `char`, `short`, `int`, `long`, `long long`, and signed/unsigned
+`_BitInt` widths 8, 16, 32 and 64 are recognized using
 both qualifier and type-specifier syntax, including typedefs, const, pointers
 to these types, arrays of them,
 `sizeof`, `alignof`, and the existing `typeof` facilities. Each has the same size and alignment as its non-atomic integer counterpart:
@@ -123,3 +123,9 @@ The fallback `kill_dependency` is a single-evaluation pass-through. It makes no
 optimization promise and can retain stronger ordering than dependency removal
 would permit; it does not establish a complete consume/dependency model. The
 macro has only been compile-checked, not concurrency-tested.
+
+Byte-width atomic `_BitInt` uses the existing libatomic integer paths. Focused
+KCC execution and standard-integer surrogate cross-object checks are covered by
+`tests/test_bitint_abi_atomics.py`; native atomic `_BitInt` interoperability and
+concurrent stress for these types are not yet validated. Other bit-precise widths
+remain unsupported as values or atomic objects.

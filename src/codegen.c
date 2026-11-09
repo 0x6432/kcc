@@ -1210,7 +1210,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c vaarg %%t%zu\n", temporary,
 			qbe_type(expression->type), list);
-		return temporary;
+		return codegen_canonicalize(codegen, temporary, expression->type);
 	}
 	case expression_compound_literal:
 		return codegen_compound_literal(codegen, (const struct ast_compound_literal_expression *)expression);

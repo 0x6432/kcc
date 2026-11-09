@@ -46,7 +46,6 @@ invalid = [
     ('int f(void) { return sizeof(unsigned _BitInt(18446744073709551615ULL)); }', 'outside the supported range'),
     ('int f(void) { return sizeof(_BitInt(8) int); }', 'cannot combine'),
     ('int f(void) { return sizeof(unsigned signed _BitInt(8)); }', 'duplicate or conflicting'),
-    ('int f(void) { return sizeof(_Atomic(_BitInt(8))); }', 'does not support atomic'),
     ('int f(void) { return sizeof(restrict _BitInt(8)); }', 'does not support atomic or restrict'),
     ('typedef _BitInt(7) T;', 'only in direct sizeof'),
     ('_BitInt(7) x;', 'only in direct sizeof'),

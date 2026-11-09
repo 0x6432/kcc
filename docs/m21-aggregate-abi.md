@@ -55,8 +55,9 @@ nested arrays and unions) is an eightbyte boundary. Other floating/barrier
 register records remain rejected by default: GCC 11 can pass a float/zero-width/float
 record differently from a classifier ignoring the barrier. Bounded 17–64-byte
 MEMORY-class records can contain barriers, including nested and union members;
-the backend uses the whole object's size and alignment. Bit-precise members
-remain rejected. Pointer-based interoperation remains supported.
+the backend uses the whole object's size and alignment. Supported byte-width
+bit-precise integer members use INTEGER classification, within the same limits.
+Pointer-based interoperation remains supported.
 
 `--legacy-clang-abi` opts into the older Clang x86-64 behavior that ignores
 nonzero unnamed bit-fields and zero-width separators during aggregate
@@ -80,7 +81,7 @@ silently switched based on the build or host compiler. Use the new mode for all
 KCC objects sharing affected by-value interfaces with a compatible GCC 12+ host.
 Unlike legacy Clang mode, it retains GCC's classification of nonzero unnamed
 fields. The two ABI modes are mutually exclusive, and neither works in token-dump
-modes. Existing size, alignment, bit-precise and QBE representability limits
+modes. Existing size, alignment, type and QBE representability limits
 still apply. Layout and pointer-only use are unchanged.
 
 `--warn-legacy-clang-abi` conservatively warns at evaluated calls and function
@@ -126,7 +127,7 @@ other hosts run self-calls. `tests/test_zero_width_gcc12_abi.py` runs the same
 216 separator, 119 unnamed-field and 480 nested layouts in GCC 12 mode; native
 cross-calls are only counted with a detected GCC 12+ host. In the default ABI,
 register records with unaligned
-effective barriers and floating members remain rejected. Bit-precise members and
-records above 64 bytes remain rejected in both modes.
+effective barriers and floating members remain rejected. Records above 64 bytes
+and unsupported bit-precise widths remain rejected in both modes.
 This focused evidence is not full ABI validation or M21 completion. Full test,
 sanitizer, fuzz and broader cross-compiler/target matrices remain release gates.

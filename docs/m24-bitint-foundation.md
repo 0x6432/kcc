@@ -5,8 +5,9 @@ On the Linux x86-64 LP64 target, direct type names in `sizeof`, `alignof` /
 `unsigned _BitInt(N)`. `N` must be an integer constant expression: 2–64 for
 signed, 1–64 for unsigned. The size and alignment in bytes are both 1 for
 widths 1–8, 2 for 9–16, 4 for 17–32, and 8 for 33–64. The query result is
-`unsigned long`. Direct queries also accept `const` and `volatile`, but not
-atomic or restrict types. Widths outside the range are rejected.
+`unsigned long`. Direct queries also accept `const` and `volatile`; atomic
+queries are supported for the four byte-width value types below, but `restrict`
+is rejected. Widths outside the range are rejected.
 
 ## Value slice
 
@@ -29,18 +30,20 @@ not generally checked. The target object layout (size/alignment) is 1/1, 2/2, 4/
 
 Other widths remain **layout-query only**: declarations, aliases, derived
 types and value expressions involving them are diagnosed, not lowered as a
-standard integer. Bit-precise by-value parameters, return types, variadic
-arguments and `va_arg` are rejected; pointer parameters are supported by the
-existing pointer ABI. Aggregate calls or returns containing bit-precise members
-by value are also rejected pending ABI validation. Bit-precise bit-fields, fixed
-enum underlying types and atomic bit-precise objects remain unsupported.
+standard integer. For the four supported widths, scalar parameters, returns,
+variadic arguments and `va_arg` use the existing integer ABI without default
+integer promotion, with subword results normalized. Records containing these
+members can be passed or returned within the existing aggregate ABI bounds.
+Atomic objects of these four widths use the existing libatomic paths for loads,
+stores, exchange, compare-exchange and integer fetch operations. Atomic record
+members remain rejected. Bit-precise bit-fields and fixed enum underlying
+types remain unsupported.
 `wb`/`WB` literals are supported when their exact minimum required width is
 8, 16, 32 or 64 in ordinary expressions; other widths there are rejected.
 Preprocessing expressions use the separate 64-bit intmax/uintmax model and
 accept other minimal widths within that range. Existing
-aggregate-by-value and other compiler restrictions also apply. No host call or
-object interoperability is claimed by this checkpoint; widths above 64 remain
-unsupported. The compiler emits IL for the Linux x86-64 LP64 SysV model only;
+aggregate-by-value and other compiler restrictions also apply. Widths above 64
+remain unsupported. The compiler emits IL for the Linux x86-64 LP64 SysV model only;
 its driver accepts no target selector. Invoke QBE with `-t amd64_sysv` and use
 a matching runtime and linker. Feeding the IL to another backend is outside
 the supported contract and cannot be diagnosed by the compiler. This is not a
@@ -53,7 +56,12 @@ and rejection tests through QBE; `tests/test_bitint_layout.py` covers the entire
 layout-only range and can compare with a native compiler if available.
 `tests/test_bitint.c` checks the independent arithmetic helpers. These focused
 checks are not a substitute for full conformance tests, fuzzing or a host ABI
-oracle.
+oracle. `tests/test_bitint_abi_atomics.py` covers fixed and variadic scalar
+calls, small and MEMORY aggregates, packed and zero-width fields, and atomic
+operations. It tests both cross-object directions with native `_BitInt` when
+available; standard-integer ABI surrogates are used and labeled otherwise.
+Atomic cross-object checks use surrogates, not a native atomic `_BitInt` oracle.
+These focused checks do not establish full ABI or concurrent memory-model coverage.
 
 `tests/test_bitint_literals.py` checks exact signed/unsigned literal type and
 value selection, suffix spellings, macro pasting, arithmetic and rejection
