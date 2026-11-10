@@ -23,12 +23,13 @@ and natural alignment, with zero-width separators aligning to a two-byte
 boundary. Named signed/unsigned `long` and `long long` fields accept widths
 1–64; unnamed fields accept 0–64. They use eight-byte allocation
 units and natural alignment, with zero-width separators aligning to eight-byte
-boundaries. Named widths 33–63 have additional expression restrictions below. Enums
-compatible with `int` or `unsigned int`, including ordinary int-compatible enums
-and fixed-underlying enums, use the corresponding 32-bit unit and accept named
-widths 1–32 or unnamed widths 0–32. Unnamed fields and zero-width separators
+boundaries. Named widths 33–63 have additional expression restrictions below.
+Complete enums with supported integer compatible types, whether ordinary or
+fixed, can be used as named or unnamed fields. Width limits, allocation units,
+boolean normalization and the 33–63-bit expression restrictions follow the
+underlying integer representation. Unnamed fields and zero-width separators
 can use either a direct enum tag, such as `enum E : 0`, or an enum typedef.
-Other enum base types remain unsupported. Signed and unsigned `_BitInt(N)`
+Signed and unsigned `_BitInt(N)`
 bit-fields accept widths up to N (zero only for unnamed fields), using the
 allocation unit and alignment of the declared bit-precise type. Structs,
 unions, anonymous-record promotion, arrays of records, and flexible arrays
@@ -83,8 +84,8 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Enum base types other than `int`/`unsigned int`, volatile and atomic fields
-are rejected. The named long/long-long widths 33–63
+Volatile and atomic fields are rejected. Named long/long-long and long-compatible
+enum widths 33–63
 retain the rank-sensitive operation restrictions above. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
@@ -99,9 +100,11 @@ can share the legacy M22 diagnostic.
 types at representative field widths, including static initialization and
 by-value aggregate calls in both Clang/KCC directions.
 `tests/test_enum_bit_fields.py` checks 288 ordinary-enum layouts with matching
-GCC/KCC declarations in both call directions, plus 448 fixed-enum layouts
+GCC/KCC declarations in both call directions, plus 2,632 fixed-enum layouts
 against separately compiled representation-compatible primitive-field
-surrogates. GCC 11 cannot compile C23 fixed enums, so the surrogate checks are
+surrogates, including character-, short-, int- and long-based layouts. Focused checks
+cover static initialization, integer promotion, field updates and zero-width
+separators. GCC 11 cannot compile C23 fixed enums, so the surrogate checks are
 not native C23 syntax or semantics agreements. `tests/test_long_bit_fields.py` checks 924 named long/long-long layouts and
 512 unnamed floating/mixed layouts across by-value calls in both host/KCC
 directions, using the selected host-compatible ABI mode, plus static and local initialization, signed/unsigned conversions,

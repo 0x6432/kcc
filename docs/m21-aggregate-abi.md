@@ -17,7 +17,7 @@ This is not the entire SysV ABI. Size 1025 or more, alignment above 16, flexible
 array members, unrepresentable/empty ABI eightbytes, unsupported types and
 unaligned scalar fields are refused rather than passed as pointers. Aggregate arguments after an ellipsis and `va_arg` of unqualified aggregate types
 are supported under the same limits. Fixed aggregate parameters of a variadic
-function are also supported alongside the existing scalar variadic subset. Supported named int, short, char, boolean, bounded long-base and int-compatible enum bit-fields are documented
+function are also supported alongside the existing scalar variadic subset. Supported named int, short, char, boolean, bounded long-base and integer-compatible enum bit-fields are documented
 in `m22-bit-fields.md`; their actual occupied bits are classified as INTEGER,
 including fields starting at byte offsets not aligned for `int`. Other bit-field base types, vectors,
 `long double`, complex types and aggregate atomics are not added by this slice.
@@ -44,7 +44,7 @@ to the existing 256 record-temporary and 1 MiB per-function storage limits.
 The 1024-byte ceiling bounds QBE's proportional aggregate-copy expansion.
 A temporary stream collects IL so deduplicated ABI types can precede all uses.
 
-Nonzero unnamed int, short, char, boolean, supported long-base and int-compatible enum bit-fields contribute INTEGER classes for their occupied
+Nonzero unnamed int, short, char, boolean, supported long-base and integer-compatible enum bit-fields contribute INTEGER classes for their occupied
 bits. Register-class records containing zero-width barriers are supported by
 value when their recursively contained by-value members have no floating types,
 subject to the existing size, alignment and representability limits. Pointers
@@ -120,7 +120,7 @@ exhaustion and rollback, memory returns, fixed parameters of variadic functions,
 `tests/test_bitfield_aggregate_abi.py` additionally exercises 448 named signed
 and unsigned field layouts by value in both host/KCC directions, plus mixed
 INTEGER/SSE, unions, nested records and register pressure.
-`tests/test_enum_bit_fields.py` checks 288 ordinary-enum and 448 fixed-enum
+`tests/test_enum_bit_fields.py` checks 288 ordinary-enum and 2,632 fixed-enum
 surrogate layouts in both host/KCC directions; the latter are not native C23
 syntax agreements. `tests/test_long_bit_fields.py` checks 924 named and 512 unnamed long-base
 layouts by value in both host/KCC directions.

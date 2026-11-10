@@ -698,12 +698,11 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 		if (member->bit_width) {
 			struct constant_result width;
 			const struct type *field_type = type;
-			/* Bounded enum bit-fields use only complete int-compatible or
-			 * unsigned-int-compatible enum representations. */
+			/* Use the complete enum's compatible integer representation for
+			 * width constraints; retain the enum type on the member itself. */
 			if (type->kind == type_kind_enum && type_is_complete_object(type)) {
 				const struct type *base = ((const struct enum_type *)type)->definition->underlying;
-				if (base && (base->kind == type_kind_int || base->kind == type_kind_uint))
-					field_type = base;
+				if (base) field_type = base;
 			}
 			if (member->alignments) {
 				diagnostic_error(sema->diagnostics, member->bit_colon,

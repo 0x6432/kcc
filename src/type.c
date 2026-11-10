@@ -748,8 +748,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 		if (member->is_bit_field && field_type->kind == type_kind_enum &&
 			type_is_complete_object(field_type)) {
 			const struct type *base = ((const struct enum_type *)field_type)->definition->underlying;
-			if (base && (base->kind == type_kind_int || base->kind == type_kind_uint))
-				field_type = base;
+			if (base) field_type = base;
 		}
 		if (++count > 1024 ||
 			(member->is_bit_field && (member->anonymous ||

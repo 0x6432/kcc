@@ -17,6 +17,24 @@ GitHub jobs (GCC and Clang normal/sanitized, plus fuzz) in
 https://github.com/0x6432/kcc/actions/runs/42823291407. That result applies to
 that exact commit; it does not by itself approve M17 or establish C23 conformance.
 
+## Current B1/B2 implementation increment
+
+Named and unnamed enum bit-fields now support every currently supported standard
+integer underlying representation, including boolean, character, short, int,
+long and long long (ordinary wide enums and fixed-underlying enums). Fields
+retain their enum type while using the underlying width, signedness and layout.
+Existing long-base rank-sensitive restrictions apply to widths 33–63; volatile
+and atomic fields remain rejected. The focused GCC 11/QBE 1.2 regression
+passed 288 ordinary-enum layouts and 2,632 fixed-enum layouts against primitive
+surrogates in both directions, plus boolean, initialization, promotions, updates,
+zero-width separators and wide-field guards. Surrogates do not validate native
+C23 fixed-enum semantics. This does not complete enum support, B1/B2, M17
+approval, or C23 conformance.
+
+For this project, commit and push finished changes without asking again. Group
+work into substantial end-to-end features rather than pausing after small slices.
+Keep validation honest and do not overwrite a remote branch that has advanced.
+
 ## Current implementation lane
 
 This section supersedes stale forward-looking implementation statements below;

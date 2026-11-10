@@ -1,4 +1,4 @@
-"""Int-compatible enum bit-fields on x86-64 SysV."""
+"""Integer-compatible enum bit-fields on x86-64 SysV."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -60,6 +60,127 @@ def matrix(d,prefix,mode):
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
 
+def narrow_fixed_matrix(d, prefix, base, max_width, signed):
+    # The host uses an equivalent primitive bit-field surrogate, not the C23
+    # enum declaration: GCC 11 cannot parse fixed enum syntax.
+    enum = f'enum E : {base} {{ E0=0, E1=1 }};\n'
+    decl, owner, checks = [], [], []
+    initial, updated = ('-1', '0') if signed else ('0', '1')
+    for width in range(1, max_width + 1):
+        name = f'n{prefix}_{width}'
+        decl += [f'struct {name} {{ unsigned p:{prefix}; enum E a:{width}; '
+                 f'unsigned char tail:3; char end; }};',
+                 f'extern struct {name} g{name}; int size_{name}(void); '
+                 f'struct {name} f{name}(struct {name} x);']
+        owner += [f'struct {name} g{name}={{{(1<<prefix)-1},{initial},5,77}};',
+                  f'int size_{name}(void){{return sizeof(struct {name});}}',
+                  f'struct {name} f{name}(struct {name} x){{x.a={updated}; '
+                  'x.tail=3; return x;}']
+        checks += [f'struct {name} r{name}=f{name}(g{name});',
+                   f'if(size_{name}()!=sizeof(struct {name}) || '
+                   f'g{name}.a!={initial} || r{name}.a!={updated} || '
+                   f'r{name}.p!={(1<<prefix)-1} || r{name}.tail!=3 || '
+                   f'r{name}.end!=77) return {width};']
+    header = enum + '\n'.join(decl) + '\n'
+    source_owner = header + '\n'.join(owner) + '\n'
+    source_companion = header + 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}\n'
+    def surrogate(source):
+        return source.replace(enum, '').replace('enum E a:', base+' a:')
+    for owner_kind, companion_kind in [('host','kcc'), ('kcc','host')]:
+        (d/'owner.c').write_text(surrogate(source_owner) if owner_kind=='host' else source_owner)
+        (d/'companion.c').write_text(surrogate(source_companion) if companion_kind=='host' else source_companion)
+        object_file(d/'owner.c', d/'owner.o', owner_kind)
+        object_file(d/'companion.c', d/'companion.o', companion_kind)
+        run([HOST, d/'owner.o', d/'companion.o', '-o', d/'test'])
+        try: run([d/'test'])
+        except AssertionError as e: raise AssertionError(f'{base} prefix {prefix} {owner_kind}/{companion_kind}: {e}') from e
+
+def narrow_fixed_controls(d, base, signed):
+    # Width-limited updates, integer promotion, static initialization and an
+    # unnamed zero-width separator exercise more than simple ABI layout.
+    enum = f'enum E : {base} {{ E0=0, E1=1 }};\n'
+    initial = '-1' if signed else '7'
+    text = enum + f"""
+    typedef enum E ET;
+    struct S {{ enum E a:3; ET b:3; enum E :0; char tail; }};
+    struct S global = {{{initial}, 1, 42}};
+    int main(void) {{
+        struct S s = {{{initial}, 1, 43}};
+        if (s.a!={initial} || global.a!={initial} || s.b!=1 || s.tail!=43) return 1;
+        if (s.a++!={initial} || s.a!=0 || global.a!={initial}) return 2;
+        if (++s.b!=2 || (s.a=1)!=1 || s.a!=1) return 3;
+        if (_Generic(+s.a, int:1, default:0)!=1) return 4;
+        return 0;
+    }}
+    """
+    for compiler in ('host', 'kcc'):
+        source = text if compiler == 'kcc' else (text.replace(enum, f'typedef {base} ET;\n')
+                    .replace('typedef enum E ET;', '').replace('enum E a:', base+' a:')
+                    .replace('enum E :0', base+' :0'))
+        (d/'controls.c').write_text(source)
+        object_file(d/'controls.c', d/'controls.o', compiler)
+        run([HOST, d/'controls.o', '-o', d/'controls'])
+        run([d/'controls'])
+
+def wide_fixed_matrix(d, prefix, base, signed):
+    # Compare all 64 widths with primitive field surrogates. Cast reads so
+    # the existing 33–63-bit rank-sensitive operation guard is respected.
+    enum = f'enum E : {base} {{ E0=0, E1=1 }};\n'
+    decl, owner, checks = [], [], []
+    initial, updated = ('-1', '0') if signed else ('0', '1')
+    for width in range(1, 65):
+        name = f'w{prefix}_{width}'
+        decl += [f'struct {name} {{ unsigned p:{prefix}; enum E a:{width}; unsigned tail:3; char end; }};',
+                 f'extern struct {name} g{name}; int size_{name}(void); struct {name} f{name}(struct {name} x);']
+        owner += [f'struct {name} g{name}={{{(1<<prefix)-1},{initial},5,77}};',
+                  f'int size_{name}(void){{return sizeof(struct {name});}}',
+                  f'struct {name} f{name}(struct {name} x){{x.a={updated}; x.tail=3; return x;}}']
+        checks += [f'struct {name} r{name}=f{name}(g{name});',
+                   f'if(size_{name}()!=sizeof(struct {name}) || (long long)g{name}.a!={initial} || '
+                   f'(long long)r{name}.a!={updated} || r{name}.p!={(1<<prefix)-1} || '
+                   f'r{name}.tail!=3 || r{name}.end!=77) return {width};']
+    header = enum + '\n'.join(decl) + '\n'
+    source_owner = header + '\n'.join(owner) + '\n'
+    source_companion = header + 'int main(void){\n' + '\n'.join(checks) + '\nreturn 0;}\n'
+    def surrogate(source):
+        return source.replace(enum, '').replace('enum E a:', base+' a:')
+    for a,b in [('host','kcc'), ('kcc','host')]:
+        (d/'owner.c').write_text(surrogate(source_owner) if a=='host' else source_owner)
+        (d/'companion.c').write_text(surrogate(source_companion) if b=='host' else source_companion)
+        object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
+        run([HOST,d/'owner.o',d/'companion.o','-o',d/'test'])
+        try: run([d/'test'])
+        except AssertionError as e: raise AssertionError(f'{base} prefix {prefix} {a}/{b}: {e}') from e
+
+def bool_fixed_controls(d):
+    enum = 'enum E : _Bool { E0=0, E1=1 };\n'
+    text = enum + r"""
+    typedef enum E ET;
+    struct S { char c; enum E a:1; ET b:1; enum E :0; char tail; };
+    union U { enum E b:1; char c; };
+    extern struct S g; extern union U u;
+    struct S change(struct S s);
+    """
+    owner = text + r"""
+    struct S g={9,2,0,42}; union U u={.b=9};
+    struct S change(struct S s){s.a=0; s.b=3; return s;}
+    """
+    companion = text + r"""
+    int main(void) { struct S s=change(g);
+      if (g.a!=1 || g.b!=0 || g.tail!=42 || u.b!=1 || s.a!=0 || s.b!=1) return 1;
+      if ((g.b=7)!=1 || g.b!=1 || g.b++!=1 || g.b!=1 || --g.b!=0) return 2;
+      if (_Generic(+g.a,int:1,default:0)!=1) return 3;
+      return 0;
+    }
+    """
+    def surrogate(source):
+        return source.replace(enum, '').replace('typedef enum E ET;', 'typedef _Bool ET;').replace('enum E ', '_Bool ')
+    for a,b in [('host','kcc'), ('kcc','host')]:
+        (d/'owner.c').write_text(surrogate(owner) if a=='host' else owner)
+        (d/'companion.c').write_text(surrogate(companion) if b=='host' else companion)
+        object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
+        run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
+
 def unnamed_matrix(d,typ,kcc_options):
     decl, owner, checks = [], [], []
     for width in range(1,33):
@@ -85,6 +206,16 @@ def main():
             run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
         for mode in ('ordinary','fixed_signed','fixed_unsigned'):
             for prefix in range(1,8): matrix(d,prefix,mode)
+        for base, maximum, signed in [('char', 8, True), ('signed char', 8, True),
+                                      ('unsigned char', 8, False), ('short', 16, True),
+                                      ('unsigned short', 16, False)]:
+            for prefix in range(1, 8): narrow_fixed_matrix(d, prefix, base, maximum, signed)
+            narrow_fixed_controls(d, base, signed)
+        bool_fixed_controls(d)
+        for base, signed in [('long', True), ('unsigned long', False),
+                             ('long long', True), ('unsigned long long', False)]:
+            for prefix in range(1, 8): wide_fixed_matrix(d, prefix, base, signed)
+            narrow_fixed_controls(d, base, signed)
         kcc_options = legacy_clang_options()
         for typ in ('float','double'): unnamed_matrix(d,typ,kcc_options)
         # The colon following an enum tag must remain a member declarator
@@ -129,8 +260,32 @@ def main():
         # GCC may choose a different compatible type for a nonnegative enum.
         (d/'former.c').write_text('enum E { A }; struct S { enum E x:32; }; struct S s={0}; int main(void){return s.x!=0;}')
         object_file(d/'former.c',d/'former.o','kcc'); run([HOST,d/'former.o','-o',d/'former']); run([d/'former'])
-        for source in ['enum E : short { A }; struct S { enum E x:3; };',
-                       'enum E : unsigned long { A }; struct S { enum E x:32; };',
+        # Ordinary enums whose values force long/unsigned long compatibility,
+        # wide fields and full-width values, not only explicitly fixed enums.
+        (d/'ordinary_wide.c').write_text(r"""
+        enum S { NEG=-2147483649L, ZERO=0 }; enum U { BIG=18446744073709551615UL };
+        struct V { enum S x:64; enum U y:64; enum U :0; char tail; };
+        struct V global={NEG,BIG,42};
+        int main(void) { struct V v=global;
+          if(v.x!=NEG || v.y!=BIG || v.tail!=42) return 1;
+          if(v.y++!=BIG || v.y!=0 || ++v.x!=-2147483648L) return 2;
+          return 0;
+        }
+        """)
+        object_file(d/'ordinary_wide.c',d/'ordinary_wide.o','kcc')
+        run([HOST,d/'ordinary_wide.o','-o',d/'ordinary_wide']); run([d/'ordinary_wide'])
+        # Wide enum field rank follows the same explicit-cast boundary as long.
+        (d/'wide_guard.c').write_text('enum E : long { A }; struct S { enum E x:40; }; int f(struct S s){ return s.x+1; }')
+        rejected=subprocess.run([str(KCC),str(d/'wide_guard.c')],text=True,capture_output=True)
+        if rejected.returncode==0 or 'wide bit-field operation requires an explicit cast' not in rejected.stderr:
+            raise AssertionError((rejected.returncode,rejected.stderr))
+        for source in ['enum E : short { A }; struct S { enum E x:17; };',
+                       'enum E : unsigned char { A }; struct S { enum E x:9; };',
+                       'enum E : signed char { A }; struct S { enum E :9; int x; };',
+                       'enum E : short { A }; struct S { enum E x:0; };',
+                       'enum E : _Bool { A }; struct S { enum E x:2; };',
+                       'enum E : short { A }; struct S { volatile enum E x:3; };',
+                       'enum E : unsigned long { A }; struct S { enum E x:65; };',
                        'enum E { A }; struct S { enum E x:33; };',
                        'enum E { A }; struct S { enum E x:0; };',
                        'enum E { A }; struct S { enum E : 33; };',
@@ -139,7 +294,7 @@ def main():
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else ('expected' if ': ;' in source else 'bit-field')
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))
-    print('enum bit-fields: 288 ordinary host/KCC layouts and 448 fixed-enum/primitive-surrogate layouts '
+    print('enum bit-fields: 288 ordinary host/KCC layouts and 2632 fixed-enum/primitive-surrogate layouts '
           f"in both directions passed; unnamed ABI: {'legacy Clang' if kcc_options else 'default'}; "
           'fixed-enum native C23 comparison unavailable')
 
