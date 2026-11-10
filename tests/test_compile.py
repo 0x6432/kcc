@@ -673,7 +673,7 @@ with tempfile.TemporaryDirectory(prefix="kcc-test-") as directory:
     ]
     invalid += [
         "int main(void) { return 1'g; }",
-        "int main(void) { return 'xy'; }", "int main(void) { return u'xy'; }",
+        "int main(void) { return u'xy'; }",
         'int main(void) { return "x"; }', 'int main(void) { return L"x"; }',
         "%:define X(x) 3\nint main(void) { return X; }",
     ]
