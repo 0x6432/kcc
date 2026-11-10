@@ -23,11 +23,11 @@ and natural alignment, with zero-width separators aligning to a two-byte
 boundary. Named signed/unsigned `long` and `long long` fields accept widths
 1–64; unnamed fields accept 0–64. They use eight-byte allocation
 units and natural alignment, with zero-width separators aligning to eight-byte
-boundaries. Named widths 33–63 have additional expression restrictions below.
+boundaries. Named widths 33–63 use the expression model below.
 Complete enums with supported integer compatible types, whether ordinary or
 fixed, can be used as named or unnamed fields. Width limits, allocation units,
-boolean normalization and the 33–63-bit expression restrictions follow the
-underlying integer representation. Unnamed fields and zero-width separators
+boolean normalization and expression behavior follow the underlying integer
+representation. Unnamed fields and zero-width separators
 can use either a direct enum tag, such as `enum E : 0`, or an enum typedef.
 Signed and unsigned `_BitInt(N)`
 bit-fields accept widths up to N (zero only for unnamed fields), using the
@@ -54,13 +54,18 @@ old value. Mutations evaluate the field base once and preserve other bytes or
 bits. Narrow `unsigned int` fields and supported long-base fields below 32 bits
 promote to `int` in integer-promotion contexts; 32-bit signed long-base fields
 promote to `int`, and 32-bit unsigned long-base fields to `unsigned int`.
-Full 64-bit fields retain their declared long-base types. These rules apply to
-arithmetic, shifts, conditional operands and variadic calls. For named 33–63-bit
-long-base fields, direct storage, reads, conversions, assignment and updates
-are supported, but uncast arithmetic, comparisons, conditional operands,
-variadic arguments and other rank-sensitive operations are rejected. Cast to a
-standard integer type first. Unpromoted `_Generic` and `typeof` forms are also
-rejected: GCC and Clang differ on the compatible type of these fields.
+Full 64-bit fields retain their declared long-base types. For named 33–63-bit
+long-base and long-compatible enum fields, KCC follows GCC's target-specific
+width-specific extended integer model, rather than Clang's declared-base-type
+model. Arithmetic, comparisons, shifts, conditional expressions, pointer indices,
+`switch`, compound updates and variadic calls use the width-specific type. Its
+rank falls between the standard int and long types and, as an implementation
+choice, exceeds `_BitInt` of the same width. Unsigned arithmetic wraps at the
+field width; mixing in a higher-ranked standard type can change the result.
+`_Generic` can match that type through a `typeof(+field)` typedef, and
+`typeof` of an ordinary expression formed from a field is supported. Values of
+these types occupy eight bytes, with signed values sign-extended in storage.
+Direct `typeof(field)` and `sizeof(field)` remain invalid.
 Bit-precise fields retain their declared `_BitInt` type and are exempt from
 integer promotion; ordinary arithmetic conversions still apply.
 Within existing initializer limits, static and automatic, positional and
@@ -84,9 +89,9 @@ supported. Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
-Volatile and atomic fields are rejected. Named long/long-long and long-compatible
-enum widths 33–63
-retain the rank-sensitive operation restrictions above. Known GNU
+Volatile and atomic fields are rejected. GCC and Clang make different
+implementation-defined choices for wide field expressions, so code relying on
+Clang's arithmetic or generic-selection behavior is not portable to KCC. Known GNU
 layout-changing scoped attributes (`packed`, `aligned`, `ms_struct`,
 `scalar_storage_order`) are rejected. Other unknown/vendor attributes retain
 the compiler's existing ignore policy and must not be relied upon to change
@@ -113,7 +118,12 @@ checks 868 layouts with widths 33–63, prefixes 1–7 and signed/unsigned long 
 long-long base types in both host/KCC directions, plus union and nested records.
 `tests/test_named_wide_bit_fields.py` checks 868 named width/prefix/base
 combinations in both host/KCC directions, plus unions, nested records, calls,
-updates and explicit semantic guards. Historical unsupported-long fixtures now
+updates and explicit semantic guards. `tests/test_wide_bit_field_ops.py` exercises
+248 integer and fixed-enum expression cases across widths 33–63, including
+GCC primitive-field comparison, mixed integer ranks, `typeof`, `_Generic`,
+variadic arguments, static representation and cross-object GCC/KCC calls in
+both directions. Fixed-enum cases use primitive surrogates for GCC 11; Clang's
+expression semantics differ and are not used as the arithmetic oracle. Historical unsupported-long fixtures now
 use unsupported volatile fields; valid newly supported examples have positive
 coverage. `tests/test_short_bit_fields.py` checks 480 signed/unsigned layouts and
 `tests/test_char_bit_fields.py` checks 112 signed/unsigned layouts across

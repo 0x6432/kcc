@@ -47,9 +47,26 @@ struct other_bitint_type {
 #define UNSIGNED_ENTRY(n) [n] = { { .kind = type_kind_ubitint_other }, n },
 static const struct other_bitint_type signed_bitints[65] = { BITINT_WIDTHS(SIGNED_ENTRY) };
 static const struct other_bitint_type unsigned_bitints[65] = { BITINT_WIDTHS(UNSIGNED_ENTRY) };
+#define FIELD_SIGNED_ENTRY(n) [n] = { { .kind = type_kind_field_signed }, n },
+#define FIELD_UNSIGNED_ENTRY(n) [n] = { { .kind = type_kind_field_unsigned }, n },
+static const struct other_bitint_type signed_fields[65] = { BITINT_WIDTHS(FIELD_SIGNED_ENTRY) };
+static const struct other_bitint_type unsigned_fields[65] = { BITINT_WIDTHS(FIELD_UNSIGNED_ENTRY) };
+#undef FIELD_SIGNED_ENTRY
+#undef FIELD_UNSIGNED_ENTRY
 #undef SIGNED_ENTRY
 #undef UNSIGNED_ENTRY
 #undef BITINT_WIDTHS
+
+bool type_is_field_integer(const struct type *type)
+{
+	return type->kind == type_kind_field_signed || type->kind == type_kind_field_unsigned;
+}
+
+const struct type *type_field_integer(unsigned width, bool is_unsigned)
+{
+	assert(width > 32 && width < 64);
+	return is_unsigned ? &unsigned_fields[width].type : &signed_fields[width].type;
+}
 
 static bool type_is_other_bitint(const struct type *type)
 {
@@ -123,7 +140,7 @@ static const struct integer_properties integer_properties[] = {
 
 bool type_is_integer(const struct type *type)
 {
-	if (type->kind == type_kind_enum || type_is_other_bitint(type))
+	if (type->kind == type_kind_enum || type_is_other_bitint(type) || type_is_field_integer(type))
 		return true;
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
@@ -186,6 +203,7 @@ uint64_t type_object_size(const struct type *type)
 
 		return type_object_size(array->element) * array->count;
 	}
+	if (type_is_field_integer(type)) return 8;
 	if (type_is_bitint(type)) {
 		unsigned width = type_integer_width(type);
 		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
@@ -200,6 +218,7 @@ unsigned type_object_alignment(const struct type *type)
 		return type_record_definition(type)->alignment;
 	if (type->kind == type_kind_array)
 		return type_object_alignment(((const struct array_type *)type)->element);
+	if (type_is_field_integer(type)) return 8;
 	if (type_is_bitint(type)) {
 		unsigned width = type_integer_width(type);
 		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
@@ -262,6 +281,12 @@ static struct integer_properties integer_properties_for(const struct type *type)
 		unsigned width = ((const struct other_bitint_type *)type)->width;
 		return (struct integer_properties) { type->kind, width, 2 * width,
 			type->kind == type_kind_ubitint_other, type_bitint(width, true) };
+	}
+	if (type_is_field_integer(type)) {
+		unsigned width = ((const struct other_bitint_type *)type)->width;
+		/* Implementation choice: extended fields outrank _BitInt at equal width. */
+		return (struct integer_properties) { type->kind, width, 2 * width + 1,
+			type->kind == type_kind_field_unsigned, type_field_integer(width, true) };
 	}
 	for (size_t i = 0; i < sizeof(integer_properties) / sizeof(integer_properties[0]); i++)
 		if (integer_properties[i].kind == type->kind)
@@ -419,7 +444,7 @@ static const struct type *type_with_qualifiers(struct arena *arena, const struct
 		copy->type.qualifiers = qualifiers;
 		return &copy->type;
 	}
-	if (type_is_other_bitint(type)) {
+	if (type_is_other_bitint(type) || type_is_field_integer(type)) {
 		struct other_bitint_type *copy = arena_alloc(arena, sizeof(*copy));
 		if (copy) {
 			*copy = *(const struct other_bitint_type *)type;
@@ -516,7 +541,7 @@ static bool compatible_types(const struct type *left, const struct type *right,
 		const struct enum_definition *b = ((const struct enum_type *)right)->definition;
 		return a == b || (!require_same_type && enum_definitions_compatible(a, b));
 	}
-	if (type_is_other_bitint(left))
+	if (type_is_other_bitint(left) || type_is_field_integer(left))
 		return type_integer_width(left) == type_integer_width(right);
 	if (type_is_record(left))
 		return type_record_definition(left) == type_record_definition(right);

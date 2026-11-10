@@ -23,11 +23,14 @@ Named and unnamed enum bit-fields now support every currently supported standard
 integer underlying representation, including boolean, character, short, int,
 long and long long (ordinary wide enums and fixed-underlying enums). Fields
 retain their enum type while using the underlying width, signedness and layout.
-Existing long-base rank-sensitive restrictions apply to widths 33–63; volatile
-and atomic fields remain rejected. The focused GCC 11/QBE 1.2 regression
+Named 33–63-bit long-base and long-compatible enum fields now support arithmetic,
+conversions, conditional expressions, switch, pointer indices, generic selection,
+`typeof` of expressions and variadic calls using GCC's width-specific extended
+integer model. Clang chooses different expression semantics. Volatile and atomic
+fields remain rejected. The focused GCC 11/QBE 1.2 regression
 passed 288 ordinary-enum layouts and 2,632 fixed-enum layouts against primitive
 surrogates in both directions, plus boolean, initialization, promotions, updates,
-zero-width separators and wide-field guards. Surrogates do not validate native
+zero-width separators and field constraints. Surrogates do not validate native
 C23 fixed-enum semantics. This does not complete enum support, B1/B2, M17
 approval, or C23 conformance.
 
@@ -117,9 +120,8 @@ dimensions and untracked pointer expressions remain unsupported; see
 `_BitInt` support scalar values, fixed and variadic calls, bounded aggregate
 ABI, and atomic scalar operations through libatomic.
 
-Named 33–63-bit long-base bit-fields support bounded storage, conversion,
-updates and aggregate interoperability. Rank-sensitive uses without an
-explicit cast are conservatively rejected; see `m22-bit-fields.md`.
+Named 33–63-bit long-base bit-fields also support rank-sensitive expressions
+under the documented GCC-compatible target policy; see `m22-bit-fields.md`.
 
 These features do not complete C23 attributes, hosted C, general bit-fields,
 bit-precise ABI and atomics, or `long double`.

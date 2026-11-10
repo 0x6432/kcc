@@ -1,7 +1,7 @@
 """Named 33–63-bit long fields: storage, conversions and bounded SysV ABI.
 
 Run with QBE and HOST_CC set. All mixed objects are compiled separately.
-Arithmetic on an uncast field is intentionally rejected (GCC/Clang disagree).
+Wide arithmetic follows the documented GCC extended-integer policy.
 """
 from pathlib import Path
 import subprocess
@@ -83,15 +83,9 @@ int main(void){
 }
 '''
 
-REJECT = [
- 'return s.u + 1;', 'return (0,s.u) + 1;', 'return (s.u=1) + 1;',
- 'return (s.u++) + 1;', 'return +s.u;', 'return ~s.u;',
- 'return s.u==1;', 'return 1 ? s.u : 0;', 's.u += 1; return 0;',
- 'long x=0; x += s.u; return x;', 'switch(s.u){case 0:return 0;} return 1;',
- 'int a[2]; return a[s.u];', 'return variadic(0,s.u);',
- 'return _Generic(s.u, unsigned long:1,default:0);',
- 'typeof((0,s.u)) x=0; return x;', 'return sizeof(+s.u);',
-]
+# Direct sizeof and typeof remain forbidden on a bit-field itself.
+REJECT = [('return sizeof(s.u);', 'sizeof cannot be applied to a bit-field'),
+          ('typeof(s.u) x; return 0;', 'typeof cannot be applied to a bit-field')]
 
 def main():
     (ROOT/'build').mkdir(exist_ok=True)
@@ -103,10 +97,10 @@ def main():
             run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
         for prefix in range(1,8):
             for kind in KINDS: matrix(d,prefix,kind)
-        for text in REJECT:
+        for text, diagnostic in REJECT:
             (d/'reject.c').write_text('struct S { unsigned long u:33; } s; int variadic(int, ...); int f(void){'+text+'}\n')
             result=subprocess.run([str(KCC),str(d/'reject.c')],capture_output=True,text=True)
-            if result.returncode == 0 or result.stdout or not ('wide bit-field operation' in result.stderr or 'generic selection of an unpromoted' in result.stderr):
+            if result.returncode == 0 or result.stdout or diagnostic not in result.stderr:
                 raise AssertionError((text,result.returncode,result.stdout,result.stderr))
         for source, options, diagnostic in [
             ('struct S { float x; unsigned :0; float y; unsigned long a:33; }; struct S f(struct S x){return x;}', (), 'aggregate ABI unsupported'),

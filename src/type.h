@@ -31,6 +31,9 @@ enum type_kind {
 	/* Width-aware non-native types; ABI uses separate safety gates. */
 	type_kind_bitint_other,
 	type_kind_ubitint_other,
+	/* GCC-compatible extended types of wide bit-field expressions. */
+	type_kind_field_signed,
+	type_kind_field_unsigned,
 	type_kind_bool,
 	type_kind_float,
 	type_kind_double,
@@ -193,6 +196,8 @@ bool type_bitint_width_lowerable(unsigned width);
 bool type_bitint_width_native(unsigned width);
 bool type_is_bitint(const struct type *type);
 bool type_is_integer(const struct type *type);
+bool type_is_field_integer(const struct type *type);
+const struct type *type_field_integer(unsigned width, bool is_unsigned);
 /* Includes a fixed enum compatible with bool. */
 bool type_is_boolean(const struct type *type);
 bool type_is_floating(const struct type *type);

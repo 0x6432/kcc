@@ -274,11 +274,20 @@ def main():
         """)
         object_file(d/'ordinary_wide.c',d/'ordinary_wide.o','kcc')
         run([HOST,d/'ordinary_wide.o','-o',d/'ordinary_wide']); run([d/'ordinary_wide'])
-        # Wide enum field rank follows the same explicit-cast boundary as long.
-        (d/'wide_guard.c').write_text('enum E : long { A }; struct S { enum E x:40; }; int f(struct S s){ return s.x+1; }')
-        rejected=subprocess.run([str(KCC),str(d/'wide_guard.c')],text=True,capture_output=True)
-        if rejected.returncode==0 or 'wide bit-field operation requires an explicit cast' not in rejected.stderr:
-            raise AssertionError((rejected.returncode,rejected.stderr))
+        # Uncast arithmetic on wide enum fields uses width-specific GCC-like
+        # extended integer types, including wrap and mixed-rank conversions.
+        (d/'wide_operations.c').write_text(r"""
+        enum E : unsigned long { ZERO=0, MAX=8589934591UL };
+        struct S { enum E x:33; }; struct S g={MAX};
+        int main(void){ struct S s=g;
+          if (s.x+1 != 0 || (s.x+1UL)!=8589934592UL || ~s.x!=0) return 1;
+          s.x=7; s.x+=3; if(s.x!=10 || s.x*3!=30) return 2;
+          switch(s.x){case 10:break; default:return 3;}
+          return sizeof(+s.x)!=8;
+        }
+        """)
+        object_file(d/'wide_operations.c',d/'wide_operations.o','kcc')
+        run([HOST,d/'wide_operations.o','-o',d/'wide_operations']); run([d/'wide_operations'])
         for source in ['enum E : short { A }; struct S { enum E x:17; };',
                        'enum E : unsigned char { A }; struct S { enum E x:9; };',
                        'enum E : signed char { A }; struct S { enum E :9; int x; };',

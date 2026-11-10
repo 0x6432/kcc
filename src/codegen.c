@@ -114,7 +114,8 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	size_t result;
 	const char *instruction;
 
-	if (type_is_bitint(type) && !type_bitint_width_native(type_integer_width(type))) {
+	if ((type_is_bitint(type) || type_is_field_integer(type)) &&
+		!type_bitint_width_native(type_integer_width(type))) {
 		unsigned width = type_integer_width(type);
 		unsigned carrier = width <= 32 ? 32 : 64;
 		size_t shifted = codegen->next_temporary++;
@@ -1632,7 +1633,7 @@ static size_t codegen_expression(struct codegen *codegen,
 				node->operand->type->kind == type_kind_float ? "s_0.0" : node->operand->type->kind == type_kind_double ? "d_0.0" : "0");
 			break;
 		}
-		return type_is_bitint(expression->type) ?
+		return (type_is_bitint(expression->type) || type_is_field_integer(expression->type)) ?
 			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
 	}
 	case expression_binary: {
@@ -1646,7 +1647,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", temporary, qbe_type(expression->type),
 			binary_instruction(node->operation, node->left->type), left, right);
-		return type_is_bitint(expression->type) ?
+		return (type_is_bitint(expression->type) || type_is_field_integer(expression->type)) ?
 			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
 	}
 	case expression_pointer_offset: {
@@ -2515,6 +2516,16 @@ static int initializer_offset_order(const void *left, const void *right)
 	return (a->offset > b->offset) - (a->offset < b->offset);
 }
 
+static uint64_t field_integer_storage_bits(uint64_t bits, const struct type *type)
+{
+	if (type_is_field_integer(type) && !type_is_unsigned(type)) {
+		unsigned width = type_integer_width(type);
+		if (bits & (UINT64_C(1) << (width - 1)))
+			bits |= UINT64_MAX << width;
+	}
+	return bits;
+}
+
 static void codegen_static_initializer(struct codegen *codegen, const struct ast_initializer_plan *plan)
 {
 	const struct ast_initializer_plan_entry **entries = NULL;
@@ -2611,7 +2622,7 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 			assert(entry->source_offset <= 8 && entry->length <= 8 - entry->source_offset);
 			/* Byte slices preserve explicitly overridden scalar storage too;
 			 * target representation is Linux amd64 little endian. */
-			uint64_t bits = constant->bits;
+			uint64_t bits = field_integer_storage_bits(constant->bits, entry->type);
 			if (type_is_bitint(entry->type) && type_integer_width(entry->type) < 64)
 				bits &= (UINT64_C(1) << type_integer_width(entry->type)) - 1;
 			for (size_t j = 0; j < entry->length; j++)
@@ -2677,7 +2688,7 @@ static bool codegen_translation_unit_body(FILE *stream, const struct ast_transla
 				case static_data_integer:
 					assert(type_is_integer(object->type) || object->type->kind == type_kind_pointer);
 					emit(&data_codegen, "%s %ju }\n", encoding,
-						(uintmax_t)object->initializer_value.integer_bits);
+						(uintmax_t)field_integer_storage_bits(object->initializer_value.integer_bits, object->type));
 					break;
 				case static_data_floating:
 					assert(type_is_floating(object->type));
