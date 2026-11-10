@@ -2,11 +2,11 @@
 
 ## Extended-integer underlying types
 
-A fixed enum may use the target's width-specific extended integer type obtained
-from a 33–63-bit long-base field expression, for example
-`typedef typeof(+field) T; enum E : T { A=0 };`. Its size and alignment are
-eight bytes, while its range, rank, promotions, arithmetic, storage conversions
-and signed representation follow that extended type. Qualified copies, static
+A fixed enum may use a target width-specific extended integer type obtained
+from a partial-width field expression, for example
+`typedef typeof((0, field)) T; enum E : T { A=0 };`. Its size and alignment
+are 1, 2, 4 or 8 bytes according to the width, while its range, rank, promotions,
+arithmetic, storage conversions and signed representation follow that extended type. Qualified copies, static
 initializers, fixed/variadic calls and bit-fields up to the underlying width
 are supported. Different widths are not compatible merely because their types
 share a signedness. Direct `auto` inference from such fields uses the same

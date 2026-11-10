@@ -31,7 +31,7 @@ enum type_kind {
 	/* Width-aware non-native types; ABI uses separate safety gates. */
 	type_kind_bitint_other,
 	type_kind_ubitint_other,
-	/* GCC-compatible extended types of wide bit-field expressions. */
+	/* GCC-compatible extended types of partial-width bit-field expressions. */
 	type_kind_field_signed,
 	type_kind_field_unsigned,
 	type_kind_bool,

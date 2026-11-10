@@ -84,9 +84,16 @@ bits even when their byte offsets are not int-aligned.
 Taking a field's address, applying `sizeof`, `typeof` or `typeof_unqual`
 directly to it, and using it in an `offsetof` designator are rejected. Const
 fields are not modifiable, and alignment specifiers on fields are rejected.
-Unpromoted narrow field values in `_Generic` controls are rejected because
-host compilers differ on their compatible type; `_Generic(+field, ...)` is
-supported. Ordinary expressions formed from fields follow existing rules.
+Unpromoted partial-width field values follow the GCC model in `_Generic`,
+`typeof` of a non-field expression such as `typeof((0, field))`, `sizeof` of
+such an expression, and `auto` inference. Boolean fields use `bool`; widths
+8, 16 and 32 use the corresponding signed or unsigned character, short or
+int type. Other widths below 32 use distinct width-specific extended integer
+types with 1-, 2- or 4-byte storage as appropriate; they promote to `int` in
+integer-promotion contexts. Width-specific types can be named using `typeof`
+and used in declarations and fixed-enum underlying types. Clang's choices
+can differ. Direct `sizeof(field)` and `typeof(field)` remain forbidden.
+Ordinary expressions formed from fields follow existing rules.
 
 ## Explicit boundaries
 
@@ -119,7 +126,10 @@ checks 868 layouts with widths 33–63, prefixes 1–7 and signed/unsigned long 
 long-long base types in both host/KCC directions, plus union and nested records.
 `tests/test_named_wide_bit_fields.py` checks 868 named width/prefix/base
 combinations in both host/KCC directions, plus unions, nested records, calls,
-updates and explicit semantic guards. `tests/test_wide_bit_field_ops.py` exercises
+updates and explicit semantic guards. `tests/test_narrow_field_expressions.py` covers 352 primitive and enum cases,
+GCC primitive-field expression comparisons, and separate-object GCC/KCC fixed
+and variadic calls for representative widths. Fixed enums use surrogates for
+native comparisons. `tests/test_wide_bit_field_ops.py` exercises
 248 integer and fixed-enum expression cases across widths 33–63, including
 GCC primitive-field comparison, mixed integer ranks, `typeof`, `_Generic`,
 variadic arguments, static representation and cross-object GCC/KCC calls in

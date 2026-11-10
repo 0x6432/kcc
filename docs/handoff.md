@@ -19,8 +19,10 @@ that exact commit; it does not by itself approve M17 or establish C23 conformanc
 
 ## Current B1/B2 implementation increment
 
-Fixed enum underlying types now also include the target's 33–63-bit
-width-specific extended integers. These enum objects and fields use correct
+Unpromoted narrow fields now use GCC-compatible value types in `_Generic`,
+`typeof` of non-field expressions, `sizeof` and `auto`; direct `sizeof` or
+`typeof` of a bit-field remains forbidden. Fixed enum underlying types also
+include the target's width-specific extended integers. These enum objects and fields use correct
 size/alignment, conversions, signed static representation and scalar ABI;
 `auto` inference from wide fields preserves the width-specific type. GCC 11
 primitive-surrogate interoperability is not native C23 enum validation. See

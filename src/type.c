@@ -73,7 +73,7 @@ bool type_uses_field_integer_representation(const struct type *type)
 
 const struct type *type_field_integer(unsigned width, bool is_unsigned)
 {
-	assert(width > 32 && width < 64);
+	assert(width > 0 && width < 64);
 	return is_unsigned ? &unsigned_fields[width].type : &signed_fields[width].type;
 }
 
@@ -216,7 +216,10 @@ uint64_t type_object_size(const struct type *type)
 		const struct type *base = ((const struct enum_type *)type)->definition->underlying;
 		return type_object_size(base ? base : &type_int);
 	}
-	if (type_is_field_integer(type)) return 8;
+	if (type_is_field_integer(type)) {
+		unsigned width = type_integer_width(type);
+		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
+	}
 	if (type_is_bitint(type)) {
 		unsigned width = type_integer_width(type);
 		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
@@ -235,7 +238,10 @@ unsigned type_object_alignment(const struct type *type)
 		const struct type *base = ((const struct enum_type *)type)->definition->underlying;
 		return type_object_alignment(base ? base : &type_int);
 	}
-	if (type_is_field_integer(type)) return 8;
+	if (type_is_field_integer(type)) {
+		unsigned width = type_integer_width(type);
+		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;
+	}
 	if (type_is_bitint(type)) {
 		unsigned width = type_integer_width(type);
 		return width <= 8 ? 1 : width <= 16 ? 2 : width <= 32 ? 4 : 8;

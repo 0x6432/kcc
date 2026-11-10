@@ -409,6 +409,26 @@ static bool wide_field_value(const struct ast_expression *expression)
 		type_object_size(member->type) == 8;
 }
 
+/* GCC represents unpromoted partial-width fields as the matching standard
+ * type at 8/16/32 bits, otherwise as a distinct width-specific integer type.
+ * Boolean fields retain their boolean type. No integer promotion occurs here. */
+static const struct type *field_expression_value_type(const struct ast_expression *expression)
+{
+	const struct record_member *field = field_value(expression);
+	unsigned width;
+	bool is_unsigned;
+
+	if (!field || type_is_bitint(field->type)) return expression->type;
+	if (type_is_boolean(field->type)) return &type_bool;
+	width = field->bit_width;
+	if (!narrow_field_value(expression) && !wide_field_value(expression)) return expression->type;
+	is_unsigned = type_is_unsigned(field->type);
+	if (width == 8) return is_unsigned ? &type_uchar : &type_schar;
+	if (width == 16) return is_unsigned ? &type_ushort : &type_short;
+	if (width == 32) return is_unsigned ? &type_uint : &type_int;
+	return type_field_integer(width, is_unsigned);
+}
+
 static const struct type *expression_integer_promotion(const struct ast_expression *expression)
 {
 	const struct record_member *field = field_value(expression);
@@ -1493,9 +1513,8 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		}
 		syntax->type = query->unqualify ?
-			unqualified_type(sema, wide_field_value(query->operand) ?
-				expression_integer_promotion(query->operand) : query->operand->type, syntax->location) :
-			(wide_field_value(query->operand) ? expression_integer_promotion(query->operand) : query->operand->type);
+			unqualified_type(sema, field_expression_value_type(query->operand), syntax->location) :
+			field_expression_value_type(query->operand);
 		if (!syntax->type)
 			return NULL;
 		break;
@@ -2607,15 +2626,8 @@ static bool sema_expression(struct sema *sema,
 		sema->unevaluated = saved;
 		if (!ok)
 			return false;
-		/* Narrow unpromoted fields still have host-dependent typing. Wide
-		 * fields use the documented GCC extended-integer model. */
-		if (narrow_field_value(node->control)) {
-			diagnostic_error(sema->diagnostics, node->control->location,
-				"generic selection of an unpromoted bit-field is not supported");
-			return false;
-		}
-		control_type = wide_field_value(node->control) ?
-			expression_integer_promotion(node->control) : node->control->type;
+		/* Use the target's unpromoted field type, not an integer promotion. */
+		control_type = field_expression_value_type(node->control);
 		for (struct ast_generic_association *item = node->associations; item; item = item->next) {
 			if (!item->syntax) {
 				if (fallback) {
@@ -3258,7 +3270,7 @@ static bool sema_expression(struct sema *sema,
 			diagnostic_error(sema->diagnostics, expression->location, "sizeof requires a complete object type");
 			return false;
 		}
-		node->size = type_object_size(node->operand->type);
+		node->size = type_object_size(field_expression_value_type(node->operand));
 		result_type = &type_ulong;
 		expression->depth = node->operand->depth + 1;
 		break;
@@ -5410,10 +5422,8 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	}
 	if (!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true))
 		return false;
-	/* Lvalue conversion of a wide field yields the target's width-specific
-	 * extended integer type, not its declared long/enum storage type. */
-	type = wide_field_value(local->initializer) ?
-		expression_integer_promotion(local->initializer) : local->initializer->type;
+	/* Infer the target's unpromoted value type after field lvalue conversion. */
+	type = field_expression_value_type(local->initializer);
 	if (type_contains_vm(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"inferred auto with variably modified type is not supported");

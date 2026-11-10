@@ -76,6 +76,7 @@ int main(void) {
  if (sizeof(struct Flex)!=4 || (char *)f.data-(char *)&f!=1 || f.a!=6 || f.b!=10) return 5;
  _BitInt(32) bi=10;
  if (bi+s.b!=15 || var(0,s.b)!=5 || var(0,s.d)!=-20) return 6;
+ typedef typeof((0,s.b)) Field; if(!_Generic(s.b,Field:1,default:0)) return 9;
  s.b=2; if(s.a!=7 || s.b!=2 || s.c!=400 || s.d!=-20 || s.end!=9) return 3;
  return 0;
 }
@@ -86,7 +87,6 @@ REJECT = [
  ('struct S { unsigned a:3,b:4; } s; typeof(s.b) x;', 'bit-field'),
  ('struct S { unsigned a:3,b:4; }; int a[__kcc_offsetof(struct S,b)];', 'bit-field'),
  ('struct S { unsigned a:3; const unsigned b:4; } s; void f(void){s.b=2;}', 'modifiable lvalue'),
- ('struct S { unsigned a:3,b:4; } s; int f(void){return _Generic(s.b,int:1,default:0);}', 'bit-field'),
  ('struct S { _BitInt(32) a:33; unsigned b:4; };', 'bit-field'),
  # A whole-record copy followed by a partial bit write is not representable by the bounded plan.
  ('struct S { unsigned a:3,b:4; }; struct O { struct S s; }; int f(struct S p) { struct O x = { .s=p, .s.b=3 }; return x.s.a; }', 'initializer'),

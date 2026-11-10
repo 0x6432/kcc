@@ -124,6 +124,7 @@ int main(void) {
   struct P p = { .a={5}, .b={-8}, .c={10}, .a={6} };
   if (global.a!=4 || global.b!=-7 || global.c!=9) return 1;
   if (p.a!=6 || p.b!=-8 || p.c!=10) return 2;
+  if (!_Generic(p.a, unsigned char:1, default:0)) return 8;
   p.b=32768; if (p.b!=-32768 || p.a!=6 || p.c!=10) return 3;
   return 0;
 }
@@ -138,7 +139,6 @@ REJECT = [
     'struct S { unsigned a:8; } s; int n[sizeof(s.a)];',
     'struct S { unsigned a:8; }; int n[__kcc_offsetof(struct S, a)];',
     'struct S { const unsigned a:8; } s; void f(void) { s.a=1; }',
-    'struct S { unsigned a:8; } s; int f(void) { return _Generic(s.a, unsigned: 1, default: 0); }',
 ]
 
 def width_matrix(d):
