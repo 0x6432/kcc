@@ -1,4 +1,21 @@
-# Current handoff — M17 validation recovery
+# Current handoff — implementation and validation
+
+## Current execution direction
+
+The primary roadmap is now grouped into the larger B1–B5 implementation batches
+in `milestones.md`. Prioritize substantive implementation, starting with the
+remaining B1 enum/alignment and declarator gaps; group related work instead of
+stopping for a separate release cycle after every small M-number. Focused tests
+accompany each increment, while broad validation is organized around batch
+checkpoints. Unrelated implementation may proceed while M17 approval is pending;
+its recorded release gates remain required before claiming M17 approval. Do not
+remove tests, hide failures, or count gaps as passes. Historical sequencing and
+branch instructions below do not override this direction.
+
+CI for commit `5f593e35709d25ab16fcdb86fedec9a62e0ac943` passed all five
+GitHub jobs (GCC and Clang normal/sanitized, plus fuzz) in
+https://github.com/0x6432/kcc/actions/runs/42823291407. That result applies to
+that exact commit; it does not by itself approve M17 or establish C23 conformance.
 
 ## Current implementation lane
 
@@ -265,7 +282,8 @@ interactions assigned explicitly to their later milestones. M20 ordinary
 floating types and M21 variadic/aggregate ABI require substantive implementation
 and positive, negative, AST, runtime and host interoperability evidence.
 `long double` remains M24g; it must not be substituted with `double`.
-Do not implement a later milestone before the preceding milestone's gates pass.
+This earlier sequencing rule is superseded by the current execution direction
+above; release gates still apply to the milestone being approved.
 
 ## Byte-exact legacy promotion repair
 

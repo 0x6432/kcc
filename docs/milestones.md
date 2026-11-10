@@ -1,8 +1,45 @@
-# Milestone ledger
+# Milestone roadmap
 
-Each milestone ends in a dedicated tested commit and push. Completion records
-must state tests, limitations, component changes and remote checkpoint status.
-Do not implement a later milestone just to hide a failure in an earlier one.
+## Execution direction: larger implementation milestones
+
+Work in the larger deliverable batches below, rather than treating every small
+feature slice as a separate project. Prioritize implementing usable language
+and runtime functionality; use the existing M-numbers as sub-items and history,
+not as a requirement to stop after each small increment. Related work across
+milestones may proceed together. Start with remaining foundational language
+work in B1, including the documented enum/alignment and declarator gaps; move
+on to other batches when a dependency or useful implementation opportunity
+makes that more effective. M17's separate approval work must not freeze unrelated
+implementation.
+
+| Batch | Deliverable | Completion criteria |
+| --- | --- | --- |
+| B1: Core language | Finish the supported-target baseline for pointers, declarators, initializers, enums, alignment and control flow (M13–M19). | The documented scope has end-to-end compiler/runtime coverage, multi-translation-unit and native interoperability checks where relevant, and no unresolved blockers within that scope. M17 is approved only when its own recorded gates are satisfied. |
+| B2: Practical data and calls | Extend floating-point, variadics, aggregate calls/returns, bit-fields and flexible arrays together (M20–M22). | Supported x86-64 SysV programs compile and execute, with bidirectional native ABI checks, constraints and documented remaining limits. Do not substitute double for long double. |
+| B3: C23 language and types | Implement remaining C23 declarations, attributes and preprocessing, bit-precise types, atomics, VLAs, complex types and long double/floating environment (M23–M24). | Each included feature has working parser, semantics and lowering/runtime support as applicable, with cross-feature and target ABI/concurrency coverage; unsupported behavior is explicit. |
+| B4: Hosted environment and conformance | Complete the intended predefined environment, compiler headers and runtime helpers, target libc integration and language/library audit (M25). | The supported host and library are specified; representative hosted programs build and run; a clause-mapped audit distinguishes verified features, limitations and missing support. Claim C23 conformance only if the audit and required evidence justify it. |
+| B5: Self-hosting | Compile KCC with itself and establish a repeatable bootstrap (M26). | Bootstrap stages build and run, stage comparisons and representative compiler/runtime tests pass, and the reproducible process is documented. |
+
+### Working and completion rules
+
+- Make substantive implementation progress within a batch. Group closely related
+  changes in useful increments; a small sub-item is not a separate release gate.
+- Add focused positive and negative tests with each implementation increment;
+  run broader normal, sanitizer, interoperability and fuzz checks at appropriate
+  batch checkpoints and before declaring the batch complete. Fix regressions
+  instead of disabling tests or counting unavailable checks as passes.
+- Preserve exact source/commit and toolchain evidence for release claims. Existing
+  strict release requirements, including M17's independent review and validation,
+  are not waived or silently relabeled by this reorganization.
+- Keep scope, limitations, dependencies and remaining work current. Completion
+  means the stated functionality and its acceptance evidence are done, not merely
+  that a build or an individual CI run passed.
+
+The original milestone IDs, detailed statuses and historical completion records
+below remain the source of granular tracking. They are not a reason to pause
+implementation between every small sub-item.
+
+## Detailed milestone ledger (sub-items and history)
 
 **Implementation update (2026-11-06):** The table below is a historical ledger,
 not an up-to-date release gate. Recent feature-branch checkpoints also implement
@@ -62,10 +99,10 @@ conformance is not claimed.
 | M25d | Language/library conformance audit | Published unsupported/validated list; no premature full-C23 claim | planned |
 | M26 | Self-host and bootstrap | Compile compiler with itself, compare bootstrap stages | planned |
 
-M23-M25 are now split into independently testable batches. Their exact grammar,
-runtime and ABI designs are reviewed before their implementation, not guessed
-in early code. Any newly discovered standard feature is assigned a milestone
-before the audit can be considered complete.
+M23–M25 retain independently testable sub-items under the larger B3–B4
+batches. Design grammar, runtime and ABI changes before implementing them;
+assign newly discovered standard features to a batch and a tracked sub-item
+before the conformance audit can be considered complete.
 
 ## Test policy
 
