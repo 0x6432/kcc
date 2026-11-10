@@ -397,7 +397,7 @@ static const struct record_member *narrow_field_value(const struct ast_expressio
 {
 	const struct record_member *member = field_value(expression);
 	return member && !type_is_bitint(member->type) && member->bit_width && (member->bit_width < 32 ||
-		(member->bit_width == 32 && type_value_width(member->type) == 64)) ? member : NULL;
+		(member->bit_width == 32 && type_object_size(member->type) == 8)) ? member : NULL;
 }
 
 /* Follow GCC's width-specific extended integer model; Clang instead treats
@@ -406,7 +406,7 @@ static bool wide_field_value(const struct ast_expression *expression)
 {
 	const struct record_member *member = field_value(expression);
 	return member && !type_is_bitint(member->type) && member->bit_width > 32 && member->bit_width < 64 &&
-		type_value_width(member->type) == 64;
+		type_object_size(member->type) == 8;
 }
 
 static const struct type *expression_integer_promotion(const struct ast_expression *expression)
@@ -712,8 +712,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				field_type->kind != type_kind_short && field_type->kind != type_kind_ushort &&
 				field_type->kind != type_kind_long && field_type->kind != type_kind_ulong &&
 				field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long &&
-				!type_is_bitint(field_type)) ||
-				(type_is_bitint(field_type) && width.bits > type_integer_width(field_type)) ||
+				!type_is_bitint(field_type) && !type_is_field_integer(field_type)) ||
+				((type_is_bitint(field_type) || type_is_field_integer(field_type)) &&
+				 width.bits > type_integer_width(field_type)) ||
 				(type->qualifiers & ~type_qualifier_const) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 64 ||
@@ -5409,7 +5410,10 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	}
 	if (!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true))
 		return false;
-	type = local->initializer->type;
+	/* Lvalue conversion of a wide field yields the target's width-specific
+	 * extended integer type, not its declared long/enum storage type. */
+	type = wide_field_value(local->initializer) ?
+		expression_integer_promotion(local->initializer) : local->initializer->type;
 	if (type_contains_vm(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"inferred auto with variably modified type is not supported");

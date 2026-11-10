@@ -77,6 +77,22 @@ def main():
           if(a[g.u-1]!=12 || sizeof(typeof((0,g.u)))!=8) return 3;
           return 0; }
         """)
+        (d/'auto.c').write_text(r"""
+        enum E : signed long { E0=0 }; enum F : unsigned long { F0=0 };
+        struct S { unsigned long u:33; enum E s:40; enum F e:33; } g={8589934591UL,-3,8589934591UL};
+        typedef typeof(+g.u) U; typedef typeof(+g.s) S;
+        int calls; struct S *once(void) { calls++; return &g; }
+        int main(void) {
+          auto u=once()->u; auto s=g.s; auto e=g.e; const auto c=g.u;
+          if(calls!=1 || !_Generic(u,U:1,default:0) || !_Generic(e,U:1,default:0)) return 1;
+          if(!_Generic(s,S:1,default:0) || !_Generic(c,U:1,default:0)) return 2;
+          if(u+1!=0 || e+1!=0 || s!=-3 || c!=8589934591UL) return 3;
+          u=2; s=-8; if(u!=2 || s!=-8) return 4;
+          return 0;
+        }
+        """)
+        object_file(d/'auto.c',d/'auto.o','kcc')
+        run([HOST,d/'auto.o','-o',d/'auto']); run([d/'auto'])
         (d/'mixed-bitint.c').write_text(r"""
         struct S { unsigned long u:33; signed long s:40; unsigned long v:40; } g;
         typedef typeof(+g.u) U; typedef typeof(+g.v) V;

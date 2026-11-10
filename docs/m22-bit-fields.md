@@ -63,7 +63,8 @@ rank falls between the standard int and long types and, as an implementation
 choice, exceeds `_BitInt` of the same width. Unsigned arithmetic wraps at the
 field width; mixing in a higher-ranked standard type can change the result.
 `_Generic` can match that type through a `typeof(+field)` typedef, and
-`typeof` of an ordinary expression formed from a field is supported. Values of
+`typeof` of an ordinary expression formed from a field is supported, as is
+`auto` inference directly from one. Values of
 these types occupy eight bytes, with signed values sign-extended in storage.
 Direct `typeof(field)` and `sizeof(field)` remain invalid.
 Bit-precise fields retain their declared `_BitInt` type and are exempt from

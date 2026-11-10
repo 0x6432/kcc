@@ -62,6 +62,15 @@ bool type_is_field_integer(const struct type *type)
 	return type->kind == type_kind_field_signed || type->kind == type_kind_field_unsigned;
 }
 
+bool type_uses_field_integer_representation(const struct type *type)
+{
+	if (type->kind == type_kind_enum) {
+		const struct type *base = ((const struct enum_type *)type)->definition->underlying;
+		return base && type_is_field_integer(base);
+	}
+	return type_is_field_integer(type);
+}
+
 const struct type *type_field_integer(unsigned width, bool is_unsigned)
 {
 	assert(width > 32 && width < 64);
@@ -203,6 +212,10 @@ uint64_t type_object_size(const struct type *type)
 
 		return type_object_size(array->element) * array->count;
 	}
+	if (type->kind == type_kind_enum) {
+		const struct type *base = ((const struct enum_type *)type)->definition->underlying;
+		return type_object_size(base ? base : &type_int);
+	}
 	if (type_is_field_integer(type)) return 8;
 	if (type_is_bitint(type)) {
 		unsigned width = type_integer_width(type);
@@ -218,6 +231,10 @@ unsigned type_object_alignment(const struct type *type)
 		return type_record_definition(type)->alignment;
 	if (type->kind == type_kind_array)
 		return type_object_alignment(((const struct array_type *)type)->element);
+	if (type->kind == type_kind_enum) {
+		const struct type *base = ((const struct enum_type *)type)->definition->underlying;
+		return type_object_alignment(base ? base : &type_int);
+	}
 	if (type_is_field_integer(type)) return 8;
 	if (type_is_bitint(type)) {
 		unsigned width = type_integer_width(type);
@@ -534,7 +551,9 @@ static bool compatible_types(const struct type *left, const struct type *right,
 			((const struct enum_type *)enumeration)->definition->underlying : NULL;
 		if (!underlying)
 			underlying = &type_int;
-		return enumeration && !require_same_type && underlying->kind == other->kind;
+		return enumeration && !require_same_type && underlying->kind == other->kind &&
+			(!type_is_field_integer(underlying) ||
+			 type_integer_width(underlying) == type_integer_width(other));
 	}
 	if (left->kind == type_kind_enum) {
 		const struct enum_definition *a = ((const struct enum_type *)left)->definition;
@@ -784,8 +803,9 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			field_type->kind != type_kind_short && field_type->kind != type_kind_ushort &&
 			field_type->kind != type_kind_long && field_type->kind != type_kind_ulong &&
 			field_type->kind != type_kind_long_long && field_type->kind != type_kind_ulong_long &&
-			!type_is_bitint(field_type)) ||
-			(type_is_bitint(field_type) && member->bit_width > type_integer_width(field_type)) ||
+			!type_is_bitint(field_type) && !type_is_field_integer(field_type)) ||
+			((type_is_bitint(field_type) || type_is_field_integer(field_type)) &&
+			 member->bit_width > type_integer_width(field_type)) ||
 			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 64 ||
 			((field_type->kind == type_kind_int || field_type->kind == type_kind_uint) &&
 			member->bit_width > 32) ||

@@ -117,14 +117,14 @@ def narrow_fixed_controls(d, base, signed):
         source = text if compiler == 'kcc' else (text.replace(enum, f'typedef {base} ET;\n')
                     .replace('typedef enum E ET;', '').replace('enum E a:', base+' a:')
                     .replace('enum E :0', base+' :0'))
-        (d/'controls.c').write_text(source)
+        (d/'controls.c').write_text(source+'\n')
         object_file(d/'controls.c', d/'controls.o', compiler)
         run([HOST, d/'controls.o', '-o', d/'controls'])
         run([d/'controls'])
 
 def wide_fixed_matrix(d, prefix, base, signed):
-    # Compare all 64 widths with primitive field surrogates. Cast reads so
-    # the existing 33–63-bit rank-sensitive operation guard is respected.
+    # Compare all 64 widths with primitive field surrogates. Cast reads
+    # so expression differences between GCC and Clang do not affect layout checks.
     enum = f'enum E : {base} {{ E0=0, E1=1 }};\n'
     decl, owner, checks = [], [], []
     initial, updated = ('-1', '0') if signed else ('0', '1')
@@ -176,8 +176,8 @@ def bool_fixed_controls(d):
     def surrogate(source):
         return source.replace(enum, '').replace('typedef enum E ET;', 'typedef _Bool ET;').replace('enum E ', '_Bool ')
     for a,b in [('host','kcc'), ('kcc','host')]:
-        (d/'owner.c').write_text(surrogate(owner) if a=='host' else owner)
-        (d/'companion.c').write_text(surrogate(companion) if b=='host' else companion)
+        (d/'owner.c').write_text((surrogate(owner) if a=='host' else owner)+'\n')
+        (d/'companion.c').write_text((surrogate(companion) if b=='host' else companion)+'\n')
         object_file(d/'owner.c',d/'owner.o',a); object_file(d/'companion.c',d/'companion.o',b)
         run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
 

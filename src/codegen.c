@@ -114,7 +114,7 @@ static size_t codegen_canonicalize(struct codegen *codegen, size_t value,
 	size_t result;
 	const char *instruction;
 
-	if ((type_is_bitint(type) || type_is_field_integer(type)) &&
+	if ((type_is_bitint(type) || type_uses_field_integer_representation(type)) &&
 		!type_bitint_width_native(type_integer_width(type))) {
 		unsigned width = type_integer_width(type);
 		unsigned carrier = width <= 32 ? 32 : 64;
@@ -1633,7 +1633,7 @@ static size_t codegen_expression(struct codegen *codegen,
 				node->operand->type->kind == type_kind_float ? "s_0.0" : node->operand->type->kind == type_kind_double ? "d_0.0" : "0");
 			break;
 		}
-		return (type_is_bitint(expression->type) || type_is_field_integer(expression->type)) ?
+		return (type_is_bitint(expression->type) || type_uses_field_integer_representation(expression->type)) ?
 			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
 	}
 	case expression_binary: {
@@ -1647,7 +1647,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu, %%t%zu\n", temporary, qbe_type(expression->type),
 			binary_instruction(node->operation, node->left->type), left, right);
-		return (type_is_bitint(expression->type) || type_is_field_integer(expression->type)) ?
+		return (type_is_bitint(expression->type) || type_uses_field_integer_representation(expression->type)) ?
 			codegen_canonicalize(codegen, temporary, expression->type) : temporary;
 	}
 	case expression_pointer_offset: {
@@ -2518,7 +2518,7 @@ static int initializer_offset_order(const void *left, const void *right)
 
 static uint64_t field_integer_storage_bits(uint64_t bits, const struct type *type)
 {
-	if (type_is_field_integer(type) && !type_is_unsigned(type)) {
+	if (type_uses_field_integer_representation(type) && !type_is_unsigned(type)) {
 		unsigned width = type_integer_width(type);
 		if (bits & (UINT64_C(1) << (width - 1)))
 			bits |= UINT64_MAX << width;

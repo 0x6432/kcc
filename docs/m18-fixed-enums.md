@@ -1,5 +1,26 @@
 # Fixed underlying enums: implementation checkpoint
 
+## Extended-integer underlying types
+
+A fixed enum may use the target's width-specific extended integer type obtained
+from a 33–63-bit long-base field expression, for example
+`typedef typeof(+field) T; enum E : T { A=0 };`. Its size and alignment are
+eight bytes, while its range, rank, promotions, arithmetic, storage conversions
+and signed representation follow that extended type. Qualified copies, static
+initializers, fixed/variadic calls and bit-fields up to the underlying width
+are supported. Different widths are not compatible merely because their types
+share a signedness. Direct `auto` inference from such fields uses the same
+width-specific type after lvalue conversion.
+
+`tests/test_enum_extended_underlying.py` exercises all 62 signed/unsigned
+widths and cross-object fixed and variadic ABI with GCC primitive surrogates.
+GCC 11 cannot compile the C23 fixed-enum syntax; surrogate results verify
+representation and calling convention, not native enum syntax or semantic
+agreement. These additions do not complete M18, general enums or C23.
+
+The older checkpoints below preserve their original status and are superseded
+where later sections describe expanded functionality.
+
 This incremental change adds a bounded C23 fixed-underlying-enum slice to the
 ordinary enum implementation. It is not a tested checkpoint.
 

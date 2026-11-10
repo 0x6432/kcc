@@ -19,6 +19,13 @@ that exact commit; it does not by itself approve M17 or establish C23 conformanc
 
 ## Current B1/B2 implementation increment
 
+Fixed enum underlying types now also include the target's 33–63-bit
+width-specific extended integers. These enum objects and fields use correct
+size/alignment, conversions, signed static representation and scalar ABI;
+`auto` inference from wide fields preserves the width-specific type. GCC 11
+primitive-surrogate interoperability is not native C23 enum validation. See
+`m18-fixed-enums.md` and `m22-bit-fields.md` for scope and limitations.
+
 Named and unnamed enum bit-fields now support every currently supported standard
 integer underlying representation, including boolean, character, short, int,
 long and long long (ordinary wide enums and fixed-underlying enums). Fields

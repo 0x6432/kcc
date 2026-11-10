@@ -197,6 +197,7 @@ bool type_bitint_width_native(unsigned width);
 bool type_is_bitint(const struct type *type);
 bool type_is_integer(const struct type *type);
 bool type_is_field_integer(const struct type *type);
+bool type_uses_field_integer_representation(const struct type *type);
 const struct type *type_field_integer(unsigned width, bool is_unsigned);
 /* Includes a fixed enum compatible with bool. */
 bool type_is_boolean(const struct type *type);
