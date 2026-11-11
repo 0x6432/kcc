@@ -2,7 +2,8 @@
 
 KCC supports explicit-type integer, finite floating and pointer `constexpr` object definitions at file and
 block scope, including `static` and block-scope `register`; inferred `constexpr auto` is supported for integer, finite floating and null-pointer values at file and block
-scope, including block-scope `static`. Enum and supported `_BitInt`
+scope, including block-scope `static`; direct constexpr record values can also
+be used for inferred constexpr records. Enum and supported `_BitInt`
 integer types are included. The object is const-qualified and retains actual
 storage and addressability; file-scope definitions have internal linkage.
 Integer named constants can participate in constant expressions, including
@@ -45,8 +46,7 @@ in supported constant expressions. They retain real const-qualified storage;
 initializer and representability rules are the same as constexpr objects.
 
 This is not complete C23 constexpr support. Unions, structs containing unions,
-flexible arrays, general aggregate copy expressions, aggregate inferred
-auto, non-ASCII narrow strings targeting char or signed char, non-finite floating
+flexible arrays, general aggregate copy expressions, non-ASCII narrow strings targeting char or signed char, non-finite floating
 values and non-constexpr file-scope or static inferred auto remain unsupported.
 The compiler's existing type, initializer, ABI and resource limits also apply.
 `tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, `tests/test_constexpr_floating.py`, `tests/test_constexpr_aggregates.py`, and `tests/test_constexpr_literals.py` cover executable cross-feature examples,

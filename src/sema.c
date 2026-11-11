@@ -5751,6 +5751,25 @@ static struct ast_initializer_plan *sema_initializer(struct sema *sema,
 	return builder.plan;
 }
 
+/* Inferred record initializers have already been semantically checked while
+ * determining their type; do not analyze their expression a second time. */
+static struct ast_initializer_plan *sema_checked_constexpr_record_initializer(struct sema *sema,
+	const struct type *type, const struct ast_initializer *syntax, struct ast_expression *expression, bool is_static)
+{
+	struct initializer_builder builder = { .sema = sema, .is_static = is_static, .is_constexpr = true };
+	if (!syntax || !type_is_complete_object(type) || type_object_size(type) > ast_max_local_storage) {
+		diagnostic_error(sema->diagnostics, expression->location, "inferred constexpr record initializer exceeds object limits");
+		return NULL;
+	}
+	builder.plan = initializer_alloc(&builder, sizeof(*builder.plan), syntax->location);
+	if (!builder.plan) return NULL;
+	builder.plan->type = type;
+	builder.plan->size = type_object_size(type);
+	builder.plan->zero_fill = true;
+	if (!initializer_constexpr_record_copy(&builder, type, 0, expression, syntax)) return NULL;
+	return builder.plan;
+}
+
 /* Reserve an ordinary name before any initializer is analyzed. */
 static bool reserve_local_name(struct sema *sema, struct ast_local_declaration *local)
 {
@@ -5928,10 +5947,15 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 				"constexpr currently requires a non-atomic, non-volatile scalar object");
 			return false;
 		}
-		if (!(type = constexpr_scalar_type(sema, type, local->name.location)) ||
-			!constexpr_scalar_value(sema, local->initializer, type, &bits))
-			return false;
-		local->constexpr_bits = bits;
+		if (type_is_record(type)) {
+			if (!(type = constexpr_aggregate_type(sema, type, local->name.location)))
+				return false;
+		} else {
+			if (!(type = constexpr_scalar_type(sema, type, local->name.location)) ||
+				!constexpr_scalar_value(sema, local->initializer, type, &bits))
+				return false;
+			local->constexpr_bits = bits;
+		}
 	}
 	type = type_qualified(sema->arena, type, syntax->qualifiers | (local->is_constexpr ? type_qualifier_const : 0));
 	if (!type) {
@@ -5943,6 +5967,14 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if (local->is_static && local->is_constexpr)
 		return check_object_alignment(sema, type, local->alignment, local->name.location) &&
 			sema_block_storage(sema, local, type);
+	if (local->is_constexpr && type_is_record(type)) {
+		local->initializer_plan = sema_checked_constexpr_record_initializer(sema, type,
+			local->initializer_syntax, local->initializer, false);
+		if (!local->initializer_plan || !complete_local_storage(sema, local, type))
+			return false;
+		local->constexpr_complete = true;
+		return true;
+	}
 	if (!complete_local_storage(sema, local, type))
 		return false;
 	target = unqualified_type(sema, type, local->name.location);
@@ -7115,7 +7147,9 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		/* Prior visible complete declarations supply the bound, not future
 		 * initializer inference. Keep written syntax/type graphs immutable. */
 		const struct type *visible = sema->scope ? type : symbol->file_type;
-		struct ast_initializer_plan *plan = sema_initializer(sema, visible, syntax, true, is_constexpr, NULL);
+		struct ast_initializer_plan *plan = initializer_checked && is_constexpr && type_is_record(visible) ?
+			sema_checked_constexpr_record_initializer(sema, visible, syntax, *initializer, true) :
+			sema_initializer(sema, visible, syntax, true, is_constexpr, NULL);
 		const struct type *composite;
 		if (!plan)
 			goto rollback;
@@ -7585,7 +7619,9 @@ static bool sema_external_object_declaration(struct sema *sema,
 		if (!checked)
 			return false;
 		type = field_expression_value_type(declaration->initializer);
-		if (!(type = constexpr_scalar_type(sema, type, declaration->name.location)))
+		type = type_is_record(type) ? constexpr_aggregate_type(sema, type, declaration->name.location) :
+			constexpr_scalar_type(sema, type, declaration->name.location);
+		if (!type)
 			return false;
 		type = type_qualified(sema->arena, type, type->qualifiers | syntax->qualifiers);
 		if (!type) {
