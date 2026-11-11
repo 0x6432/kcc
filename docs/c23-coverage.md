@@ -1,6 +1,6 @@
 # C23 coverage
 
-Current constexpr support includes integer, finite floating and null-pointer scalar objects, and a bounded explicit-type array and struct subset including bit-fields, plus corresponding compound literals; see `m23h-constexpr-integers.md` for scope and remaining gaps. Earlier references to constexpr being entirely unsupported are historical.
+Current constexpr support includes integer, finite floating and null-pointer scalar objects, and a bounded explicit-type array, struct and union subset including bit-fields, plus corresponding compound literals; see `m23h-constexpr-integers.md` for scope and remaining gaps. Earlier references to constexpr being entirely unsupported are historical.
 
 Current development includes bounded M17 initializers, enums, alignment,
 float/double, scalar variadics, flexible arrays, VLAs, atomics, location macros

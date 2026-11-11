@@ -929,12 +929,12 @@ static bool constexpr_aggregate_members(const struct type *type, unsigned depth,
 		return false;
 	if (type->kind == type_kind_array)
 		return constexpr_aggregate_members(((const struct array_type *)type)->element, depth + 1, work);
-	if (type->kind == type_kind_struct) {
+	if (type_is_record(type)) {
 		const struct record_definition *definition = type_record_definition(type);
 		if (!definition->complete)
 			return false;
 		for (const struct record_member *member = definition->members; member; member = member->next)
-			if (member->is_flexible ||
+			if (member->is_flexible || (member->anonymous && member->type->kind == type_kind_union) ||
 				!constexpr_aggregate_members(member->type, depth + 1, work))
 				return false;
 		return true;
@@ -949,7 +949,7 @@ static const struct type *constexpr_aggregate_type(struct sema *sema, const stru
 	size_t work = 0;
 	if (!constexpr_aggregate_members(type, 0, &work)) {
 		diagnostic_error(sema->diagnostics, location,
-			"constexpr aggregate requires supported non-volatile members without unions");
+			"constexpr aggregate requires supported non-volatile members without flexible arrays or anonymous unions");
 		return NULL;
 	}
 	type = type_qualified(sema->arena, type, type_qualifier_const);
@@ -4139,6 +4139,34 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
+/* Check each direct union selection on the path from the root object. */
+static bool constexpr_union_path_active(const struct ast_initializer_plan *plan,
+	const struct ast_member_expression *const *path, unsigned count)
+{
+	uint64_t parent_offset = 0;
+	while (count) {
+		const struct ast_member_expression *step = path[--count];
+		const struct type *parent_type = step->operand->type;
+		if (parent_type->kind == type_kind_union) {
+			const struct record_definition *definition = type_record_definition(parent_type);
+			const struct record_member *active = definition->members;
+			while (active && active->is_bit_field && !active->name.length)
+				active = active->next;
+			for (const struct ast_initializer_union_selection *selection = plan->unions; selection; selection = selection->next)
+				if (selection->offset == parent_offset && type_record_definition(selection->type) == definition) {
+					active = selection->member;
+					break;
+				}
+			if (active != step->member)
+				return false;
+		}
+		if (UINT64_MAX - parent_offset < step->offset)
+			return false;
+		parent_offset += step->offset;
+	}
+	return true;
+}
+
 bool sema_constexpr_member_value(const struct ast_expression *expression, struct static_data_value *value)
 {
 	if (expression->kind != expression_load)
@@ -4146,11 +4174,14 @@ bool sema_constexpr_member_value(const struct ast_expression *expression, struct
 	const struct ast_expression *operand = ((const struct ast_load_expression *)expression)->operand;
 	uint64_t offset = 0;
 	bool member_seen = false;
+	const struct ast_member_expression *path[ast_max_expression_depth];
+	unsigned path_count = 0;
 	const struct record_member *field = NULL;
 	while (operand->kind == expression_member) {
 		const struct ast_member_expression *member = (const struct ast_member_expression *)operand;
-		if (member->indirect || UINT64_MAX - offset < member->offset)
+		if (member->indirect || path_count == ast_max_expression_depth || UINT64_MAX - offset < member->offset)
 			return false;
+		path[path_count++] = member;
 		if (!member_seen && member->member->is_bit_field)
 			field = member->member;
 		offset += member->offset;
@@ -4172,6 +4203,8 @@ bool sema_constexpr_member_value(const struct ast_expression *expression, struct
 			plan = reference->object->initializer_plan;
 	}
 	if (!plan || !type_is_scalar(expression->type))
+		return false;
+	if (!constexpr_union_path_active(plan, path, path_count))
 		return false;
 	*value = (struct static_data_value) { .kind = type_is_floating(expression->type) ? static_data_floating :
 		(type_is_integer(expression->type) ? static_data_integer : static_data_null_pointer) };
@@ -4905,17 +4938,10 @@ struct initializer_path {
 	unsigned depth;
 };
 
-struct initializer_union_selection {
-	const struct type *type;
-	uint64_t offset;
-	const struct record_member *member;
-	struct initializer_union_selection *next;
-};
-
 struct initializer_builder {
 	struct sema *sema;
 	struct ast_initializer_plan *plan;
-	struct initializer_union_selection *unions;
+	struct ast_initializer_union_selection *unions;
 	uint64_t inferred_count;
 	bool is_static;
 	bool is_constexpr;
@@ -5075,7 +5101,7 @@ struct initializer_ancestry_memo {
 
 struct initializer_ancestry_query {
 	struct initializer_builder *builder;
-	const struct initializer_union_selection *selection;
+	const struct ast_initializer_union_selection *selection;
 	struct initializer_ancestry_memo *memo;
 	size_t states;
 	struct source_location location;
@@ -5104,7 +5130,7 @@ static enum initializer_ancestry_result initializer_contains_union(
 	struct initializer_ancestry_query *query, const struct type *type,
 	uint64_t offset, unsigned depth)
 {
-	const struct initializer_union_selection *selection = query->selection;
+	const struct ast_initializer_union_selection *selection = query->selection;
 	struct initializer_ancestry_entry *cached;
 	size_t slot;
 	if (!initializer_ancestry_step(query))
@@ -5177,10 +5203,10 @@ static enum initializer_ancestry_result initializer_contains_union(
 static bool initializer_forget_unions(struct initializer_builder *builder,
 	const struct type *type, uint64_t offset, struct source_location location)
 {
-	struct initializer_union_selection **slot = &builder->unions;
+	struct ast_initializer_union_selection **slot = &builder->unions;
 	uint64_t size = type_object_size(type);
 	while (*slot) {
-		struct initializer_union_selection *selection = *slot;
+		struct ast_initializer_union_selection *selection = *slot;
 		if (selection->offset < offset || selection->offset - offset >= size) {
 			slot = &selection->next;
 			continue;
@@ -5233,7 +5259,7 @@ static bool initializer_select_unions(struct initializer_builder *builder,
 	for (unsigned i = 0; i < path->depth; i++) {
 		const struct initializer_path_component *parent = &path->components[i];
 		const struct record_member *member = path->components[i + 1].member;
-		struct initializer_union_selection *selection;
+		struct ast_initializer_union_selection *selection;
 		if (parent->type->kind != type_kind_union)
 			continue;
 		for (selection = builder->unions; selection; selection = selection->next)
@@ -5249,7 +5275,7 @@ static bool initializer_select_unions(struct initializer_builder *builder,
 		selection = initializer_alloc(builder, sizeof(*selection), syntax->location);
 		if (!selection)
 			return false;
-		*selection = (struct initializer_union_selection) {
+		*selection = (struct ast_initializer_union_selection) {
 			.type = parent->type, .offset = parent->offset, .member = member, .next = builder->unions,
 		};
 		builder->unions = selection;
@@ -5453,6 +5479,22 @@ static void initializer_cache_constant(struct ast_initializer_constant *constant
 	}
 }
 
+/* Record-copy plans do not yet remap active union alternatives. */
+static bool constexpr_contains_union(const struct type *type, unsigned depth, size_t *work)
+{
+	if (++*work > 65536 || depth > 128)
+		return true;
+	if (type->kind == type_kind_union)
+		return true;
+	if (type->kind == type_kind_array)
+		return constexpr_contains_union(((const struct array_type *)type)->element, depth + 1, work);
+	if (type->kind == type_kind_struct)
+		for (const struct record_member *member = type_record_definition(type)->members; member; member = member->next)
+			if (constexpr_contains_union(member->type, depth + 1, work))
+				return true;
+	return false;
+}
+
 /* Resolve a direct constexpr record or record-member value to its immutable
  * initializer plan. Pointer indirection and runtime aggregate expressions do
  * not qualify. */
@@ -5463,28 +5505,30 @@ static const struct ast_initializer_plan *constexpr_record_source(
 		type_record_definition(expression->type) != type_record_definition(target))
 		return NULL;
 	const struct ast_expression *root = ((const struct ast_load_expression *)expression)->operand;
+	const struct ast_member_expression *path[ast_max_expression_depth];
+	unsigned path_count = 0;
+	const struct ast_initializer_plan *plan = NULL;
 	*offset = 0;
 	while (root->kind == expression_member) {
 		const struct ast_member_expression *member = (const struct ast_member_expression *)root;
-		if (member->indirect || UINT64_MAX - *offset < member->offset)
+		if (member->indirect || path_count == ast_max_expression_depth || UINT64_MAX - *offset < member->offset)
 			return NULL;
+		path[path_count++] = member;
 		*offset += member->offset;
 		root = member->operand;
 	}
 	if (root->kind == expression_compound_literal) {
 		const struct ast_compound_literal_expression *literal = (const struct ast_compound_literal_expression *)root;
-		return literal->is_constexpr ? literal->initializer_plan : NULL;
-	}
-	if (root->kind == expression_name) {
+		if (literal->is_constexpr) plan = literal->initializer_plan;
+	} else if (root->kind == expression_name) {
 		const struct ast_local_declaration *local = ((const struct ast_name_expression *)root)->declaration;
-		return local && local->is_constexpr && local->constexpr_complete ? local->initializer_plan : NULL;
-	}
-	if (root->kind == expression_external_object) {
+		if (local && local->is_constexpr && local->constexpr_complete) plan = local->initializer_plan;
+	} else if (root->kind == expression_external_object) {
 		const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)root;
-		return reference->is_constexpr_name && reference->object->is_constexpr && !reference->object->constexpr_in_progress ?
-			reference->object->initializer_plan : NULL;
+		if (reference->is_constexpr_name && reference->object->is_constexpr && !reference->object->constexpr_in_progress)
+			plan = reference->object->initializer_plan;
 	}
-	return NULL;
+	return plan && constexpr_union_path_active(plan, path, path_count) ? plan : NULL;
 }
 
 /* Materialize a source plan into the destination, preserving sparse strings and
@@ -5493,9 +5537,12 @@ static bool initializer_constexpr_record_copy(struct initializer_builder *builde
 	const struct type *target, uint64_t offset, const struct ast_expression *expression,
 	const struct ast_initializer *syntax)
 {
-	uint64_t source_offset;
+	uint64_t source_offset = 0;
 	const struct ast_initializer_plan *source = constexpr_record_source(expression, target, &source_offset);
 	uint64_t size = type_object_size(target);
+	size_t work = 0;
+	if (constexpr_contains_union(target, 0, &work))
+		return initializer_error(builder, syntax->location, "constexpr record copies containing unions are not supported yet");
 	if (!source || source_offset > source->size || size > source->size - source_offset)
 		return initializer_error(builder, syntax->location, "constexpr aggregate copy requires a direct constexpr record value of the same definition");
 	if (!initializer_clear(builder, target, offset, syntax))
@@ -5746,6 +5793,7 @@ static struct ast_initializer_plan *sema_initializer(struct sema *sema,
 		builder.plan->type = &completed->type;
 	}
 	builder.plan->size = type_object_size(builder.plan->type);
+	builder.plan->unions = builder.unions;
 	if (expression_depth)
 		*expression_depth = builder.expression_depth;
 	return builder.plan;

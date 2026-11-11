@@ -199,11 +199,20 @@ struct ast_initializer_plan_entry {
 	struct ast_initializer_plan_entry *next;
 };
 
+/* Selected union alternatives are retained for constexpr member evaluation. */
+struct ast_initializer_union_selection {
+	const struct type *type;
+	uint64_t offset;
+	const struct record_member *member;
+	struct ast_initializer_union_selection *next;
+};
+
 struct ast_initializer_plan {
 	const struct type *type;
 	uint64_t size;
 	struct ast_initializer_plan_entry *entries;
 	struct ast_initializer_plan_entry *tail;
+	struct ast_initializer_union_selection *unions;
 	size_t entry_count;
 	bool zero_fill;
 };
