@@ -896,6 +896,63 @@ static bool enum_value_bits(struct constant_result value, const struct type *tar
 	return true;
 }
 
+/* The current constexpr implementation supports integer objects only. Keep
+ * their identity and storage: only an lvalue-to-value load is a named constant. */
+static const struct type *constexpr_integer_type(struct sema *sema, const struct type *type,
+	struct source_location location)
+{
+	if (!type_is_integer(type) || (type->qualifiers & (type_qualifier_atomic |
+		type_qualifier_volatile | type_qualifier_restrict))) {
+		diagnostic_error(sema->diagnostics, location,
+			"constexpr currently requires a non-atomic, non-volatile integer object");
+		return NULL;
+	}
+	if (!type_is_complete_object(type)) {
+		diagnostic_error(sema->diagnostics, location, "constexpr requires a complete integer object type");
+		return NULL;
+	}
+	type = type_qualified(sema->arena, type, type->qualifiers | type_qualifier_const);
+	if (!type)
+		diagnostic_error(sema->diagnostics, location, "out of memory qualifying constexpr object");
+	return type;
+}
+
+static bool constexpr_initializer_expression(struct sema *sema, struct ast_expression **expression,
+	const struct ast_initializer *syntax, struct source_location location)
+{
+	while (syntax && syntax->kind == ast_initializer_list) {
+		if (syntax->entry_count != 1 || !syntax->entries || syntax->entries->designators) {
+			diagnostic_error(sema->diagnostics, location, "constexpr integer requires one initializer expression");
+			return false;
+		}
+		syntax = syntax->entries->value;
+	}
+	if (syntax)
+		*expression = syntax->expression;
+	if (!*expression) {
+		diagnostic_error(sema->diagnostics, location, "constexpr object requires an initializer");
+		return false;
+	}
+	return true;
+}
+
+static bool constexpr_integer_value(struct sema *sema, struct ast_expression *expression,
+	const struct type *target, uint64_t *bits)
+{
+	struct constant_result value = evaluate_integer_constant(expression);
+	if (value.status != constant_value) {
+		diagnostic_error(sema->diagnostics, value.location, value.status == constant_invalid ?
+			value.message : "constexpr integer initializer must be an integer constant expression");
+		return false;
+	}
+	if (!enum_value_bits(value, target, bits)) {
+		diagnostic_error(sema->diagnostics, expression->location,
+			"constexpr initializer is not exactly representable in its object type");
+		return false;
+	}
+	return true;
+}
+
 /* Our LP64 ordinary-enum policy uses signed long where possible and
  * unsigned long for larger nonnegative values. Reject a mixture for which
  * neither target integer type can represent every enumerator. */
@@ -3179,8 +3236,18 @@ static bool sema_expression(struct sema *sema,
 			result_type = &type_int;
 			break;
 		}
+		if (node->declaration && node->declaration->is_constexpr && !node->declaration->constexpr_complete) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"constexpr name is unavailable in its initializer");
+			return false;
+		}
 		object = node->declaration ? node->declaration->object_symbol :
 			visible_file_object(sema, node->name);
+		if (object && object->constexpr_in_progress) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"constexpr name is unavailable in its initializer");
+			return false;
+		}
 		if (!node->declaration || !node->declaration->enum_constant) {
 			struct function_symbol *referenced_function = node->declaration ?
 				node->declaration->function_symbol : visible_file_function(sema, node->name);
@@ -3203,6 +3270,8 @@ static bool sema_expression(struct sema *sema,
 					"out of memory creating external object reference");
 				return false;
 			}
+			reference->is_constexpr_name = node->declaration ?
+				node->declaration->is_constexpr : object->is_constexpr;
 			*expression_slot = expression = &reference->expression;
 			expression->is_lvalue = true;
 			result_type = node->declaration ? node->declaration->type : object->file_type;
@@ -5408,6 +5477,25 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 		sema_local_initializer(sema, local);
 }
 
+static bool sema_constexpr_local(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *type)
+{
+	uint64_t bits;
+	const struct type *target;
+	if (!constexpr_initializer_expression(sema, &local->initializer, local->initializer_syntax, local->name.location) ||
+		!(type = constexpr_integer_type(sema, type, local->name.location)) ||
+		!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true) ||
+		!constexpr_integer_value(sema, local->initializer, type, &bits) ||
+		!complete_local_storage(sema, local, type))
+		return false;
+	target = unqualified_type(sema, type, local->name.location);
+	if (!target || !convert_expression(sema, &local->initializer, target))
+		return false;
+	local->constexpr_bits = bits;
+	local->constexpr_complete = true;
+	return true;
+}
+
 /* Hide outer names immediately, but expose no type until inference completes. */
 static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration *local)
 {
@@ -5448,7 +5536,19 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 			"restrict requires a pointer to an object type");
 		return false;
 	}
-	type = type_qualified(sema->arena, type, syntax->qualifiers);
+	if (local->is_constexpr) {
+		uint64_t bits;
+		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
+			diagnostic_error(sema->diagnostics, local->name.location,
+				"constexpr currently requires a non-atomic, non-volatile integer object");
+			return false;
+		}
+		if (!(type = constexpr_integer_type(sema, type, local->name.location)) ||
+			!constexpr_integer_value(sema, local->initializer, type, &bits))
+			return false;
+		local->constexpr_bits = bits;
+	}
+	type = type_qualified(sema->arena, type, syntax->qualifiers | (local->is_constexpr ? type_qualifier_const : 0));
 	if (!type) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"out of memory qualifying inferred type");
@@ -5458,7 +5558,10 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	if (!complete_local_storage(sema, local, type))
 		return false;
 	target = unqualified_type(sema, type, local->name.location);
-	return target && convert_expression(sema, &local->initializer, target);
+	if (!target || !convert_expression(sema, &local->initializer, target))
+		return false;
+	local->constexpr_complete = local->is_constexpr;
+	return true;
 }
 
 static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
@@ -5605,6 +5708,12 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		local->vm_pointer_bound = ((struct ast_array_type_syntax *)vm_array)->bound;
 		local->vm_pointer_element_size = type_object_size(((const struct array_type *)vm_array->type)->element);
 	}
+	if (local->is_constexpr) {
+		type = constexpr_integer_type(sema, type, local->name.location);
+		if (!type || !constexpr_initializer_expression(sema, &local->initializer,
+			local->initializer_syntax, local->name.location))
+			return false;
+	}
 	if (local->is_nodiscard && type->kind != type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location, "nodiscard requires a function declaration");
 		return false;
@@ -5655,6 +5764,8 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
 		return false;
 	}
+	if (local->is_constexpr)
+		return sema_constexpr_local(sema, local, type);
 	return bind_local(sema, local, type);
 }
 
@@ -6512,7 +6623,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct ast_external_declaration *external, struct token name,
 	const struct type *type, struct ast_expression **initializer,
 	const struct ast_initializer *syntax, struct ast_initializer_plan **published_plan,
-	bool is_static, bool is_extern, bool is_query, bool is_thread_local, unsigned alignment)
+	bool is_static, bool is_extern, bool is_query, bool is_thread_local, bool is_constexpr, unsigned alignment)
 {
 	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
 	struct external_object_symbol *previous = find_external_object(sema, name);
@@ -6527,9 +6638,18 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct static_data_value boolean_value = { 0 };
 	bool has_initializer = syntax || *initializer;
 	bool promoted = syntax && (syntax->kind == ast_initializer_list || type->kind == type_kind_array);
+	uint64_t constexpr_bits = 0;
 	bool zero_definition = !is_extern && !has_initializer && (is_thread_local || sema->scope);
 	const struct type *target;
 
+	if (is_constexpr) {
+		if (!constexpr_initializer_expression(sema, initializer, syntax, name.location))
+			return NULL;
+		/* Scalar braces are normalized to the expression, retaining real storage. */
+		syntax = NULL;
+		has_initializer = true;
+		promoted = false;
+	}
 	if (!check_alignment_redeclaration(sema, previous, alignment,
 		has_initializer || zero_definition, name.location))
 		return NULL;
@@ -6571,6 +6691,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		return NULL;
 	if (alignment)
 		symbol->alignment = alignment;
+	if (is_constexpr)
+		symbol->constexpr_in_progress = true;
 	if (zero_definition) {
 		const struct type *visible = sema->scope ? type : symbol->file_type;
 		if (!type_is_complete_object(visible)) {
@@ -6605,6 +6727,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		return symbol;
 	}
 	if (!sema_expression(sema, initializer, true))
+		goto rollback;
+	if (is_constexpr && !constexpr_integer_value(sema, *initializer, type, &constexpr_bits))
 		goto rollback;
 	struct constant_result arithmetic_result;
 	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer) ||
@@ -6704,6 +6828,11 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		};
 	}
 	symbol->definition = external;
+	if (is_constexpr) {
+		symbol->initializer_value.integer_bits = constexpr_bits;
+		symbol->is_constexpr = true;
+		symbol->constexpr_in_progress = false;
+	}
 	return symbol;
 rollback:
 	if (previous)
@@ -6797,7 +6926,8 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		definition->is_static = true;
 		definition->is_thread_local = local->is_thread_local;
 		definition->type = type;
-		local->type = type;
+		if (!local->is_constexpr)
+			local->type = type;
 		local->object_symbol = register_external_object(sema, name, type, NULL,
 			true, false, local->is_thread_local);
 		if (!local->object_symbol || !reserve_local_name(sema, local))
@@ -6805,9 +6935,14 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		local->object_symbol->is_block_static = true;
 		definition->symbol = sema_file_object(sema, &definition->external, name,
 			type, &local->initializer, local->initializer_syntax, &local->initializer_plan,
-			true, false, false, local->is_thread_local, local->alignment);
+			true, false, false, local->is_thread_local, local->is_constexpr, local->alignment);
 		if (!definition->symbol)
 			return false;
+		if (local->is_constexpr) {
+			local->type = type;
+			local->constexpr_bits = definition->symbol->initializer_value.integer_bits;
+			local->constexpr_complete = true;
+		}
 		definition->initializer = local->initializer;
 		definition->initializer_syntax = local->initializer_syntax;
 		definition->initializer_plan = local->initializer_plan;
@@ -7010,6 +7145,8 @@ static bool sema_external_object_declaration(struct sema *sema,
 	type = resolve_type_syntax(sema, declaration->type_syntax);
 	if (!type || !check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
+	if (declaration->is_constexpr && !(type = constexpr_integer_type(sema, type, declaration->name.location)))
+		return false;
 	if (declaration->is_nodiscard) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "nodiscard requires a function declaration");
 		return false;
@@ -7022,7 +7159,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 	declaration->symbol = sema_file_object(sema, &declaration->external,
 		declaration->name, type, &declaration->initializer,
 		declaration->initializer_syntax, &declaration->initializer_plan,
-		declaration->is_static, declaration->is_extern, false, declaration->is_thread_local,
+		declaration->is_static || declaration->is_constexpr, declaration->is_extern, false, declaration->is_thread_local, declaration->is_constexpr,
 		group ? group->alignment : 0);
 	if (!declaration->symbol)
 		return false;
@@ -7040,6 +7177,8 @@ static bool sema_external_type_declaration(struct sema *sema,
 		return false;
 	type = resolve_type_syntax(sema, declaration->type_syntax);
 	if (!type)
+		return false;
+	if (declaration->is_constexpr && !(type = constexpr_integer_type(sema, type, declaration->name.location)))
 		return false;
 	if (group && type->kind == type_kind_function) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment requires an object type");
@@ -7060,7 +7199,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
 			declaration->initializer_syntax, &declaration->initializer_plan,
-			declaration->is_static, declaration->is_extern, true, declaration->is_thread_local,
+			declaration->is_static || declaration->is_constexpr, declaration->is_extern, true, declaration->is_thread_local, declaration->is_constexpr,
 			group ? group->alignment : 0);
 		if (!declaration->object_symbol)
 			return false;

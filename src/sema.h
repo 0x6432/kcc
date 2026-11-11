@@ -37,6 +37,8 @@ struct external_object_symbol {
 	const struct type *file_type; /* NULL until declared at file scope. */
 	bool file_deprecated;
 	bool is_thread_local;
+	bool is_constexpr;
+	bool constexpr_in_progress;
 	bool is_block_static; /* Local object has no C linkage, despite private emission. */
 	bool is_internal;
 	unsigned alignment; /* Nonzero declared storage alignment, shared by entity. */

@@ -262,6 +262,20 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 	if (!type_is_integer(expression->type))
 		return constant_failure(expression, constant_not_constant, "integer constant expression requires integer operands");
 	switch (expression->kind) {
+	case expression_load: {
+		const struct ast_expression *operand = ((const struct ast_load_expression *)expression)->operand;
+		if (operand->kind == expression_name) {
+			const struct ast_local_declaration *local = ((const struct ast_name_expression *)operand)->declaration;
+			if (local && local->is_constexpr && local->constexpr_complete)
+				return constant_success(expression, local->constexpr_bits);
+		} else if (operand->kind == expression_external_object) {
+			const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)operand;
+			const struct external_object_symbol *object = reference->object;
+			if (reference->is_constexpr_name && object->is_constexpr && !object->constexpr_in_progress)
+				return constant_success(expression, object->initializer_value.integer_bits);
+		}
+		return constant_failure(expression, constant_not_constant, "object is not a constexpr constant");
+	}
 	case expression_integer:
 		return constant_success(expression, ((const struct ast_integer_expression *)expression)->value);
 	case expression_enum_constant:

@@ -161,7 +161,7 @@ static void test_errors(void)
 		assert(strcmp(token_kind_name(token_atomic), "_Atomic") == 0);
 	}
 	{
-		const enum token_kind keyword[] = { token_unsupported_keyword };
+		const enum token_kind keyword[] = { token_constexpr };
 		const enum token_kind equal[] = { token_equal };
 
 		check_tokens("constexpr", keyword, 1, 0);

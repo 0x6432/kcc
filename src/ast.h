@@ -326,6 +326,7 @@ struct ast_name_expression {
 struct ast_external_object_expression {
 	struct ast_expression expression;
 	struct external_object_symbol *object;
+	bool is_constexpr_name;
 };
 
 struct ast_function_designator_expression {
@@ -912,6 +913,9 @@ struct ast_local_declaration {
 	struct ast_initializer_plan *initializer_plan;
 	struct ast_alignment_group *alignments;
 	unsigned alignment; /* Effective storage alignment; zero means natural. */
+	bool is_constexpr;
+	bool constexpr_complete;
+	uint64_t constexpr_bits;
 	bool enum_constant;
 	bool enum_deprecated;
 	int64_t enum_value;
@@ -989,6 +993,7 @@ struct ast_external_static_assertion {
 
 struct ast_external_object_declaration {
 	struct ast_external_declaration external;
+	bool is_constexpr;
 	bool is_extern;
 	bool is_inline;
 	bool is_noreturn;
@@ -1008,6 +1013,7 @@ struct ast_external_object_declaration {
 /* Written alias/query root; sema classifies the resolved function/object type. */
 struct ast_external_type_declaration {
 	struct ast_external_declaration external;
+	bool is_constexpr;
 	bool is_extern;
 	struct external_object_symbol *object_symbol;
 	bool is_inline;

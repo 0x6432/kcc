@@ -390,7 +390,7 @@ static bool begins_declaration_specifier(struct parser *parser, struct token tok
 
 	return kind == token_alignas || kind == token_legacy_alignas ||
 		kind == token_typedef || kind == token_register || kind == token_extern ||
-		kind == token_static || kind == token_thread_local || kind == token_inline || kind == token_noreturn || kind == token_auto ||
+		kind == token_static || kind == token_constexpr || kind == token_thread_local || kind == token_inline || kind == token_noreturn || kind == token_auto ||
 		kind == token_void || kind == token_float || kind == token_double || kind == token_const || kind == token_atomic || kind == token_restrict || kind == token_volatile ||
 		kind == token_struct || kind == token_union || kind == token_enum ||
 		kind == token_typeof || kind == token_typeof_unqual || kind == token_bitint || begins_integer_type(kind) || is_typedef_name(parser, token);
@@ -435,6 +435,7 @@ struct declaration_head {
 	struct token thread_keyword;
 	struct token keyword;
 	struct token auto_keyword;
+	struct token constexpr_keyword;
 	struct token inferred_name;
 	struct ast_alignment_group *alignments;
 	size_t alignment_count;
@@ -545,6 +546,15 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 				head->noreturn_keyword = preprocess_next(parser->preprocessor);
 			continue;
 		}
+		if (token.kind == token_constexpr) {
+			if (!head || context == declarator_parameter || context == declarator_member ||
+				context == declarator_literal || head->constexpr_keyword.kind == token_constexpr) {
+				diagnostic_error(parser->diagnostics, token.location, "constexpr is not permitted here or is duplicated");
+				return NULL;
+			}
+			head->constexpr_keyword = preprocess_next(parser->preprocessor);
+			continue;
+		}
 		if (token.kind == token_thread_local) {
 			if (!head || context == declarator_parameter || context == declarator_member ||
 				context == declarator_literal) {
@@ -619,6 +629,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			/* '=' forces an initialized identifier, not an unnamed explicit type. */
 			if (head && head->auto_keyword.kind == token_auto &&
 				preprocess_peek(parser->preprocessor).kind == token_equal) {
+				if (head->thread_keyword.kind == token_thread_local ||
+					(head->constexpr_keyword.kind == token_constexpr &&
+					 (head->keyword.kind == token_typedef || head->keyword.kind == token_extern))) {
+					diagnostic_error(parser->diagnostics, token.location,
+						"invalid storage combination for inferred constexpr or auto");
+					return NULL;
+				}
 				struct ast_inferred_type_syntax *node = ast_new_inferred_type_syntax(parser->arena,
 					beginning->location, qualifiers);
 
@@ -769,6 +786,13 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			seen_sign = true;
 			unsigned_type = token.kind == token_unsigned;
 		}
+	}
+	if (head && head->constexpr_keyword.kind == token_constexpr &&
+		(head->keyword.kind == token_typedef || head->keyword.kind == token_extern ||
+		 head->thread_keyword.kind == token_thread_local)) {
+		diagnostic_error(parser->diagnostics, beginning->location,
+			"constexpr may combine only with auto, register, or static");
+		return NULL;
 	}
 	if (head && head->alignments && (head->keyword.kind == token_typedef ||
 		head->keyword.kind == token_register)) {
@@ -2397,16 +2421,12 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 }
 
 /* C23 storage-class prefix belongs only to compound literals, never casts.
- * Existing tokens cover static/register/thread_local; constexpr is not yet a
- * supported type/storage feature. Nested type-names keep their normal context.
+ * Existing tokens cover static/register/thread_local; constexpr compound literals
+ * remain unsupported even though integer constexpr objects are implemented. Nested type-names keep their normal context.
  */
 static bool is_constexpr_keyword(struct token token)
 {
-	static const char spelling[] = "constexpr";
-
-	return token.kind == token_unsupported_keyword && token.length == sizeof(spelling) - 1 &&
-		memcmp(token.spelling_location.source->data + token.spelling_location.offset,
-			spelling, sizeof(spelling) - 1) == 0;
+	return token.kind == token_constexpr;
 }
 
 static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
@@ -3659,8 +3679,9 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			"function attribute requires a direct function declaration");
 		return NULL;
 	}
-	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
-		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
+	if ((head.alignments || head.constexpr_keyword.kind == token_constexpr) && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		diagnostic_error(parser->diagnostics, beginning.location, head.constexpr_keyword.kind == token_constexpr ?
+			"constexpr requires an object declarator" : "alignment requires an object declarator");
 		return NULL;
 	}
 	if (preprocess_peek(parser->preprocessor).kind == token_semicolon && enum_specifier_base(base)) {
@@ -3673,7 +3694,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				"enum declaration without underlying type or enumerators declares no entity");
 			return NULL;
 		}
-		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind || head.noreturn_keyword.kind) {
+		if (head.keyword.kind || head.auto_keyword.kind || head.constexpr_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind || head.noreturn_keyword.kind) {
 			diagnostic_error(parser->diagnostics, beginning.location, "storage class requires a declarator");
 			return NULL;
 		}
@@ -3798,6 +3819,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			parser->declaration_noreturn || declarator_noreturn;
 		node->is_nodiscard = parser->declaration_nodiscard || declarator_nodiscard;
 		node->is_deprecated = parser->declaration_deprecated || declarator_deprecated;
+		node->is_constexpr = head.constexpr_keyword.kind == token_constexpr;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
 		node->is_extern = head.keyword.kind == token_extern;
@@ -3807,9 +3829,10 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		tail = &node->item.next;
 		if (preprocess_peek(parser->preprocessor).kind != token_comma)
 			break;
-		if (base->kind == type_syntax_inferred) {
+		if (base->kind == type_syntax_inferred || head.constexpr_keyword.kind == token_constexpr) {
 			diagnostic_error(parser->diagnostics, name.location,
-				"multiple inferred auto declarators are not supported");
+				base->kind == type_syntax_inferred ? "multiple inferred auto declarators are not supported" :
+				"multiple constexpr declarators are not supported");
 			return NULL;
 		}
 		preprocess_next(parser->preprocessor);
@@ -4447,7 +4470,7 @@ done:
  */
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
-	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated,
+	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated, bool is_constexpr,
 	struct ast_alignment_group *alignments)
 {
 	struct ast_external_declaration *items = NULL;
@@ -4486,6 +4509,11 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		else {
 			struct ast_function_declaration *declaration;
 			enum token_kind next;
+
+			if (is_constexpr) {
+				diagnostic_error(parser->diagnostics, name.location, "constexpr requires an object definition");
+				return NULL;
+			}
 
 			if (alignments) {
 				diagnostic_error(parser->diagnostics, name.location, "alignment requires an object type");
@@ -4530,6 +4558,12 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		}
 		if (!item)
 			return NULL;
+		if (is_constexpr) {
+			if (item->kind == external_object_declaration)
+				((struct ast_external_object_declaration *)item)->is_constexpr = true;
+			else if (item->kind == external_type_declaration)
+				((struct ast_external_type_declaration *)item)->is_constexpr = true;
+		}
 		item->alignments = alignments;
 		*tail = item;
 		tail = &item->next;
@@ -4537,6 +4571,10 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		if (preprocess_peek(parser->preprocessor).kind == token_semicolon) {
 			preprocess_next(parser->preprocessor);
 			return items;
+		}
+		if (is_constexpr) {
+			diagnostic_error(parser->diagnostics, name.location, "multiple constexpr declarators are not supported");
+			return NULL;
 		}
 		if (!expect_token(parser, token_comma,
 			"expected ',' or ';' after function declaration", NULL))
@@ -4595,8 +4633,9 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			"file-scope auto declarations are not supported yet");
 		return NULL;
 	}
-	if (head.alignments && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
-		diagnostic_error(parser->diagnostics, beginning.location, "alignment requires an object declarator");
+	if ((head.alignments || head.constexpr_keyword.kind == token_constexpr) && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
+		diagnostic_error(parser->diagnostics, beginning.location, head.constexpr_keyword.kind == token_constexpr ?
+			"constexpr requires an object declarator" : "alignment requires an object declarator");
 		return NULL;
 	}
 	if ((parsed.noreturn || parsed.nodiscard) && preprocess_peek(parser->preprocessor).kind == token_semicolon) {
@@ -4614,7 +4653,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 				"enum declaration without underlying type or enumerators declares no entity");
 			return NULL;
 		}
-		if (head.keyword.kind || head.auto_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind || head.noreturn_keyword.kind) {
+		if (head.keyword.kind || head.auto_keyword.kind || head.constexpr_keyword.kind || head.thread_keyword.kind || head.inline_keyword.kind || head.noreturn_keyword.kind) {
 			diagnostic_error(parser->diagnostics, beginning.location, "storage class requires a declarator");
 			return NULL;
 		}
@@ -4674,7 +4713,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
 		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
-		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.alignments);
+		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.constexpr_keyword.kind == token_constexpr, head.alignments);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

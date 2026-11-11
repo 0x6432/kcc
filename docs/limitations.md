@@ -1,5 +1,7 @@
 # Implementation limitations
 
+Current constexpr support is limited to integer objects; see `m23h-constexpr-integers.md` for scope and remaining gaps. Earlier references to constexpr being entirely unsupported are historical.
+
 The development branch includes bounded initializers, enums, alignment,
 float/double, scalar variadics, flexible arrays, VLAs, atomics and partial
 standard headers. Aggregate calls and returns have a bounded SysV implementation

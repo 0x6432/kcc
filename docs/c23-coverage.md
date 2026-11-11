@@ -1,5 +1,7 @@
 # C23 coverage
 
+Current constexpr support is limited to integer objects; see `m23h-constexpr-integers.md` for scope and remaining gaps. Earlier references to constexpr being entirely unsupported are historical.
+
 Current development includes bounded M17 initializers, enums, alignment,
 float/double, scalar variadics, flexible arrays, VLAs, atomics, location macros
 and partial standard headers. Aggregate-by-value ABI, bit-fields, expanded C23
