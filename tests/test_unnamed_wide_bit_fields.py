@@ -60,7 +60,7 @@ def main():
             assert default.returncode == 0 and default.stdout and not default.stderr, (source,default.stderr)
             assert legacy.returncode == 1 and not legacy.stdout and 'aggregate ABI unsupported (M21, legacy Clang mode)' in legacy.stderr, (source,legacy.stderr)
         # Width and base-type restrictions remain in force.
-        for source in ('struct S { long x:65; };', 'struct S { volatile long x:33; };',
+        for source in ('struct S { long x:65; };',
                        'struct S { unsigned long :65; int x; };', 'struct S { unsigned :33; int x; };'):
             (d/'reject.c').write_text(source)
             result=subprocess.run([str(KCC),*options,str(d/'reject.c')],capture_output=True,text=True,timeout=15)

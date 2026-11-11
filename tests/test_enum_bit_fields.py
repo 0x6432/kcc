@@ -293,13 +293,11 @@ def main():
                        'enum E : signed char { A }; struct S { enum E :9; int x; };',
                        'enum E : short { A }; struct S { enum E x:0; };',
                        'enum E : _Bool { A }; struct S { enum E x:2; };',
-                       'enum E : short { A }; struct S { volatile enum E x:3; };',
                        'enum E : unsigned long { A }; struct S { enum E x:65; };',
                        'enum E { A }; struct S { enum E x:33; };',
                        'enum E { A }; struct S { enum E x:0; };',
                        'enum E { A }; struct S { enum E : 33; };',
-                       'enum E { A }; struct S { enum E : ; };',
-                       'enum E { A }; struct S { volatile enum E x:1; };']:
+                       'enum E { A }; struct S { enum E : ; };']:
             (d/'reject.c').write_text(source); r=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else ('expected' if ': ;' in source else 'bit-field')
             if r.returncode==0 or r.stdout or diagnostic not in r.stderr: raise AssertionError((source,r.returncode,r.stderr,r.stdout))

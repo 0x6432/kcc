@@ -54,7 +54,7 @@ def main():
             run([HOST,d/'owner.o',d/'companion.o','-o',d/'test']); run([d/'test'])
         (d/'keyword.c').write_text('struct B { bool a:1; bool b:1; }; struct B g={true,false}; int main(void){g.b=99;return !(g.a && g.b);}')
         object_file(d/'keyword.c',d/'keyword.o','kcc'); run([HOST,d/'keyword.o','-o',d/'keyword']); run([d/'keyword'])
-        for source in ['struct S { _Bool x:2; };', 'struct S { _Bool x:0; };', 'struct S { volatile _Bool x:1; };']:
+        for source in ['struct S { _Bool x:2; };', 'struct S { _Bool x:0; };']:
             (d/'reject.c').write_text(source)
             result=subprocess.run([str(KCC),str(d/'reject.c')],text=True,capture_output=True)
             diagnostic='aggregate ABI unsupported' if 'f(struct' in source else 'bit-field'

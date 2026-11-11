@@ -132,7 +132,6 @@ int main(void) {
 REJECT = [
     'struct S { unsigned a:0; };',
     'struct S { unsigned :0; };',
-    'struct S { volatile unsigned a:8; };',
     'struct S { [[gnu::packed]] unsigned a:8; };',
     'struct S { [[gnu::aligned(1)]] unsigned a:8; };',
     'struct S { unsigned a:8; } s; unsigned *p = &s.a;',

@@ -37,6 +37,8 @@ cases += [
   'struct S{char a[4]; volatile int x;}; int main(void){struct S s={.a="abc",.x=40}; s.x+=2; return s.a[1]==98 ? s.x : 1;}',
   'struct I{volatile int a; int b;}; struct S{struct I x[2];}; int main(void){struct S s={.x={{40,1},{2,3}}}; s.x[0].a+=s.x[1].a; return s.x[0].a;}',
   'struct S{volatile unsigned x:3; int y;}; int main(void){struct S a={.x=1,.y=40}; struct S b=a; b.x++; return b.x+b.y;}',
+  'struct S{volatile _Bool a:1; volatile char b:1; volatile short c:1; volatile long d:1;}; int main(void){struct S s={0,0,0,0}; s.a=1; s.b=-1; s.c=-1; s.d=-1; return s.a && s.b==-1 && s.c==-1 && s.d==-1 ? 42:1;}',
+  'enum E { A=-1,B=1 }; struct S{volatile enum E x:3;}; int main(void){struct S s={A}; s.x=B; return s.x==B?42:1;}',
 ]
 
 def run(command, **kw):
@@ -71,6 +73,14 @@ with tempfile.TemporaryDirectory(prefix='kcc-volatile-records-') as directory:
     # Previously unsupported declarations remain as exact compile-only cases.
     for i, text in enumerate([
         'struct S { volatile int member; };',
+        'struct S { volatile _Bool x:1; };',
+        'struct S { volatile char a:1; };',
+        'struct S { volatile short a:1; };',
+        'struct S { volatile long x:1; };',
+        'struct S { volatile long x:33; };',
+        'struct S { volatile unsigned a:8; };',
+        'enum E : short { A }; struct S { volatile enum E x:3; };',
+        'enum E { A }; struct S { volatile enum E x:1; };',
         'struct S { volatile int x:32; };',
         'struct S { int x; }; typedef struct S A[2]; volatile A a;',
         'struct S { volatile unsigned long x:33; }; struct S s;',
