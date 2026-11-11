@@ -38,11 +38,28 @@ bool __kcc_ckd(void *result, unsigned int result_kind, unsigned long a,
     bool overflow = (negative && !result_signed) || magnitude > limit;
     uint64_t bits = (uint64_t)magnitude;
     if (negative) bits = (uint64_t)(0ul - bits);
-    switch (width) {
-    case 8: *(unsigned char *)result = (unsigned char)bits; break;
-    case 16: *(unsigned short *)result = (unsigned short)bits; break;
-    case 32: *(unsigned int *)result = (unsigned int)bits; break;
-    case 64: *(unsigned long *)result = (unsigned long)bits; break;
+    /* Qualified destinations still require one observable/atomic store. */
+    if (result_kind & 1024u) {
+        switch (width) {
+        case 8: __atomic_store_n((volatile unsigned char *)result, (unsigned char)bits, __ATOMIC_SEQ_CST); break;
+        case 16: __atomic_store_n((volatile unsigned short *)result, (unsigned short)bits, __ATOMIC_SEQ_CST); break;
+        case 32: __atomic_store_n((volatile unsigned int *)result, (unsigned int)bits, __ATOMIC_SEQ_CST); break;
+        case 64: __atomic_store_n((volatile unsigned long *)result, (unsigned long)bits, __ATOMIC_SEQ_CST); break;
+        }
+    } else if (result_kind & 512u) {
+        switch (width) {
+        case 8: *(volatile unsigned char *)result = (unsigned char)bits; break;
+        case 16: *(volatile unsigned short *)result = (unsigned short)bits; break;
+        case 32: *(volatile unsigned int *)result = (unsigned int)bits; break;
+        case 64: *(volatile unsigned long *)result = (unsigned long)bits; break;
+        }
+    } else {
+        switch (width) {
+        case 8: *(unsigned char *)result = (unsigned char)bits; break;
+        case 16: *(unsigned short *)result = (unsigned short)bits; break;
+        case 32: *(unsigned int *)result = (unsigned int)bits; break;
+        case 64: *(unsigned long *)result = (unsigned long)bits; break;
+        }
     }
     return overflow;
 }

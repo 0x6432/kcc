@@ -200,6 +200,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_fenv_header.py
 	QBE="$(QBE)" python3 tests/test_threads_header.py
 	QBE="$(QBE)" python3 tests/test_stdckdint_header.py
+	QBE="$(QBE)" python3 tests/test_ckd_qualified.py
 	QBE="$(QBE)" python3 tests/test_memset_explicit.py
 	QBE="$(QBE)" python3 tests/test_free_sized.py
 	QBE="$(QBE)" python3 tests/test_math_extended.py
@@ -448,6 +449,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_fenv_header.py
 	python3 tests/test_threads_header.py
 	python3 tests/test_stdckdint_header.py
+	python3 tests/test_ckd_qualified.py
 	python3 tests/test_memset_explicit.py
 	python3 tests/test_free_sized.py
 	python3 tests/test_math_extended.py

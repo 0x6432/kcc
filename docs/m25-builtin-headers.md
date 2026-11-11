@@ -130,13 +130,18 @@ Source provenance, not a filename, determines which budget is charged.
   only; signal behavior has not been runtime-tested.
 - `stdckdint.h` supplies `ckd_add`, `ckd_sub` and `ckd_mul` for the ten ordinary
   signed/unsigned integer types, with single evaluation and wrapped result bits.
-  Link `build/libkccrt.a` after the generated object. The helper depends on the
-  host compiler's unsigned 128-bit arithmetic and the target's LP64 layout.
-  Plain `char`, `_Bool`, qualified result objects and noninteger operands are
-  rejected; enum and character typedef restrictions cannot all be distinguished
-  by this `_Generic` implementation. Bit-precise types are not supported.
-  Compiler-output and host-helper smoke checks do not replace runtime or
-  cross-compiler conformance tests.
+  Ordinary, volatile, atomic and volatile-atomic modifiable result objects are
+  supported; atomic results use a sequentially consistent store, and volatile
+  results receive a volatile store. Link `build/libkccrt.a` after the generated
+  object; atomic accesses in generated code also require `-latomic`. The helper
+  depends on the host compiler's unsigned 128-bit arithmetic and target LP64
+  layout. Plain `char`, `_Bool`, const result objects and noninteger operands
+  are rejected; enum and character typedef restrictions cannot all be
+  distinguished by this `_Generic` implementation. C23 excludes bit-precise
+  types from these macros. Native-model tests cover all ten result types in all
+  four qualifier forms, mixed signed/unsigned arithmetic, overflow, single
+  evaluation, and concurrent native atomic access; this is not full hosted
+  conformance.
 - `threads.h` declares the C thread, mutex, condition, once and thread-specific
   storage functions using bounded x86-64 glibc ABI-compatible opaque layouts.
   Link with `-pthread` and use a compatible glibc with C thread symbols. Thread

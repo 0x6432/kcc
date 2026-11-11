@@ -24,6 +24,12 @@ int main(void) {
   if (ckd_mul(&s,-3,7u) || s!=-21) return 3;
   if (!ckd_mul(&z,UINT64_MAX,UINT64_MAX) || z!=1) return 4;
   if (ckd_add(&vals[j++],i++,2) || i!=2 || j!=1 || vals[0]!=3) return 5;
+  { volatile int v[2]; int k=0; int a=3; int b=4;
+    if (ckd_mul(&v[k++],a++,b++) || k!=1 || a!=4 || b!=5 || v[0]!=12) return 6;
+  }
+  { volatile _Atomic int v[2]; int k=0; int a=3; int b=4;
+    if (ckd_mul(&v[k++],a++,b++) || k!=1 || a!=4 || b!=5 || v[0]!=12) return 7;
+  }
   return 42;
 }
 ''')
@@ -35,11 +41,10 @@ int main(void) {
         il.write_text(result.stdout)
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
         subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'), *runtime_link_flags(),
-                        '-o', str(exe)], check=True)
+                        '-latomic', '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
     for text in ('int f(void){char x; return ckd_add(&x,1,2);}',
                  'int f(void){int x; return ckd_add(&x,1.0,2);}',
-                 'int f(void){volatile int x; return ckd_add(&x,1,2);}',
                  'int f(void){_Bool x; return ckd_add(&x,1,2);}'):
         source.write_text('#include <stdckdint.h>\n' + text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
