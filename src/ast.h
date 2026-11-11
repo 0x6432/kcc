@@ -592,6 +592,7 @@ struct ast_bitint_type_syntax {
 struct ast_enumerator {
 	struct token name;
 	bool is_deprecated;
+	const char *deprecated_message;
 	struct ast_expression *value;
 	struct ast_local_declaration *binding; /* Semantic binding, after declaration. */
 	struct ast_enumerator *next;
@@ -603,7 +604,9 @@ struct ast_enum_type_syntax {
 	struct ast_type_syntax *underlying;
 	bool has_definition;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	struct ast_enumerator *enumerators;
 };
 
@@ -614,7 +617,9 @@ struct ast_record_type_syntax {
 	bool is_union;
 	bool has_definition;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	struct ast_record_member_declaration *members;
 	size_t member_declaration_count;
 };
@@ -627,6 +632,7 @@ struct ast_record_member_declaration {
 	struct token name;
 	bool anonymous;
 	bool is_deprecated;
+	const char *deprecated_message;
 	struct ast_record_member_declaration *next;
 	struct ast_static_assertion *static_assertion;
 };
@@ -929,6 +935,7 @@ struct ast_local_declaration {
 	bool enum_constant;
 	bool is_function_name; /* Implicit __func__ binding; no local slot. */
 	bool enum_deprecated;
+	const char *enum_deprecated_message;
 	int64_t enum_value;
 	uint64_t enum_bits;
 	bool is_register;
@@ -938,7 +945,9 @@ struct ast_local_declaration {
 	bool is_inline;
 	bool is_noreturn;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool is_thread_local;
 	struct external_object_symbol *object_symbol;
 	struct function_symbol *function_symbol;
@@ -986,6 +995,7 @@ struct ast_external_tag_declaration {
 
 struct ast_typedef_declaration {
 	bool is_deprecated;
+	const char *deprecated_message;
 	struct source_location location;
 	struct ast_type_syntax *type_syntax;
 	struct token name;
@@ -1009,7 +1019,9 @@ struct ast_external_object_declaration {
 	bool is_inline;
 	bool is_noreturn;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the object type. */
 	struct ast_type_syntax *type_syntax;
@@ -1030,7 +1042,9 @@ struct ast_external_type_declaration {
 	bool is_inline;
 	bool is_noreturn;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_type_syntax *type_syntax;
@@ -1057,6 +1071,7 @@ struct ast_parameter {
 	struct token name;
 	bool has_name;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool is_register; /* Written storage, not part of the adjusted function type. */
 	bool is_void_marker; /* Checked sole unnamed void, not an ABI parameter. */
 	struct ast_local_declaration *local; /* NULL for prototypes and unnamed parameters. */
@@ -1070,7 +1085,9 @@ struct ast_function_declaration {
 	bool is_inline;
 	bool is_noreturn;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool is_thread_local;
 	bool is_static; /* Written linkage, not part of the function type. */
 	struct ast_function_type_syntax *type_syntax;

@@ -18,4 +18,7 @@ void diagnostic_error(struct diagnostics *diagnostics,
 void diagnostic_warning(struct diagnostics *diagnostics,
 			struct source_location location, const char *message);
 
+void diagnostic_warning_with_detail(struct diagnostics *diagnostics,
+	struct source_location location, const char *message, const char *detail);
+
 #endif

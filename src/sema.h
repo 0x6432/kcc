@@ -42,6 +42,7 @@ struct external_object_symbol {
 	const struct type *type;
 	const struct type *file_type; /* NULL until declared at file scope. */
 	bool file_deprecated;
+	const char *file_deprecated_message;
 	bool is_thread_local;
 	bool is_constexpr;
 	bool constexpr_in_progress;
@@ -60,7 +61,9 @@ struct external_object_symbol {
 struct function_symbol {
 	bool has_inline_declaration;
 	bool file_nodiscard;
+	const char *file_nodiscard_message;
 	bool file_deprecated;
+	const char *file_deprecated_message;
 	bool has_noninline_file_declaration;
 	bool is_inline_only;
 	struct token name;

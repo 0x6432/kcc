@@ -739,8 +739,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	syntax->syntax.type = &record->type;
 	if (!syntax->has_definition) {
 		if (!standalone && definition->is_deprecated)
-			diagnostic_warning(sema->diagnostics, syntax->syntax.location,
-				"use of deprecated record type");
+			diagnostic_warning_with_detail(sema->diagnostics, syntax->syntax.location,
+				"use of deprecated record type", definition->deprecated_message);
 		return &record->type;
 	}
 	if (state->defining) {
@@ -911,7 +911,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			goto done;
 		}
 		*resolved = (struct record_member) { .name = member->name, .type = type,
-			.anonymous = member->anonymous, .is_deprecated = member->is_deprecated, .is_flexible = flexible,
+			.anonymous = member->anonymous, .is_deprecated = member->is_deprecated,
+			.deprecated_message = member->deprecated_message, .is_flexible = flexible,
 			.is_bit_field = member->bit_width != NULL, .bit_width = bit_width,
 			.alignment = member->alignments ? member->alignments->alignment : 0 };
 		*tail = resolved;
@@ -935,6 +936,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	}
 	definition->is_nodiscard = syntax->is_nodiscard;
 	definition->is_deprecated = syntax->is_deprecated;
+	definition->nodiscard_message = syntax->nodiscard_message;
+	definition->deprecated_message = syntax->deprecated_message;
 	if (canonical_definition && !record_redefinition_matches(canonical_definition, definition)) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of record tag");
 		goto done;
@@ -942,6 +945,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	if (canonical_definition) {
 		canonical_definition->is_nodiscard |= syntax->is_nodiscard;
 		canonical_definition->is_deprecated |= syntax->is_deprecated;
+		if (syntax->nodiscard_message) canonical_definition->nodiscard_message = syntax->nodiscard_message;
+		if (syntax->deprecated_message) canonical_definition->deprecated_message = syntax->deprecated_message;
 	}
 	success = true;
 done:
@@ -1258,6 +1263,7 @@ static bool check_enum_redefinition(struct sema *sema, struct ast_enum_type_synt
 		if (bits != old->binding->enum_bits) goto mismatch;
 		item->binding = old->binding;
 		old->binding->enum_deprecated |= item->is_deprecated;
+		if (item->deprecated_message) old->binding->enum_deprecated_message = item->deprecated_message;
 		previous = old->binding;
 		count++;
 	}
@@ -1321,8 +1327,8 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		}
 		if (!syntax->has_definition) {
 			if (!standalone && !syntax->underlying && definition->is_deprecated)
-				diagnostic_warning(sema->diagnostics, syntax->tag.location,
-					"use of deprecated enum type");
+				diagnostic_warning_with_detail(sema->diagnostics, syntax->tag.location,
+					"use of deprecated enum type", definition->deprecated_message);
 			return syntax->syntax.type = &type->type;
 		}
 		underlying = definition->underlying ? definition->underlying : &type_int;
@@ -1335,6 +1341,8 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 				return NULL;
 			definition->is_nodiscard |= syntax->is_nodiscard;
 			definition->is_deprecated |= syntax->is_deprecated;
+			if (syntax->nodiscard_message) definition->nodiscard_message = syntax->nodiscard_message;
+			if (syntax->deprecated_message) definition->deprecated_message = syntax->deprecated_message;
 			return syntax->syntax.type = &type->type;
 		}
 	} else {
@@ -1443,6 +1451,7 @@ static const struct type *resolve_enum_syntax(struct sema *sema,
 		item->binding = constant;
 		constant->enum_constant = true;
 		constant->enum_deprecated = item->is_deprecated;
+		constant->enum_deprecated_message = item->deprecated_message;
 		constant->enum_bits = bits;
 		constant->type = constant_type;
 		if (constant_type == &type_int)
@@ -1493,6 +1502,8 @@ range:
 	definition->defining = false;
 	definition->is_nodiscard |= syntax->is_nodiscard;
 	definition->is_deprecated |= syntax->is_deprecated;
+	if (syntax->nodiscard_message) definition->nodiscard_message = syntax->nodiscard_message;
+	if (syntax->deprecated_message) definition->deprecated_message = syntax->deprecated_message;
 	if (tag)
 		tag->enum_definition = syntax;
 	return &type->type;
@@ -1718,7 +1729,7 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			return NULL;
 		}
 		if (declaration->is_deprecated)
-			diagnostic_warning(sema->diagnostics, alias->name.location, "use of deprecated typedef");
+			diagnostic_warning_with_detail(sema->diagnostics, alias->name.location, "use of deprecated typedef", declaration->deprecated_message);
 		syntax->type = declaration->type;
 		break;
 	}
@@ -1945,6 +1956,7 @@ static bool bind_prototype_parameter(struct sema *sema, struct ast_parameter *pa
 	local->type = parameter->type;
 	local->is_register = parameter->is_register;
 	local->is_deprecated = parameter->is_deprecated;
+	local->deprecated_message = parameter->deprecated_message;
 	local->alignment = parameter->alignments ? parameter->alignments->alignment : 0;
 	parameter->prototype_local = local;
 	*binding = (struct binding) { .declaration = local, .next = sema->scope->bindings };
@@ -2701,31 +2713,38 @@ static struct ast_call_expression *discarded_call(struct ast_expression *express
 	return expression->kind == expression_call ? (struct ast_call_expression *)expression : NULL;
 }
 
-static bool discarded_call_nodiscard(struct sema *sema, const struct ast_call_expression *call)
+static bool discarded_call_nodiscard(struct sema *sema, const struct ast_call_expression *call,
+	const char **message)
 {
+	*message = NULL;
 	if (!call || call->callee->kind != expression_name)
 		return false;
 	struct ast_name_expression *name = (struct ast_name_expression *)call->callee;
 	struct ast_local_declaration *local = find_local(sema, name->name);
 	struct function_symbol *function = local ? local->function_symbol : visible_file_function(sema, name->name);
-	return function && ((local && local->is_nodiscard) || function->file_nodiscard);
+	if (!function) return false;
+	*message = local && local->nodiscard_message ? local->nodiscard_message : function->file_nodiscard_message;
+	return (local && local->is_nodiscard) || function->file_nodiscard;
 }
 
-static void warn_discarded_call(struct sema *sema, const struct ast_call_expression *call, bool marked)
+static void warn_discarded_call(struct sema *sema, const struct ast_call_expression *call, bool marked,
+	const char *message)
 {
 	if (!call || sema->unevaluated)
 		return;
 	if (call->expression.type->kind == type_kind_enum &&
 		((const struct enum_type *)call->expression.type)->definition->is_nodiscard)
-		diagnostic_warning(sema->diagnostics, call->expression.location,
-			"discarded result of function returning nodiscard enum");
+		diagnostic_warning_with_detail(sema->diagnostics, call->expression.location,
+			"discarded result of function returning nodiscard enum",
+			((const struct enum_type *)call->expression.type)->definition->nodiscard_message);
 	else if (type_is_record(call->expression.type) &&
 		type_record_definition(call->expression.type)->is_nodiscard)
-		diagnostic_warning(sema->diagnostics, call->expression.location,
-			"discarded result of function returning nodiscard record");
+		diagnostic_warning_with_detail(sema->diagnostics, call->expression.location,
+			"discarded result of function returning nodiscard record",
+			type_record_definition(call->expression.type)->nodiscard_message);
 	else if (marked && call->expression.type->kind != type_kind_void)
-		diagnostic_warning(sema->diagnostics, call->expression.location,
-			"discarded result of nodiscard function");
+		diagnostic_warning_with_detail(sema->diagnostics, call->expression.location,
+			"discarded result of nodiscard function", message);
 }
 
 static bool has_register_root(const struct ast_expression *expression)
@@ -3137,7 +3156,7 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		if (node->member->is_deprecated)
-			diagnostic_warning(sema->diagnostics, node->name.location, "use of deprecated member");
+			diagnostic_warning_with_detail(sema->diagnostics, node->name.location, "use of deprecated member", node->member->deprecated_message);
 		result_type = type_qualified(sema->arena, node->member->type, qualifiers);
 		if (!result_type) {
 			diagnostic_error(sema->diagnostics, expression->location, "out of memory qualifying member type");
@@ -3435,7 +3454,7 @@ static bool sema_expression(struct sema *sema,
 		if (!node->declaration)
 			node->declaration = find_file_enumerator(sema, node->name);
 		if (node->declaration && node->declaration->enum_constant && node->declaration->enum_deprecated)
-			diagnostic_warning(sema->diagnostics, expression->location, "use of deprecated enumerator");
+			diagnostic_warning_with_detail(sema->diagnostics, expression->location, "use of deprecated enumerator", node->declaration->enum_deprecated_message);
 		if (node->declaration && node->declaration->enum_constant &&
 			node->declaration->type != &type_int) {
 			struct ast_enum_constant_expression *constant = arena_alloc(sema->arena, sizeof(*constant));
@@ -3483,8 +3502,11 @@ static bool sema_expression(struct sema *sema,
 			if ((node->declaration && node->declaration->is_deprecated) ||
 				(object && object->file_type && object->file_deprecated) ||
 				(referenced_function && referenced_function->file_type && referenced_function->file_deprecated))
-				diagnostic_warning(sema->diagnostics, expression->location,
-					"use of deprecated declaration");
+				diagnostic_warning_with_detail(sema->diagnostics, expression->location,
+					"use of deprecated declaration",
+					node->declaration && node->declaration->deprecated_message ? node->declaration->deprecated_message :
+					object && object->file_type && object->file_deprecated_message ? object->file_deprecated_message :
+					referenced_function && referenced_function->file_type ? referenced_function->file_deprecated_message : NULL);
 		}
 		if (sema->function && object && object->is_internal && !object->is_block_static) {
 				sema->function->inline_has_internal_reference = true;
@@ -3622,7 +3644,7 @@ static bool sema_expression(struct sema *sema,
 						return false;
 					}
 					if (member->is_deprecated)
-						diagnostic_warning(sema->diagnostics, step->member.location, "use of deprecated member");
+						diagnostic_warning_with_detail(sema->diagnostics, step->member.location, "use of deprecated member", member->deprecated_message);
 					offset += member_offset;
 					type = member->type;
 				} else {
@@ -3911,12 +3933,13 @@ static bool sema_expression(struct sema *sema,
 	case expression_comma: {
 		struct ast_comma_expression *node = (struct ast_comma_expression *)expression;
 		struct ast_call_expression *call = discarded_call(node->left);
-		bool marked = discarded_call_nodiscard(sema, call);
+		const char *nodiscard_message;
+		bool marked = discarded_call_nodiscard(sema, call, &nodiscard_message);
 		unsigned depth;
 
 		if (!sema_expression(sema, &node->left, true) || !sema_expression(sema, &node->right, true))
 			return false;
-		warn_discarded_call(sema, call, marked);
+		warn_discarded_call(sema, call, marked, nodiscard_message);
 		result_type = node->right->type;
 		depth = node->left->depth > node->right->depth ? node->left->depth : node->right->depth;
 		expression->depth = depth + 1;
@@ -5477,7 +5500,7 @@ static bool initializer_member_path(struct initializer_builder *builder,
 		uint64_t ignored;
 		if (!member->anonymous && same_name(member->name, *name)) {
 			if (member->is_deprecated)
-				diagnostic_warning(builder->sema->diagnostics, name->location, "use of deprecated member");
+				diagnostic_warning_with_detail(builder->sema->diagnostics, name->location, "use of deprecated member", member->deprecated_message);
 			return initializer_child(builder, path, 0, member, location);
 		}
 		if (member->anonymous && type_record_find_member(member->type, name, &ignored)) {
@@ -6882,10 +6905,11 @@ static bool sema_statement(struct sema *sema, struct ast_statement *statement)
 		struct ast_expression_statement *node =
 			(struct ast_expression_statement *)statement;
 		struct ast_call_expression *call = discarded_call(node->value);
-		bool marked = discarded_call_nodiscard(sema, call);
+		const char *nodiscard_message;
+		bool marked = discarded_call_nodiscard(sema, call, &nodiscard_message);
 		if (!sema_expression(sema, &node->value, true))
 			return false;
-		warn_discarded_call(sema, call, marked);
+		warn_discarded_call(sema, call, marked, nodiscard_message);
 		return true;
 	}
 	case statement_empty:
@@ -7780,6 +7804,9 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 	local->type = type;
 	if (same) {
 		local->is_deprecated |= same->is_deprecated;
+		local->is_nodiscard |= same->is_nodiscard;
+		if (!local->nodiscard_message) local->nodiscard_message = same->nodiscard_message;
+		if (!local->deprecated_message) local->deprecated_message = same->deprecated_message;
 		struct binding *binding = arena_alloc(sema->arena, sizeof(*binding));
 		if (!binding)
 			goto allocation_failure;
@@ -8000,6 +8027,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 	if (!declaration->symbol)
 		return false;
 	declaration->symbol->file_deprecated |= declaration->is_deprecated;
+	if (declaration->deprecated_message) declaration->symbol->file_deprecated_message = declaration->deprecated_message;
 	declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
 	return true;
 }
@@ -8044,6 +8072,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 		if (!declaration->object_symbol)
 			return false;
 		declaration->object_symbol->file_deprecated |= declaration->is_deprecated;
+		if (declaration->deprecated_message) declaration->object_symbol->file_deprecated_message = declaration->deprecated_message;
 		declaration->type = declaration->initializer_plan ? declaration->initializer_plan->type : type;
 		return true;
 	}
@@ -8064,7 +8093,9 @@ static bool sema_external_type_declaration(struct sema *sema,
 		true, declaration->name.location))
 		return false;
 	declaration->symbol->file_nodiscard |= declaration->is_nodiscard;
+	if (declaration->nodiscard_message) declaration->symbol->file_nodiscard_message = declaration->nodiscard_message;
 	declaration->symbol->file_deprecated |= declaration->is_deprecated;
+	if (declaration->deprecated_message) declaration->symbol->file_deprecated_message = declaration->deprecated_message;
 	declaration->type = type;
 	return true;
 }
@@ -8105,7 +8136,9 @@ static bool sema_function_declaration(struct sema *sema,
 		true, declaration->name.location))
 		return false;
 	symbol->file_nodiscard |= declaration->is_nodiscard;
+	if (declaration->nodiscard_message) symbol->file_nodiscard_message = declaration->nodiscard_message;
 	symbol->file_deprecated |= declaration->is_deprecated;
+	if (declaration->deprecated_message) symbol->file_deprecated_message = declaration->deprecated_message;
 	if (!definition)
 		return true;
 	const struct function_type *signature = (const struct function_type *)resolved;
@@ -8213,6 +8246,7 @@ static bool sema_typedef_declaration(struct sema *sema, struct ast_typedef_decla
 		}
 		declaration->type = previous->declaration->type;
 		previous->declaration->is_deprecated |= declaration->is_deprecated;
+		if (declaration->deprecated_message) previous->declaration->deprecated_message = declaration->deprecated_message;
 		return true;
 	}
 

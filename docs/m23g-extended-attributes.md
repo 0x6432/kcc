@@ -62,7 +62,11 @@ record references or forward declarations with an attribute after `struct` or
 `union` are likewise rejected.
 Deprecated declaration warnings are published after a successful declaration;
 self-references in its own initializer are not diagnosed by this subset.
-Nodiscard and deprecated message text is not yet included in diagnostics.
+When a supported `deprecated` or `nodiscard` warning is emitted, its optional
+message is included. Adjacent ordinary string fragments are concatenated and
+decoded, up to 4096 bytes; ASCII control bytes and invalid UTF-8 bytes are
+escaped in the diagnostic. Redeclarations retain an earlier message when they
+do not provide another. This does not expand the warning contexts described above.
 The supported unprefixed standard attributes also recognize their required
 double-underscore spellings, such as `[[__maybe_unused__]]` and
 `[[__nodiscard__]]`. The alternate spellings of explicitly unsupported
@@ -94,7 +98,7 @@ references, not typedef-mediated references or standalone tag declarations.
 Forward-declaration completion, anonymous definitions, shadowing, standard
 `__name__` spellings and layout-altering vendor-attribute refusals are covered
 by `tests/test_attributes.py`. Record attributes do not change object layout.
-Messages are parsed but are not included in the warnings.
+Message text is included in these warnings when provided.
 
 ## Deprecated object and function declarations
 
@@ -116,7 +120,7 @@ body; a separate definition controls its own parameter names and attributes.
 Member expressions, `offsetof` paths, and designated initializers warn on the
 selected deprecated member, including through anonymous records. Positional
 initializers do not name members and do not warn. These warnings include uses in
-unevaluated expressions. Message text is not yet included.
+unevaluated expressions. Message text is included when provided.
 
 ## Function-type optimization contracts
 

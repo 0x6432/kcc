@@ -37,6 +37,8 @@ struct parser {
 	bool declaration_noreturn;
 	bool declaration_nodiscard;
 	bool declaration_deprecated;
+	const char *declaration_nodiscard_message;
+	const char *declaration_deprecated_message;
 	bool builtin_declaration;
 	unsigned parameter_nesting;
 	size_t record_declarations;
@@ -72,8 +74,10 @@ struct parsed_attributes {
 	bool maybe_unused;
 	bool fallthrough;
 	bool deprecated;
+	const char *deprecated_message;
 	bool noreturn;
 	bool nodiscard;
+	const char *nodiscard_message;
 	bool function_contract;
 };
 
@@ -205,6 +209,8 @@ static bool parse_attributes_impl(struct parser *parser, struct parsed_attribute
 			}
 			if (preprocess_peek(parser->preprocessor).kind == token_left_paren) {
 				if (message_argument) {
+					struct token fragments[256];
+					size_t fragment_count = 0, message_length = 0;
 					preprocess_next(parser->preprocessor);
 					struct token message = preprocess_peek(parser->preprocessor);
 					if (message.kind != token_string || message.string_encoding != character_ordinary) {
@@ -223,6 +229,16 @@ static bool parse_attributes_impl(struct parser *parser, struct parsed_attribute
 							diagnostic_error(parser->diagnostics, message.location, error);
 							return false;
 						}
+						if (decoded_length > 4096 - message_length) {
+							diagnostic_error(parser->diagnostics, message.location, "attribute message exceeds 4096 bytes");
+							return false;
+						}
+						if (fragment_count == 256) {
+							diagnostic_error(parser->diagnostics, message.location, "attribute limit exceeded (256)");
+							return false;
+						}
+						fragments[fragment_count++] = message;
+						message_length += decoded_length;
 						if (++count > 256) {
 							diagnostic_error(parser->diagnostics, message.location, "attribute limit exceeded (256)");
 							return false;
@@ -233,6 +249,48 @@ static bool parse_attributes_impl(struct parser *parser, struct parsed_attribute
 					if (!expect_token(parser, token_right_paren, deprecated ? "expected ')' after deprecated message" :
 						"expected ')' after nodiscard message", NULL))
 						return false;
+					unsigned char *bytes = arena_alloc(parser->arena, message_length + 1);
+					char *rendered = arena_alloc(parser->arena, message_length * 4 + 1);
+					if (!bytes || !rendered) {
+						diagnostic_error(parser->diagnostics, token.location, "out of memory storing attribute message");
+						return false;
+					}
+					size_t offset = 0, used = 0;
+					for (size_t i = 0; i < fragment_count; i++) {
+						struct token part = fragments[i];
+						size_t length;
+						const unsigned char *spelling = part.spelling_location.source->data + part.spelling_location.offset;
+						const char *error = parse_string_spelling(spelling, part.length, bytes + offset, message_length - offset, &length);
+						assert(!error); (void)error;
+						offset += length;
+					}
+					for (size_t i = 0; i < message_length; i++) {
+						unsigned c = bytes[i];
+						/* Preserve valid UTF-8, but escape control and invalid bytes so
+						 * ASCII controls cannot forge lines or break UTF-8 output. */
+						unsigned width = c >= 0xc2 && c <= 0xdf ? 2 :
+							c >= 0xe0 && c <= 0xef ? 3 : c >= 0xf0 && c <= 0xf4 ? 4 : 0;
+						bool valid = width && width <= message_length - i;
+						if (valid) {
+							for (unsigned j = 1; j < width; j++)
+								if ((bytes[i + j] & 0xc0) != 0x80) valid = false;
+							if ((c == 0xe0 && bytes[i + 1] < 0xa0) ||
+								(c == 0xed && bytes[i + 1] >= 0xa0) ||
+								(c == 0xf0 && bytes[i + 1] < 0x90) ||
+								(c == 0xf4 && bytes[i + 1] >= 0x90)) valid = false;
+						}
+						if (valid) {
+							for (unsigned j = 0; j < width; j++) rendered[used++] = (char)bytes[i++];
+							i--;
+						} else if (c < 32 || c >= 127) {
+							static const char hex[] = "0123456789abcdef";
+							rendered[used++] = '\\'; rendered[used++] = 'x';
+							rendered[used++] = hex[c >> 4]; rendered[used++] = hex[c & 15];
+						} else rendered[used++] = (char)c;
+					}
+					rendered[used] = 0;
+					if (deprecated) attributes->deprecated_message = rendered;
+					else attributes->nodiscard_message = rendered;
 				} else if (known) {
 					diagnostic_error(parser->diagnostics, token.location, "supported attributes take no arguments");
 					return false;
@@ -267,7 +325,7 @@ static bool parse_attributes(struct parser *parser, struct parsed_attributes *at
 	return parse_attributes_impl(parser, attributes, false);
 }
 
-static bool parse_general_declaration_attributes(struct parser *parser, bool *present, bool *deprecated)
+static bool parse_general_declaration_attributes(struct parser *parser, bool *present, bool *deprecated, const char **message)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
@@ -291,6 +349,7 @@ static bool parse_general_declaration_attributes(struct parser *parser, bool *pr
 	}
 	*present = attributes.present;
 	if (deprecated) *deprecated = attributes.deprecated;
+	if (message) *message = attributes.deprecated_message;
 	return true;
 }
 
@@ -312,7 +371,7 @@ static bool function_contract_target(const struct ast_type_syntax *syntax)
 /* For typedefs, members and parameters, only function-type contracts and
  * ordinary declaration attributes are valid in this bounded suffix path. */
 static bool parse_type_declarator_attributes(struct parser *parser,
-	bool *present, bool *deprecated, bool *function_contract)
+	bool *present, bool *deprecated, bool *function_contract, const char **message)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
@@ -328,12 +387,14 @@ static bool parse_type_declarator_attributes(struct parser *parser,
 	*present = attributes.present;
 	*deprecated = attributes.deprecated;
 	*function_contract = attributes.function_contract;
+	if (message) *message = attributes.deprecated_message;
 	return true;
 }
 
 /* After an ordinary declarator, function attributes apply to that declarator
  * only. Semantic analysis checks the resolved identifier type. */
-static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated, bool *function_contract)
+static bool parse_function_declarator_attributes(struct parser *parser, bool *noreturn, bool *nodiscard, bool *deprecated, bool *function_contract,
+	const char **nodiscard_message, const char **deprecated_message)
 {
 	struct parsed_attributes attributes;
 	struct token location = preprocess_peek(parser->preprocessor);
@@ -348,6 +409,8 @@ static bool parse_function_declarator_attributes(struct parser *parser, bool *no
 	*nodiscard = attributes.nodiscard;
 	*deprecated = attributes.deprecated;
 	*function_contract = attributes.function_contract;
+	*nodiscard_message = attributes.nodiscard_message;
+	*deprecated_message = attributes.deprecated_message;
 	return true;
 }
 
@@ -1273,6 +1336,8 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 	}
 	node->is_nodiscard = enum_attributes.nodiscard;
 	node->is_deprecated = enum_attributes.deprecated;
+	node->nodiscard_message = enum_attributes.nodiscard_message;
+	node->deprecated_message = enum_attributes.deprecated_message;
 	if (preprocess_peek(parser->preprocessor).kind == token_identifier)
 		node->tag = preprocess_next(parser->preprocessor);
 	/* In a member declaration, the colon after an enum tag can instead
@@ -1324,20 +1389,21 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 		struct token name;
 		struct ast_enumerator *item;
 		bool attributes, deprecated;
+		const char *message;
 		if (count++ == 1024 || parser->record_declarations == ast_max_record_declarations) {
 			diagnostic_error(parser->diagnostics, keyword.location, "enumerator resource limit exceeded");
 			return NULL;
 		}
 		if (!expect_token(parser, token_identifier, "expected enumerator name", &name))
 			return NULL;
-		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated))
+		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated, &message))
 			return NULL;
 		item = arena_alloc(parser->arena, sizeof(*item));
 		if (!item) {
 			allocation_error(parser, name.location);
 			return NULL;
 		}
-		*item = (struct ast_enumerator) { .name = name, .is_deprecated = deprecated };
+		*item = (struct ast_enumerator) { .name = name, .is_deprecated = deprecated, .deprecated_message = message };
 		if (preprocess_peek(parser->preprocessor).kind == token_equal) {
 			preprocess_next(parser->preprocessor);
 			item->value = parse_expression(parser, 2);
@@ -1364,7 +1430,7 @@ static struct ast_type_syntax *parse_enum_specifier(struct parser *parser, struc
 static bool append_record_member(struct parser *parser, struct ast_record_type_syntax *record,
 	struct ast_record_member_declaration ***tail, struct ast_type_syntax *syntax,
 	struct token name, bool anonymous, bool is_deprecated, struct ast_alignment_group *alignments,
-	struct ast_expression *bit_width, struct source_location bit_colon)
+	struct ast_expression *bit_width, struct source_location bit_colon, const char *message)
 {
 	struct ast_record_member_declaration *member;
 
@@ -1380,7 +1446,7 @@ static bool append_record_member(struct parser *parser, struct ast_record_type_s
 		return false;
 	}
 	*member = (struct ast_record_member_declaration) {
-		.type_syntax = syntax, .name = name, .anonymous = anonymous, .is_deprecated = is_deprecated, .alignments = alignments,
+		.type_syntax = syntax, .name = name, .anonymous = anonymous, .is_deprecated = is_deprecated, .deprecated_message = message, .alignments = alignments,
 		.bit_width = bit_width, .bit_colon = bit_colon,
 	};
 	**tail = member;
@@ -1399,8 +1465,9 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 		struct ast_type_syntax *base;
 		struct declaration_head head = { 0 };
 		bool attributes, deprecated;
+		const char *message;
 
-		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated))
+		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated, &message))
 			return false;
 		if (attributes && (preprocess_peek(parser->preprocessor).kind == token_static_assert ||
 			preprocess_peek(parser->preprocessor).kind == token_legacy_static_assert)) {
@@ -1454,7 +1521,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				return false;
 			}
 			preprocess_next(parser->preprocessor);
-			if (!append_record_member(parser, record, &tail, base, name, true, false, head.alignments, NULL, beginning.location))
+			if (!append_record_member(parser, record, &tail, base, name, true, false, head.alignments, NULL, beginning.location, NULL))
 				return false;
 			continue;
 		}
@@ -1465,6 +1532,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 			struct ast_expression *bit_width = NULL;
 			struct source_location bit_colon = beginning.location;
 			bool suffix_deprecated = false;
+			const char *suffix_message = NULL;
 
 			if (preprocess_peek(parser->preprocessor).kind == token_colon) {
 				syntax = base;
@@ -1474,7 +1542,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 					return false;
 				{
 					bool suffix_attributes, function_contract;
-					if (!parse_type_declarator_attributes(parser, &suffix_attributes, &suffix_deprecated, &function_contract))
+					if (!parse_type_declarator_attributes(parser, &suffix_attributes, &suffix_deprecated, &function_contract, &suffix_message))
 						return false;
 					if (function_contract && !function_contract_target(syntax)) {
 						diagnostic_error(parser->diagnostics, name.location,
@@ -1493,7 +1561,7 @@ static bool parse_record_members(struct parser *parser, struct ast_record_type_s
 				diagnostic_error(parser->diagnostics, beginning.location, "expected member name");
 				return false;
 			}
-			if (!append_record_member(parser, record, &tail, syntax, name, false, deprecated || suffix_deprecated, head.alignments, bit_width, bit_colon))
+			if (!append_record_member(parser, record, &tail, syntax, name, false, deprecated || suffix_deprecated, head.alignments, bit_width, bit_colon, suffix_message ? suffix_message : message))
 				return false;
 			if (preprocess_peek(parser->preprocessor).kind != token_comma)
 				break;
@@ -1527,6 +1595,8 @@ static struct ast_type_syntax *parse_record_specifier(struct parser *parser, str
 	}
 	record->is_nodiscard = attributes.nodiscard;
 	record->is_deprecated = attributes.deprecated;
+	record->nodiscard_message = attributes.nodiscard_message;
+	record->deprecated_message = attributes.deprecated_message;
 	if (preprocess_peek(parser->preprocessor).kind != token_left_brace) {
 		if (attributes.present) {
 			diagnostic_error(parser->diagnostics, keyword.location,
@@ -3378,7 +3448,8 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		return NULL;
 	if (preprocess_peek(parser->preprocessor).kind == token_left_bracket) {
 		bool attributes, deprecated;
-		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated))
+		const char *message;
+		if (!parse_general_declaration_attributes(parser, &attributes, &deprecated, &message))
 			return NULL;
 		if (!begins_declaration_specifier(parser, preprocess_peek(parser->preprocessor))) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -3387,9 +3458,11 @@ static struct ast_for_statement *parse_for_contents(struct parser *parser)
 		}
 		parser->declaration_attributes = attributes;
 		parser->declaration_deprecated = deprecated;
+		parser->declaration_deprecated_message = message;
 		initializer_declarations = parse_local_declaration(parser);
 		parser->declaration_attributes = false;
 		parser->declaration_deprecated = false;
+		parser->declaration_deprecated_message = NULL;
 		if (!initializer_declarations)
 			return NULL;
 	} else if (begins_static_assertion(preprocess_peek(parser->preprocessor).kind)) {
@@ -3782,6 +3855,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 		struct ast_initializer *initializer_syntax = NULL;
 		struct ast_local_declaration *node;
 		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated, function_contract;
+		const char *declarator_nodiscard_message, *declarator_deprecated_message;
 
 		if (!count_block_item(parser, head.inferred_name.kind == token_identifier ?
 			head.inferred_name.location : preprocess_peek(parser->preprocessor).location))
@@ -3792,7 +3866,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 				name = head.inferred_name;
 			else if (!parse_inferred_identifier(parser, &name))
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract, &declarator_nodiscard_message, &declarator_deprecated_message))
 				return NULL;
 			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
 				diagnostic_error(parser->diagnostics, name.location,
@@ -3803,7 +3877,7 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_local);
 			if (!type_syntax)
 				return NULL;
-			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
+			if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract, &declarator_nodiscard_message, &declarator_deprecated_message))
 				return NULL;
 		}
 		if (function_contract && !function_contract_target(type_syntax)) {
@@ -3838,6 +3912,8 @@ static struct ast_block_item *parse_local_declaration_tail(struct parser *parser
 			parser->declaration_noreturn || declarator_noreturn;
 		node->is_nodiscard = parser->declaration_nodiscard || declarator_nodiscard;
 		node->is_deprecated = parser->declaration_deprecated || declarator_deprecated;
+		node->nodiscard_message = declarator_nodiscard_message ? declarator_nodiscard_message : parser->declaration_nodiscard_message;
+		node->deprecated_message = declarator_deprecated_message ? declarator_deprecated_message : parser->declaration_deprecated_message;
 		node->is_constexpr = head.constexpr_keyword.kind == token_constexpr;
 		node->is_register = head.keyword.kind == token_register;
 		node->is_auto = head.auto_keyword.kind == token_auto;
@@ -3970,6 +4046,7 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 		struct ast_typedef_declaration *declaration;
 		struct ast_block_typedef_declaration *item;
 		bool suffix_deprecated;
+		const char *suffix_message;
 
 		if (!count_block_item(parser, preprocess_peek(parser->preprocessor).location))
 			return NULL;
@@ -3978,7 +4055,7 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 			return NULL;
 		{
 			bool attributes, function_contract;
-			if (!parse_type_declarator_attributes(parser, &attributes, &suffix_deprecated, &function_contract))
+			if (!parse_type_declarator_attributes(parser, &attributes, &suffix_deprecated, &function_contract, &suffix_message))
 				return NULL;
 			if (function_contract && !function_contract_target(type_syntax)) {
 				diagnostic_error(parser->diagnostics, name.location,
@@ -3990,6 +4067,7 @@ static struct ast_block_item *parse_block_typedef_declaration_tail(struct parser
 		if (!declaration)
 			return NULL;
 		declaration->is_deprecated = parser->declaration_deprecated || suffix_deprecated;
+		declaration->deprecated_message = suffix_message ? suffix_message : parser->declaration_deprecated_message;
 		item = ast_new_block_typedef_declaration(parser->arena, declaration);
 		if (!item) {
 			allocation_error(parser, keyword.location);
@@ -4186,11 +4264,15 @@ static struct ast_compound_statement *parse_compound_contents(struct parser *par
 		parser->declaration_noreturn = attributes.noreturn;
 		parser->declaration_nodiscard = attributes.nodiscard;
 		parser->declaration_deprecated = attributes.deprecated;
+		parser->declaration_nodiscard_message = attributes.nodiscard_message;
+		parser->declaration_deprecated_message = attributes.deprecated_message;
 		item = parse_block_item(parser);
 		parser->declaration_attributes = false;
 		parser->declaration_noreturn = false;
 		parser->declaration_nodiscard = false;
 		parser->declaration_deprecated = false;
+		parser->declaration_nodiscard_message = NULL;
+		parser->declaration_deprecated_message = NULL;
 		if (!item)
 			return NULL;
 		*tail = item;
@@ -4239,6 +4321,7 @@ static bool parse_parameters(struct parser *parser,
 		struct declaration_head head = { 0 };
 		bool has_name = false;
 		bool prefix_attributes, suffix_attributes, prefix_deprecated, suffix_deprecated, function_contract;
+		const char *prefix_message, *suffix_message;
 
 		if (preprocess_peek(parser->preprocessor).kind == token_ellipsis) {
 			preprocess_next(parser->preprocessor);
@@ -4251,11 +4334,11 @@ static bool parse_parameters(struct parser *parser,
 				"function exceeds parameter limit (128)");
 			return false;
 		}
-		if (!parse_general_declaration_attributes(parser, &prefix_attributes, &prefix_deprecated))
+		if (!parse_general_declaration_attributes(parser, &prefix_attributes, &prefix_deprecated, &prefix_message))
 			return false;
 		type_syntax = parse_declaration_specifiers(parser, &beginning, &head, declarator_parameter);
 		type_syntax = parse_derived_type(parser, type_syntax, &name, &has_name, declarator_parameter);
-		if (!type_syntax || !parse_type_declarator_attributes(parser, &suffix_attributes, &suffix_deprecated, &function_contract))
+		if (!type_syntax || !parse_type_declarator_attributes(parser, &suffix_attributes, &suffix_deprecated, &function_contract, &suffix_message))
 			return false;
 		if (function_contract && !function_contract_target(type_syntax)) {
 			diagnostic_error(parser->diagnostics, beginning.location,
@@ -4279,6 +4362,7 @@ static bool parse_parameters(struct parser *parser,
 		}
 		parameter->type_syntax = type_syntax;
 		parameter->is_deprecated = prefix_deprecated || suffix_deprecated;
+		parameter->deprecated_message = suffix_message ? suffix_message : prefix_message;
 		parameter->alignments = head.alignments;
 		parameter->is_register = head.keyword.kind == token_register;
 		/* Nested function parameter lists restore parser names, so only
@@ -4393,7 +4477,7 @@ static struct ast_external_declaration *new_external_type_declaration(struct par
  * Every name is visible to later declarators, not its own unfinished declarator.
  */
 static struct ast_external_declaration *parse_typedef_declaration_tail(struct parser *parser,
-	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base, bool is_deprecated)
+	size_t remaining_declarations, struct token keyword, struct ast_type_syntax *base, bool is_deprecated, const char *message)
 {
 	struct ast_external_declaration *declarations = NULL;
 	struct ast_external_declaration **tail = &declarations;
@@ -4407,6 +4491,7 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 		struct ast_typedef_declaration *declaration;
 		struct ast_external_typedef_declaration *external;
 		bool suffix_deprecated;
+		const char *suffix_message;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4419,7 +4504,7 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 			return NULL;
 		{
 			bool attributes, function_contract;
-			if (!parse_type_declarator_attributes(parser, &attributes, &suffix_deprecated, &function_contract))
+			if (!parse_type_declarator_attributes(parser, &attributes, &suffix_deprecated, &function_contract, &suffix_message))
 				return NULL;
 			if (function_contract && !function_contract_target(type_syntax)) {
 				diagnostic_error(parser->diagnostics, name.location,
@@ -4431,6 +4516,7 @@ static struct ast_external_declaration *parse_typedef_declaration_tail(struct pa
 		if (!declaration)
 			return NULL;
 		declaration->is_deprecated = is_deprecated || suffix_deprecated;
+		declaration->deprecated_message = suffix_message ? suffix_message : message;
 		external = ast_new_external_typedef_declaration(parser->arena, declaration);
 		if (!external) {
 			allocation_error(parser, keyword.location);
@@ -4494,7 +4580,7 @@ done:
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
 	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated, bool is_constexpr,
-	struct token inferred_name, struct ast_alignment_group *alignments)
+	struct token inferred_name, struct ast_alignment_group *alignments, const char *nodiscard_message, const char *deprecated_message)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -4505,6 +4591,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		struct ast_type_syntax *type_syntax;
 		struct ast_external_declaration *item;
 		bool declarator_noreturn, declarator_nodiscard, declarator_deprecated, function_contract;
+		const char *declarator_nodiscard_message, *declarator_deprecated_message;
 
 		if (count == remaining_declarations) {
 			diagnostic_error(parser->diagnostics, preprocess_peek(parser->preprocessor).location,
@@ -4527,7 +4614,7 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			if (!type_syntax)
 				return NULL;
 		}
-		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
+		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract, &declarator_nodiscard_message, &declarator_deprecated_message))
 			return NULL;
 		if (function_contract && !function_contract_target(type_syntax)) {
 			diagnostic_error(parser->diagnostics, name.location,
@@ -4564,6 +4651,8 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			declaration->is_noreturn = is_noreturn || declarator_noreturn;
 			declaration->is_nodiscard = is_nodiscard || declarator_nodiscard;
 			declaration->is_deprecated = is_deprecated || declarator_deprecated;
+			declaration->nodiscard_message = declarator_nodiscard_message ? declarator_nodiscard_message : nodiscard_message;
+			declaration->deprecated_message = declarator_deprecated_message ? declarator_deprecated_message : deprecated_message;
 			declaration->is_thread_local = is_thread_local;
 			declaration->is_static = is_static;
 			declaration->type_syntax = (struct ast_function_type_syntax *)type_syntax;
@@ -4593,6 +4682,15 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 		}
 		if (!item)
 			return NULL;
+		if (item->kind == external_object_declaration) {
+			struct ast_external_object_declaration *object = (struct ast_external_object_declaration *)item;
+			object->nodiscard_message = declarator_nodiscard_message ? declarator_nodiscard_message : nodiscard_message;
+			object->deprecated_message = declarator_deprecated_message ? declarator_deprecated_message : deprecated_message;
+		} else if (item->kind == external_type_declaration) {
+			struct ast_external_type_declaration *declaration = (struct ast_external_type_declaration *)item;
+			declaration->nodiscard_message = declarator_nodiscard_message ? declarator_nodiscard_message : nodiscard_message;
+			declaration->deprecated_message = declarator_deprecated_message ? declarator_deprecated_message : deprecated_message;
+		}
 		if (is_constexpr) {
 			if (item->kind == external_object_declaration)
 				((struct ast_external_object_declaration *)item)->is_constexpr = true;
@@ -4744,12 +4842,13 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 				"function attribute requires a function identifier declaration");
 			return NULL;
 		}
-		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base, parsed.deprecated);
+		return parse_typedef_declaration_tail(parser, remaining_declarations, head.keyword, base, parsed.deprecated, parsed.deprecated_message);
 	}
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
 		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
-		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.constexpr_keyword.kind == token_constexpr, head.inferred_name, head.alignments);
+		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.constexpr_keyword.kind == token_constexpr, head.inferred_name, head.alignments,
+		parsed.nodiscard_message, parsed.deprecated_message);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

@@ -57,7 +57,9 @@ struct enum_definition {
 	bool defining;
 	bool fixed;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	const struct type *underlying; /* NULL denotes ordinary enum int. */
 	struct token tag;
 	struct enum_member_info *members; /* Sorted by name after definition. */
@@ -91,6 +93,7 @@ struct record_member {
 	unsigned alignment; /* Explicit member alignment; zero means natural. */
 	bool anonymous;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool is_flexible;
 	bool is_bit_field;
 	unsigned bit_width; /* 0..64; zero denotes an unnamed separator. */
@@ -103,7 +106,9 @@ struct record_definition {
 	bool is_union;
 	bool complete;
 	bool is_nodiscard;
+	const char *nodiscard_message;
 	bool is_deprecated;
+	const char *deprecated_message;
 	bool has_flexible_array;
 	struct record_member *members;
 	size_t member_count;

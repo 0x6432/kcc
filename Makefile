@@ -231,6 +231,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_sizeof_alignment.py
 	QBE="$(QBE)" python3 tests/test_declaration_alignment.py
 	QBE="$(QBE)" python3 tests/test_attributes.py
+	QBE="$(QBE)" python3 tests/test_attribute_messages.py
 	QBE="$(QBE)" python3 tests/test_alignment_storage_records.py
 	python3 tests/test_constant_array_bounds.py
 	python3 tests/test_null_pointer_constants.py
@@ -482,6 +483,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_sizeof_alignment.py
 	python3 tests/test_declaration_alignment.py
 	python3 tests/test_attributes.py
+	python3 tests/test_attribute_messages.py
 	python3 tests/test_alignment_storage_records.py
 	python3 tests/test_constant_array_bounds.py
 	python3 tests/test_null_pointer_constants.py

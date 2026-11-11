@@ -26,3 +26,16 @@ void diagnostic_warning(struct diagnostics *diagnostics,
 	write_diagnostic(diagnostics, location, "warning", message);
 	diagnostics->warnings++;
 }
+
+void diagnostic_warning_with_detail(struct diagnostics *diagnostics,
+	struct source_location location, const char *message, const char *detail)
+{
+	if (diagnostics->stream) {
+		size_t line, column;
+		source_line_column(location, &line, &column);
+		fprintf(diagnostics->stream, "%s:%zu:%zu: warning: %s%s%s\n",
+			location.source->name, line, column, message,
+			detail ? ": " : "", detail ? detail : "");
+	}
+	diagnostics->warnings++;
+}
