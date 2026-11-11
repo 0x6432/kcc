@@ -19,12 +19,14 @@ programs=[
 '''static_assert((constexpr int){42}==42); constexpr int x=(constexpr int){40}+2; int a[(constexpr int){42}]; int main(void){return x==42 && sizeof(a)==168?42:1;}''',
 '''struct S{int x; unsigned y:6;}; static_assert((constexpr struct S){40,42}.y==42); int main(void){return (constexpr struct S){40,42}.y;}''',
 '''union U{int a; int b;}; static_assert((constexpr union U){.b=42}.b==42); int main(void){return (constexpr union U){.b=42}.b;}''',
+'''struct S{union {int a; int b;};}; static_assert((constexpr struct S){.b=42}.b==42); int main(void){return (constexpr struct S){.b=42}.b;}''',
 '''static_assert((int)(constexpr double){42.0}==42); constexpr double x=(constexpr double){21.0}*2.0; int main(void){return x==42.0?42:1;}''',
 '''constexpr int *p=(constexpr int *){nullptr}; int main(void){return p==nullptr?42:1;}''',
 '''int main(void){return sizeof((constexpr char[]){"abc"})==4?42:1;}''',
 '''int main(void){const int *a=0; int ok=1; for(int i=0;i<2;i++){const int *b=&(static constexpr int){42}; if(i && a!=b)ok=0; a=b;} return ok && *a==42?42:1;}''',
 ]
 negative=[
+'''struct S{union {int a; int b;};}; static_assert((constexpr struct S){.b=42}.a==42);''',
 '''union U{int a; int b;}; static_assert((constexpr union U){.a=42}.b==42);''',
 '''int main(void){(constexpr int){42}=0;return 0;}''',
 '''int main(void){int x=42; return (constexpr int){x};}''',

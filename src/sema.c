@@ -934,7 +934,7 @@ static bool constexpr_aggregate_members(const struct type *type, unsigned depth,
 		if (!definition->complete)
 			return false;
 		for (const struct record_member *member = definition->members; member; member = member->next)
-			if (member->is_flexible || (member->anonymous && member->type->kind == type_kind_union) ||
+			if (member->is_flexible ||
 				!constexpr_aggregate_members(member->type, depth + 1, work))
 				return false;
 		return true;
@@ -949,7 +949,7 @@ static const struct type *constexpr_aggregate_type(struct sema *sema, const stru
 	size_t work = 0;
 	if (!constexpr_aggregate_members(type, 0, &work)) {
 		diagnostic_error(sema->diagnostics, location,
-			"constexpr aggregate requires supported non-volatile members without flexible arrays or anonymous unions");
+			"constexpr aggregate requires supported non-volatile members without flexible arrays");
 		return NULL;
 	}
 	type = type_qualified(sema->arena, type, type_qualifier_const);
@@ -4139,28 +4139,50 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
-/* Check each direct union selection on the path from the root object. */
+/* Follow promoted anonymous-record members through every union selection. */
+static bool constexpr_promoted_path_active(const struct ast_initializer_plan *plan,
+	const struct type *type, uint64_t offset, const struct record_member *target, unsigned depth)
+{
+	if (!type_is_record(type) || depth > ast_max_expression_depth)
+		return false;
+	const struct record_definition *definition = type_record_definition(type);
+	const struct record_member *chosen = NULL;
+	for (const struct record_member *member = definition->members; member; member = member->next) {
+		uint64_t ignored;
+		if (member == target || (member->anonymous &&
+			type_record_find_member(member->type, &target->name, &ignored) == target)) {
+			chosen = member;
+			break;
+		}
+	}
+	if (!chosen)
+		return false;
+	if (type->kind == type_kind_union) {
+		const struct record_member *active = definition->members;
+		while (active && active->is_bit_field && !active->name.length)
+			active = active->next;
+		for (const struct ast_initializer_union_selection *selection = plan->unions; selection; selection = selection->next)
+			if (selection->offset == offset && type_record_definition(selection->type) == definition) {
+				active = selection->member;
+				break;
+			}
+		if (active != chosen)
+			return false;
+	}
+	if (chosen == target)
+		return true;
+	return UINT64_MAX - offset >= chosen->offset &&
+		constexpr_promoted_path_active(plan, chosen->type, offset + chosen->offset, target, depth + 1);
+}
+
 static bool constexpr_union_path_active(const struct ast_initializer_plan *plan,
 	const struct ast_member_expression *const *path, unsigned count)
 {
 	uint64_t parent_offset = 0;
 	while (count) {
 		const struct ast_member_expression *step = path[--count];
-		const struct type *parent_type = step->operand->type;
-		if (parent_type->kind == type_kind_union) {
-			const struct record_definition *definition = type_record_definition(parent_type);
-			const struct record_member *active = definition->members;
-			while (active && active->is_bit_field && !active->name.length)
-				active = active->next;
-			for (const struct ast_initializer_union_selection *selection = plan->unions; selection; selection = selection->next)
-				if (selection->offset == parent_offset && type_record_definition(selection->type) == definition) {
-					active = selection->member;
-					break;
-				}
-			if (active != step->member)
-				return false;
-		}
-		if (UINT64_MAX - parent_offset < step->offset)
+		if (!constexpr_promoted_path_active(plan, step->operand->type, parent_offset, step->member, 0) ||
+			UINT64_MAX - parent_offset < step->offset)
 			return false;
 		parent_offset += step->offset;
 	}
