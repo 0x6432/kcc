@@ -71,7 +71,10 @@ build/unreachable.o: runtime/unreachable.c build/compile.flags Makefile $(if $(w
 build/math_compare.o: runtime/math_compare.c build/compile.flags Makefile $(if $(wildcard build/math_compare.d),,FORCE) | build
 	$(CC) $(CFLAGS) -fno-fast-math -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
 
-build/libkccrt.a: build/math_compare.o build/volatile.o build/checked.o build/memset_explicit.o build/free_sized.o build/unreachable.o
+build/uchar8.o: runtime/uchar8.c build/compile.flags Makefile $(if $(wildcard build/uchar8.d),,FORCE) | build
+	$(CC) $(CFLAGS) -fno-lto -MD -MP -MF $(@:.o=.d) -MT $@ -c $< -o $@
+
+build/libkccrt.a: build/uchar8.o build/math_compare.o build/volatile.o build/checked.o build/memset_explicit.o build/free_sized.o build/unreachable.o
 	ar rcs $@ $^
 
 build/test_support: $(patsubst %.c,build/obj/%.o,tests/test_support.c src/source.c src/arena.c src/diagnostic.c) build/link.flags Makefile | build
@@ -145,6 +148,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_bitint_layout.py
 	QBE="$(QBE)" python3 tests/test_variadic.py
 	QBE="$(QBE)" python3 tests/test_builtin_headers.py
+	QBE="$(QBE)" python3 tests/test_uchar8_runtime.py
 	QBE="$(QBE)" python3 tests/test_hosted_numeric.py
 	QBE="$(QBE)" python3 tests/test_wide_library_declarations.py
 	QBE="$(QBE)" python3 tests/test_embed.py
@@ -391,6 +395,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	QBE="$(QBE)" python3 tests/test_aggregate_varargs.py
 	python3 tests/test_variadic.py
 	python3 tests/test_builtin_headers.py
+	python3 tests/test_uchar8_runtime.py
 	python3 tests/test_hosted_numeric.py
 	python3 tests/test_wide_library_declarations.py
 	python3 tests/test_embed.py

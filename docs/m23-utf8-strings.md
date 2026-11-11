@@ -38,9 +38,7 @@ characters cannot fit a UTF-8 character constant.
 A partial `uchar.h` fallback defines `char8_t`, `char16_t`, and `char32_t`
 for the target, a glibc-compatible `mbstate_t`, and the `mbrtoc16`, `c16rtomb`,
 `mbrtoc32`, and `c32rtomb` interfaces. These functions require compatible libc;
-C23 `mbrtoc8` and `c8rtomb` are declared, but require a compatible libc that
-exports them; the development environment’s glibc 2.34 does not. Explicit include directories override this
-fallback.
+C23 `mbrtoc8` and `c8rtomb` are provided by `libkccrt.a` for the supported x86-64 glibc C and UTF-8 locales, including glibc 2.34. See `m25-uchar8-runtime.md` for state, linkage, and locale limitations. Explicit include directories override this fallback.
 
 The compiler was built; new and updated unit, integration and optional runtime
 cases have not been run.

@@ -116,9 +116,9 @@ Source provenance, not a filename, determines which budget is charged.
 - `wctype.h` declares wide classification and case-conversion functions and
   glibc-compatible classification and transformation descriptor types.
 - `uchar.h` supplies the C23 character typedefs, glibc-compatible `mbstate_t`,
-  and 8/16/32-bit conversion function declarations. The C23 8-bit conversion
-  declarations require a libc exporting those symbols; the development glibc
-  2.34 does not.
+  and 8/16/32-bit conversion function declarations. `libkccrt.a` supplies the
+  C23 8-bit conversion functions for the supported glibc C and UTF-8 locales;
+  see `m25-uchar8-runtime.md` for linkage and locale limitations.
 - `signal.h` provides Linux x86-64 signal numbers, `sig_atomic_t`, `SIG_DFL`,
   `SIG_IGN`, `SIG_ERR`, and declarations for `signal` and `raise`. The signal
   sentinel expressions use the target's integer/function-pointer mapping,

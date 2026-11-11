@@ -96,7 +96,7 @@ conformance is not claimed.
 | M24f | VLA/variably modified types | Lifetime, evaluation, stack bounds, goto constraints | in progress (bounded automatic outer VLAs and direct block-local pointers to runtime-bound arrays with tracked strides, updates and subtraction; loop/switch/goto scope checks and empty initialization; broader VM types remain unsupported) |
 | M24g | long double, floating environment and remaining backend gaps | Correct target representation and runtime/ABI tests | planned |
 | M25a | Predefined macros and translation/environment audit | Standard clause matrix and implementation-defined docs | planned |
-| M25b | Compiler-provided headers and runtime helpers | Header compile tests and link resolution | planned |
+| M25b | Compiler-provided headers and runtime helpers | Header compile tests and link resolution | in progress: partial headers and runtime, including bounded glibc C/UTF-8 `mbrtoc8` and `c8rtomb`; broader library work remains |
 | M25c | Hosted system-libc compatibility | Declare supported libc/version; verify C23 gaps explicitly | planned |
 | M25d | Language/library conformance audit | Published unsupported/validated list; no premature full-C23 claim | planned |
 | M26 | Self-host and bootstrap | Compile compiler with itself, compare bootstrap stages | planned |
