@@ -3379,9 +3379,7 @@ static bool sema_expression(struct sema *sema,
 			return false;
 		}
 		node->declaration = find_local(sema, node->name);
-		if (!node->declaration && sema->function && node->name.length == 8 &&
-			memcmp(node->name.spelling_location.source->data + node->name.spelling_location.offset,
-				"__func__", 8) == 0) {
+		if (node->declaration && node->declaration->is_function_name) {
 			struct ast_string_expression *original = sema->function->function_name_string;
 			struct ast_string_expression *value;
 
@@ -7073,6 +7071,24 @@ static bool sema_function_body(struct sema *sema, struct ast_function *definitio
 		parameter->local = parameter->prototype_local;
 		assert(parameter->local);
 		if (!bind_local(sema, parameter->local, parameter->type))
+			goto done;
+	}
+	/* The implicit static const-char array shares the outer body scope with
+	 * parameters. It has static string storage, not an automatic local slot. */
+	{
+		struct token name = ast_function_name_token(definition->declaration->name.location);
+		struct ast_local_declaration *implicit = ast_new_local(sema->arena, name.location, name, NULL);
+		const struct type *element = type_qualified(sema->arena, &type_char, type_qualifier_const);
+		struct array_type *array = element ? type_new_array(sema->arena, element,
+			definition->declaration->name.length + 1) : NULL;
+		if (!implicit || !array) {
+			diagnostic_error(sema->diagnostics, name.location, "out of memory binding function name");
+			goto done;
+		}
+		implicit->type = &array->type;
+		implicit->is_function_name = true;
+		implicit->is_static = true;
+		if (!reserve_local_name(sema, implicit))
 			goto done;
 	}
 	/* Parameters and outermost body declarations inhabit the same scope. */

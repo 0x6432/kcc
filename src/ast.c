@@ -808,6 +808,16 @@ struct ast_continue_statement *ast_new_continue(struct arena *arena,
 	return node;
 }
 
+/* A synthetic token gives parser and semantic scopes one shared spelling. */
+struct token ast_function_name_token(struct source_location location)
+{
+	static unsigned char spelling[] = "__func__";
+	static const struct source source = { .data = spelling, .length = 8 };
+
+	return (struct token) { .kind = token_identifier, .location = location,
+		.spelling_location = { .source = &source }, .length = 8 };
+}
+
 struct ast_local_declaration *ast_new_local(struct arena *arena,
 	struct source_location location, struct token name,
 	struct ast_expression *initializer)

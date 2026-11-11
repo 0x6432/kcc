@@ -4459,6 +4459,10 @@ static struct ast_compound_statement *parse_function_body(struct parser *parser,
 			!publish_parser_name(parser, parameter->name, parser_name_object))
 			goto done;
 	}
+	/* The implicit array is in the body's ordinary identifier namespace. */
+	if (!publish_parser_name(parser, ast_function_name_token(declaration->name.location),
+		parser_name_object))
+		goto done;
 	parser->block_items = 0;
 	parser->in_function = true;
 	body = parse_compound_statement(parser);

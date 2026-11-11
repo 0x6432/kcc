@@ -927,6 +927,7 @@ struct ast_local_declaration {
 	bool constexpr_complete;
 	uint64_t constexpr_bits;
 	bool enum_constant;
+	bool is_function_name; /* Implicit __func__ binding; no local slot. */
 	bool enum_deprecated;
 	int64_t enum_value;
 	uint64_t enum_bits;
@@ -1282,6 +1283,7 @@ struct ast_break_statement *ast_new_break(struct arena *arena,
 	struct source_location location);
 struct ast_continue_statement *ast_new_continue(struct arena *arena,
 	struct source_location location);
+struct token ast_function_name_token(struct source_location location);
 struct ast_local_declaration *ast_new_local(struct arena *arena,
 	struct source_location location, struct token name,
 	struct ast_expression *initializer);
