@@ -41,10 +41,58 @@ int main(void) {
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
+
+    # Range checking happens after adjacent fragments choose their encoding.
+    # Cover both orders, macro expansion, fragment escape boundaries and
+    # ordinary UTF-8 source characters on either side of a wide numeric escape.
+    cases = []
+    for prefix, typename, values in (
+        ('u', 'char16_t', (0xff, 0x100, 0x1ff, 0xffff)),
+        ('U', 'char32_t', (0xff, 0x100, 0xffff, 0x10000, 0xffffffff)),
+        ('L', 'int', (0xff, 0x100, 0xffff, 0x10000, 0x7fffffff)),
+    ):
+        for value in values:
+            for literal in (f'"\\x{value:x}" {prefix}""',
+                            f'{prefix}"" "\\x{value:x}"',
+                            f'{prefix}"A" "\\x{value:x}" "é"'):
+                expected = [value] if '"A"' not in literal else [65, value, 0xe9]
+                cases.append((typename, literal, expected))
+    lines = ['#include <uchar.h>', '#define LARGE "\\x100"',
+             'char16_t macro_value[] = LARGE u"";',
+             'char16_t boundary[] = u"" "\\x1" "00" "\\400";',
+             'int main(void) {']
+    for i, (typename, literal, expected) in enumerate(cases):
+        lines.append(f'  {typename} s{i}[] = {literal};')
+        checks = [f'sizeof s{i} != {len(expected) + 1} * sizeof({typename})']
+        checks += [f's{i}[{j}] != {value}u' for j, value in enumerate(expected)]
+        checks.append(f's{i}[{len(expected)}] != 0')
+        lines.append(f'  if ({" || ".join(checks)}) return 1;')
+    lines += ['  if (macro_value[0] != 256 || macro_value[1]) return 2;',
+              '  if (boundary[0] != 1 || boundary[1] != 48 || boundary[2] != 48 ||'
+              ' boundary[3] != 256 || boundary[4]) return 3;', '  return 42;', '}']
+    source.write_text('\n'.join(lines), encoding='utf-8')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and not result.stderr, result.stderr
+    native = path / 'native'
+    subprocess.run([host, '-std=c2x', str(source), '-o', str(native)], check=True)
+    assert subprocess.run([str(native)], timeout=5).returncode == 42
+    if qbe:
+        il, asm, exe = (path / n for n in ('mixed.ssa', 'mixed.s', 'mixed'))
+        il.write_text(result.stdout)
+        subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
+        subprocess.run([host, str(asm), '-o', str(exe)], check=True)
+        assert subprocess.run([str(exe)], timeout=5).returncode == 42
     for literal in (b'u"\\x10000"', b'U"\\x100000000"', b'L"\\x80000000"',
                     b'u"\\uD800"', b'U"\\U00110000"', b'L"\xed\xa0\x80"',
-                    b'u"x" U"y"', b'L"x" u8"y"'):
+                    b'u"x" U"y"', b'L"x" u8"y"',
+                    b'u"" "\\x10000"', b'"\\x10000" u""',
+                    b'U"" "\\x100000000"', b'L"" "\\x80000000"',
+                    b'u8"" "\\x100"', b'"\\x100" u8""',
+                    b'"" "\\x100"', b'"\\400"'):
         source.write_bytes(b'int main(void) { ' + literal + b'; return 0; }\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode != 0 and result.stderr, literal
+    source.write_bytes(b'[[deprecated("\\x100")]] int f(void); int main(void) { return 0; }\n')
+    result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
+    assert result.returncode != 0 and b'exceeds one byte' in result.stderr.encode(), result.stderr
 print('wide string literal checks completed')

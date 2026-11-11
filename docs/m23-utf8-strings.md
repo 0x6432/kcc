@@ -14,9 +14,10 @@ wide code units respectively on the little-endian target. Raw UTF-8 scalars and
 fixed-width UCNs are transcoded, including UTF-16 surrogate pairs; numeric
 escapes directly represent one target code unit and must fit its supported
 range. Matching-prefixed and ordinary fragments concatenate in the selected
-encoding; different nonordinary prefixes are rejected. As with ordinary
-strings, ordinary fragments are initially validated as byte strings, so an
-ordinary numeric escape above 255 is rejected even beside a wide fragment.
+encoding; different nonordinary prefixes are rejected. Numeric escapes in
+ordinary fragments are checked against the selected encoding after concatenation,
+so, for example, `u"" "\x100"` yields the UTF-16 code unit 0x100. Ordinary
+and `u8` strings still require byte-sized numeric escapes.
 Strings initialize matching unsigned-short, unsigned-int, or int arrays, with
 inferred bounds and optional omitted terminating code unit. Wide assertion
 messages are not supported. Other C23 literal and UCN extensions remain incomplete.
@@ -36,6 +37,3 @@ A partial `uchar.h` fallback defines `char8_t`, `char16_t`, and `char32_t`
 for the target, a glibc-compatible `mbstate_t`, and the `mbrtoc16`, `c16rtomb`,
 `mbrtoc32`, and `c32rtomb` interfaces. These functions require compatible libc;
 C23 `mbrtoc8` and `c8rtomb` are provided by `libkccrt.a` for the supported x86-64 glibc C and UTF-8 locales, including glibc 2.34. See `m25-uchar8-runtime.md` for state, linkage, and locale limitations. Explicit include directories override this fallback.
-
-The compiler was built; new and updated unit, integration and optional runtime
-cases have not been run.

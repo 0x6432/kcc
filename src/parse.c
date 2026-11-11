@@ -214,6 +214,15 @@ static bool parse_attributes_impl(struct parser *parser, struct parsed_attribute
 						return false;
 					}
 					do {
+						const unsigned char *spelling = message.spelling_location.source->data +
+							message.spelling_location.offset;
+						size_t decoded_length;
+						const char *error = parse_string_spelling(spelling, message.length,
+							NULL, 0, &decoded_length);
+						if (error) {
+							diagnostic_error(parser->diagnostics, message.location, error);
+							return false;
+						}
 						if (++count > 256) {
 							diagnostic_error(parser->diagnostics, message.location, "attribute limit exceeded (256)");
 							return false;
@@ -1729,14 +1738,18 @@ static struct ast_expression *parse_string_expression(struct parser *parser)
 		parser->string_fragment_count++;
 	} while (preprocess_peek(parser->preprocessor).kind == token_string);
 
-	/* Re-measure ordinary fragments in the selected wide encoding. */
-	if (encoding >= character_utf16) {
+	/* Validate and re-measure after concatenation has selected the encoding.
+	 * Ordinary fragments can have numeric escapes too large for a byte but
+	 * valid in the resulting wide string. */
+	{
 		length = 0;
 		for (struct string_fragment *fragment = fragments; fragment; fragment = fragment->next) {
 			struct token token = fragment->token;
 			const unsigned char *spelling = token.spelling_location.source->data + token.spelling_location.offset;
 			size_t decoded_length;
-			const char *error = parse_wide_string_spelling(spelling, token.length, encoding, NULL, 0, &decoded_length);
+			const char *error = encoding >= character_utf16 ?
+				parse_wide_string_spelling(spelling, token.length, encoding, NULL, 0, &decoded_length) :
+				parse_string_spelling(spelling, token.length, NULL, 0, &decoded_length);
 			if (error || decoded_length > ast_max_string_length - length) {
 				diagnostic_error(parser->diagnostics, token.location, error ? error : "string literal storage/count limit exceeded");
 				return NULL;

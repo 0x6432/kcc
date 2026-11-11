@@ -927,6 +927,18 @@ static struct token convert_string(struct token token, struct diagnostics *diagn
 	const char *error = wide ? parse_wide_string_spelling(text, token.length, encoding, NULL, 0, &token.string_length) :
 		parse_string_spelling(text, token.length, NULL, 0, &token.string_length);
 
+	/* An ordinary fragment can acquire a wider encoding during phase 6.
+	 * Defer its numeric-escape range check until the adjacent fragments have
+	 * selected their common encoding. The public byte decoder stays strict. */
+	if (error && encoding == character_ordinary &&
+		!strcmp(error, "character escape exceeds one byte")) {
+		size_t wide_length;
+		if (!parse_wide_string_spelling(text, token.length, character_utf32,
+				NULL, 0, &wide_length)) {
+			token.string_length = wide_length / 4;
+			error = NULL;
+		}
+	}
 	if (error)
 		return invalid_language_token(token, diagnostics, error);
 	token.kind = token_string;
