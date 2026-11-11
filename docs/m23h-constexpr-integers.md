@@ -37,8 +37,9 @@ Bit-field initializers must be exactly representable in their declared field wid
 Union-member access, including through promoted anonymous members, can form a
 constant expression only for the initialized active member; empty-initialized
 unions select their first named member.
-Direct constexpr struct or union values and direct record-member values of the same record
-definition can initialize constexpr records, or records with static storage.
+Direct constexpr struct or union values and direct record-member values can initialize
+compatible constexpr records, or compatible records with static storage, including separately
+declared C23 tagged records with matching layouts.
 Copies preserve active union members, nested arrays, bit-fields, string data and scalar constants without
 re-evaluating the source initializer.
 

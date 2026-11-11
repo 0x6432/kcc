@@ -5551,14 +5551,13 @@ static void initializer_cache_constant(struct ast_initializer_constant *constant
 	}
 }
 
-/* Resolve a direct constexpr record or record-member value to its immutable
- * initializer plan. Pointer indirection and runtime aggregate expressions do
- * not qualify. */
+/* Resolve a direct compatible constexpr record or record-member value to its
+ * immutable plan. Pointer indirection and runtime expressions do not qualify. */
 static const struct ast_initializer_plan *constexpr_record_source(
 	const struct ast_expression *expression, const struct type *target, uint64_t *offset)
 {
 	if (expression->kind != expression_load || !type_is_record(expression->type) ||
-		type_record_definition(expression->type) != type_record_definition(target))
+		!type_unqualified_compatible(expression->type, target))
 		return NULL;
 	const struct ast_expression *root = ((const struct ast_load_expression *)expression)->operand;
 	const struct ast_member_expression *path[ast_max_expression_depth];
@@ -5587,8 +5586,109 @@ static const struct ast_initializer_plan *constexpr_record_source(
 	return plan && constexpr_union_path_active(plan, path, path_count) ? plan : NULL;
 }
 
+/* Map physical subobjects between compatible, separately declared records.
+ * Their layouts have already been checked by type_compatible. Follow only the
+ * source union's active member, because distinct nested unions may overlap at
+ * the same address. Bounded work is shared with the initializer ancestry walk. */
+struct constexpr_copy_map {
+	struct initializer_builder *builder;
+	const struct ast_initializer_plan *plan;
+	uint64_t wanted_offset;
+	const struct record_member *field;
+	const struct ast_initializer_union_selection *selection;
+	const struct record_member *mapped_field;
+	const struct type *mapped_union;
+	struct source_location location;
+};
+
+enum constexpr_copy_map_result { constexpr_map_absent, constexpr_map_found, constexpr_map_failed };
+
+static bool constexpr_copy_map_step(struct constexpr_copy_map *query)
+{
+	if (query->builder->sema->initializer_ancestry_work >= initializer_ancestry_max_work)
+		return initializer_error(query->builder, query->location, "constexpr record copy mapping exceeds work limit");
+	query->builder->sema->initializer_ancestry_work++;
+	return true;
+}
+
+static enum constexpr_copy_map_result constexpr_copy_map_subobject(struct constexpr_copy_map *query,
+	const struct type *source, const struct type *target, uint64_t offset, unsigned depth)
+{
+	if (depth > ast_max_expression_depth) {
+		initializer_error(query->builder, query->location, "constexpr record copy mapping exceeds depth limit");
+		return constexpr_map_failed;
+	}
+	if (!constexpr_copy_map_step(query))
+		return constexpr_map_failed;
+	if (query->wanted_offset < offset || query->wanted_offset - offset >= type_object_size(source))
+		return constexpr_map_absent;
+	if (source->kind == type_kind_array) {
+		const struct array_type *a = (const struct array_type *)source;
+		const struct array_type *b = (const struct array_type *)target;
+		uint64_t stride = type_object_size(a->element);
+		uint64_t index = (query->wanted_offset - offset) / stride;
+		if (index >= a->count || index >= b->count)
+			return constexpr_map_absent;
+		return constexpr_copy_map_subobject(query, a->element, b->element, offset + index * stride, depth + 1);
+	}
+	if (!type_is_record(source))
+		return constexpr_map_absent;
+	const struct record_definition *a = type_record_definition(source);
+	const struct record_definition *b = type_record_definition(target);
+	const struct record_member *active = NULL;
+	if (source->kind == type_kind_union) {
+		if (query->selection && query->selection->offset == offset &&
+			type_record_definition(query->selection->type) == a) {
+			const struct record_member *x = a->members, *y = b->members;
+			while (x && y && x != query->selection->member) {
+				if (!constexpr_copy_map_step(query)) return constexpr_map_failed;
+				x = x->next;
+				y = y->next;
+			}
+			if (!x || !y)
+				return constexpr_map_absent;
+			query->mapped_union = target;
+			query->mapped_field = y;
+			return constexpr_map_found;
+		}
+		active = a->members;
+		while (active && active->is_bit_field && !active->name.length)
+			active = active->next;
+		for (const struct ast_initializer_union_selection *selection = query->plan->unions;
+			selection; selection = selection->next) {
+			if (!constexpr_copy_map_step(query)) return constexpr_map_failed;
+			if (selection->offset == offset && type_record_definition(selection->type) == a) {
+				active = selection->member;
+				break;
+			}
+		}
+	}
+	const struct record_member *x = a->members, *y = b->members;
+	while (x && y) {
+		if (!constexpr_copy_map_step(query)) return constexpr_map_failed;
+		if ((!active || x == active) && !x->is_flexible && !(x->is_bit_field && !x->name.length)) {
+			uint64_t child = offset + x->offset;
+			if (query->field == x && query->wanted_offset == child) {
+				query->mapped_field = y;
+				return constexpr_map_found;
+			}
+			if (!x->is_bit_field && query->wanted_offset >= child &&
+				query->wanted_offset - child < type_object_size(x->type) &&
+				(type_is_record(x->type) || x->type->kind == type_kind_array)) {
+				enum constexpr_copy_map_result result = constexpr_copy_map_subobject(query,
+					x->type, y->type, child, depth + 1);
+				if (result != constexpr_map_absent)
+					return result;
+			}
+		}
+		x = x->next;
+		y = y->next;
+	}
+	return constexpr_map_absent;
+}
+
 /* Materialize a source plan into the destination, preserving sparse strings and
-	* exact scalar values without re-evaluating the source object's initializer. */
+ * exact scalar values without re-evaluating the source object's initializer. */
 static bool initializer_constexpr_record_copy(struct initializer_builder *builder,
 	const struct type *target, uint64_t offset, const struct ast_expression *expression,
 	const struct ast_initializer *syntax)
@@ -5597,7 +5697,7 @@ static bool initializer_constexpr_record_copy(struct initializer_builder *builde
 	const struct ast_initializer_plan *source = constexpr_record_source(expression, target, &source_offset);
 	uint64_t size = type_object_size(target);
 	if (!source || source_offset > source->size || size > source->size - source_offset)
-		return initializer_error(builder, syntax->location, "constexpr aggregate copy requires a direct constexpr record value of the same definition");
+		return initializer_error(builder, syntax->location, "constexpr aggregate copy requires a direct compatible constexpr record value");
 	if (!initializer_clear(builder, target, offset, syntax))
 		return false;
 	for (const struct ast_initializer_plan_entry *entry = source->entries; entry; entry = entry->next) {
@@ -5608,6 +5708,17 @@ static bool initializer_constexpr_record_copy(struct initializer_builder *builde
 			entry->kind == ast_initializer_write_copy)
 			return initializer_error(builder, syntax->location, "unsupported overlapping constexpr record copy");
 		struct ast_initializer_plan_entry store = *entry;
+		if (entry->bit_field && type_record_definition(expression->type) != type_record_definition(target)) {
+			struct constexpr_copy_map query = { .builder = builder, .plan = source,
+				.wanted_offset = entry->offset, .field = entry->bit_field, .location = syntax->location };
+			enum constexpr_copy_map_result result = constexpr_copy_map_subobject(&query,
+				expression->type, target, source_offset, 0);
+			if (result == constexpr_map_failed)
+				return false;
+			if (result != constexpr_map_found)
+				return initializer_error(builder, syntax->location, "cannot map constexpr record-copy bit-field");
+			store.bit_field = query.mapped_field;
+		}
 		store.offset = offset + entry->offset - source_offset;
 		store.syntax = syntax;
 		if (entry->kind == ast_initializer_write_expression && !builder->is_static) {
@@ -5637,25 +5748,38 @@ static bool initializer_constexpr_record_copy(struct initializer_builder *builde
 			continue;
 		struct ast_initializer_union_selection candidate = *entry;
 		candidate.offset = offset + entry->offset - source_offset;
-		if (!builder->sema->initializer_ancestry) {
-			builder->sema->initializer_ancestry = initializer_alloc(builder,
-				sizeof(*builder->sema->initializer_ancestry), syntax->location);
-			if (!builder->sema->initializer_ancestry)
+		if (type_record_definition(expression->type) != type_record_definition(target)) {
+			struct constexpr_copy_map query = { .builder = builder, .plan = source,
+				.wanted_offset = entry->offset, .selection = entry, .location = syntax->location };
+			enum constexpr_copy_map_result result = constexpr_copy_map_subobject(&query,
+				expression->type, target, source_offset, 0);
+			if (result == constexpr_map_failed)
 				return false;
+			if (result == constexpr_map_absent)
+				continue; /* This is an enclosing or inactive union, not a copied child. */
+			candidate.type = query.mapped_union;
+			candidate.member = query.mapped_field;
+		} else {
+			if (!builder->sema->initializer_ancestry) {
+				builder->sema->initializer_ancestry = initializer_alloc(builder,
+					sizeof(*builder->sema->initializer_ancestry), syntax->location);
+				if (!builder->sema->initializer_ancestry)
+					return false;
+			}
+			struct initializer_ancestry_memo *memo = builder->sema->initializer_ancestry;
+			if (++memo->generation == 0) {
+				memset(memo->entries, 0, sizeof(memo->entries));
+				memo->generation = 1;
+			}
+			struct initializer_ancestry_query query = {
+				.builder = builder, .selection = &candidate, .memo = memo, .location = syntax->location,
+			};
+			enum initializer_ancestry_result result = initializer_contains_union(&query, target, offset, 0);
+			if (result == initializer_ancestry_failed)
+				return false;
+			if (result == initializer_ancestry_absent)
+				continue;
 		}
-		struct initializer_ancestry_memo *memo = builder->sema->initializer_ancestry;
-		if (++memo->generation == 0) {
-			memset(memo->entries, 0, sizeof(memo->entries));
-			memo->generation = 1;
-		}
-		struct initializer_ancestry_query query = {
-			.builder = builder, .selection = &candidate, .memo = memo, .location = syntax->location,
-		};
-		enum initializer_ancestry_result result = initializer_contains_union(&query, target, offset, 0);
-		if (result == initializer_ancestry_failed)
-			return false;
-		if (result == initializer_ancestry_absent)
-			continue;
 		struct ast_initializer_union_selection *copy = initializer_alloc(builder, sizeof(*copy), syntax->location);
 		if (!copy)
 			return false;

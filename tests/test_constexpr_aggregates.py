@@ -85,9 +85,45 @@ programs=[
 '''struct S{int n;}; struct B{struct S s;}; constexpr struct S source={42}; static struct B b={source}; int main(void){return b.s.n;}''',
 '''struct S{int n; int m;}; int main(void){constexpr struct S a={42,0}; constexpr struct S b=a; static_assert(b.n==42 && b.m==0); return b.n;}''',
 '''struct A{int n; int z;}; struct B{struct A a;}; constexpr struct A a={1,2}; constexpr struct B b={.a=a,.a.n=42}; static_assert(b.a.n==42 && b.a.z==2); int main(void){return b.a.n;}''',
+# Distinct compatible C23 tags must remap bit-fields and active union members.
+"struct S{int n;}; constexpr struct S a={42}; int main(void){struct S{int n;}; constexpr struct S b=a; static_assert(b.n==42); return b.n;}",
+"struct S{unsigned n:6;}; constexpr struct S a={42}; int main(void){struct S{unsigned n:6;}; constexpr struct S b=a; static_assert(b.n==42); return b.n;}",
+"struct S{unsigned n:6; double f;}; constexpr struct S a={42,1.5}; int main(void){struct S{unsigned n:6; double f;}; static constexpr struct S b=a; static_assert(b.n==42); return b.f==1.5?b.n:1;}",
+"union U{int a; int b;}; constexpr union U x={.b=42}; int main(void){union U{int a; int b;}; constexpr union U y=x; static_assert(y.b==42); return y.b;}",
+"union U{unsigned a:6; unsigned b:6;}; constexpr union U x={.b=42}; int main(void){union U{unsigned a:6; unsigned b:6;}; constexpr union U y=x; static_assert(y.b==42); return y.b;}",
+"struct S{union {int a; int b;};}; constexpr struct S x={.b=42}; int main(void){struct S{union {int a; int b;};}; constexpr struct S y=x; static_assert(y.b==42); return y.b;}",
+"struct S{union {unsigned a:6; unsigned b:6;};}; constexpr struct S x={.b=42}; int main(void){struct S{union {unsigned a:6; unsigned b:6;};}; constexpr struct S y=x; static_assert(y.b==42); return y.b;}",
+"union U{struct {union {unsigned a:6; unsigned b:6;};}; int n;}; constexpr union U x={.b=42}; int main(void){union U{struct {union {unsigned a:6; unsigned b:6;};}; int n;}; constexpr union U y=x; static_assert(y.b==42); return y.b;}",
+"union U{int a; int b;}; struct S{union U a[2];}; constexpr struct S x={{{.a=1},{.b=42}}}; int main(void){union U{int a; int b;}; struct S{union U a[2];}; constexpr struct S y=x; return y.a[0].a==1?y.a[1].b:1;}",
+"struct A{int n;}; struct B{struct A a;}; constexpr struct B x={{42}}; int main(void){struct A{int n;}; constexpr struct A y=x.a; static_assert(y.n==42); return y.n;}",
+"struct A{unsigned n:6;}; struct B{struct A a;}; constexpr struct B x={{42}}; int main(void){struct A{unsigned n:6;}; constexpr struct A y=x.a; static_assert(y.n==42); return y.n;}",
+"union U{int a; int b;}; struct S{union U u;}; constexpr struct S x={{.b=42}}; int main(void){union U{int a; int b;}; constexpr union U y=x.u; static_assert(y.b==42); return y.b;}",
+"struct S{int n;}; constexpr struct S a={42}; int main(void){struct S{int n;}; static struct S b=a; return b.n;}",
+"struct S{int n;}; constexpr struct S a={42}; int main(void){struct S{int n;}; constexpr struct S b=a; constexpr auto c=b; static_assert(c.n==42); return c.n;}",
+
+"struct S{union {int a; unsigned b:6;};}; constexpr struct S x={.b=42}; int main(void){struct S{union {int a; unsigned b:6;};}; struct P{int n; struct S s;}; constexpr struct P p={1,x}; static_assert(p.n==1 && p.s.b==42); return p.s.b;}",
+"struct S{union {int a; unsigned b:6;};}; constexpr struct S x={.b=42}; int main(void){struct S{union {int a; unsigned b:6;};}; struct P{struct S s;}; constexpr struct P p={.s=x,.s.a=42}; static_assert(p.s.a==42); return p.s.a;}",
+"union U{int a; int b;}; constexpr union U x={}; int main(void){union U{int a; int b;}; constexpr union U y=x; static_assert(y.a==0); return y.a==0?42:1;}",
+"union U{struct {int a; int b;}; int n;}; constexpr union U x={.b=42}; int main(void){union U{struct {int a; int b;}; int n;}; constexpr union U y=x; static_assert(y.a==0 && y.b==42); return y.b;}",
+"struct S{int *p; int n;}; constexpr struct S x={nullptr,42}; int main(void){struct S{int *p; int n;}; constexpr struct S y=x; constexpr int *p=y.p; return p==nullptr?y.n:1;}",
+"struct S{char a[4]; int n;}; constexpr struct S x={\"abc\",42}; int main(void){struct S{char a[4]; int n;}; constexpr struct S y=x; return y.a[2]=='c'?y.n:1;}",
+
+"struct A{union {int a; unsigned b:6;};}; union O{struct A a; int n;}; constexpr union O x={.a={.b=42}}; int main(void){struct A{union {int a; unsigned b:6;};}; constexpr struct A y=x.a; static_assert(y.b==42); return y.b;}",
+"struct A{unsigned n:6;}; struct B{struct A a;}; constexpr struct B x={{42}}; int main(void){struct A{unsigned n:6;}; constexpr struct A y=x.a; constexpr struct A z=y; static_assert(z.n==42); return z.n;}",
+"struct S{int n;}; constexpr struct S x={42}; int main(void){struct S{int n;}; constexpr struct S y=x; const struct S *p=&y; return p->n;}",
 ]
 # Array indexing is not a C23 named constant: move the deliberately invalid case to refusals.
 negative=[programs.pop(8),
+"struct A{union {int a; unsigned b:6;};}; union O{struct A a; int n;}; constexpr union O x={.n=42}; int main(void){struct A{union {int a; unsigned b:6;};}; constexpr struct A y=x.a; return y.a;}",
+"struct A{union {int a; unsigned b:6;};}; union O{struct A a; int n;}; constexpr union O x={.a={.b=42}}; int main(void){struct A{union {int a; unsigned b:6;};}; constexpr struct A y=x.a; static_assert(y.a==42); return 0;}",
+
+"struct S{union {int a; unsigned b:6;};}; constexpr struct S x={.b=42}; int main(void){struct S{union {int a; unsigned b:6;};}; struct P{struct S s;}; constexpr struct P p={.s=x,.s.a=42}; static_assert(p.s.b==42); return 0;}",
+"union U{int a; int b;}; constexpr union U x={}; int main(void){union U{int a; int b;}; constexpr union U y=x; static_assert(y.b==0); return 0;}",
+
+"union U{int a; int b;}; constexpr union U x={.b=42}; int main(void){union U{int a; int b;}; constexpr union U y=x; static_assert(y.a==42); return 0;}",
+"struct S{union {int a; int b;};}; constexpr struct S x={.b=42}; int main(void){struct S{union {int a; int b;};}; constexpr struct S y=x; static_assert(y.a==42); return 0;}",
+"struct S{int n;}; constexpr struct S x={42}; int main(void){struct S{long n;}; constexpr struct S y=x; return 0;}",
+
 '''struct S{union {struct {union {int a; int b;};}; int c;};}; constexpr struct S s={.c=42}; static_assert(s.b==42);''',
 '''struct S{union {struct {union {int a; int b;};}; int c;};}; constexpr struct S s={.b=42}; static_assert(s.a==42);''',
 '''struct S{union {int a; int b;};}; constexpr struct S s={.b=42}; static_assert(s.a==42);''',
