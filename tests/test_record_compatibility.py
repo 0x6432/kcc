@@ -7,6 +7,13 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 programs = [
 '''struct S{int x;}; struct S{int x;}; int main(void){struct S x={42}; return x.x;}''',
+"struct foo { struct { int x; }; }; struct foo { struct { int x; }; }; int main(void){struct foo x={42};return x.x;}",
+"struct S{union {int x; double y;};}; struct S{union {int x; double y;};}; int main(void){struct S s={.x=42}; return s.x;}",
+"union U{struct {union {int x; long y;};}; double z;}; union U{struct {union {int x; long y;};}; double z;}; constexpr union U u={.x=42}; static_assert(u.x==42); int main(void){return u.x;}",
+"struct S{struct {unsigned x:6; unsigned :0; int y[2];};}; struct S{struct {unsigned x:6; unsigned :0; int y[2];};}; int main(void){struct S s={.x=42,.y={1,2}};return s.x;}",
+"struct S{struct {int x;};}; struct S f(struct S x){return x;} struct S{struct {int x;};}; int main(void){struct S x={42};return f(x).x;}",
+"struct S{union {int x; int y;};}; struct S{union {int x; int y;};}; constexpr struct S a={.y=42}; constexpr struct S b=a; static_assert(b.y==42); int main(void){return b.y;}",
+
 '''union U{int x; double y;}; union U{int x; double y;}; int main(void){union U u={.x=42}; return u.x;}''',
 '''struct N{int x; struct N *next;}; struct N{int x; struct N *next;}; int main(void){struct N n={42,nullptr}; return n.next==nullptr?n.x:1;}''',
 '''struct S{unsigned x:6; unsigned :0; int y[2];}; struct S{unsigned x:3+3; unsigned :0; int y[2];}; int main(void){struct S s={42,{1,2}}; return s.x;}''',
@@ -34,6 +41,13 @@ programs = [
 
 ]
 negative = [
+"struct S{struct {int x;};}; struct S{struct {int y;};};",
+"struct S{union {int x; long y;};}; struct S{struct {int x; long y;};};",
+"struct S{struct {int x; long y;};}; struct S{struct {long y; int x;};};",
+"struct S{struct {unsigned x:6;};}; struct S{struct {unsigned x:5;};};",
+"struct S{struct {struct {int x;} y;};}; struct S{struct {struct {int x;} y;};};",
+"struct S{struct {int x;};}; struct S{struct {const int x;};};",
+
 '''struct S{int x;}; struct S{int y;};''',
 '''struct S{int x;}; struct S{long x;};''',
 '''struct S{int x; int y;}; struct S{int y; int x;};''',
@@ -61,6 +75,13 @@ negative = [
 , "struct S{int n; int a[1];}; int main(void){struct S x={1,{2}}; {struct S{int n; int a[];}; struct S *p=&x; return 0;}}"
 
 ]
+# Deep anonymous nesting exercises the separate same-scope comparison budget.
+def anonymous_redefinition(depth, mismatch=False):
+ def contents(bad):
+  return 'struct {' * depth + ('long x;' if bad else 'int x;') + '};' * depth
+ return 'struct S{'+contents(False)+'}; struct S{'+contents(mismatch)+'}; int main(void){struct S s={42};return s.x;}'
+programs.append(anonymous_redefinition(48))
+negative.append(anonymous_redefinition(48, True))
 # Deep chains exercise visited-pair bounds and mismatch propagation without
 # relying on the host compiler's C23 redefinition support.
 def graph(depth, mismatch=False):
@@ -111,4 +132,4 @@ int main(void) { struct S x={40,1.5}, y=kcc_transform(x);
 """)
   subprocess.run([host,str(asm),str(native),'-o',str(exe)],check=True,timeout=15)
   assert subprocess.run([str(exe)],timeout=5).returncode==42
-print(f'C23 tagged records: {len(programs)} programs, {len(negative)} constraints, QBE/runtime and bidirectional native ABI when available')
+print(f'C23 tagged records: {len(programs)} accepted, {len(negative)} refusals; ' + ('QBE/runtime and bidirectional native ABI passed' if qbe else 'QBE/runtime and native ABI not run'))

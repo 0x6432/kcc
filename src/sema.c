@@ -611,24 +611,49 @@ static bool following_record_member(const struct ast_record_member_declaration *
 /* Repeated definitions in one scope require identical member types, not
  * merely compatible ones. Keep the original definition as the canonical
  * identity; the candidate is checked transactionally after layout. */
-static bool record_redefinition_matches(const struct record_definition *a,
-	const struct record_definition *b)
+/* A redeclared tag retains its identity, but its anonymous member declarations
+ * introduce fresh anonymous record identities. Match those member definitions
+ * recursively; named members still require the exact same type (including
+ * explicitly named members with anonymous record types). Bound the traversal. */
+static bool record_redefinition_matches_impl(const struct record_definition *a,
+	const struct record_definition *b, unsigned depth, size_t *work)
 {
 	const struct record_member *x = a->members, *y = b->members;
-	if (a->member_count != b->member_count)
+	if (depth > sema_max_record_nesting || *work == 0 ||
+		a->is_union != b->is_union || a->member_count != b->member_count ||
+		a->size != b->size || a->alignment != b->alignment ||
+		a->has_flexible_array != b->has_flexible_array)
 		return false;
+	--*work;
 	while (x && y) {
+		if (*work == 0)
+			return false;
+		--*work;
 		if (x->name.length != y->name.length ||
 			(x->name.length && !same_name(x->name, y->name)) ||
 			x->alignment != y->alignment || x->anonymous != y->anonymous ||
+			x->is_flexible != y->is_flexible || x->offset != y->offset ||
 			x->is_bit_field != y->is_bit_field ||
-			(x->is_bit_field && x->bit_width != y->bit_width) ||
-			!type_same(x->type, y->type))
+			(x->is_bit_field && (x->bit_width != y->bit_width || x->bit_offset != y->bit_offset)))
+			return false;
+		if (x->anonymous && type_is_record(x->type) && type_is_record(y->type)) {
+			if (x->type->qualifiers != y->type->qualifiers ||
+				!record_redefinition_matches_impl(type_record_definition(x->type),
+					type_record_definition(y->type), depth + 1, work))
+				return false;
+		} else if (!type_same(x->type, y->type))
 			return false;
 		x = x->next;
 		y = y->next;
 	}
 	return !x && !y;
+}
+
+static bool record_redefinition_matches(const struct record_definition *a,
+	const struct record_definition *b)
+{
+	size_t work = 8192;
+	return record_redefinition_matches_impl(a, b, 0, &work);
 }
 
 static const struct type *resolve_record_syntax(struct sema *sema,
