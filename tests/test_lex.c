@@ -456,7 +456,7 @@ static void test_legacy_integer_token_metadata(void)
 static void test_character_spellings(void)
 {
 	const char *bad[] = { "", "'", "''", "'''", "'abcde'", "'a", "a'", "'\\'",
-		"'\\x'", "'\\x100'", "'\\400'", "'\\q'", "'\\u0041'",
+		"'\\x'", "'\\x100'", "'\\400'", "'\\q'",
 		"L'ab'", "u'ab'", "U'ab'", "u8'ab'", "'\n'", "'\r'", "'\200'" };
 	const unsigned char slice[] = { '\'', 'a', '\'', 'z' };
 	const unsigned char nul[] = { '\'', 0, '\'' };
@@ -472,6 +472,11 @@ static void test_character_spellings(void)
 		assert(snprintf(text, sizeof(text), "'\\x%02x'", byte) == 6);
 		assert(!parse_character_spelling((const unsigned char *)text, 6, &value));
 		assert(value == expected);
+	}
+	for (unsigned scalar = 0; scalar < 128; scalar++) {
+		assert(snprintf(text, sizeof(text), "'\\u%04x'", scalar) == 8);
+		assert(!parse_character_spelling((const unsigned char *)text, 8, &value));
+		assert(value == scalar);
 	}
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
 		assert(parse_character_spelling((const unsigned char *)bad[i], strlen(bad[i]), &value));

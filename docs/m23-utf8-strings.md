@@ -7,9 +7,7 @@ combine into one `u8` string. The existing string length, fragment and storage
 limits apply. Character arrays can use the resulting byte sequences as
 initializers, and pointer conversion uses the unsigned-character element type.
 
-Fixed-width `\u` and `\U` universal names from U+00A0 through U+10FFFF,
-excluding surrogates, encode to UTF-8 in ordinary and `u8` strings. The
-permitted special basic-set UCNs for `$`, `@`, and backtick are also accepted; other basic-set UCNs and delimited or named UCNs are rejected.
+Fixed-width `\u` and `\U` universal names from U+0000 through U+10FFFF, excluding surrogates, encode to UTF-8 in ordinary and `u8` string literals. C23 permits basic-set and control UCNs inside literals. Unicode identifiers are not supported; C++ delimited or named UCNs are not C23 syntax.
 
 Bounded `u`, `U`, and `L` strings produce UTF-16, UTF-32, and 32-bit
 wide code units respectively on the little-endian target. Raw UTF-8 scalars and
@@ -26,8 +24,7 @@ messages are not supported. Other C23 literal and UCN extensions remain incomple
 Bounded `u`, `U`, and `L`
 character constants have unsigned-short, unsigned-int, and int types
 respectively. They accept one UTF-8 source character or fixed-width UCN in the
-range U+00A0–U+10FFFF (excluding surrogates), the three permitted special
-UCNs, and ASCII characters.
+range U+0000–U+10FFFF (excluding surrogates), and ASCII characters.
 `u` rejects characters requiring a UTF-16 surrogate pair. Octal and
 hexadecimal escapes are accepted up to the target character type maximum:
 65535 for `u`, 4294967295 for `U`, and 2147483647 for `L`.

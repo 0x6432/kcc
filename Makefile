@@ -191,6 +191,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_multidimensional_arrays.py
 	QBE="$(QBE)" python3 tests/test_string_literals.py
 	QBE="$(QBE)" python3 tests/test_utf8_strings.py
+	QBE="$(QBE)" python3 tests/test_ucn_basic_literals.py
 	QBE="$(QBE)" python3 tests/test_wide_strings.py
 	QBE="$(QBE)" python3 tests/test_stdbit.py
 	QBE="$(QBE)" python3 tests/test_integer_pointer_casts.py
@@ -437,6 +438,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_multidimensional_arrays.py
 	python3 tests/test_string_literals.py
 	python3 tests/test_utf8_strings.py
+	python3 tests/test_ucn_basic_literals.py
 	python3 tests/test_wide_strings.py
 	python3 tests/test_stdbit.py
 	python3 tests/test_integer_pointer_casts.py

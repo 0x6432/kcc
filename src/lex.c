@@ -651,8 +651,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 				return "invalid universal character name";
 			value = (value << 4) | (unsigned)digit;
 		}
-		if ((value < 0xa0 && value != 0x24 && value != 0x40 && value != 0x60) ||
-			value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
+		if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
 			return "unsupported or invalid universal character name";
 		if (!wide_unicode && value >= 128)
 			return "character requires more than one UTF-8 code unit";
@@ -707,8 +706,7 @@ const char *parse_character_spelling(const unsigned char *text, size_t length,
 						return "invalid universal character name";
 					byte = (byte << 4) | (unsigned)digit;
 				}
-				if ((byte < 0xa0 && byte != 0x24 && byte != 0x40 && byte != 0x60) ||
-					byte > 0x10ffff || (byte >= 0xd800 && byte <= 0xdfff))
+				if (byte > 0x10ffff || (byte >= 0xd800 && byte <= 0xdfff))
 					return "unsupported or invalid universal character name";
 				if (byte >= 128)
 					return "character requires more than one UTF-8 code unit";
@@ -764,8 +762,7 @@ const char *parse_string_spelling(const unsigned char *text, size_t length,
 					return "invalid universal character name";
 				codepoint = (codepoint << 4) | (unsigned)digit;
 			}
-			if ((codepoint < 0xa0 && codepoint != 0x24 && codepoint != 0x40 && codepoint != 0x60) ||
-				codepoint > 0x10ffff || (codepoint >= 0xd800 && codepoint <= 0xdfff))
+			if (codepoint > 0x10ffff || (codepoint >= 0xd800 && codepoint <= 0xdfff))
 				return "unsupported or invalid universal character name";
 			if (codepoint < 0x80) {
 				units = 1;
@@ -874,8 +871,7 @@ const char *parse_wide_string_spelling(const unsigned char *text, size_t length,
 					return "invalid universal character name";
 				value = (value << 4) | (unsigned)digit;
 			}
-			if ((value < 0xa0 && value != 0x24 && value != 0x40 && value != 0x60) ||
-				value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
+			if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff))
 				return "unsupported or invalid universal character name";
 		} else if (value == '\\') {
 			const char *error = parse_character_escape(text, end, &offset, &value, maximum);

@@ -64,7 +64,7 @@ int main(void) {
         subprocess.run([qbe, '-t', 'amd64_sysv', '-o', str(asm), str(il)], check=True)
         subprocess.run([host, str(asm), '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
-    for invalid in [b"u'\\x10000'", b"U'\\x100000000'", b"L'\\x80000000'", b"u'\\U0001F642'", b"u'\\uD800'", b"U'\\U00110000'", b"U'\\u0041'", b'u8"\xc0\x80"', b'u8"\xed\xa0\x80"', b'u8"\xf4\x90\x80\x80"', b'u8"\xe2\x82"',
+    for invalid in [b"u'\\x10000'", b"U'\\x100000000'", b"L'\\x80000000'", b"u'\\U0001F642'", b"u'\\uD800'", b"U'\\U00110000'", b'u8"\xc0\x80"', b'u8"\xed\xa0\x80"', b'u8"\xf4\x90\x80\x80"', b'u8"\xe2\x82"',
                     b'u8"\\uD800"', b'u8"\\U00110000"', b'u8"\\u01"']:
         source.write_bytes(b'int main(void) { ' + invalid + b'; return 0; }\n')
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
