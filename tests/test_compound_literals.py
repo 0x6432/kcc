@@ -534,7 +534,7 @@ KCC_REFUSALS = {'const literal assignment': (1, 23, 'assignment requires a modif
  'static register literal combination': (1, 30, 'duplicate or conflicting compound literal storage class'),
  'ordinary static record literal copy': (1,
                                          40,
-                                         'constexpr aggregate copy requires a direct constexpr record value of the same definition'),
+                                         'constexpr aggregate copy requires a direct compatible constexpr record value'),
  'ordinary object load literal content': (1, 29, 'static initializer must be a constant expression'),
  'file unevaluated static literal content': (1, 43, 'static initializer must be a constant expression'),
  'M20 floating literal': (1, 1, 'expected integer type specifier'),
