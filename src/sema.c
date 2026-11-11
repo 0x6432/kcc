@@ -897,19 +897,21 @@ static bool enum_value_bits(struct constant_result value, const struct type *tar
 	return true;
 }
 
-/* The current constexpr implementation supports integer objects only. Keep
- * their identity and storage: only an lvalue-to-value load is a named constant. */
-static const struct type *constexpr_integer_type(struct sema *sema, const struct type *type,
+/* Keep constexpr object identity and storage: only a value load is a named
+ * constant. Integer values and null pointer values are supported. */
+static bool type_contains_vm(const struct type *type);
+static const struct type *constexpr_scalar_type(struct sema *sema, const struct type *type,
 	struct source_location location)
 {
-	if (!type_is_integer(type) || (type->qualifiers & (type_qualifier_atomic |
+	if ((!type_is_integer(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) ||
+		type_contains_vm(type) || (type->qualifiers & (type_qualifier_atomic |
 		type_qualifier_volatile | type_qualifier_restrict))) {
 		diagnostic_error(sema->diagnostics, location,
-			"constexpr currently requires a non-atomic, non-volatile integer object");
+			"constexpr currently requires a non-atomic, non-volatile integer or pointer object");
 		return NULL;
 	}
 	if (!type_is_complete_object(type)) {
-		diagnostic_error(sema->diagnostics, location, "constexpr requires a complete integer object type");
+		diagnostic_error(sema->diagnostics, location, "constexpr requires a complete scalar object type");
 		return NULL;
 	}
 	type = type_qualified(sema->arena, type, type->qualifiers | type_qualifier_const);
@@ -922,6 +924,16 @@ static bool constexpr_initializer_expression(struct sema *sema, struct ast_expre
 	const struct ast_initializer *syntax, struct source_location location)
 {
 	while (syntax && syntax->kind == ast_initializer_list) {
+		if (!syntax->entry_count) {
+			struct token zero = { .kind = token_integer, .location = syntax->location, .integer_base = 10 };
+			struct ast_integer_expression *value = ast_new_integer(sema->arena, zero);
+			if (!value) {
+				diagnostic_error(sema->diagnostics, location, "out of memory creating constexpr zero initializer");
+				return false;
+			}
+			*expression = &value->expression;
+			return true;
+		}
 		if (syntax->entry_count != 1 || !syntax->entries || syntax->entries->designators) {
 			diagnostic_error(sema->diagnostics, location, "constexpr integer requires one initializer expression");
 			return false;
@@ -937,9 +949,19 @@ static bool constexpr_initializer_expression(struct sema *sema, struct ast_expre
 	return true;
 }
 
-static bool constexpr_integer_value(struct sema *sema, struct ast_expression *expression,
+static bool constexpr_scalar_value(struct sema *sema, struct ast_expression *expression,
 	const struct type *target, uint64_t *bits)
 {
+	if (target->kind == type_kind_pointer || target->kind == type_kind_nullptr) {
+		struct null_initializer_result value = evaluate_null_initializer(expression);
+		if (value.status != constant_value) {
+			diagnostic_error(sema->diagnostics, value.location, value.status == constant_invalid ?
+				value.message : "constexpr pointer initializer must be a null constant expression");
+			return false;
+		}
+		*bits = 0; /* Not a pointer representation; static data keeps a null tag. */
+		return true;
+	}
 	struct constant_result value = evaluate_integer_constant(expression);
 	if (value.status != constant_value) {
 		diagnostic_error(sema->diagnostics, value.location, value.status == constant_invalid ?
@@ -5489,9 +5511,9 @@ static bool sema_constexpr_local(struct sema *sema, struct ast_local_declaration
 	uint64_t bits;
 	const struct type *target;
 	if (!constexpr_initializer_expression(sema, &local->initializer, local->initializer_syntax, local->name.location) ||
-		!(type = constexpr_integer_type(sema, type, local->name.location)) ||
+		!(type = constexpr_scalar_type(sema, type, local->name.location)) ||
 		!reserve_local_name(sema, local) || !sema_expression(sema, &local->initializer, true) ||
-		!constexpr_integer_value(sema, local->initializer, type, &bits) ||
+		!constexpr_scalar_value(sema, local->initializer, type, &bits) ||
 		!complete_local_storage(sema, local, type))
 		return false;
 	target = unqualified_type(sema, type, local->name.location);
@@ -5549,11 +5571,11 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		uint64_t bits;
 		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
 			diagnostic_error(sema->diagnostics, local->name.location,
-				"constexpr currently requires a non-atomic, non-volatile integer object");
+				"constexpr currently requires a non-atomic, non-volatile integer or pointer object");
 			return false;
 		}
-		if (!(type = constexpr_integer_type(sema, type, local->name.location)) ||
-			!constexpr_integer_value(sema, local->initializer, type, &bits))
+		if (!(type = constexpr_scalar_type(sema, type, local->name.location)) ||
+			!constexpr_scalar_value(sema, local->initializer, type, &bits))
 			return false;
 		local->constexpr_bits = bits;
 	}
@@ -5719,7 +5741,7 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		local->vm_pointer_element_size = type_object_size(((const struct array_type *)vm_array->type)->element);
 	}
 	if (local->is_constexpr) {
-		type = constexpr_integer_type(sema, type, local->name.location);
+		type = constexpr_scalar_type(sema, type, local->name.location);
 		if (!type || !constexpr_initializer_expression(sema, &local->initializer,
 			local->initializer_syntax, local->name.location))
 			return false;
@@ -6738,7 +6760,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	}
 	if (!initializer_checked && !sema_expression(sema, initializer, true))
 		goto rollback;
-	if (is_constexpr && !constexpr_integer_value(sema, *initializer, type, &constexpr_bits))
+	if (is_constexpr && !constexpr_scalar_value(sema, *initializer, type, &constexpr_bits))
 		goto rollback;
 	struct constant_result arithmetic_result;
 	if ((type_is_floating((*initializer)->type) || is_static_float_cast(*initializer) ||
@@ -7159,7 +7181,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 		bool checked;
 		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
 			diagnostic_error(sema->diagnostics, declaration->name.location,
-				"constexpr currently requires a non-atomic, non-volatile integer object");
+				"constexpr currently requires a non-atomic, non-volatile integer or pointer object");
 			return false;
 		}
 		if (!declaration->initializer || !declaration->initializer_syntax ||
@@ -7174,7 +7196,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 		if (!checked)
 			return false;
 		type = field_expression_value_type(declaration->initializer);
-		if (!(type = constexpr_integer_type(sema, type, declaration->name.location)))
+		if (!(type = constexpr_scalar_type(sema, type, declaration->name.location)))
 			return false;
 		type = type_qualified(sema->arena, type, type->qualifiers | syntax->qualifiers);
 		if (!type) {
@@ -7187,7 +7209,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 	}
 	if (!type || !check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
-	if (declaration->is_constexpr && !(type = constexpr_integer_type(sema, type, declaration->name.location)))
+	if (declaration->is_constexpr && !(type = constexpr_scalar_type(sema, type, declaration->name.location)))
 		return false;
 	if (declaration->is_nodiscard) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "nodiscard requires a function declaration");
@@ -7221,7 +7243,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 	type = resolve_type_syntax(sema, declaration->type_syntax);
 	if (!type)
 		return false;
-	if (declaration->is_constexpr && !(type = constexpr_integer_type(sema, type, declaration->name.location)))
+	if (declaration->is_constexpr && !(type = constexpr_scalar_type(sema, type, declaration->name.location)))
 		return false;
 	if (group && type->kind == type_kind_function) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment requires an object type");

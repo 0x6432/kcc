@@ -274,7 +274,7 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 			if (reference->is_constexpr_name && object->is_constexpr && !object->constexpr_in_progress)
 				return constant_success(expression, object->initializer_value.integer_bits);
 		}
-		return constant_failure(expression, constant_not_constant, "object is not a constexpr constant");
+		return constant_failure(expression, constant_not_constant, "operand is not an integer constant expression");
 	}
 	case expression_integer:
 		return constant_success(expression, ((const struct ast_integer_expression *)expression)->value);
@@ -963,6 +963,24 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		return (struct address_proof) { .is_null = true, .result = {
 			.status = constant_value, .location = expression->location,
 		} };
+	case expression_load: {
+		const struct ast_expression *object = ((const struct ast_load_expression *)expression)->operand;
+		bool named = false;
+		if (object->kind == expression_name) {
+			const struct ast_local_declaration *local = ((const struct ast_name_expression *)object)->declaration;
+			named = local && local->is_constexpr && local->constexpr_complete;
+		} else if (object->kind == expression_external_object) {
+			const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)object;
+			named = reference->is_constexpr_name && reference->object->is_constexpr &&
+				!reference->object->constexpr_in_progress &&
+				reference->object->initializer_value.kind == static_data_null_pointer;
+		}
+		if (named && (expression->type->kind == type_kind_pointer || expression->type->kind == type_kind_nullptr))
+			return (struct address_proof) { .is_null = true, .result = {
+				.status = constant_value, .location = expression->location,
+			} };
+		break;
+	}
 	case expression_conditional: {
 		const struct ast_conditional_expression *node = (const struct ast_conditional_expression *)expression;
 		struct constant_result condition = evaluate_initializer_condition(node->condition);
