@@ -11,7 +11,7 @@ sources cannot acquire that permission by using a similar filename. Predefined
 operators and built-in location/clock/embed macros remain protected. A focused
 compile covering several guarded headers passed after this fix; the full header
 suite remains unrun. Trusted fallback-header declarations and new function
-symbols use separate bounded budgets of 1,024 declarations and 512 functions;
+symbols use separate bounded budgets of 1,024 declarations and 640 functions;
 user sources retain their existing 512-declaration and 256-function limits.
 Source provenance, not a filename, determines which budget is charged.
 
@@ -150,13 +150,18 @@ Source provenance, not a filename, determines which budget is charged.
   only exposes library calls. No floating-environment runtime test has run.
 - `stdbit.h` supplies the C23 leading/trailing counts, first-bit positions,
   zero/one counts, single-bit predicate, bit width, floor and ceiling for the
-  five ordinary unsigned integer types, with `_Generic` dispatch evaluating
-  arguments once. Endianness macros describe the little-endian target. The
-  functions are static inline implementations, not external libc symbols;
-  including the header consumes 70 compiler-header function slots. Extended unsigned and bit-precise types are not supported; the header
-  version macro is not advertised. An unrepresentable bit ceiling yields zero,
-  though programs cannot rely on that value for the standard's undefined case.
-  Only a focused compile/IL check has been run; runtime coverage is pending.
+  five ordinary unsigned types and unsigned `_BitInt` widths 1–64. C23 requires
+  bit-precise arguments with widths matching ordinary or extended integer types;
+  the remaining supported widths are an extension. The generic macros evaluate
+  their argument once, and floor and ceiling retain its unqualified type. Endianness
+  macros describe the little-endian target. Named ordinary-type functions and
+  generic helpers are static inline implementations, not external libc symbols;
+  the header consumes 71 compiler-header function slots. Other extended unsigned
+  types are unavailable and the header version macro is not advertised. An
+  unrepresentable bit ceiling yields zero, but the C23 case is undefined. Tests
+  exercise all 14 operations for every `_BitInt` width against an independent
+  native model, including return types and side effects; this is not a claim of
+  full hosted conformance.
 - `time.h` supplies glibc x86-64 `time_t`, `clock_t` and `struct tm` layout,
   `struct timespec`, `CLOCKS_PER_SEC`, `TIME_UTC`, and common clock, calendar
   and formatting declarations including `timespec_get` and `timespec_getres`.

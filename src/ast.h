@@ -74,7 +74,7 @@ enum {
 	ast_max_external_declarations = 512,
 	ast_max_builtin_external_declarations = 1024,
 	ast_max_functions = 256,
-	ast_max_builtin_functions = 512,
+	ast_max_builtin_functions = 640,
 	ast_max_external_objects = 256,
 	ast_max_parameters = 128,
 	ast_max_arguments = 128,

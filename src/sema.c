@@ -7160,7 +7160,7 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 		size_t limit = builtin ? ast_max_builtin_functions : ast_max_functions;
 		if (*used == limit) {
 			diagnostic_error(sema->diagnostics, name.location, builtin ?
-				"translation unit exceeds built-in function limit (512)" :
+				"translation unit exceeds built-in function limit (640)" :
 				"translation unit exceeds function limit (256)");
 			return NULL;
 		}
