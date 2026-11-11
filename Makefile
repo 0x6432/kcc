@@ -12,7 +12,7 @@ CLANG = clang
 LEX_SOURCES = src/lex.c src/source.c src/diagnostic.c
 PREPROCESS_SOURCES = $(LEX_SOURCES) src/preprocess.c src/arena.c
 COMPILER_SOURCES = $(PREPROCESS_SOURCES) src/bitint.c src/ast.c src/type.c src/parse.c src/sema.c src/consteval.c src/codegen.c
-HEADERS = $(wildcard src/*.h)
+HEADERS = $(wildcard src/*.h src/*.inc)
 
 .PHONY: all test test-codegen test-bitint-native clean fuzz-lex fuzz-compile FORCE
 .DELETE_ON_ERROR:
@@ -192,6 +192,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_string_literals.py
 	QBE="$(QBE)" python3 tests/test_utf8_strings.py
 	QBE="$(QBE)" python3 tests/test_ucn_basic_literals.py
+	QBE="$(QBE)" python3 tests/test_unicode_identifiers.py
 	QBE="$(QBE)" python3 tests/test_wide_strings.py
 	QBE="$(QBE)" python3 tests/test_stdbit.py
 	QBE="$(QBE)" python3 tests/test_stdbit_bitint.py
@@ -337,7 +338,7 @@ build/consteval_oracle: $(patsubst %.c,build/obj/%.o,tests/consteval_oracle.c $(
 build/test_bitint: $(patsubst %.c,build/obj/%.o,tests/test_bitint.c src/bitint.c) build/link.flags Makefile | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
-build/test_type: $(patsubst %.c,build/obj/%.o,tests/test_type.c src/type.c src/arena.c) build/link.flags Makefile | build
+build/test_type: $(patsubst %.c,build/obj/%.o,tests/test_type.c src/type.c src/arena.c $(LEX_SOURCES)) build/link.flags Makefile | build
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(filter %.o,$^) $(LDFLAGS) $(LDLIBS) -o $@
 
 build/test_sema: $(patsubst %.c,build/obj/%.o,tests/test_sema.c $(COMPILER_SOURCES)) build/link.flags Makefile | build
@@ -442,6 +443,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_string_literals.py
 	python3 tests/test_utf8_strings.py
 	python3 tests/test_ucn_basic_literals.py
+	python3 tests/test_unicode_identifiers.py
 	python3 tests/test_wide_strings.py
 	python3 tests/test_stdbit.py
 	python3 tests/test_stdbit_bitint.py

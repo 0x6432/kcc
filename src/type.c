@@ -513,9 +513,8 @@ const struct type *type_unqualified(struct arena *arena, const struct type *type
 static bool enum_name_equal(const struct token *a, const struct token *b)
 {
 	return a->kind == token_identifier && b->kind == token_identifier &&
-		a->length == b->length &&
-		!memcmp(a->spelling_location.source->data + a->spelling_location.offset,
-			b->spelling_location.source->data + b->spelling_location.offset, a->length);
+		!identifier_compare(a->spelling_location.source->data + a->spelling_location.offset, a->length,
+			b->spelling_location.source->data + b->spelling_location.offset, b->length);
 }
 
 /* Distinct completed tagged enums may be compatible across scopes in C23.
@@ -571,7 +570,7 @@ static bool record_definitions_compatible(const struct record_definition *a,
 	context->records[context->count++] = (struct compatibility_pair) { a, b };
 	const struct record_member *x = a->members, *y = b->members;
 	while (x && y) {
-		if (x->name.length != y->name.length ||
+		if (!!x->name.length != !!y->name.length ||
 			(x->name.length && !enum_name_equal(&x->name, &y->name)) ||
 			x->alignment != y->alignment || x->anonymous != y->anonymous ||
 			x->is_flexible != y->is_flexible || x->offset != y->offset ||
@@ -955,10 +954,9 @@ bool type_record_layout(struct record_definition *definition)
 static bool member_name_equal(const struct token *left, const struct token *right)
 {
 	return left->kind == token_identifier && right->kind == token_identifier &&
-		left->length == right->length &&
-		memcmp(left->spelling_location.source->data + left->spelling_location.offset,
-			right->spelling_location.source->data + right->spelling_location.offset,
-			left->length) == 0;
+		!identifier_compare(left->spelling_location.source->data + left->spelling_location.offset,
+			left->length, right->spelling_location.source->data + right->spelling_location.offset,
+			right->length);
 }
 
 static const struct record_member *find_record_member(const struct type *type,

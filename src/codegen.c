@@ -41,6 +41,31 @@ static void emit(struct codegen *codegen, const char *format, ...)
 	va_end(arguments);
 }
 
+/* QBE supports quoted global names. Emit decoded UTF-8, preserving native ELF
+ * symbol spelling across raw source characters and equivalent UCNs. */
+static void emit_symbol(struct codegen *codegen, struct token name)
+{
+	const unsigned char *text = name.spelling_location.source->data + name.spelling_location.offset;
+	bool quoted = false;
+	for (size_t i = 0; i < name.length; i++)
+		if (text[i] >= 128 || text[i] == '\\') { quoted = true; break; }
+	if (!quoted) {
+		emit(codegen, "$%.*s", (int)name.length, (const char *)text);
+		return;
+	}
+	emit(codegen, "$\"");
+	for (size_t i = 0; i < name.length;) {
+		size_t start = i;
+		uint32_t cp;
+		unsigned char bytes[4];
+		bool valid = identifier_next(text, name.length, &i, &cp);
+		assert(valid); (void)valid; (void)cp;
+		size_t n = identifier_utf8(text + start, i - start, bytes);
+		emit(codegen, "%.*s", (int)n, (const char *)bytes);
+	}
+	emit(codegen, "\"");
+}
+
 static size_t new_label(struct codegen *codegen)
 {
 	return codegen->next_label++;
@@ -301,8 +326,9 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 		struct token name = function->function->name;
 		size_t result = codegen->next_temporary++;
 
-		emit(codegen, "\t%%t%zu =l copy $%.*s\n", result, (int)name.length,
-			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		emit(codegen, "\t%%t%zu =l copy ", result);
+		emit_symbol(codegen, name);
+		emit(codegen, "\n");
 		return result;
 	}
 	case expression_external_object: {
@@ -311,9 +337,9 @@ static size_t codegen_address(struct codegen *codegen, const struct ast_expressi
 		struct token name = object->object->name;
 		size_t result = codegen->next_temporary++;
 
-		emit(codegen, "\t%%t%zu =l copy %s$%.*s\n", result,
-			object->object->is_thread_local ? "thread " : "", (int)name.length,
-			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		emit(codegen, "\t%%t%zu =l copy %s", result, object->object->is_thread_local ? "thread " : "");
+		emit_symbol(codegen, name);
+		emit(codegen, "\n");
 		return result;
 	}
 	case expression_string: {
@@ -785,9 +811,9 @@ static size_t codegen_compound_literal(struct codegen *codegen,
 	} else {
 		assert(literal->object);
 		struct token name = literal->object->name;
-		emit(codegen, "\t%%t%zu =l copy %s$%.*s\n", address,
-			literal->object->is_thread_local ? "thread " : "", (int)name.length,
-			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		emit(codegen, "\t%%t%zu =l copy %s", address, literal->object->is_thread_local ? "thread " : "");
+		emit_symbol(codegen, name);
+		emit(codegen, "\n");
 	}
 	return address;
 }
@@ -1279,8 +1305,8 @@ static void emit_call(struct codegen *codegen, const struct ast_call_expression 
 	if (node->function) {
 		struct token name = node->function->name;
 
-		emit(codegen, "$%.*s(", (int)name.length,
-			(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+		emit_symbol(codegen, name);
+		emit(codegen, "(");
 	} else {
 		emit(codegen, "%%t%zu(", target);
 	}
@@ -2400,8 +2426,8 @@ static bool codegen_function(FILE *stream, const struct ast_function *function, 
 		emit_abi_type(&codegen, function->return_type);
 		emit(&codegen, " ");
 	}
-	emit(&codegen, "$%.*s(", (int)name.length,
-		(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+	emit_symbol(&codegen, name);
+	emit(&codegen, "(");
 	for (const struct ast_parameter *parameter = function->declaration->parameters; parameter;
 		parameter = parameter->next) {
 		if (parameter->is_void_marker)
@@ -2605,8 +2631,8 @@ static void codegen_static_initializer(struct codegen *codegen, const struct ast
 			case ast_initializer_address_function:
 				name = constant->address_kind == ast_initializer_address_object ?
 					constant->base.object->name : constant->base.function->name;
-				emit(codegen, "l $%.*s", (int)name.length,
-					(const char *)name.spelling_location.source->data + name.spelling_location.offset);
+				emit(codegen, "l ");
+				emit_symbol(codegen, name);
 				break;
 			case ast_initializer_address_compound_literal:
 				/* Sema resolves static literals to their canonical symbol. */
@@ -2670,9 +2696,10 @@ static bool codegen_translation_unit_body(FILE *stream, const struct ast_transla
 
 			/* Explicit definitions supersede the first tentative anchor. */
 			assert(type_is_complete_object(object->type));
-			emit(&data_codegen, "%s%sdata $%.*s = align %u { ",
-				object->is_internal ? "" : "export ", object->is_thread_local ? "thread " : "", (int)name.length,
-				(const char *)name.spelling_location.source->data + name.spelling_location.offset,
+			emit(&data_codegen, "%s%sdata ",
+				object->is_internal ? "" : "export ", object->is_thread_local ? "thread " : "");
+			emit_symbol(&data_codegen, name);
+			emit(&data_codegen, " = align %u { ",
 				object->alignment > type_object_alignment(object->type) ?
 					object->alignment : type_object_alignment(object->type));
 			if (object->definition && object->initializer_plan)
@@ -2711,8 +2738,8 @@ static bool codegen_translation_unit_body(FILE *stream, const struct ast_transla
 					case static_address_function:
 						base_name = address->kind == static_address_object ?
 							address->base.object->name : address->base.function->name;
-						emit(&data_codegen, "l $%.*s", (int)base_name.length,
-							(const char *)base_name.spelling_location.source->data + base_name.spelling_location.offset);
+						emit(&data_codegen, "l ");
+						emit_symbol(&data_codegen, base_name);
 						break;
 					}
 					if (address->byte_addend)

@@ -165,6 +165,13 @@ enum character_encoding { character_ordinary, character_utf8, character_utf16,
 const char *parse_wide_string_spelling(const unsigned char *text, size_t length,
 	enum character_encoding encoding, unsigned char *output, size_t capacity, size_t *decoded_length);
 
+/* Identifiers are compared by decoded Unicode scalar values. These functions
+ * accept validated identifier spellings, including fixed-width UCNs. */
+bool identifier_next(const unsigned char *text, size_t length, size_t *cursor, uint32_t *codepoint);
+int identifier_compare(const unsigned char *left, size_t left_length,
+	const unsigned char *right, size_t right_length);
+size_t identifier_utf8(const unsigned char *text, size_t length, unsigned char *output);
+
 /* Spelling uses spelling_location; location is the diagnostic invocation.
  * Both offsets address prepared source data, with explicit logical length.
  * Spelling may use an arena-owned generated source view, not the input source.

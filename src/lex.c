@@ -25,6 +25,204 @@ static bool is_identifier_continue(unsigned char byte)
 	return is_identifier_start(byte) || is_digit(byte);
 }
 
+/* Unicode identifier classification and NFC checks, generated from Unicode
+ * 15.1.  Spellings remain borrowed from the original source; comparison and
+ * output decode UCNs so source UTF-8 and universal names denote the same C
+ * identifier without changing stringization or diagnostic locations. */
+#include "unicode_identifiers.inc"
+
+#define ARRAY_COUNT(a) (sizeof(a) / sizeof((a)[0]))
+enum { identifier_unicode_limit = 4096, identifier_normalization_work_limit = 131072 };
+
+static int unicode_digit(unsigned char c)
+{
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+	return -1;
+}
+
+/* Consume exactly one UTF-8 source character or fixed-width UCN. */
+bool identifier_next(const unsigned char *s, size_t n, size_t *cursor, uint32_t *out)
+{
+	size_t i = *cursor;
+	uint32_t v;
+	unsigned count;
+	if (i >= n) return false;
+	v = s[i++];
+	if (v == '\\') {
+		if (i >= n || (s[i] != 'u' && s[i] != 'U')) return false;
+		count = s[i++] == 'u' ? 4 : 8;
+		if (count > n - i) return false;
+		v = 0;
+		for (unsigned j = 0; j < count; j++) {
+			int digit = unicode_digit(s[i++]);
+			if (digit < 0) return false;
+			v = (v << 4) | (unsigned)digit;
+		}
+		/* UCNs for basic and control characters are restricted outside literals. */
+		if (v < 0xa0) return false;
+	} else if (v >= 0x80) {
+		unsigned first = v;
+		if (v >= 0xc2 && v <= 0xdf) { count = 1; v &= 0x1f; }
+		else if (v >= 0xe0 && v <= 0xef) { count = 2; v &= 0x0f; }
+		else if (v >= 0xf0 && v <= 0xf4) { count = 3; v &= 0x07; }
+		else return false;
+		if (count > n - i) return false;
+		for (unsigned j = 0; j < count; j++) {
+			unsigned c = s[i++];
+			if (c < 0x80 || c > 0xbf || (j == 0 &&
+				((first == 0xe0 && c < 0xa0) || (first == 0xed && c > 0x9f) ||
+				 (first == 0xf0 && c < 0x90) || (first == 0xf4 && c > 0x8f)))) return false;
+			v = (v << 6) | (c & 0x3f);
+		}
+	}
+	if (v > 0x10ffff || (v >= 0xd800 && v <= 0xdfff)) return false;
+	*cursor = i; *out = v; return true;
+}
+
+int identifier_compare(const unsigned char *a, size_t an, const unsigned char *b, size_t bn)
+{
+	if (!memchr(a, '\\', an) && !memchr(b, '\\', bn)) {
+		size_t shared = an < bn ? an : bn;
+		int order = memcmp(a, b, shared);
+		return order ? order : (an > bn) - (an < bn);
+	}
+	size_t ai = 0, bi = 0;
+	while (ai < an && bi < bn) {
+		uint32_t x, y;
+		bool ax = identifier_next(a, an, &ai, &x), by = identifier_next(b, bn, &bi, &y);
+		assert(ax && by);
+		(void)ax; (void)by;
+		if (x != y) return x < y ? -1 : 1;
+	}
+	return (ai < an) - (bi < bn);
+}
+
+size_t identifier_utf8(const unsigned char *s, size_t n, unsigned char *out)
+{
+	size_t i = 0, count = 0;
+	while (i < n) {
+		uint32_t c;
+		bool ok = identifier_next(s, n, &i, &c);
+		assert(ok); (void)ok;
+		if (c < 0x80) { if (out) out[count] = c; count++; }
+		else if (c < 0x800) {
+			if (out) { out[count] = 0xc0 | (c >> 6); out[count+1] = 0x80 | (c & 63); }
+			count += 2;
+		} else if (c < 0x10000) {
+			if (out) { out[count] = 0xe0 | (c >> 12); out[count+1] = 0x80 | ((c >> 6) & 63); out[count+2] = 0x80 | (c & 63); }
+			count += 3;
+		} else {
+			if (out) { out[count] = 0xf0 | (c >> 18); out[count+1] = 0x80 | ((c >> 12) & 63); out[count+2] = 0x80 | ((c >> 6) & 63); out[count+3] = 0x80 | (c & 63); }
+			count += 4;
+		}
+	}
+	return count;
+}
+
+static bool unicode_in_ranges(uint32_t cp, const struct unicode_range *ranges, size_t n)
+{
+	size_t lo = 0, hi = n;
+	while (lo < hi) {
+		size_t mid = lo + (hi-lo)/2;
+		if (cp < ranges[mid].lo) hi = mid;
+		else if (cp > ranges[mid].hi) lo = mid + 1;
+		else return true;
+	}
+	return false;
+}
+static bool unicode_xid(uint32_t cp, bool first)
+{
+	if (cp < 128) return first ? is_identifier_start((unsigned char)cp) : is_identifier_continue((unsigned char)cp);
+	return first ? unicode_in_ranges(cp, unicode_xid_start, ARRAY_COUNT(unicode_xid_start)) :
+		unicode_in_ranges(cp, unicode_xid_continue, ARRAY_COUNT(unicode_xid_continue));
+}
+static unsigned unicode_ccc_of(uint32_t cp)
+{
+	size_t lo=0, hi=ARRAY_COUNT(unicode_combining_class);
+	while (lo<hi) { size_t m=lo+(hi-lo)/2; if (unicode_combining_class[m].cp < cp) lo=m+1; else hi=m; }
+	return lo < ARRAY_COUNT(unicode_combining_class) && unicode_combining_class[lo].cp == cp ? unicode_combining_class[lo].value : 0;
+}
+static uint32_t unicode_compose(uint32_t first, uint32_t second)
+{
+	/* Algorithmic Hangul composition. */
+	if (first >= 0x1100 && first < 0x1113 && second >= 0x1161 && second < 0x1176)
+		return 0xac00 + ((first-0x1100)*21 + (second-0x1161))*28;
+	if (first >= 0xac00 && first <= 0xd7a3 && (first-0xac00)%28 == 0 && second > 0x11a7 && second < 0x11c3)
+		return first + second - 0x11a7;
+	size_t lo=0, hi=ARRAY_COUNT(unicode_compositions);
+	while (lo<hi) {
+		size_t m=lo+(hi-lo)/2;
+		if (unicode_compositions[m].first < first || (unicode_compositions[m].first == first && unicode_compositions[m].second < second)) lo=m+1; else hi=m;
+	}
+	return lo < ARRAY_COUNT(unicode_compositions) && unicode_compositions[lo].first == first && unicode_compositions[lo].second == second ? unicode_compositions[lo].result : 0;
+}
+
+struct unicode_unit { uint32_t cp; unsigned ccc; };
+static const char *identifier_validate(const unsigned char *s, size_t n)
+{
+	size_t pos=0, count=0, used=0, work=0;
+	bool nonascii=false;
+	while (pos<n) {
+		uint32_t cp;
+		if (!identifier_next(s,n,&pos,&cp)) return "invalid UTF-8 or universal character name in identifier";
+		if (!unicode_xid(cp, count == 0)) return "character is not allowed in identifier";
+		if (cp >= 128) nonascii=true;
+		count++;
+	}
+	if (!nonascii) return NULL;
+	if (count > identifier_unicode_limit) return "Unicode identifier length limit exceeded";
+	struct unicode_unit *units=malloc(count*4*sizeof(*units));
+	if (!units) return "out of memory validating identifier";
+	const char *error=NULL;
+	pos=0;
+	while (pos<n) {
+		uint32_t cp, sequence[4]; unsigned len=1;
+		(void)identifier_next(s,n,&pos,&cp); sequence[0]=cp;
+		if (cp >= 0xac00 && cp <= 0xd7a3) {
+			uint32_t x=cp-0xac00;
+			sequence[0]=0x1100+x/588; sequence[1]=0x1161+(x%588)/28; len=2;
+			if (x%28) { sequence[2]=0x11a7+x%28; len=3; }
+		} else {
+			size_t lo=0, hi=ARRAY_COUNT(unicode_decompositions);
+			while (lo<hi) { size_t m=lo+(hi-lo)/2; if (unicode_decompositions[m].cp < cp) lo=m+1; else hi=m; }
+			if (lo < ARRAY_COUNT(unicode_decompositions) && unicode_decompositions[lo].cp == cp) {
+				len=unicode_decompositions[lo].length;
+				for (unsigned j=0;j<len;j++) sequence[j]=unicode_decompositions[lo].values[j];
+			}
+		}
+		for (unsigned j=0;j<len;j++) {
+			struct unicode_unit unit={sequence[j],unicode_ccc_of(sequence[j])};
+			size_t k=used++;
+			while (unit.ccc && k && units[k-1].ccc > unit.ccc) {
+				if (++work > identifier_normalization_work_limit) { error="Unicode identifier normalization work limit exceeded"; goto done; }
+				units[k]=units[k-1]; k--;
+			}
+			units[k]=unit;
+		}
+	}
+	/* Canonical composition in place; blocked combining marks remain separate. */
+	if (used) {
+		size_t out=1, starter=0; unsigned last=0;
+		for (size_t i=1;i<used;i++) {
+			struct unicode_unit u=units[i];
+			uint32_t composite=(last < u.ccc || last == 0) ? unicode_compose(units[starter].cp,u.cp) : 0;
+			if (composite) units[starter].cp=composite;
+			else { if (!u.ccc) starter=out; units[out++]=u; last=u.ccc; }
+		}
+		used=out;
+	}
+	pos=0;
+	for (size_t i=0;i<used;i++) {
+		uint32_t cp;
+		if (!identifier_next(s,n,&pos,&cp) || cp != units[i].cp) { error="identifier is not in Unicode NFC"; goto done; }
+	}
+	if (pos != n) error="identifier is not in Unicode NFC";
+done:
+	free(units); return error;
+}
+
 static bool is_horizontal_space(unsigned char byte)
 {
 	return byte == ' ' || byte == '\t' || byte == '\v' || byte == '\f';
@@ -113,11 +311,27 @@ static bool skip_pp_trivia(struct pp_lexer *lexer, struct pp_token *error)
 static struct pp_token lex_pp_identifier(struct pp_lexer *lexer)
 {
 	size_t beginning = lexer->offset;
+	const struct source *source = lexer->source;
 
-	do
-		lexer->offset++;
-	while (lexer->offset < lexer->source->length &&
-		is_identifier_continue(lexer->source->data[lexer->offset]));
+	while (lexer->offset < source->length) {
+		unsigned char byte = source->data[lexer->offset];
+		if (byte < 128 && byte != '\\') {
+			if (!is_identifier_continue(byte)) break;
+			lexer->offset++;
+		} else {
+			uint32_t cp;
+			if (byte == '\\' && (source->length - lexer->offset < 2 ||
+				(source->data[lexer->offset+1] != 'u' && source->data[lexer->offset+1] != 'U')))
+				break;
+			if (!identifier_next(source->data, source->length, &lexer->offset, &cp)) {
+				lexer->offset++;
+				return invalid_pp_token(lexer, beginning, "invalid UTF-8 or universal character name in identifier");
+			}
+		}
+	}
+	const char *error = identifier_validate(source->data + beginning, lexer->offset - beginning);
+	if (error)
+		return invalid_pp_token(lexer, beginning, error);
 	return make_pp_token(lexer, pp_identifier, beginning);
 }
 
@@ -141,9 +355,26 @@ static struct pp_token lex_pp_number(struct pp_lexer *lexer)
 			lexer->offset++;
 			continue;
 		}
+		if (byte >= 128 || (byte == '\\' && source->length - lexer->offset >= 2 &&
+			(source->data[lexer->offset+1] == 'u' || source->data[lexer->offset+1] == 'U'))) {
+			uint32_t cp;
+			size_t before = lexer->offset;
+			if (!identifier_next(source->data, source->length, &lexer->offset, &cp) || !unicode_xid(cp, false)) {
+				if (lexer->offset == before) lexer->offset++;
+				return invalid_pp_token(lexer, beginning, "invalid character in preprocessing number");
+			}
+			continue;
+		}
 		if (byte == '\'' && source->length - lexer->offset >= 2 &&
 			is_identifier_continue(source->data[lexer->offset + 1])) {
 			lexer->offset += 2;
+			continue;
+		}
+		if (byte == '\'' && source->length - lexer->offset >= 2 &&
+			(source->data[lexer->offset + 1] >= 128 ||
+			 (source->data[lexer->offset + 1] == '\\' && source->length - lexer->offset >= 3 &&
+			  (source->data[lexer->offset + 2] == 'u' || source->data[lexer->offset + 2] == 'U')))) {
+			lexer->offset++;
 			continue;
 		}
 		if ((byte == '+' || byte == '-') &&
@@ -265,7 +496,8 @@ static struct pp_token read_pp_token(struct pp_lexer *lexer)
 	quote_offset = find_quote(lexer);
 	if (quote_offset != source->length)
 		return lex_pp_quoted(lexer, quote_offset);
-	if (is_identifier_start(byte))
+	if (is_identifier_start(byte) || byte >= 128 || (byte == '\\' && source->length - beginning >= 2 &&
+		(source->data[beginning+1] == 'u' || source->data[beginning+1] == 'U')))
 		return lex_pp_identifier(lexer);
 	if (is_digit(byte) || (byte == '.' && source->length - beginning >= 2 &&
 		is_digit(source->data[beginning + 1])))

@@ -78,7 +78,12 @@ struct macro {
 
 static bool same_spelling(struct pp_token left, struct pp_token right)
 {
-	return left.kind == right.kind && left.length == right.length &&
+	if (left.kind != right.kind)
+		return false;
+	if (left.kind == pp_identifier)
+		return !identifier_compare(left.location.source->data + left.location.offset, left.length,
+			right.location.source->data + right.location.offset, right.length);
+	return left.length == right.length &&
 		memcmp(left.location.source->data + left.location.offset,
 			right.location.source->data + right.location.offset, left.length) == 0;
 }
@@ -2428,7 +2433,7 @@ static bool stringize_argument(struct preprocessor *preprocessor,
 		for (size_t i = 0; i < token.length; i++) {
 			bool escape = literal && (bytes[i] == '"' || bytes[i] == '\\');
 
-			if (!literal && bytes[i] == '\\') {
+			if (!literal && token.kind != pp_identifier && bytes[i] == '\\') {
 				*error = stop_preprocessing(preprocessor, operator,
 					"stringizing a backslash outside a literal is not supported yet");
 				return false;

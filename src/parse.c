@@ -369,9 +369,8 @@ static bool is_typedef_name(struct parser *parser, struct token token)
 	if (token.kind != token_identifier)
 		return false;
 	while (name) {
-		if (name->name.length == token.length &&
-			memcmp(name->name.spelling_location.source->data + name->name.spelling_location.offset,
-				token.spelling_location.source->data + token.spelling_location.offset, token.length) == 0)
+		if (!identifier_compare(name->name.spelling_location.source->data + name->name.spelling_location.offset,
+				name->name.length, token.spelling_location.source->data + token.spelling_location.offset, token.length))
 			return name->kind == parser_name_typedef;
 		name = name->next;
 	}

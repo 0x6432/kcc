@@ -7,7 +7,7 @@ combine into one `u8` string. The existing string length, fragment and storage
 limits apply. Character arrays can use the resulting byte sequences as
 initializers, and pointer conversion uses the unsigned-character element type.
 
-Fixed-width `\u` and `\U` universal names from U+0000 through U+10FFFF, excluding surrogates, encode to UTF-8 in ordinary and `u8` string literals. C23 permits basic-set and control UCNs inside literals. Unicode identifiers are not supported; C++ delimited or named UCNs are not C23 syntax.
+Fixed-width `\u` and `\U` universal names from U+0000 through U+10FFFF, excluding surrogates, encode to UTF-8 in ordinary and `u8` string literals. C23 permits basic-set and control UCNs inside literals. Unicode identifiers and their bounds are described in `m23-unicode-identifiers.md`; C++ delimited or named UCNs are not C23 syntax.
 
 Bounded `u`, `U`, and `L` strings produce UTF-16, UTF-32, and 32-bit
 wide code units respectively on the little-endian target. Raw UTF-8 scalars and

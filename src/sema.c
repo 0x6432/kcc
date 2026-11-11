@@ -134,10 +134,26 @@ struct sema {
 
 static bool same_name(struct token left, struct token right)
 {
-	return left.length == right.length &&
-		memcmp(left.spelling_location.source->data + left.spelling_location.offset,
-			right.spelling_location.source->data + right.spelling_location.offset,
-			left.length) == 0;
+	if (!left.length || !right.length)
+		return left.length == right.length;
+	return !identifier_compare(left.spelling_location.source->data + left.spelling_location.offset,
+		left.length, right.spelling_location.source->data + right.spelling_location.offset, right.length);
+}
+
+/* QBE 1.2 stores definition names in an 80-byte array, including quotes and
+ * the terminator. Refuse overlong quoted names rather than silently truncating
+ * externally visible UTF-8 symbols. Local identifiers do not use QBE names. */
+static bool supported_symbol_name(struct sema *sema, struct token name)
+{
+	const unsigned char *text = name.spelling_location.source->data + name.spelling_location.offset;
+	bool quoted = false;
+	for (size_t i = 0; i < name.length; i++)
+		if (text[i] >= 128 || text[i] == '\\') { quoted = true; break; }
+	if (quoted && identifier_utf8(text, name.length, NULL) > 77) {
+		diagnostic_error(sema->diagnostics, name.location, "Unicode symbol exceeds QBE name limit");
+		return false;
+	}
+	return true;
 }
 
 static struct ast_local_declaration *find_in_scope(struct scope *scope,
@@ -629,7 +645,7 @@ static bool record_redefinition_matches_impl(const struct record_definition *a,
 		if (*work == 0)
 			return false;
 		--*work;
-		if (x->name.length != y->name.length ||
+		if (!!x->name.length != !!y->name.length ||
 			(x->name.length && !same_name(x->name, y->name)) ||
 			x->alignment != y->alignment || x->anonymous != y->anonymous ||
 			x->is_flexible != y->is_flexible || x->offset != y->offset ||
@@ -1193,12 +1209,9 @@ static bool track_ordinary_enum_value(struct constant_result value,
 static int compare_enum_member_names(const void *left, const void *right)
 {
 	const struct enum_member_info *a = left, *b = right;
-	size_t shared = a->name.length < b->name.length ? a->name.length : b->name.length;
-	int order = memcmp(a->name.spelling_location.source->data + a->name.spelling_location.offset,
-		b->name.spelling_location.source->data + b->name.spelling_location.offset, shared);
-	if (order)
-		return order;
-	return (a->name.length > b->name.length) - (a->name.length < b->name.length);
+	return identifier_compare(a->name.spelling_location.source->data + a->name.spelling_location.offset,
+		a->name.length, b->name.spelling_location.source->data + b->name.spelling_location.offset,
+		b->name.length);
 }
 
 /* Repeated C23 enum definitions must name the same members with the same
@@ -3385,18 +3398,20 @@ static bool sema_expression(struct sema *sema,
 
 			if (!original) {
 				struct token name = sema->function->declaration->name;
-				unsigned char *bytes = arena_alloc(sema->arena, name.length + 1);
+				const unsigned char *spelling = name.spelling_location.source->data + name.spelling_location.offset;
+				size_t length = identifier_utf8(spelling, name.length, NULL);
+				unsigned char *bytes = arena_alloc(sema->arena, length + 1);
 				const struct type *element = type_qualified(sema->arena, &type_char, type_qualifier_const);
-				struct array_type *array = element ? type_new_array(sema->arena, element, name.length + 1) : NULL;
+				struct array_type *array = element ? type_new_array(sema->arena, element, length + 1) : NULL;
 
 				if (!bytes || !array ||
-					!(original = ast_new_string(sema->arena, expression->location, bytes, name.length))) {
+					!(original = ast_new_string(sema->arena, expression->location, bytes, length))) {
 					diagnostic_error(sema->diagnostics, expression->location,
 						"out of memory creating function name");
 					return false;
 				}
-				memcpy(bytes, name.spelling_location.source->data + name.spelling_location.offset, name.length);
-				bytes[name.length] = 0;
+				(void)identifier_utf8(spelling, name.length, bytes);
+				bytes[length] = 0;
 				original->expression.type = &array->type;
 				original->expression.is_lvalue = true;
 				original->object_id = sema->string_count++;
@@ -7134,6 +7149,8 @@ static struct function_symbol *register_function(struct sema *sema, struct token
 	bool canonical_is_visible = symbol && symbol->file_type == symbol->type;
 	const struct type *return_type;
 
+	if (!supported_symbol_name(sema, name))
+		return NULL;
 	if (find_external_object(sema, name)) {
 		diagnostic_error(sema->diagnostics, name.location,
 			"function name conflicts with external object");
@@ -7236,6 +7253,8 @@ static struct external_object_symbol *register_external_object(struct sema *sema
 	struct external_object_symbol *symbol = find_external_object(sema, name);
 	const struct type *composite = type;
 
+	if (!supported_symbol_name(sema, name))
+		return NULL;
 	if (tentative_definition && name.length == 4 && memcmp(name.spelling_location.source->data +
 		name.spelling_location.offset, "main", 4) == 0) {
 		diagnostic_error(sema->diagnostics, name.location,
