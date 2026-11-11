@@ -5453,6 +5453,86 @@ static void initializer_cache_constant(struct ast_initializer_constant *constant
 	}
 }
 
+/* Resolve a direct constexpr record or record-member value to its immutable
+ * initializer plan. Pointer indirection and runtime aggregate expressions do
+ * not qualify. */
+static const struct ast_initializer_plan *constexpr_record_source(
+	const struct ast_expression *expression, const struct type *target, uint64_t *offset)
+{
+	if (expression->kind != expression_load || !type_is_record(expression->type) ||
+		type_record_definition(expression->type) != type_record_definition(target))
+		return NULL;
+	const struct ast_expression *root = ((const struct ast_load_expression *)expression)->operand;
+	*offset = 0;
+	while (root->kind == expression_member) {
+		const struct ast_member_expression *member = (const struct ast_member_expression *)root;
+		if (member->indirect || UINT64_MAX - *offset < member->offset)
+			return NULL;
+		*offset += member->offset;
+		root = member->operand;
+	}
+	if (root->kind == expression_compound_literal) {
+		const struct ast_compound_literal_expression *literal = (const struct ast_compound_literal_expression *)root;
+		return literal->is_constexpr ? literal->initializer_plan : NULL;
+	}
+	if (root->kind == expression_name) {
+		const struct ast_local_declaration *local = ((const struct ast_name_expression *)root)->declaration;
+		return local && local->is_constexpr && local->constexpr_complete ? local->initializer_plan : NULL;
+	}
+	if (root->kind == expression_external_object) {
+		const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)root;
+		return reference->is_constexpr_name && reference->object->is_constexpr && !reference->object->constexpr_in_progress ?
+			reference->object->initializer_plan : NULL;
+	}
+	return NULL;
+}
+
+/* Materialize a source plan into the destination, preserving sparse strings and
+	* exact scalar values without re-evaluating the source object's initializer. */
+static bool initializer_constexpr_record_copy(struct initializer_builder *builder,
+	const struct type *target, uint64_t offset, const struct ast_expression *expression,
+	const struct ast_initializer *syntax)
+{
+	uint64_t source_offset;
+	const struct ast_initializer_plan *source = constexpr_record_source(expression, target, &source_offset);
+	uint64_t size = type_object_size(target);
+	if (!source || source_offset > source->size || size > source->size - source_offset)
+		return initializer_error(builder, syntax->location, "constexpr aggregate copy requires a direct constexpr record value of the same definition");
+	if (!initializer_clear(builder, target, offset, syntax))
+		return false;
+	for (const struct ast_initializer_plan_entry *entry = source->entries; entry; entry = entry->next) {
+		if (entry->kind == ast_initializer_write_zero || entry->offset >= source_offset + size ||
+			entry->offset + entry->length <= source_offset)
+			continue;
+		if (entry->offset < source_offset || entry->length > source_offset + size - entry->offset ||
+			entry->kind == ast_initializer_write_copy)
+			return initializer_error(builder, syntax->location, "unsupported overlapping constexpr record copy");
+		struct ast_initializer_plan_entry store = *entry;
+		store.offset = offset + entry->offset - source_offset;
+		store.syntax = syntax;
+		if (entry->kind == ast_initializer_write_expression && !builder->is_static) {
+			if (entry->constant.kind == ast_initializer_constant_null) {
+				struct ast_nullptr_expression *node = ast_new_nullptr(builder->sema->arena, syntax->location);
+				if (!node) return initializer_error(builder, syntax->location, "out of memory materializing constexpr copy");
+				node->expression.type = entry->type;
+				store.expression = &node->expression;
+			} else if (entry->constant.kind == ast_initializer_constant_integer) {
+				struct ast_integer_expression *node = arena_alloc(builder->sema->arena, sizeof(*node));
+				if (!node) return initializer_error(builder, syntax->location, "out of memory materializing constexpr copy");
+				*node = (struct ast_integer_expression) {
+					.expression = { .kind = type_is_floating(entry->type) ? expression_floating : expression_integer,
+						.location = syntax->location, .type = entry->type, .depth = 1 }, .value = entry->constant.bits,
+				};
+				store.expression = &node->expression;
+			} else
+				return initializer_error(builder, syntax->location, "unsupported constexpr record-copy value");
+		}
+		if (!initializer_store(builder, &store, syntax->location))
+			return false;
+	}
+	return true;
+}
+
 static bool initializer_value(struct initializer_builder *builder,
 	struct initializer_path *path, const struct ast_initializer *syntax, bool elision);
 
@@ -5575,10 +5655,10 @@ static bool initializer_value(struct initializer_builder *builder,
 			return initializer_error(builder, syntax->location, "out of memory decaying string initializer");
 		expression = &decay->expression;
 	}
+	if ((builder->is_constexpr || builder->is_static) && type_is_record(object->type))
+		return initializer_constexpr_record_copy(builder, object->type, object->offset, expression, syntax);
 	if (builder->is_constexpr) {
 		uint64_t bits;
-		if (type_is_record(object->type))
-			return initializer_error(builder, syntax->location, "constexpr aggregate copy initializers are not supported yet");
 		if (!constexpr_scalar_value(builder->sema, expression, object->type, &bits))
 			return false;
 		if (store.bit_field) {
@@ -6957,7 +7037,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	bool is_boolean_address = false;
 	struct static_data_value boolean_value = { 0 };
 	bool has_initializer = syntax || *initializer;
-	bool promoted = syntax && (syntax->kind == ast_initializer_list || type->kind == type_kind_array);
+	bool promoted = syntax && (syntax->kind == ast_initializer_list || type->kind == type_kind_array || type_is_record(type));
 	uint64_t constexpr_bits = 0;
 	bool zero_definition = !is_extern && !has_initializer && (is_thread_local || sema->scope);
 	const struct type *target;

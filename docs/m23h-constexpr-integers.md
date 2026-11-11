@@ -33,6 +33,10 @@ constants; null pointer members can initialize compatible pointers. Array
 subscripts do not form named constants. Floating automatic constexpr initializers
 are materialized from their translation-time value, independent of runtime rounding.
 Bit-field initializers must be exactly representable in their declared field width.
+Direct constexpr record values and direct record-member values of the same record
+definition can initialize constexpr records, or records with static storage.
+Copies preserve nested arrays, bit-fields, string data and scalar constants without
+re-evaluating the source initializer.
 
 The same bounded scalar, array and struct types are supported in C23 constexpr
 compound literals, including automatic, static and register storage where valid.
@@ -41,7 +45,7 @@ in supported constant expressions. They retain real const-qualified storage;
 initializer and representability rules are the same as constexpr objects.
 
 This is not complete C23 constexpr support. Unions, structs containing unions,
-flexible arrays, aggregate copy initialization, aggregate inferred
+flexible arrays, general aggregate copy expressions, aggregate inferred
 auto, non-ASCII narrow strings targeting char or signed char, non-finite floating
 values and non-constexpr file-scope or static inferred auto remain unsupported.
 The compiler's existing type, initializer, ABI and resource limits also apply.

@@ -32,9 +32,20 @@ programs=[
 '''enum E : unsigned int { A=1 }; struct S{enum E x:6;}; constexpr struct S s={42}; static_assert(s.x==42); int main(void){return s.x;}''',
 '''struct S{signed long x:64; unsigned long y:64;}; constexpr struct S s={-9223372036854775807L-1,18446744073709551615UL}; static_assert(s.x<0 && s.y==~0UL); int main(void){return s.x<0 && s.y==~0UL?42:1;}''',
 '''struct S{signed x:3; unsigned y:6;}; int main(void){static constexpr struct S s={-4,42}; static_assert(s.x==-4 && s.y==42); return s.y;}''',
+'''struct S{int n;}; constexpr struct S s={42}; constexpr struct S t=s; static_assert(t.n==42); int main(void){return t.n;}''',
+'''struct S{int n; double f; int *p; char a[4]; unsigned bit:6;}; constexpr struct S s={42,1.5,nullptr,"abc",42}; constexpr struct S t=s; int main(void){return t.n==42 && t.f==1.5 && t.p==nullptr && t.a[2]=='c' && t.bit==42?42:1;}''',
+'''struct A{int n; int m;}; struct B{int z; struct A a;}; constexpr struct B b={1,{42,2}}; constexpr struct A a=b.a; static_assert(a.n==42 && a.m==2); int main(void){return a.n;}''',
+'''struct A{int n; int m;}; struct B{struct A a; int z;}; constexpr struct A a={42,2}; constexpr struct B b={a,3}; static_assert(b.a.n==42 && b.a.m==2); int main(void){return b.a.n;}''',
+'''struct S{int n;}; constexpr struct S s=(constexpr struct S){42}; static_assert(s.n==42); int main(void){return s.n;}''',
+'''struct S{int n;}; constexpr struct S source={42}; struct S a=source; static struct S b=(constexpr struct S){42}; int main(void){return a.n==42 && b.n==42?42:1;}''',
+'''struct S{int n;}; struct B{struct S s;}; constexpr struct S source={42}; static struct B b={source}; int main(void){return b.s.n;}''',
+'''struct S{int n; int m;}; int main(void){constexpr struct S a={42,0}; constexpr struct S b=a; static_assert(b.n==42 && b.m==0); return b.n;}''',
+'''struct A{int n; int z;}; struct B{struct A a;}; constexpr struct A a={1,2}; constexpr struct B b={.a=a,.a.n=42}; static_assert(b.a.n==42 && b.a.z==2); int main(void){return b.a.n;}''',
 ]
 # Array indexing is not a C23 named constant: move the deliberately invalid case to refusals.
 negative=[programs.pop(8),
+'''struct S{int n;}; struct S s={1}; constexpr struct S t=s;''',
+'''struct S{int n;}; constexpr struct S s={1}; constexpr struct S t=*(&s);''',
 '''struct S{unsigned x:3;}; constexpr struct S s={8};''',
 '''struct S{_Bool x:1;}; constexpr struct S s={2};''',
 '''struct S{signed x:3;}; constexpr struct S s={4};''',
@@ -54,7 +65,6 @@ negative=[programs.pop(8),
 '''struct S{int n; union U{int x;} u;}; constexpr struct S s={1,{2}};''',
 '''struct S{int n; int a[];}; constexpr struct S s={1};''',
 '''struct S{int n;}; constexpr struct S s={s.n};''',
-'''struct S{int n;}; constexpr struct S s={1}; constexpr struct S t=s;''',
 '''constexpr int a[2];''',
 '''constexpr int a[1]={1}, b[1]={2};''',
 '''constexpr char s[]="\\xff";''',
@@ -80,10 +90,11 @@ with tempfile.TemporaryDirectory(prefix='kcc constexpr aggregate ') as tmp:
     const struct S *get(void){static constexpr struct S b={a.n,a.f,a.p}; return &b;}
     double scalar(void){constexpr double x=1.0/3.0; return x;}
     double inferred(void){constexpr auto x=1.0/3.0; return x;}
-    double aggregate(void){constexpr struct S x={1,1.0/3.0,nullptr}; return x.f;}''')
+    double aggregate(void){constexpr struct S x={1,1.0/3.0,nullptr}; return x.f;}
+    double copy(void){constexpr struct S x={1,1.0/3.0,nullptr}; constexpr struct S y=x; return y.f;}''')
   assert r.returncode==0,r.stderr
   il.write_text(r.stdout);subprocess.run([qbe,'-t','amd64_sysv','-o',str(asm),str(il)],check=True,timeout=15)
-  native=d/'native.c'; native.write_text('''#include <fenv.h>\n#include <stdint.h>\n#include <string.h>\nstruct S{int n; double f; int *p;}; const struct S *get(void); double scalar(void), inferred(void), aggregate(void); int main(void){ const struct S *p=get(); if(p!=get() || p->n!=42 || p->f!=1.5 || p->p) return 1; fesetround(FE_UPWARD); double x[]={scalar(),inferred(),aggregate()}; for(int i=0;i<3;i++){uint64_t u; memcpy(&u,&x[i],8); if(u!=0x3fd5555555555555ULL)return 2;} return 42;}''')
+  native=d/'native.c'; native.write_text('''#include <fenv.h>\n#include <stdint.h>\n#include <string.h>\nstruct S{int n; double f; int *p;}; const struct S *get(void); double scalar(void), inferred(void), aggregate(void), copy(void); int main(void){ const struct S *p=get(); if(p!=get() || p->n!=42 || p->f!=1.5 || p->p) return 1; fesetround(FE_UPWARD); double x[]={scalar(),inferred(),aggregate(),copy()}; for(int i=0;i<4;i++){uint64_t u; memcpy(&u,&x[i],8); if(u!=0x3fd5555555555555ULL)return 2;} return 42;}''')
   subprocess.run([host,str(asm),str(native),'-lm','-o',str(exe)],check=True,timeout=15)
   assert subprocess.run([str(exe)],timeout=5).returncode==42
 if qbe:
