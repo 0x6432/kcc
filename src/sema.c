@@ -6012,9 +6012,9 @@ static struct ast_initializer_plan *sema_initializer(struct sema *sema,
 /* Inferred record initializers have already been semantically checked while
  * determining their type; do not analyze their expression a second time. */
 static struct ast_initializer_plan *sema_checked_constexpr_record_initializer(struct sema *sema,
-	const struct type *type, const struct ast_initializer *syntax, struct ast_expression *expression, bool is_static)
+	const struct type *type, const struct ast_initializer *syntax, struct ast_expression *expression, bool is_static, bool is_constexpr)
 {
-	struct initializer_builder builder = { .sema = sema, .is_static = is_static, .is_constexpr = true };
+	struct initializer_builder builder = { .sema = sema, .is_static = is_static, .is_constexpr = is_constexpr };
 	if (!syntax || !type_is_complete_object(type) || type_object_size(type) > ast_max_local_storage) {
 		diagnostic_error(sema->diagnostics, expression->location, "inferred constexpr record initializer exceeds object limits");
 		return NULL;
@@ -6223,12 +6223,12 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		return false;
 	}
 	syntax->syntax.type = type;
-	if (local->is_static && local->is_constexpr)
+	if (local->is_static)
 		return check_object_alignment(sema, type, local->alignment, local->name.location) &&
 			sema_block_storage(sema, local, type);
 	if (local->is_constexpr && type_is_record(type)) {
 		local->initializer_plan = sema_checked_constexpr_record_initializer(sema, type,
-			local->initializer_syntax, local->initializer, false);
+			local->initializer_syntax, local->initializer, false, true);
 		if (!local->initializer_plan || !complete_local_storage(sema, local, type))
 			return false;
 		local->constexpr_complete = true;
@@ -6353,7 +6353,7 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 				return false;
 			local->alignment = local->alignments->alignment;
 		}
-		if ((local->is_static && !local->is_constexpr) || local->is_extern) {
+		if (local->is_extern) {
 			diagnostic_error(sema->diagnostics, local->name.location,
 				"static or extern auto inference is not supported yet");
 			return false;
@@ -7406,8 +7406,8 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		/* Prior visible complete declarations supply the bound, not future
 		 * initializer inference. Keep written syntax/type graphs immutable. */
 		const struct type *visible = sema->scope ? type : symbol->file_type;
-		struct ast_initializer_plan *plan = initializer_checked && is_constexpr && type_is_record(visible) ?
-			sema_checked_constexpr_record_initializer(sema, visible, syntax, *initializer, true) :
+		struct ast_initializer_plan *plan = initializer_checked && type_is_record(visible) ?
+			sema_checked_constexpr_record_initializer(sema, visible, syntax, *initializer, true, is_constexpr) :
 			sema_initializer(sema, visible, syntax, true, is_constexpr, NULL);
 		const struct type *composite;
 		if (!plan)
@@ -7861,7 +7861,8 @@ static bool sema_external_object_declaration(struct sema *sema,
 		struct ast_inferred_type_syntax *syntax = (struct ast_inferred_type_syntax *)declaration->type_syntax;
 		const struct token *previous_pending = sema->pending_constexpr_name;
 		bool checked;
-		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
+		if (declaration->is_constexpr &&
+			(syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict))) {
 			diagnostic_error(sema->diagnostics, declaration->name.location,
 				"constexpr currently requires a non-atomic, non-volatile scalar object");
 			return false;
@@ -7878,10 +7879,29 @@ static bool sema_external_object_declaration(struct sema *sema,
 		if (!checked)
 			return false;
 		type = field_expression_value_type(declaration->initializer);
-		type = type_is_record(type) ? constexpr_aggregate_type(sema, type, declaration->name.location) :
-			constexpr_scalar_type(sema, type, declaration->name.location);
-		if (!type)
+		if (type_contains_vm(type) || (!type_is_scalar(type) && !type_is_record(type)) || !type_is_complete_object(type)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"inferred auto requires a complete scalar or aggregate initializer type");
 			return false;
+		}
+		if ((syntax->qualifiers & type_qualifier_atomic) && !supported_atomic_type(type)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location, "unsupported atomic type");
+			return false;
+		}
+		if ((syntax->qualifiers & type_qualifier_volatile) && type_is_record(type)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location, "unsupported inferred volatile type");
+			return false;
+		}
+		if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location, "restrict requires a pointer to an object type");
+			return false;
+		}
+		if (declaration->is_constexpr) {
+			type = type_is_record(type) ? constexpr_aggregate_type(sema, type, declaration->name.location) :
+				constexpr_scalar_type(sema, type, declaration->name.location);
+			if (!type)
+				return false;
+		}
 		type = type_qualified(sema->arena, type, type->qualifiers | syntax->qualifiers);
 		if (!type) {
 			diagnostic_error(sema->diagnostics, declaration->name.location, "out of memory qualifying constexpr object");

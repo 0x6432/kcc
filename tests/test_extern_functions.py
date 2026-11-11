@@ -79,8 +79,6 @@ c23_constraints = [
     ('int f(extern typeof(missing) x);','extern is not permitted'),
 ]
 subset_errors = [
-    ('extern auto x=42;','file-scope auto declarations'),
-    ('auto extern x=42;','file-scope auto declarations'),
     ('typedef int T; int main(void) { extern auto T=42; return 0; }','static or extern auto inference is not supported yet'),
 ]
 with tempfile.TemporaryDirectory(prefix='kcc extern functions ') as directory:

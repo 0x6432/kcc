@@ -311,6 +311,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_auto_explicit.py
 	python3 tests/test_local_binding_phases.py
 	python3 tests/test_auto_inference.py
+	python3 tests/test_auto_static_inference.py
 	python3 tests/test_constexpr_integer.py
 	python3 tests/test_constexpr_pointers.py
 	python3 tests/test_constexpr_floating.py
@@ -554,6 +555,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_auto_explicit.py
 	python3 tests/test_local_binding_phases.py
 	python3 tests/test_auto_inference.py
+	python3 tests/test_auto_static_inference.py
 	python3 tests/test_constexpr_integer.py
 	python3 tests/test_constexpr_pointers.py
 	python3 tests/test_constexpr_floating.py

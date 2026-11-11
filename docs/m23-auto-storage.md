@@ -1,0 +1,7 @@
+# C23 inferred auto with static storage and thread storage
+
+Single-identifier initialized `auto` objects may be declared at file scope or with `static` or `thread_local` storage. Inference uses the initializer expression after value conversion, retaining existing supported scalar, pointer, enum, bit-precise and record types. Qualifiers and alignment use the existing object rules. File-scope external and internal linkage and block-scope static lifetime use the ordinary object machinery. Thread-local objects use the existing TLS machinery.
+
+Static- and thread-storage initializers remain subject to the compiler’s existing constant-initializer subset. Inferred records initialized by supported constexpr record values can be emitted as static objects; this is not general compile-time evaluation of arbitrary record expressions. Inferred declarations require an assignment initializer and a single identifier; multiple declarators, derived declarators, incomplete and variably modified types remain unsupported. Block-scope `extern auto` with an initializer remains refused. Explicit-type file-scope auto and explicit-type TLS/auto combinations remain refused.
+
+The regression suite exercises QBE runtime execution, native external linkage and native pthread TLS isolation when QBE and a pthread-capable host compiler are available, in addition to compile-only rejection cases. This is not a claim of full C23 support.

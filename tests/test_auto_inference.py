@@ -84,7 +84,6 @@ ub_refusals = [
     ('int main(void) { int x=1; auto x=42; return x; }', 'redeclaration'),
 ]
 subset_errors = [
-    ('auto x=42;', 'file-scope auto declarations'),
     ('int main(void) { auto x; return 0; }', 'requires an assignment initializer'),
     ('int main(void) { auto *x=0; return 0; }', 'single identifier declarator'),
     ('int main(void) { auto x[2]=0; return 0; }', 'single identifier declarator'),

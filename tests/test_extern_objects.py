@@ -246,7 +246,6 @@ c23_constraints = [
 ]
 subset_errors = [
     ('extern void x;', 'file-scope declaration requires a scalar, array or record object type'),
-    ('extern auto x=42;', 'file-scope auto declarations'),
     ('extern inline int x;', 'error:'),
 ]
 

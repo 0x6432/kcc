@@ -98,10 +98,7 @@ c23_constraints = [
     ('int f(static typeof(missing) x);','static is not permitted'),
 ]
 subset_errors = [
-    ('static auto x=42;','file-scope auto declarations'),
-    ('auto static x=42;','file-scope auto declarations'),
     ('typedef int F(int); int main(void) { F static f; return 0; }','block-scope static function declaration is not permitted'),
-    ('typedef int T; int main(void) { static auto T=42; return 0; }','static or extern auto inference is not supported yet'),
     ('static int main(void) { return 42; }','static main'),
     ('int f(int a[static]);','error:'),
 ]

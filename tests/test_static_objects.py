@@ -139,7 +139,6 @@ ub_refusals = [
 # incomplete-internal-array UB refusal are covered by test_static_arrays.py.
 # Integer initializers now have independent acceptance/ownership coverage.
 subset_errors = [
-    'static auto cell=42;', 'auto static cell=42;',
     'int f(int cell[static]);',
 ]
 

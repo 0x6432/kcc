@@ -50,7 +50,7 @@ in supported constant expressions. They retain real const-qualified storage;
 initializer and representability rules are the same as constexpr objects.
 
 This is not complete C23 constexpr support. Flexible arrays, general aggregate copy expressions, non-ASCII narrow strings targeting char or signed char, non-finite floating
-values and non-constexpr file-scope or static inferred auto remain unsupported.
+values remain unsupported. Non-constexpr file-scope and static inferred auto objects are now supported within the initializer subset documented in m23-auto-storage.md.
 The compiler's existing type, initializer, ABI and resource limits also apply.
 `tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, `tests/test_constexpr_floating.py`, `tests/test_constexpr_aggregates.py`, and `tests/test_constexpr_literals.py` cover executable cross-feature examples,
 range and constraint refusals, and file-scope symbol linkage. Native C23

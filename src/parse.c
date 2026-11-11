@@ -629,9 +629,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 			/* '=' forces an initialized identifier, not an unnamed explicit type. */
 			if (head && head->auto_keyword.kind == token_auto &&
 				preprocess_peek(parser->preprocessor).kind == token_equal) {
-				if (head->thread_keyword.kind == token_thread_local ||
-					(head->constexpr_keyword.kind == token_constexpr &&
-					 (head->keyword.kind == token_typedef || head->keyword.kind == token_extern))) {
+				if (head->constexpr_keyword.kind == token_constexpr &&
+					 (head->keyword.kind == token_typedef || head->keyword.kind == token_extern)) {
 					diagnostic_error(parser->diagnostics, token.location,
 						"invalid storage combination for inferred constexpr or auto");
 					return NULL;
@@ -807,7 +806,8 @@ static struct ast_type_syntax *parse_declaration_specifiers_tail(struct parser *
 		return NULL;
 	}
 	if (head && head->thread_keyword.kind == token_thread_local &&
-		head->auto_keyword.kind == token_auto) {
+		head->auto_keyword.kind == token_auto &&
+		(query || seen_float || seen_double || seen_void || seen_int || seen_char || seen_short || seen_bool || seen_sign || long_count)) {
 		diagnostic_error(parser->diagnostics, beginning->location,
 			"thread_local auto inference is not supported yet");
 		return NULL;
@@ -4591,8 +4591,9 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 			preprocess_next(parser->preprocessor);
 			return items;
 		}
-		if (is_constexpr) {
-			diagnostic_error(parser->diagnostics, name.location, "multiple constexpr declarators are not supported");
+		if (is_constexpr || base->kind == type_syntax_inferred) {
+			diagnostic_error(parser->diagnostics, name.location, is_constexpr ?
+				"multiple constexpr declarators are not supported" : "multiple inferred auto declarators are not supported");
 			return NULL;
 		}
 		if (!expect_token(parser, token_comma,
@@ -4647,8 +4648,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			"register storage class requires block scope");
 		return NULL;
 	}
-	if (head.auto_keyword.kind == token_auto &&
-		!(head.constexpr_keyword.kind == token_constexpr && base->kind == type_syntax_inferred)) {
+	if (head.auto_keyword.kind == token_auto && base->kind != type_syntax_inferred) {
 		diagnostic_error(parser->diagnostics, head.auto_keyword.location,
 			"file-scope auto declarations are not supported yet");
 		return NULL;

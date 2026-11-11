@@ -273,17 +273,14 @@ ADDRESS_CONSTRAINTS = [
 # C23 6.9.2: a non-extern TLS declaration without initializer is a zero
 # definition, NOT a tentative definition. Old native implementations admit some
 # of these as extensions even with -pedantic-errors: never execute or count them
-# as native constraint agreements. TLS+auto is legal C23 but M23e inference is
-# a supported-subset refusal, likewise never a native language-constraint claim.
+# as native constraint agreements. Explicit-type TLS+auto remains refused.
 KCC_ONLY = [
     ('_Thread_local int cell; _Thread_local int cell;', 'multiple definitions of thread_local object'),
     ('thread_local int cell=1; thread_local int cell;', 'multiple definitions of thread_local object'),
     ('_Thread_local int cell; _Thread_local int cell=1;', 'multiple initialized definitions of object'),
     ('_Thread_local int cells[];', 'thread_local definition requires a complete object type'),
     ('thread_local int cells[]; extern thread_local int cells[3];', 'thread_local definition requires a complete object type'),
-    ('thread_local auto cell=42;', 'thread_local auto inference is not supported yet'),
     ('thread_local auto int cell=42;', 'thread_local auto inference is not supported yet'),
-    ('int f(void) { static thread_local auto cell=42; return 0; }', 'thread_local auto inference is not supported yet'),
     ('thread_local int f(void);', 'thread_local requires an object type'),
     ('int f(void) { thread_local int cell; return 0; }', 'block-scope thread_local requires static or extern'),
 ]

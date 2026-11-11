@@ -74,7 +74,6 @@ constraints = [
 ]
 c23_constraints = []
 subset_errors = [
-    ('auto x=42;', 'file-scope auto declarations are not supported yet'),
     ('int main(void) { auto int a[2]=0; return 0; }', 'aggregate initializer requires braces or a compatible record value'),
 ]
 

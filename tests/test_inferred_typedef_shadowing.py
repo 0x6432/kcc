@@ -67,6 +67,7 @@ constraints = [
     ('typedef int T; int main(void) { register auto T value=42; return 0; }', 'combined auto storage requires an inferred type'),
 ]
 ub_refusals = [
+    ('typedef long T; auto T=42;', 'external object conflicts with prior ordinary declaration'),
     ('typedef long T; int main(void) { auto T=1,U=2; return 0; }', 'multiple inferred auto declarators'),
     ('typedef long T; int main(void) { auto (T)=1,T=2; return 0; }', 'multiple inferred auto declarators'),
     ('int main(void) { typedef long T; auto T=42; return 0; }', 'ordinary declaration conflicts'),
@@ -74,7 +75,6 @@ ub_refusals = [
     ('typedef long T; int main(void) { auto T=1; auto T=2; return 0; }', 'redeclaration'),
 ]
 subset_errors = [
-    ('typedef long T; auto T=42;', 'file-scope auto declarations'),
     ('typedef long T; int main(void) { auto (T); return 0; }', 'requires an assignment initializer'),
     ('typedef long T; int main(void) { auto *T=0; return 0; }', 'single identifier declarator'),
     ('typedef long T; int main(void) { auto (T[2])=0; return 0; }', 'single identifier declarator'),
