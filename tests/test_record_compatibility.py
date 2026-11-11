@@ -57,6 +57,9 @@ negative = [
 , "struct S{int x;}; struct S{struct S {int x;} a;};"
 , "struct S{int x;}; struct S{int x[1];};"
 
+, "struct S{int n; int a[];}; int main(void){struct S x={1}; {struct S{int n; int a[1];}; struct S y=x; return 0;}}"
+, "struct S{int n; int a[1];}; int main(void){struct S x={1,{2}}; {struct S{int n; int a[];}; struct S *p=&x; return 0;}}"
+
 ]
 # Deep chains exercise visited-pair bounds and mismatch propagation without
 # relying on the host compiler's C23 redefinition support.

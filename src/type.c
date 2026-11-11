@@ -547,7 +547,9 @@ static bool compatible_types(const struct type *left, const struct type *right,
 
 /* C23 permits distinct complete tagged records with the same tag and
  * corresponding compatible members. A visited-pair set makes recursive
- * pointer graphs coinductive and keeps the analysis bounded. */
+ * pointer graphs coinductive and keeps the analysis bounded. Refuse layouts
+ * that differ, including C23 issue 1000's flexible-vs-fixed array case: treating
+ * those as interchangeable by value would otherwise miscompile copies/ABI. */
 static bool record_definitions_compatible(const struct record_definition *a,
 	const struct record_definition *b, bool anonymous, struct compatibility_context *context)
 {
@@ -555,7 +557,8 @@ static bool record_definitions_compatible(const struct record_definition *a,
 		return true;
 	if (a->is_union != b->is_union || !a->complete || !b->complete ||
 		(!anonymous && !enum_name_equal(&a->tag, &b->tag)) ||
-		a->member_count != b->member_count)
+		a->member_count != b->member_count || a->size != b->size ||
+		a->alignment != b->alignment || a->has_flexible_array != b->has_flexible_array)
 		return false;
 	for (size_t i = 0; i < context->count; i++)
 		if ((context->records[i].left == a && context->records[i].right == b) ||
@@ -569,7 +572,9 @@ static bool record_definitions_compatible(const struct record_definition *a,
 		if (x->name.length != y->name.length ||
 			(x->name.length && !enum_name_equal(&x->name, &y->name)) ||
 			x->alignment != y->alignment || x->anonymous != y->anonymous ||
+			x->is_flexible != y->is_flexible || x->offset != y->offset ||
 			x->is_bit_field != y->is_bit_field ||
+			(x->is_bit_field && x->bit_offset != y->bit_offset) ||
 			(x->is_bit_field && x->bit_width != y->bit_width))
 			return false;
 		if (x->anonymous && type_is_record(x->type) && type_is_record(y->type)) {
