@@ -113,7 +113,7 @@ Distinct completed enum definitions with the same tag can be compatible across
 scopes when their enumerator names and values match, regardless of order. Fixed
 definitions additionally require the same fixed underlying type; fixed and
 non-fixed definitions do not match. This implementation also conservatively
-requires the same chosen underlying integer kind for ordinary enums. Unnamed
+requires the same chosen underlying integer kind for ordinary enums. Width-specific extended integer underlying types must also have the same width, including when two widths share a type kind. Unnamed
 enums and distinct fixed forward declarations retain nominal identity.
 Matching uses an arena-owned member inventory sorted once at definition and
 linear comparison, with the existing 1,024-enumerator per-definition limit.

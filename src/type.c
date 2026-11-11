@@ -526,7 +526,9 @@ static bool enum_definitions_compatible(const struct enum_definition *a,
 {
 	if (!a->defined || !b->defined || !enum_name_equal(&a->tag, &b->tag) ||
 		a->fixed != b->fixed || a->member_count != b->member_count ||
-		!a->underlying || !b->underlying || a->underlying->kind != b->underlying->kind)
+		!a->underlying || !b->underlying || a->underlying->kind != b->underlying->kind ||
+		((type_is_other_bitint(a->underlying) || type_is_field_integer(a->underlying)) &&
+		 type_integer_width(a->underlying) != type_integer_width(b->underlying)))
 		return false;
 	for (size_t i = 0; i < a->member_count; i++)
 		if (!enum_name_equal(&a->members[i].name, &b->members[i].name) ||
