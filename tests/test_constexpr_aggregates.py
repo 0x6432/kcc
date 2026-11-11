@@ -22,7 +22,7 @@ programs=[
 '''struct S{int a; int b;}; constexpr struct S s={.a=1,.a=42}; static_assert(s.a==42 && s.b==0); int main(void){return s.a;}''',
 '''struct A{int n; int b;}; struct S{struct A a;}; constexpr struct S s={.a={1,2},.a={42}}; static_assert(s.a.n==42 && s.a.b==0); int main(void){return s.a.n;}''',
 '''struct S{int n;}; constexpr struct S s={42}; constexpr int x=s.n; int main(void){constexpr int y=s.n; static_assert(y==42); return x;}''',
-'''constexpr unsigned char s[]="\\xff"; int main(void){return s[0]==255 && s[1]==0?42:1;}''',
+'''constexpr unsigned char s[]=u8"\\xff"; int main(void){return s[0]==255 && s[1]==0?42:1;}''',
 '''struct S{unsigned a:6; signed b:5; unsigned c:3;}; constexpr struct S s={42,-3,7}; static_assert(s.a==42 && s.b==-3 && s.c==7); int main(void){return s.a;}''',
 '''struct S{unsigned a:4; unsigned b:6; unsigned c:4;}; constexpr struct S s={.a=2,.b=42,.c=3,.a=1}; static_assert(s.a==1 && s.b==42 && s.c==3); int main(void){return s.b;}''',
 '''struct S{signed long a:40; unsigned long b:40;}; constexpr struct S s={-12345678901L,42}; static_assert(s.a==-12345678901L && s.b==42); int main(void){return s.b;}''',
@@ -170,7 +170,7 @@ negative=[programs.pop(8),
 '''struct S{int n;}; constexpr struct S s={s.n};''',
 '''constexpr int a[2];''',
 '''constexpr int a[1]={1}, b[1]={2};''',
-'''constexpr char s[]="\\xff";''',
+'''constexpr unsigned char s[]="\\xff";''',
 ]
 with tempfile.TemporaryDirectory(prefix='kcc constexpr aggregate ') as tmp:
  d=Path(tmp); source=d/'p.c'; il=d/'p.ssa'; asm=d/'p.s'; exe=d/'p'

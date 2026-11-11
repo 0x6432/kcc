@@ -5906,12 +5906,15 @@ static bool initializer_value(struct initializer_builder *builder,
 		const struct array_type *array = (const struct array_type *)object->type;
 		unsigned width = literal->encoding == character_utf16 ? 2 : literal->encoding >= character_utf32 ? 4 : 1;
 		uint64_t units = literal->length / width;
-		/* Conservatively exclude non-ASCII narrow strings targeting signed char:
-		 * their exact character values depend on execution-character mapping. */
-		if (builder->is_constexpr && width == 1 && array->element->kind != type_kind_uchar)
+		/* Ordinary literals have signed char values on this target; u8
+		 * literals have unsigned-char values. A constexpr initializer must
+		 * preserve each character's value, not just its byte representation. */
+		if (builder->is_constexpr && width == 1 &&
+			((literal->encoding == character_utf8) != (array->element->kind == type_kind_uchar)))
 			for (uint64_t i = 0; i < literal->length; i++)
-				if ((unsigned char)literal->bytes[i] > 127)
-					return initializer_error(builder, syntax->location, "constexpr non-ASCII signed character string is not supported");
+				if (literal->bytes[i] > 127)
+					return initializer_error(builder, syntax->location,
+						"constexpr string character is not exactly representable in target type");
 		uint64_t count = array->count ? array->count : units + 1;
 		if (count < units)
 			return initializer_error(builder, syntax->location, "string initializer is too long for character array");
