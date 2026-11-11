@@ -4471,7 +4471,7 @@ done:
 static struct ast_external_declaration *parse_external_declarator_tail(struct parser *parser,
 	size_t remaining_declarations, struct token beginning, struct ast_type_syntax *base,
 	bool is_static, bool is_extern, bool is_thread_local, bool is_inline, bool is_noreturn, bool is_nodiscard, bool is_deprecated, bool is_constexpr,
-	struct ast_alignment_group *alignments)
+	struct token inferred_name, struct ast_alignment_group *alignments)
 {
 	struct ast_external_declaration *items = NULL;
 	struct ast_external_declaration **tail = &items;
@@ -4489,9 +4489,21 @@ static struct ast_external_declaration *parse_external_declarator_tail(struct pa
 				"translation unit exceeds declaration limit (512)");
 			return NULL;
 		}
-		type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
-		if (!type_syntax)
-			return NULL;
+		if (base->kind == type_syntax_inferred) {
+			type_syntax = base;
+			if (inferred_name.kind == token_identifier)
+				name = inferred_name;
+			else if (!parse_inferred_identifier(parser, &name))
+				return NULL;
+			if (preprocess_peek(parser->preprocessor).kind != token_equal) {
+				diagnostic_error(parser->diagnostics, name.location, "inferred auto requires an assignment initializer");
+				return NULL;
+			}
+		} else {
+			type_syntax = parse_derived_type(parser, base, &name, NULL, declarator_external);
+			if (!type_syntax)
+				return NULL;
+		}
 		if (!parse_function_declarator_attributes(parser, &declarator_noreturn, &declarator_nodiscard, &declarator_deprecated, &function_contract))
 			return NULL;
 		if (function_contract && !function_contract_target(type_syntax)) {
@@ -4628,7 +4640,8 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 			"register storage class requires block scope");
 		return NULL;
 	}
-	if (head.auto_keyword.kind == token_auto) {
+	if (head.auto_keyword.kind == token_auto &&
+		!(head.constexpr_keyword.kind == token_constexpr && base->kind == type_syntax_inferred)) {
 		diagnostic_error(parser->diagnostics, head.auto_keyword.location,
 			"file-scope auto declarations are not supported yet");
 		return NULL;
@@ -4713,7 +4726,7 @@ static struct ast_external_declaration *parse_external_declaration(struct parser
 	return parse_external_declarator_tail(parser, remaining_declarations, beginning, base,
 		head.keyword.kind == token_static, head.keyword.kind == token_extern,
 		head.thread_keyword.kind == token_thread_local, head.inline_keyword.kind == token_inline,
-		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.constexpr_keyword.kind == token_constexpr, head.alignments);
+		head.noreturn_keyword.kind == token_noreturn || parsed.noreturn, parsed.nodiscard, parsed.deprecated, head.constexpr_keyword.kind == token_constexpr, head.inferred_name, head.alignments);
 }
 
 /* translation-unit ::= external-declaration { external-declaration } end-of-file */

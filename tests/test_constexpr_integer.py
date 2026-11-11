@@ -10,6 +10,19 @@ qbe = os.environ.get('QBE')
 host = os.environ.get('HOST_CC', 'cc')
 
 programs = [
+    '''constexpr auto a=40; static constexpr auto b=a+2; static_assert(b==42);
+       int main(void) { static constexpr auto c=b; static_assert(c==42); const int *p=&c; return *p; }''',
+    '''typedef long T; constexpr auto x=(T)42; static_assert(x==42);
+       int main(void) { static constexpr auto T=x; const long *p=&T; return *p; }''',
+    '''constexpr auto a=(unsigned char)42; int main(void) { static constexpr auto b=a;
+       const unsigned char *p=&b; return *p; }''',
+    '''constexpr auto x=40; int f(void) { static constexpr auto y=x+2; return y; }
+       int main(void) { return f()==42 && f()==42 ? 42 : 1; }''',
+    '''constexpr auto zero=0; int *p=zero; int main(void){return p==0?42:1;}''',
+    '''constexpr auto x=18446744073709551615ULL; static_assert(x==~0ULL);
+       int main(void) { static constexpr auto n=(_BitInt(16))42; return n; }''',
+    '''enum E : unsigned short { FIRST=42 }; constexpr auto x=(enum E)FIRST;
+       int main(void) { const enum E *p=&x; static_assert(x==42); return *p; }''',
     '''constexpr int a=40; constexpr int b=a+2; static_assert(b==42);
        enum E { ANSWER=b }; int table[b];
        int main(void) { const int *p=&b; return ANSWER==42 && sizeof(table)==168 && *p==42 ? 42 : 1; }''',
@@ -46,6 +59,17 @@ for t, v in [('signed char','-128'),('unsigned char','255'),('short','-32768'),
     programs.append(f'constexpr {t} x={v}; static_assert(x==({v})); int main(void) {{ const {t} *p=&x; return *p==({v})?42:1; }}')
 
 negative = [
+    ('constexpr auto x=x;', 'unavailable in its initializer'),
+    ('constexpr auto x=sizeof(x);', 'unavailable in its initializer'),
+    ('int x=1; int f(void){ static constexpr auto x=x; return x; }', 'unavailable in its initializer'),
+    ('constexpr auto x=1.0;', 'requires a non-atomic'),
+    ('constexpr auto x={1};', 'requires an assignment initializer'),
+    ('int f(void){ static constexpr auto x={1}; return 0; }', 'requires an assignment initializer'),
+    ('constexpr auto x=1/0;', 'division by zero'),
+    ('constexpr auto x=42,y=1;', 'multiple constexpr declarators'),
+    ('constexpr volatile auto x=1;', 'requires a non-atomic'),
+    ('int f(void){ static constexpr auto x=1.0; return 0; }', 'requires a non-atomic'),
+    ('int f(void){ static constexpr auto x=1; x=2; return x; }', 'modifiable'),
     ('constexpr int x;', 'requires an initializer'),
     ('int main(void){ constexpr int x; return 0; }', 'requires an initializer'),
     ('constexpr int x=x;', 'unavailable in its initializer'),
@@ -96,6 +120,16 @@ with tempfile.TemporaryDirectory(prefix='kcc constexpr ') as tmp:
     for text,message in negative:
         result=compile_text(text)
         assert result.returncode==1 and not result.stdout and message in result.stderr,(text,message,result.stderr)
+    # Verify the address and value across a separately compiled native TU.
+    if qbe:
+        result=compile_text('constexpr auto global=42; const int *get(void) { static constexpr auto local=global; return &local; }')
+        assert result.returncode==0,result.stderr
+        il.write_text(result.stdout)
+        subprocess.run([qbe,'-t','amd64_sysv','-o',str(asm),str(il)],check=True,timeout=15)
+        native=d/'native.c'
+        native.write_text('const int *get(void); int main(void) { const int *a=get(), *b=get(); return a==b && *a==42 ? 42 : 1; }\n')
+        subprocess.run([host,str(asm),str(native),'-o',str(exe)],check=True,timeout=15)
+        assert subprocess.run([str(exe)],timeout=5).returncode==42
     # A file-scope constexpr definition must not export its name.
     result=compile_text('constexpr int unique_constexpr_name=42; int f(void){return unique_constexpr_name;}')
     assert result.returncode==0,result.stderr

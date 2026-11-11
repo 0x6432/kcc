@@ -85,6 +85,7 @@ struct sema {
 	bool gcc12_zero_width_abi;
 	struct ast_function *function;
 	struct scope *scope;
+	const struct token *pending_constexpr_name;
 	struct tag_binding *file_tags;
 	struct binding *file_enumerators;
 	struct ast_function_type_syntax *definition_syntax;
@@ -3157,6 +3158,11 @@ static bool sema_expression(struct sema *sema,
 			(struct ast_name_expression *)expression;
 		struct external_object_symbol *object;
 
+		if (sema->pending_constexpr_name && same_name(*sema->pending_constexpr_name, node->name)) {
+			diagnostic_error(sema->diagnostics, expression->location,
+				"constexpr name is unavailable in its initializer");
+			return false;
+		}
 		/* A visible typedef hides outer ordinary names; it is never a value. */
 		if (find_typedef(sema, node->name)) {
 			diagnostic_error(sema->diagnostics, expression->location, "typedef name is not an expression");
@@ -5496,6 +5502,9 @@ static bool sema_constexpr_local(struct sema *sema, struct ast_local_declaration
 	return true;
 }
 
+static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *type);
+
 /* Hide outer names immediately, but expose no type until inference completes. */
 static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration *local)
 {
@@ -5555,6 +5564,9 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		return false;
 	}
 	syntax->syntax.type = type;
+	if (local->is_static && local->is_constexpr)
+		return check_object_alignment(sema, type, local->alignment, local->name.location) &&
+			sema_block_storage(sema, local, type);
 	if (!complete_local_storage(sema, local, type))
 		return false;
 	target = unqualified_type(sema, type, local->name.location);
@@ -5564,8 +5576,6 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 	return true;
 }
 
-static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *local,
-	const struct type *type);
 
 /* A shared declaration-specifier group is evaluated once, before any of
  * its declarators introduces a name. Alignment is storage metadata, not type. */
@@ -5673,7 +5683,7 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 				return false;
 			local->alignment = local->alignments->alignment;
 		}
-		if (local->is_static || local->is_extern) {
+		if ((local->is_static && !local->is_constexpr) || local->is_extern) {
 			diagnostic_error(sema->diagnostics, local->name.location,
 				"static or extern auto inference is not supported yet");
 			return false;
@@ -6623,7 +6633,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	struct ast_external_declaration *external, struct token name,
 	const struct type *type, struct ast_expression **initializer,
 	const struct ast_initializer *syntax, struct ast_initializer_plan **published_plan,
-	bool is_static, bool is_extern, bool is_query, bool is_thread_local, bool is_constexpr, unsigned alignment)
+	bool is_static, bool is_extern, bool is_query, bool is_thread_local, bool is_constexpr, bool initializer_checked, unsigned alignment)
 {
 	struct sema_initializer_transaction transaction = initializer_transaction_begin(sema);
 	struct external_object_symbol *previous = find_external_object(sema, name);
@@ -6643,7 +6653,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	const struct type *target;
 
 	if (is_constexpr) {
-		if (!constexpr_initializer_expression(sema, initializer, syntax, name.location))
+		if (!initializer_checked && !constexpr_initializer_expression(sema, initializer, syntax, name.location))
 			return NULL;
 		/* Scalar braces are normalized to the expression, retaining real storage. */
 		syntax = NULL;
@@ -6726,7 +6736,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		*published_plan = plan;
 		return symbol;
 	}
-	if (!sema_expression(sema, initializer, true))
+	if (!initializer_checked && !sema_expression(sema, initializer, true))
 		goto rollback;
 	if (is_constexpr && !constexpr_integer_value(sema, *initializer, type, &constexpr_bits))
 		goto rollback;
@@ -6887,7 +6897,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		return false;
 	}
 	if ((alias && alias->scope == sema->scope) ||
-		(same && (local->is_static || (!same->object_symbol && !same->function_symbol) || same->is_static))) {
+		(same && same != local && (local->is_static || (!same->object_symbol && !same->function_symbol) || same->is_static))) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			alias && alias->scope == sema->scope ? "ordinary declaration conflicts with typedef name" :
 			"redeclaration of local in this scope");
@@ -6930,12 +6940,13 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 			local->type = type;
 		local->object_symbol = register_external_object(sema, name, type, NULL,
 			true, false, local->is_thread_local);
-		if (!local->object_symbol || !reserve_local_name(sema, local))
+		if (!local->object_symbol || (same != local && !reserve_local_name(sema, local)))
 			return false;
 		local->object_symbol->is_block_static = true;
 		definition->symbol = sema_file_object(sema, &definition->external, name,
 			type, &local->initializer, local->initializer_syntax, &local->initializer_plan,
-			true, false, false, local->is_thread_local, local->is_constexpr, local->alignment);
+			true, false, false, local->is_thread_local, local->is_constexpr,
+			local->type_syntax->kind == type_syntax_inferred, local->alignment);
 		if (!definition->symbol)
 			return false;
 		if (local->is_constexpr) {
@@ -7142,7 +7153,38 @@ static bool sema_external_object_declaration(struct sema *sema,
 	const struct type *type;
 	if (group && !sema_alignment_group(sema, group))
 		return false;
-	type = resolve_type_syntax(sema, declaration->type_syntax);
+	if (declaration->type_syntax->kind == type_syntax_inferred) {
+		struct ast_inferred_type_syntax *syntax = (struct ast_inferred_type_syntax *)declaration->type_syntax;
+		const struct token *previous_pending = sema->pending_constexpr_name;
+		bool checked;
+		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"constexpr currently requires a non-atomic, non-volatile integer object");
+			return false;
+		}
+		if (!declaration->initializer || !declaration->initializer_syntax ||
+			declaration->initializer_syntax->kind != ast_initializer_expression) {
+			diagnostic_error(sema->diagnostics, declaration->name.location,
+				"inferred auto requires an assignment initializer");
+			return false;
+		}
+		sema->pending_constexpr_name = &declaration->name;
+		checked = sema_expression(sema, &declaration->initializer, true);
+		sema->pending_constexpr_name = previous_pending;
+		if (!checked)
+			return false;
+		type = field_expression_value_type(declaration->initializer);
+		if (!(type = constexpr_integer_type(sema, type, declaration->name.location)))
+			return false;
+		type = type_qualified(sema->arena, type, type->qualifiers | syntax->qualifiers);
+		if (!type) {
+			diagnostic_error(sema->diagnostics, declaration->name.location, "out of memory qualifying constexpr object");
+			return false;
+		}
+		syntax->syntax.type = type;
+	} else {
+		type = resolve_type_syntax(sema, declaration->type_syntax);
+	}
 	if (!type || !check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
 	if (declaration->is_constexpr && !(type = constexpr_integer_type(sema, type, declaration->name.location)))
@@ -7160,6 +7202,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 		declaration->name, type, &declaration->initializer,
 		declaration->initializer_syntax, &declaration->initializer_plan,
 		declaration->is_static || declaration->is_constexpr, declaration->is_extern, false, declaration->is_thread_local, declaration->is_constexpr,
+		declaration->type_syntax->kind == type_syntax_inferred,
 		group ? group->alignment : 0);
 	if (!declaration->symbol)
 		return false;
@@ -7199,7 +7242,7 @@ static bool sema_external_type_declaration(struct sema *sema,
 		declaration->object_symbol = sema_file_object(sema, &declaration->external,
 			declaration->name, type, &declaration->initializer,
 			declaration->initializer_syntax, &declaration->initializer_plan,
-			declaration->is_static || declaration->is_constexpr, declaration->is_extern, true, declaration->is_thread_local, declaration->is_constexpr,
+			declaration->is_static || declaration->is_constexpr, declaration->is_extern, true, declaration->is_thread_local, declaration->is_constexpr, false,
 			group ? group->alignment : 0);
 		if (!declaration->object_symbol)
 			return false;
