@@ -269,6 +269,9 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 	switch (expression->kind) {
 	case expression_load: {
 		const struct ast_expression *operand = ((const struct ast_load_expression *)expression)->operand;
+		struct static_data_value member;
+		if (sema_constexpr_member_value(expression, &member) && member.kind == static_data_integer)
+			return constant_success(expression, member.integer_bits);
 		if (operand->kind == expression_name) {
 			const struct ast_local_declaration *local = ((const struct ast_name_expression *)operand)->declaration;
 			if (local && local->is_constexpr && local->constexpr_complete)
@@ -971,7 +974,8 @@ static struct address_proof prove_address(const struct ast_expression *expressio
 		} };
 	case expression_load: {
 		const struct ast_expression *object = ((const struct ast_load_expression *)expression)->operand;
-		bool named = false;
+		struct static_data_value member;
+		bool named = sema_constexpr_member_value(expression, &member) && member.kind == static_data_null_pointer;
 		if (object->kind == expression_name) {
 			const struct ast_local_declaration *local = ((const struct ast_name_expression *)object)->declaration;
 			named = local && local->is_constexpr && local->constexpr_complete;

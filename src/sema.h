@@ -25,6 +25,9 @@ enum { sema_max_initializer_stores = 65536 };
 bool sema_static_arithmetic_value(const struct ast_expression *expression,
 	struct constant_result *result);
 
+/* Read a scalar member of an already validated constexpr aggregate. */
+bool sema_constexpr_member_value(const struct ast_expression *expression, struct static_data_value *value);
+
 /* Retrieve a floating named constant without evaluating arbitrary expressions. */
 bool sema_constexpr_floating_bits(const struct ast_expression *expression, uint64_t *bits);
 

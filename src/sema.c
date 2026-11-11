@@ -921,6 +921,43 @@ static const struct type *constexpr_scalar_type(struct sema *sema, const struct 
 	return type;
 }
 
+/* Bound recursive aggregate inspection independently of source DAG sharing. */
+static bool constexpr_aggregate_members(const struct type *type, unsigned depth, size_t *work)
+{
+	if (++*work > 65536 || depth > 128 || type_contains_vm(type) ||
+		(type->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)))
+		return false;
+	if (type->kind == type_kind_array)
+		return constexpr_aggregate_members(((const struct array_type *)type)->element, depth + 1, work);
+	if (type->kind == type_kind_struct) {
+		const struct record_definition *definition = type_record_definition(type);
+		if (!definition->complete)
+			return false;
+		for (const struct record_member *member = definition->members; member; member = member->next)
+			if (member->is_bit_field || member->is_flexible ||
+				!constexpr_aggregate_members(member->type, depth + 1, work))
+				return false;
+		return true;
+	}
+	return type_is_complete_object(type) && (type_is_integer(type) || type_is_floating(type) ||
+		type->kind == type_kind_pointer || type->kind == type_kind_nullptr);
+}
+
+static const struct type *constexpr_aggregate_type(struct sema *sema, const struct type *type,
+	struct source_location location)
+{
+	size_t work = 0;
+	if (!constexpr_aggregate_members(type, 0, &work)) {
+		diagnostic_error(sema->diagnostics, location,
+			"constexpr aggregate requires supported non-volatile members without unions or bit-fields");
+		return NULL;
+	}
+	type = type_qualified(sema->arena, type, type_qualifier_const);
+	if (!type)
+		diagnostic_error(sema->diagnostics, location, "out of memory qualifying constexpr aggregate");
+	return type;
+}
+
 static bool constexpr_initializer_expression(struct sema *sema, struct ast_expression **expression,
 	const struct ast_initializer *syntax, struct source_location location)
 {
@@ -4102,10 +4139,59 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
+bool sema_constexpr_member_value(const struct ast_expression *expression, struct static_data_value *value)
+{
+	if (expression->kind != expression_load)
+		return false;
+	const struct ast_expression *operand = ((const struct ast_load_expression *)expression)->operand;
+	uint64_t offset = 0;
+	bool member_seen = false;
+	while (operand->kind == expression_member) {
+		const struct ast_member_expression *member = (const struct ast_member_expression *)operand;
+		if (member->indirect || member->member->is_bit_field || UINT64_MAX - offset < member->offset)
+			return false;
+		offset += member->offset;
+		member_seen = true;
+		operand = member->operand;
+	}
+	if (!member_seen)
+		return false;
+	const struct ast_initializer_plan *plan = NULL;
+	if (operand->kind == expression_name) {
+		const struct ast_local_declaration *local = ((const struct ast_name_expression *)operand)->declaration;
+		if (local && local->is_constexpr && local->constexpr_complete)
+			plan = local->initializer_plan;
+	} else if (operand->kind == expression_external_object) {
+		const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)operand;
+		if (reference->is_constexpr_name && reference->object->is_constexpr && !reference->object->constexpr_in_progress)
+			plan = reference->object->initializer_plan;
+	}
+	if (!plan || !type_is_scalar(expression->type))
+		return false;
+	*value = (struct static_data_value) { .kind = type_is_floating(expression->type) ? static_data_floating :
+		(type_is_integer(expression->type) ? static_data_integer : static_data_null_pointer) };
+	for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
+		if (entry->kind == ast_initializer_write_expression && entry->offset == offset &&
+			entry->length == type_object_size(expression->type)) {
+			if (entry->constant.kind == ast_initializer_constant_integer)
+				value->integer_bits = entry->constant.bits;
+			else if (entry->constant.kind != ast_initializer_constant_null)
+				return false;
+			return true;
+		}
+	}
+	return true; /* Implicitly zero-initialized scalar member. */
+}
+
 bool sema_constexpr_floating_bits(const struct ast_expression *expression, uint64_t *bits)
 {
 	if (!type_is_floating(expression->type) || expression->kind != expression_load)
 		return false;
+	struct static_data_value member;
+	if (sema_constexpr_member_value(expression, &member)) {
+		*bits = member.integer_bits;
+		return true;
+	}
 	const struct ast_expression *object = ((const struct ast_load_expression *)expression)->operand;
 	if (object->kind == expression_name) {
 		const struct ast_local_declaration *local = ((const struct ast_name_expression *)object)->declaration;
@@ -4827,6 +4913,7 @@ struct initializer_builder {
 	struct initializer_union_selection *unions;
 	uint64_t inferred_count;
 	bool is_static;
+	bool is_constexpr;
 	unsigned nesting;
 	unsigned expression_depth; /* Includes overridden sources and designators. */
 };
@@ -5292,6 +5379,26 @@ static bool initializer_designate(struct initializer_builder *builder,
 	return true;
 }
 
+/* Automatic constexpr storage must contain the translation-time value, even
+ * when the runtime floating-point environment differs from translation. */
+static bool constexpr_materialize_float(struct sema *sema, struct ast_expression **expression,
+	const struct type *type, uint64_t bits)
+{
+	struct ast_integer_expression *node = arena_alloc(sema->arena, sizeof(*node));
+	if (!node) {
+		diagnostic_error(sema->diagnostics, (*expression)->location,
+			"out of memory materializing constexpr value");
+		return false;
+	}
+	*node = (struct ast_integer_expression) {
+		.expression = { .kind = expression_floating, .location = (*expression)->location,
+			.type = type, .depth = 1 },
+		.value = bits,
+	};
+	*expression = &node->expression;
+	return true;
+}
+
 static bool initializer_string_array(const struct type *type, const struct ast_string_expression *literal)
 {
 	if (type->kind != type_kind_array)
@@ -5434,6 +5541,12 @@ static bool initializer_value(struct initializer_builder *builder,
 		const struct array_type *array = (const struct array_type *)object->type;
 		unsigned width = literal->encoding == character_utf16 ? 2 : literal->encoding >= character_utf32 ? 4 : 1;
 		uint64_t units = literal->length / width;
+		/* Conservatively exclude non-ASCII narrow strings targeting signed char:
+		 * their exact character values depend on execution-character mapping. */
+		if (builder->is_constexpr && width == 1 && array->element->kind != type_kind_uchar)
+			for (uint64_t i = 0; i < literal->length; i++)
+				if ((unsigned char)literal->bytes[i] > 127)
+					return initializer_error(builder, syntax->location, "constexpr non-ASCII signed character string is not supported");
 		uint64_t count = array->count ? array->count : units + 1;
 		if (count < units)
 			return initializer_error(builder, syntax->location, "string initializer is too long for character array");
@@ -5457,12 +5570,28 @@ static bool initializer_value(struct initializer_builder *builder,
 			return initializer_error(builder, syntax->location, "out of memory decaying string initializer");
 		expression = &decay->expression;
 	}
+	if (builder->is_constexpr) {
+		uint64_t bits;
+		if (type_is_record(object->type))
+			return initializer_error(builder, syntax->location, "constexpr aggregate copy initializers are not supported yet");
+		if (!constexpr_scalar_value(builder->sema, expression, object->type, &bits))
+			return false;
+		struct static_data_value constant = {
+			.kind = type_is_integer(object->type) ? static_data_integer :
+				(type_is_floating(object->type) ? static_data_floating : static_data_null_pointer),
+			.integer_bits = bits,
+		};
+		initializer_cache_constant(&store.constant, &constant);
+	}
 	target = unqualified_type(builder->sema, object->type, syntax->location);
 	source = expression;
 	if (!target || !convert_expression(builder->sema, &expression, target))
 		return false;
 	if (expression->depth > builder->expression_depth)
 		builder->expression_depth = expression->depth;
+	if (builder->is_constexpr && !builder->is_static && type_is_floating(target) &&
+		!constexpr_materialize_float(builder->sema, &expression, target, store.constant.bits))
+		return false;
 	store.expression = expression;
 	if (type_is_record(object->type)) {
 		if (builder->is_static)
@@ -5483,9 +5612,9 @@ static bool initializer_value(struct initializer_builder *builder,
 }
 
 static struct ast_initializer_plan *sema_initializer(struct sema *sema,
-	const struct type *type, const struct ast_initializer *syntax, bool is_static, unsigned *expression_depth)
+	const struct type *type, const struct ast_initializer *syntax, bool is_static, bool is_constexpr, unsigned *expression_depth)
 {
-	struct initializer_builder builder = { .sema = sema, .is_static = is_static };
+	struct initializer_builder builder = { .sema = sema, .is_static = is_static, .is_constexpr = is_constexpr };
 	struct initializer_path path = { .components = { { .type = type } } };
 	bool incomplete = type->kind == type_kind_array && !((const struct array_type *)type)->count;
 	if ((!incomplete && !type_is_complete_object(type)) ||
@@ -5604,7 +5733,7 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 		/* Bind the source-point type NOW; unknown bounds stay unknown until
 		 * every initializer expression (including self sizeof) is checked. */
 		local->type = effective_type;
-		plan = sema_initializer(sema, effective_type, local->initializer_syntax, false, NULL);
+		plan = sema_initializer(sema, effective_type, local->initializer_syntax, false, false, NULL);
 		if (!plan || !complete_local_storage(sema, local, plan->type))
 			return false;
 		local->initializer_plan = plan;
@@ -5612,6 +5741,23 @@ static bool bind_local(struct sema *sema, struct ast_local_declaration *local,
 	}
 	return reserve_local_name(sema, local) && complete_local_storage(sema, local, effective_type) &&
 		sema_local_initializer(sema, local);
+}
+
+static bool sema_constexpr_aggregate_local(struct sema *sema, struct ast_local_declaration *local,
+	const struct type *type)
+{
+	if (!local->initializer_syntax) {
+		diagnostic_error(sema->diagnostics, local->name.location, "constexpr object requires an initializer");
+		return false;
+	}
+	if (!reserve_local_name(sema, local))
+		return false;
+	struct ast_initializer_plan *plan = sema_initializer(sema, type, local->initializer_syntax, false, true, NULL);
+	if (!plan || !complete_local_storage(sema, local, plan->type))
+		return false;
+	local->initializer_plan = plan;
+	local->constexpr_complete = true;
+	return true;
 }
 
 static bool sema_constexpr_local(struct sema *sema, struct ast_local_declaration *local,
@@ -5627,6 +5773,8 @@ static bool sema_constexpr_local(struct sema *sema, struct ast_local_declaration
 		return false;
 	target = unqualified_type(sema, type, local->name.location);
 	if (!target || !convert_expression(sema, &local->initializer, target))
+		return false;
+	if (type_is_floating(target) && !constexpr_materialize_float(sema, &local->initializer, target, bits))
 		return false;
 	local->constexpr_bits = bits;
 	local->constexpr_complete = true;
@@ -5702,6 +5850,9 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		return false;
 	target = unqualified_type(sema, type, local->name.location);
 	if (!target || !convert_expression(sema, &local->initializer, target))
+		return false;
+	if (local->is_constexpr && type_is_floating(target) &&
+		!constexpr_materialize_float(sema, &local->initializer, target, local->constexpr_bits))
 		return false;
 	local->constexpr_complete = local->is_constexpr;
 	return true;
@@ -5850,10 +6001,18 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		local->vm_pointer_element_size = type_object_size(((const struct array_type *)vm_array->type)->element);
 	}
 	if (local->is_constexpr) {
-		type = constexpr_scalar_type(sema, type, local->name.location);
-		if (!type || !constexpr_initializer_expression(sema, &local->initializer,
-			local->initializer_syntax, local->name.location))
-			return false;
+		if (type->kind == type_kind_array || type_is_record(type)) {
+			type = constexpr_aggregate_type(sema, type, local->name.location);
+			if (!type || !local->initializer_syntax) {
+				if (type) diagnostic_error(sema->diagnostics, local->name.location, "constexpr object requires an initializer");
+				return false;
+			}
+		} else {
+			type = constexpr_scalar_type(sema, type, local->name.location);
+			if (!type || !constexpr_initializer_expression(sema, &local->initializer,
+				local->initializer_syntax, local->name.location))
+				return false;
+		}
 	}
 	if (local->is_nodiscard && type->kind != type_kind_function) {
 		diagnostic_error(sema->diagnostics, local->name.location, "nodiscard requires a function declaration");
@@ -5905,8 +6064,11 @@ static bool sema_local_impl(struct sema *sema, struct ast_local_declaration *loc
 		diagnostic_error(sema->diagnostics, local->name.location, "local object type must be complete");
 		return false;
 	}
-	if (local->is_constexpr)
+	if (local->is_constexpr) {
+		if (type->kind == type_kind_array || type_is_record(type))
+			return sema_constexpr_aggregate_local(sema, local, type);
 		return sema_constexpr_local(sema, local, type);
+	}
 	return bind_local(sema, local, type);
 }
 
@@ -6783,7 +6945,13 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 	bool zero_definition = !is_extern && !has_initializer && (is_thread_local || sema->scope);
 	const struct type *target;
 
-	if (is_constexpr) {
+	if (is_constexpr && (type->kind == type_kind_array || type_is_record(type))) {
+		if (!syntax) {
+			diagnostic_error(sema->diagnostics, name.location, "constexpr object requires an initializer");
+			return NULL;
+		}
+		promoted = true;
+	} else if (is_constexpr) {
 		if (!initializer_checked && !constexpr_initializer_expression(sema, initializer, syntax, name.location))
 			return NULL;
 		/* Scalar braces are normalized to the expression, retaining real storage. */
@@ -6850,7 +7018,7 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 		/* Prior visible complete declarations supply the bound, not future
 		 * initializer inference. Keep written syntax/type graphs immutable. */
 		const struct type *visible = sema->scope ? type : symbol->file_type;
-		struct ast_initializer_plan *plan = sema_initializer(sema, visible, syntax, true, NULL);
+		struct ast_initializer_plan *plan = sema_initializer(sema, visible, syntax, true, is_constexpr, NULL);
 		const struct type *composite;
 		if (!plan)
 			goto rollback;
@@ -6864,6 +7032,10 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 			symbol->file_type = plan->type;
 		symbol->initializer_plan = plan;
 		symbol->definition = external;
+		if (is_constexpr) {
+			symbol->is_constexpr = true;
+			symbol->constexpr_in_progress = false;
+		}
 		*published_plan = plan;
 		return symbol;
 	}
@@ -7085,7 +7257,7 @@ static bool sema_block_storage(struct sema *sema, struct ast_local_declaration *
 		if (!definition->symbol)
 			return false;
 		if (local->is_constexpr) {
-			local->type = type;
+			local->type = local->initializer_plan ? local->initializer_plan->type : type;
 			local->constexpr_bits = definition->symbol->initializer_value.integer_bits;
 			local->constexpr_complete = true;
 		}
@@ -7206,7 +7378,7 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 	if (node->alignments && !check_object_alignment(sema, type,
 		node->alignments->alignment, node->expression.location))
 		goto failure;
-	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, &initializer_depth);
+	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, false, &initializer_depth);
 	if (!plan)
 		goto failure;
 	node->expression.type = plan->type;
@@ -7322,8 +7494,12 @@ static bool sema_external_object_declaration(struct sema *sema,
 	}
 	if (!type || !check_object_alignment(sema, type, group ? group->alignment : 0, declaration->name.location))
 		return false;
-	if (declaration->is_constexpr && !(type = constexpr_scalar_type(sema, type, declaration->name.location)))
-		return false;
+	if (declaration->is_constexpr) {
+		type = (type->kind == type_kind_array || type_is_record(type)) ?
+			constexpr_aggregate_type(sema, type, declaration->name.location) :
+			constexpr_scalar_type(sema, type, declaration->name.location);
+		if (!type) return false;
+	}
 	if (declaration->is_nodiscard) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "nodiscard requires a function declaration");
 		return false;
@@ -7356,8 +7532,12 @@ static bool sema_external_type_declaration(struct sema *sema,
 	type = resolve_type_syntax(sema, declaration->type_syntax);
 	if (!type)
 		return false;
-	if (declaration->is_constexpr && !(type = constexpr_scalar_type(sema, type, declaration->name.location)))
-		return false;
+	if (declaration->is_constexpr) {
+		type = (type->kind == type_kind_array || type_is_record(type)) ?
+			constexpr_aggregate_type(sema, type, declaration->name.location) :
+			constexpr_scalar_type(sema, type, declaration->name.location);
+		if (!type) return false;
+	}
 	if (group && type->kind == type_kind_function) {
 		diagnostic_error(sema->diagnostics, declaration->name.location, "alignment requires an object type");
 		return false;

@@ -85,7 +85,6 @@ negative = [
     ('constexpr int x=42; int f(void){ extern const int x; constexpr int y=x; return y; }', 'integer constant expression'),
     ('int f(void){ constexpr int x=1/0; return x; }', 'division by zero'),
     ('int f(void){ constexpr int x=1; x=2; return x; }', 'modifiable'),
-    ('constexpr int x[2]={1,2};', 'requires a non-atomic'),
     ('constexpr volatile int x=1;', 'requires a non-atomic'),
     ('constexpr _Atomic int x=1;', 'requires a non-atomic'),
     ('extern constexpr int x=1;', 'may combine only'),

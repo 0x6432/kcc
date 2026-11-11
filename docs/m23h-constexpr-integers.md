@@ -1,4 +1,4 @@
-# C23 constexpr scalar objects
+# C23 constexpr objects
 
 KCC supports explicit-type integer, finite floating and pointer `constexpr` object definitions at file and
 block scope, including `static` and block-scope `register`; inferred `constexpr auto` is supported for integer, finite floating and null-pointer values at file and block
@@ -25,10 +25,20 @@ available within its initializer, even in an unevaluated operand. Existing
 checks reject attempted modification, incompatible storage classes, unsupported
 qualifiers, missing initializers and multiple declarators.
 
-This is not complete C23 constexpr support. Array, struct
-and union constexpr objects, non-finite constexpr floating values, constexpr compound
-literals and non-constexpr file-scope or static inferred auto remain unsupported.
+Explicit-type constexpr arrays and structs are supported at file and block scope,
+including static locals, unknown outer array bounds, nested aggregates, designated
+initializers, zero-filled members, and character strings. Integer and finite
+floating struct members accessed through direct member selection are named
+constants; null pointer members can initialize compatible pointers. Array
+subscripts do not form named constants. Floating automatic constexpr initializers
+are materialized from their translation-time value, independent of runtime rounding.
+
+This is not complete C23 constexpr support. Unions, structs containing unions,
+bit-fields or flexible arrays, aggregate copy initialization, aggregate inferred
+auto, non-ASCII narrow strings targeting char or signed char, non-finite floating
+values, constexpr compound literals and non-constexpr file-scope or static inferred
+auto remain unsupported.
 The compiler's existing type, initializer, ABI and resource limits also apply.
-`tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, and `tests/test_constexpr_floating.py` cover executable cross-feature examples,
+`tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, and `tests/test_constexpr_floating.py`, and `tests/test_constexpr_aggregates.py` cover executable cross-feature examples,
 range and constraint refusals, and file-scope symbol linkage. Native C23
 constexpr agreement is not claimed unless a supporting host is separately used.
