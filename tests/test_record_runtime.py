@@ -355,7 +355,6 @@ def native_constraint(cc, source, output, name):
 # These are native-valid out-of-scope forms, NOT language constraints. They are
 # never executed and native acceptance is not treated as semantic evidence.
 SUBSET = [
-    ('M22 bitfield', 'struct S { volatile unsigned long x:33; }; struct S s;'),
 ]
 
 

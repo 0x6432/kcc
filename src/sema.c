@@ -816,7 +816,7 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				!type_is_bitint(field_type) && !type_is_field_integer(field_type)) ||
 				((type_is_bitint(field_type) || type_is_field_integer(field_type)) &&
 				 width.bits > type_integer_width(field_type)) ||
-				(type->qualifiers & ~type_qualifier_const) ||
+				(type->qualifiers & ~(type_qualifier_const | type_qualifier_volatile)) ||
 				!type_is_integer(member->bit_width->type) ||
 				width.status != constant_value || width.bits > 64 ||
 				((field_type->kind == type_kind_int || field_type->kind == type_kind_uint) && width.bits > 32) ||
@@ -876,11 +876,9 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				"atomic record members are not supported");
 			goto done;
 		}
-		if (element->qualifiers & type_qualifier_volatile) {
-			diagnostic_error(sema->diagnostics, member->type_syntax->location,
-				"volatile record members are not supported");
-			goto done;
-		}
+		if ((element->qualifiers & type_qualifier_volatile) ||
+			(type_is_record(element) && type_record_definition(element)->has_volatile_member))
+			definition->has_volatile_member = true;
 		if (type_is_record(element)) {
 			struct record_state *child = record_state(sema, element);
 			if (type_record_definition(element)->has_flexible_array) {
@@ -1748,15 +1746,6 @@ static const struct type *resolve_type_syntax(struct sema *sema, struct ast_type
 			diagnostic_error(sema->diagnostics, syntax->location, "unsupported atomic type");
 			return NULL;
 		}
-		if (qualified->qualifiers & type_qualifier_volatile) {
-			const struct type *element = base;
-			while (element->kind == type_kind_array)
-				element = ((const struct array_type *)element)->element;
-			if (type_is_record(element)) {
-				diagnostic_error(sema->diagnostics, syntax->location, "volatile record types are not supported yet");
-				return NULL;
-			}
-		}
 		if ((qualified->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(base)) {
 			diagnostic_error(sema->diagnostics, syntax->location,
 				"restrict requires a pointer to an object type");
@@ -2044,7 +2033,8 @@ static bool definition_bound(struct sema *sema, const struct ast_expression *exp
 		}
 		if (!type || !(type_is_scalar(type) || type_is_record(type)))
 			return false;
-		if (type->qualifiers & (type_qualifier_atomic | type_qualifier_volatile))
+		if ((type->qualifiers & (type_qualifier_atomic | type_qualifier_volatile)) ||
+			(type_is_record(type) && type_record_definition(type)->has_volatile_member))
 			*effect = true;
 		return true;
 	}
@@ -6254,10 +6244,6 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		diagnostic_error(sema->diagnostics, local->name.location, "unsupported atomic type");
 		return false;
 	}
-	if ((syntax->qualifiers & type_qualifier_volatile) && type_is_record(type)) {
-		diagnostic_error(sema->diagnostics, local->name.location, "unsupported inferred volatile type");
-		return false;
-	}
 	if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {
 		diagnostic_error(sema->diagnostics, local->name.location,
 			"restrict requires a pointer to an object type");
@@ -7976,10 +7962,6 @@ static bool sema_external_object_declaration(struct sema *sema,
 		}
 		if ((syntax->qualifiers & type_qualifier_atomic) && !supported_atomic_type(type)) {
 			diagnostic_error(sema->diagnostics, declaration->name.location, "unsupported atomic type");
-			return false;
-		}
-		if ((syntax->qualifiers & type_qualifier_volatile) && type_is_record(type)) {
-			diagnostic_error(sema->diagnostics, declaration->name.location, "unsupported inferred volatile type");
 			return false;
 		}
 		if ((syntax->qualifiers & type_qualifier_restrict) && !restrict_qualifiable(type)) {

@@ -110,6 +110,7 @@ struct record_definition {
 	bool is_deprecated;
 	const char *deprecated_message;
 	bool has_flexible_array;
+	bool has_volatile_member;
 	struct record_member *members;
 	size_t member_count;
 	uint64_t size;

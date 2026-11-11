@@ -1,4 +1,4 @@
-# Bounded volatile scalar types
+# Bounded volatile object types
 
 `volatile` is recognized on scalar integer, enum, floating and pointer types,
 including pointed-to types, parameters, and adjusted array-parameter pointers.
@@ -21,14 +21,24 @@ support indexed access and static initialization. Automatic array initializers,
 including strings, designators, implicit zeros
 and empty VLAs, use helper stores for each scalar element. Surviving explicit
 expressions are captured before stores; implicit zeros and string ranges use
-bounded generated loops. Scalar accesses use the same helpers. Volatile record
-types and members are rejected. Supported volatile atomic scalars use the atomic
-paths for accesses and require `-latomic`; initialization uses the volatile
+bounded generated loops. Scalar accesses use the same helpers.
+
+Volatile records, unions, their arrays, and volatile scalar or record members
+are also supported within the existing aggregate and ABI subset. Whole-record
+loads and stores, including records containing volatile members, use bytewise
+helper calls over the complete object representation, including padding;
+narrow and wide volatile bit-fields use bytewise read/modify/write of touched
+bytes; full-width `int` fields use the corresponding scalar-width helper. Automatic
+aggregate initialization uses volatile bytewise zero fill and volatile stores
+for explicit writes, so an initialized byte can be written more than once.
+This implementation-defined access policy does not promise native access widths,
+one access per field, atomicity or suitability for memory-mapped devices.
+
+Supported volatile atomic scalars use the atomic paths for accesses and require `-latomic`; initialization uses the volatile
 runtime helper where an automatic store is needed. Scalar braced initializers,
 including empty initializers
 and automatic compound literals, emit one volatile store after evaluating the
 surviving initializer expression. Static scalar initializers are also supported.
-No general aggregate volatile copy or C23 conformance is claimed.
-The compiler and runtime archive build, and focused compile/IL checks were run.
-Regression, QBE backend, signal, concurrency and generated-program runtime tests
-remain unrun.
+Atomic record members, aggregate atomics and broader C23 conformance remain unsupported.
+`tests/test_volatile_aggregates.py` covers native comparisons, QBE execution,
+bit-field widths, instrumented access calls and native/KCC ABI in both directions.

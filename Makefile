@@ -209,6 +209,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	QBE="$(QBE)" python3 tests/test_unreachable.py
 	QBE="$(QBE)" python3 tests/test_pragma_operator.py
 	QBE="$(QBE)" python3 tests/test_volatile.py
+	QBE="$(QBE)" python3 tests/test_volatile_aggregates.py
 	QBE="$(QBE)" python3 tests/test_string_concatenation.py
 	QBE="$(QBE)" python3 tests/test_array_parameters.py
 	QBE="$(QBE)" python3 tests/test_qualified_array_parameters.py
@@ -461,6 +462,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_unreachable.py
 	python3 tests/test_pragma_operator.py
 	python3 tests/test_volatile.py
+	python3 tests/test_volatile_aggregates.py
 	python3 tests/test_string_concatenation.py
 	python3 tests/test_array_parameters.py
 	python3 tests/test_qualified_array_parameters.py

@@ -876,7 +876,7 @@ static bool record_layout_pass(struct record_definition *definition, bool publis
 			!type_is_bitint(field_type) && !type_is_field_integer(field_type)) ||
 			((type_is_bitint(field_type) || type_is_field_integer(field_type)) &&
 			 member->bit_width > type_integer_width(field_type)) ||
-			(member->type->qualifiers & ~type_qualifier_const) || member->bit_width > 64 ||
+			(member->type->qualifiers & ~(type_qualifier_const | type_qualifier_volatile)) || member->bit_width > 64 ||
 			((field_type->kind == type_kind_int || field_type->kind == type_kind_uint) &&
 			member->bit_width > 32) ||
 			(field_type->kind == type_kind_bool && member->bit_width > 1) ||

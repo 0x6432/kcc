@@ -92,7 +92,7 @@ REJECT = {
     'not-ice': ('int n; struct S { int x:(n ? 32 : 32); };', 'bit-fields are not supported yet'),
     'float-width': ('struct S { int x:32.0; };', 'bit-fields are not supported yet'),
     'alignment': ('struct S { _Alignas(4) int x:32; };', 'alignment specifier cannot apply'),
-    'volatile': ('struct S { volatile int x:32; };', 'bit-fields are not supported yet'),
+    'atomic': ('struct S { _Atomic int x:32; };', 'bit-fields are not supported yet'),
     'address': ('struct S { int x:32; } s; int *p = &s.x;', 'cannot take the address of a bit-field'),
     'rvalue-sizeof': ('struct S { int x:32; }; int f(void) { return sizeof(((struct S){1}).x); }', 'sizeof cannot be applied to a bit-field'),
     'address-promoted': ('struct S { union { int x:32; }; } s; int *p = &(s.x);', 'cannot take the address of a bit-field'),

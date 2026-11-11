@@ -59,9 +59,8 @@ int main(void) { return f(2); }
         subprocess.run([os.environ.get('HOST_CC', 'cc'), str(asm), str(root / 'build' / 'libkccrt.a'), *runtime_link_flags(), '-latomic',
                         '-o', str(exe)], check=True)
         assert subprocess.run([str(exe)], timeout=5).returncode == 42
-    for text in ('struct S { volatile int member; };',
-                 'struct S { int x; }; typedef struct S A[2]; volatile A a;',
-                 'int f(void){volatile int x=1; int *p=&x; return 0;}'):
+    for text in ('int f(void){volatile int x=1; int *p=&x; return 0;}',
+                 'struct S { _Atomic int member; };'):
         source.write_text(text)
         result = subprocess.run([str(compiler), str(source)], capture_output=True, text=True, timeout=10)
         assert result.returncode != 0 and result.stderr, text

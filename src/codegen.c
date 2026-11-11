@@ -198,6 +198,33 @@ static size_t atomic_from_bits(struct codegen *codegen, size_t bits, const struc
 	return codegen_canonicalize(codegen, bits, type);
 }
 
+/* Do not follow pointer referents. By-value record nesting is bounded by sema. */
+static bool contains_volatile(const struct type *type)
+{
+	if (type->qualifiers & type_qualifier_volatile) return true;
+	if (type->kind == type_kind_array)
+		return contains_volatile(((const struct array_type *)type)->element);
+	return type_is_record(type) && type_record_definition(type)->has_volatile_member;
+}
+
+static bool has_record_leaf(const struct type *type)
+{
+	while (type->kind == type_kind_array) type = ((const struct array_type *)type)->element;
+	return type_is_record(type);
+}
+
+static void codegen_volatile_copy(struct codegen *codegen, size_t source,
+	size_t destination, uint64_t bytes, unsigned flags)
+{
+	emit(codegen, "\tcall $__kcc_volatile_copy(l %%t%zu, l %%t%zu, l %ju, w %u)\n",
+		destination, source, (uintmax_t)bytes, flags);
+}
+
+static void codegen_volatile_zero(struct codegen *codegen, size_t destination, uint64_t bytes)
+{
+	emit(codegen, "\tcall $__kcc_volatile_zero(l %%t%zu, l %ju)\n", destination, (uintmax_t)bytes);
+}
+
 /* QBE has no volatile access marker. Calls into the separately compiled
  * runtime preserve an observable scalar access across backend optimization. */
 static size_t codegen_volatile_load(struct codegen *codegen, size_t address, const struct type *type)
@@ -405,8 +432,22 @@ static size_t codegen_field_value(struct codegen *codegen, size_t value,
 	return result;
 }
 
-static size_t codegen_field_storage_load(struct codegen *codegen, size_t address, unsigned bytes)
+static size_t codegen_field_storage_load(struct codegen *codegen, size_t address, unsigned bytes, bool is_volatile)
 {
+	if (is_volatile) {
+		size_t value = codegen->next_temporary++;
+		emit(codegen, "\t%%t%zu =w copy 0\n", value);
+		for (unsigned i = 0; i < bytes; i++) {
+			size_t at = codegen->next_temporary++, byte = codegen->next_temporary++;
+			size_t shifted = codegen->next_temporary++, combined = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", at, address, i);
+			emit(codegen, "\t%%t%zu =w call $__kcc_volatile_load_1(l %%t%zu)\n", byte, at);
+			emit(codegen, "\t%%t%zu =w shl %%t%zu, %u\n", shifted, byte, 8 * i);
+			emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, value, shifted);
+			value = combined;
+		}
+		return value;
+	}
 	size_t value = codegen->next_temporary++;
 	if (bytes != 3) {
 		emit(codegen, "\t%%t%zu =w %s %%t%zu\n", value,
@@ -429,7 +470,7 @@ static size_t codegen_byte_offset(struct codegen *codegen, size_t base, uint64_t
  * Allocation-unit layout ensures bit_offset + bit_width <= 64. Access exactly the occupied bytes so a
  * field at the end of an object does not read or write beyond it. */
 static size_t codegen_wide_field_load(struct codegen *codegen, size_t address,
-	const struct record_member *member)
+	const struct record_member *member, bool is_volatile)
 {
 	assert(member->bit_offset + member->bit_width <= 64);
 	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
@@ -439,7 +480,10 @@ static size_t codegen_wide_field_load(struct codegen *codegen, size_t address,
 		size_t at = codegen_byte_offset(codegen, address, i);
 		size_t byte = codegen->next_temporary++, wide = codegen->next_temporary++;
 		size_t shifted = codegen->next_temporary++, combined = codegen->next_temporary++;
-		emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", byte, at);
+		if (is_volatile)
+			emit(codegen, "\t%%t%zu =w call $__kcc_volatile_load_1(l %%t%zu)\n", byte, at);
+		else
+			emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", byte, at);
 		emit(codegen, "\t%%t%zu =l extuw %%t%zu\n", wide, byte);
 		emit(codegen, "\t%%t%zu =l shl %%t%zu, %u\n", shifted, wide, 8 * i);
 		emit(codegen, "\t%%t%zu =l or %%t%zu, %%t%zu\n", combined, value, shifted);
@@ -455,7 +499,7 @@ static size_t codegen_wide_field_load(struct codegen *codegen, size_t address,
 }
 
 static size_t codegen_wide_field_store(struct codegen *codegen, size_t address,
-	size_t value, const struct record_member *member)
+	size_t value, const struct record_member *member, bool is_volatile)
 {
 	assert(member->bit_offset + member->bit_width <= 64);
 	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
@@ -470,12 +514,18 @@ static size_t codegen_wide_field_store(struct codegen *codegen, size_t address,
 		size_t shifted = codegen->next_temporary++, part = codegen->next_temporary++;
 		size_t combined = codegen->next_temporary++;
 		unsigned byte_mask = (unsigned)((storage_mask >> (8 * i)) & 255);
-		emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", old, at);
+		if (is_volatile)
+			emit(codegen, "\t%%t%zu =w call $__kcc_volatile_load_1(l %%t%zu)\n", old, at);
+		else
+			emit(codegen, "\t%%t%zu =w loadub %%t%zu\n", old, at);
 		emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", kept, old, 255 ^ byte_mask);
 		emit(codegen, "\t%%t%zu =l shr %%t%zu, %u\n", shifted, placed, 8 * i);
 		emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", part, shifted, byte_mask);
 		emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, kept, part);
-		emit(codegen, "\tstoreb %%t%zu, %%t%zu\n", combined, at);
+		if (is_volatile)
+			emit(codegen, "\tcall $__kcc_volatile_store_1(l %%t%zu, w %%t%zu)\n", at, combined);
+		else
+			emit(codegen, "\tstoreb %%t%zu, %%t%zu\n", combined, at);
 	}
 	unsigned shift = 64 - member->bit_width;
 	size_t shifted = codegen->next_temporary++, result = codegen->next_temporary++;
@@ -486,11 +536,11 @@ static size_t codegen_wide_field_store(struct codegen *codegen, size_t address,
 }
 
 static size_t codegen_field_load(struct codegen *codegen, size_t address,
-	const struct record_member *member)
+	const struct record_member *member, bool is_volatile)
 {
 	if (type_value_width(member->type) > 32)
-		return codegen_wide_field_load(codegen, address, member);
-	size_t value = codegen_field_storage_load(codegen, address, (member->bit_offset + member->bit_width + 7) / 8);
+		return codegen_wide_field_load(codegen, address, member, is_volatile);
+	size_t value = codegen_field_storage_load(codegen, address, (member->bit_offset + member->bit_width + 7) / 8, is_volatile);
 	if (member->bit_offset) {
 		size_t shifted = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =w shr %%t%zu, %u\n", shifted, value, member->bit_offset);
@@ -500,14 +550,14 @@ static size_t codegen_field_load(struct codegen *codegen, size_t address,
 }
 
 static size_t codegen_field_store(struct codegen *codegen, size_t address, size_t value,
-	const struct record_member *member)
+	const struct record_member *member, bool is_volatile)
 {
 	if (type_value_width(member->type) > 32)
-		return codegen_wide_field_store(codegen, address, value, member);
+		return codegen_wide_field_store(codegen, address, value, member, is_volatile);
 	unsigned bytes = (member->bit_offset + member->bit_width + 7) / 8;
 	uint32_t mask = UINT32_MAX >> (32 - member->bit_width);
 	uint32_t storage_mask = mask << member->bit_offset;
-	size_t old = codegen_field_storage_load(codegen, address, bytes);
+	size_t old = codegen_field_storage_load(codegen, address, bytes, is_volatile);
 	size_t kept = codegen->next_temporary++, bits = codegen->next_temporary++;
 	size_t combined = codegen->next_temporary++;
 	emit(codegen, "\t%%t%zu =w and %%t%zu, %u\n", kept, old, ~storage_mask);
@@ -518,7 +568,14 @@ static size_t codegen_field_store(struct codegen *codegen, size_t address, size_
 		emit(codegen, "\t%%t%zu =w shl %%t%zu, %u\n", placed, bits, member->bit_offset);
 	}
 	emit(codegen, "\t%%t%zu =w or %%t%zu, %%t%zu\n", combined, kept, placed);
-	if (bytes == 3) {
+	if (is_volatile) {
+		for (unsigned i = 0; i < bytes; i++) {
+			size_t at = codegen->next_temporary++, byte = codegen->next_temporary++;
+			emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", at, address, i);
+			emit(codegen, "\t%%t%zu =w shr %%t%zu, %u\n", byte, combined, 8 * i);
+			emit(codegen, "\tcall $__kcc_volatile_store_1(l %%t%zu, w %%t%zu)\n", at, byte);
+		}
+	} else if (bytes == 3) {
 		size_t tail_address = codegen->next_temporary++, tail = codegen->next_temporary++;
 		emit(codegen, "\tstoreh %%t%zu, %%t%zu\n", combined, address);
 		emit(codegen, "\t%%t%zu =l add %%t%zu, 2\n", tail_address, address);
@@ -663,10 +720,11 @@ static void codegen_initializer_plan(struct codegen *codegen,
 {
 	struct initializer_capture *captures = NULL;
 	size_t capacity = 1;
+	bool volatile_aggregate = has_record_leaf(plan->type) && contains_volatile(plan->type);
 
 	/* Volatile scalar plans have one whole-object surviving write. Evaluate
 	 * its expression before writing, including for re-evaluated literals. */
-	if (plan->type->kind != type_kind_array && (plan->type->qualifiers & type_qualifier_volatile)) {
+	if (type_is_scalar(plan->type) && (plan->type->qualifiers & type_qualifier_volatile)) {
 		const struct ast_initializer_plan_entry *entry = plan->entries;
 		unsigned width = (unsigned)plan->size;
 		assert(type_is_scalar(plan->type));
@@ -708,7 +766,8 @@ static void codegen_initializer_plan(struct codegen *codegen,
 			captures[i] = (struct initializer_capture) { entry->expression, value };
 		}
 	}
-	if (plan->type->kind == type_kind_array && (plan->type->qualifiers & type_qualifier_volatile)) {
+	if (plan->type->kind == type_kind_array && (plan->type->qualifiers & type_qualifier_volatile) &&
+		!volatile_aggregate) {
 		const struct type *element = plan->type;
 		while (element->kind == type_kind_array)
 			element = ((const struct array_type *)element)->element;
@@ -757,8 +816,10 @@ static void codegen_initializer_plan(struct codegen *codegen,
 		free(captures);
 		return;
 	}
-	if (plan->zero_fill)
-		codegen_zero_bytes(codegen, destination, plan->size);
+	if (plan->zero_fill) {
+		if (volatile_aggregate) codegen_volatile_zero(codegen, destination, plan->size);
+		else codegen_zero_bytes(codegen, destination, plan->size);
+	}
 	for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
 		size_t address, value;
 
@@ -772,8 +833,10 @@ static void codegen_initializer_plan(struct codegen *codegen,
 				size_t zero = codegen->next_temporary++;
 				emit(codegen, "\t%%t%zu =%c copy 0\n", zero,
 					qbe_type(entry->bit_field->type));
-				(void)codegen_field_store(codegen, address, zero, entry->bit_field);
-			} else
+				(void)codegen_field_store(codegen, address, zero, entry->bit_field, volatile_aggregate);
+			} else if (volatile_aggregate)
+				codegen_volatile_zero(codegen, address, entry->length);
+			else
 				codegen_zero_bytes(codegen, address, entry->length);
 			continue;
 		}
@@ -785,13 +848,16 @@ static void codegen_initializer_plan(struct codegen *codegen,
 		value = captures[i].value;
 		if (entry->kind == ast_initializer_write_copy || entry->kind == ast_initializer_write_string) {
 			value = codegen_byte_offset(codegen, value, entry->source_offset);
-			codegen_record_copy(codegen, value, address, entry->length);
+			if (volatile_aggregate) codegen_volatile_copy(codegen, value, address, entry->length, 2);
+			else codegen_record_copy(codegen, value, address, entry->length);
 		} else {
 			assert(entry->kind == ast_initializer_write_expression);
 			assert(entry->bit_field || entry->length == type_object_size(entry->type));
 			if (entry->bit_field && entry->bit_field->bit_width &&
 				(entry->bit_field->bit_width < 32 || type_is_bitint(entry->bit_field->type) || type_value_width(entry->bit_field->type) == 64))
-				(void)codegen_field_store(codegen, address, value, entry->bit_field);
+				(void)codegen_field_store(codegen, address, value, entry->bit_field, volatile_aggregate);
+			else if (volatile_aggregate)
+				codegen_volatile_store(codegen, address, value, entry->type);
 			else
 				emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(entry->type), codegen_storage_bits(codegen, value, entry->type), address);
 		}
@@ -1047,7 +1113,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		return codegen_canonicalize(codegen, value, node->left->type);
 	}
 	if (codegen_bit_field(node->left))
-		left = codegen_field_load(codegen, address, codegen_bit_field(node->left));
+		left = codegen_field_load(codegen, address, codegen_bit_field(node->left), (node->left->type->qualifiers & type_qualifier_volatile) != 0);
 	else if (node->left->type->qualifiers & type_qualifier_volatile)
 		left = codegen_volatile_load(codegen, address, node->left->type);
 	else {
@@ -1066,7 +1132,7 @@ static size_t codegen_compound_assignment(struct codegen *codegen,
 		instruction, left, right);
 	value = codegen_convert_value(codegen, value, node->calculation_type, node->expression.type);
 	if (codegen_bit_field(node->left))
-		value = codegen_field_store(codegen, address, value, codegen_bit_field(node->left));
+		value = codegen_field_store(codegen, address, value, codegen_bit_field(node->left), (node->left->type->qualifiers & type_qualifier_volatile) != 0);
 	else if (node->left->type->qualifiers & type_qualifier_volatile)
 		codegen_volatile_store(codegen, address, value, node->left->type);
 	else
@@ -1153,7 +1219,7 @@ static struct update_values codegen_update(struct codegen *codegen,
 		return (struct update_values) { .previous = previous, .current = value };
 	}
 	if (codegen_bit_field(operand))
-		previous = codegen_field_load(codegen, address, codegen_bit_field(operand));
+		previous = codegen_field_load(codegen, address, codegen_bit_field(operand), (operand->type->qualifiers & type_qualifier_volatile) != 0);
 	else if (operand->type->qualifiers & type_qualifier_volatile)
 		previous = codegen_volatile_load(codegen, address, operand->type);
 	else
@@ -1182,7 +1248,7 @@ static struct update_values codegen_update(struct codegen *codegen,
 	else
 		value = codegen_canonicalize(codegen, value, operand->type);
 	if (codegen_bit_field(operand))
-		value = codegen_field_store(codegen, address, value, codegen_bit_field(operand));
+		value = codegen_field_store(codegen, address, value, codegen_bit_field(operand), (operand->type->qualifiers & type_qualifier_volatile) != 0);
 	else if (operand->type->qualifiers & type_qualifier_volatile)
 		codegen_volatile_store(codegen, address, value, operand->type);
 	else
@@ -1746,7 +1812,7 @@ static size_t codegen_expression(struct codegen *codegen,
 
 		temporary = codegen->next_temporary++;
 		if (codegen_bit_field(node->operand))
-			return codegen_field_load(codegen, address, codegen_bit_field(node->operand));
+			return codegen_field_load(codegen, address, codegen_bit_field(node->operand), (node->operand->type->qualifiers & type_qualifier_volatile) != 0);
 		if (node->operand->type->qualifiers & type_qualifier_atomic) {
 			/* libatomic's ABI memory order 5 is __ATOMIC_SEQ_CST. */
 			unsigned width = (unsigned)type_object_size(node->operand->type);
@@ -1755,15 +1821,17 @@ static size_t codegen_expression(struct codegen *codegen,
 				temporary, wide ? 'l' : 'w', width, address);
 			return atomic_from_bits(codegen, temporary, node->operand->type);
 		}
-		if (node->operand->type->qualifiers & type_qualifier_volatile)
-			return codegen_volatile_load(codegen, address, node->operand->type);
 		if (type_is_record(expression->type)) {
 			/* Captures live in entry-allocated slots, never loop allocations.
 			 * Later writes to the original cannot rewrite this value. */
 			emit(codegen, "\t%%t%zu =l copy %%r%zu\n", temporary, node->record_temporary_slot);
-			codegen_record_copy(codegen, address, temporary, type_object_size(expression->type));
+			if (contains_volatile(node->operand->type))
+				codegen_volatile_copy(codegen, address, temporary, type_object_size(expression->type), 1);
+			else codegen_record_copy(codegen, address, temporary, type_object_size(expression->type));
 			return temporary;
 		}
+		if (node->operand->type->qualifiers & type_qualifier_volatile)
+			return codegen_volatile_load(codegen, address, node->operand->type);
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
 		return codegen_canonicalize(codegen, temporary, expression->type);
@@ -1792,7 +1860,7 @@ static size_t codegen_expression(struct codegen *codegen,
 		size_t address = codegen_address(codegen, node->left);
 
 		if (codegen_bit_field(node->left))
-			value = codegen_field_store(codegen, address, value, codegen_bit_field(node->left));
+			value = codegen_field_store(codegen, address, value, codegen_bit_field(node->left), (node->left->type->qualifiers & type_qualifier_volatile) != 0);
 		else if (node->left->type->qualifiers & type_qualifier_atomic) {
 			unsigned width = (unsigned)type_object_size(node->left->type);
 			bool wide = width == 8;
@@ -1800,10 +1868,12 @@ static size_t codegen_expression(struct codegen *codegen,
 			emit(codegen, "\tcall $__atomic_store_%u(l %%t%zu, %c %%t%zu, w 5)\n",
 				width, address, wide ? 'l' : 'w', bits);
 		}
-		else if (node->left->type->qualifiers & type_qualifier_volatile)
+		else if (type_is_record(node->left->type)) {
+			if (contains_volatile(node->left->type))
+				codegen_volatile_copy(codegen, value, address, type_object_size(node->left->type), 2);
+			else codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
+		} else if (node->left->type->qualifiers & type_qualifier_volatile)
 			codegen_volatile_store(codegen, address, value, node->left->type);
-		else if (type_is_record(node->left->type))
-			codegen_record_copy(codegen, value, address, type_object_size(node->left->type));
 		else
 			emit(codegen, "\tstore%c %%t%zu, %%t%zu\n", qbe_store_size(node->left->type), codegen_storage_bits(codegen, value, node->left->type), address);
 		return value;
@@ -1814,7 +1884,9 @@ static size_t codegen_expression(struct codegen *codegen,
 		if (type_is_record(expression->type))
 			return address;
 		if (codegen_bit_field(expression))
-			return codegen_field_load(codegen, address, codegen_bit_field(expression));
+			return codegen_field_load(codegen, address, codegen_bit_field(expression), (expression->type->qualifiers & type_qualifier_volatile) != 0);
+		if (expression->type->qualifiers & type_qualifier_volatile)
+			return codegen_volatile_load(codegen, address, expression->type);
 		temporary = codegen->next_temporary++;
 		emit(codegen, "\t%%t%zu =%c %s %%t%zu\n", temporary,
 			qbe_type(expression->type), qbe_load_instruction(expression->type), address);
@@ -2062,7 +2134,9 @@ static void codegen_local_initializer(struct codegen *codegen,
 			size_t address = codegen->next_temporary++;
 
 			emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
-			codegen_record_copy(codegen, value, address, type_object_size(local->type));
+			if (contains_volatile(local->type))
+				codegen_volatile_copy(codegen, value, address, type_object_size(local->type), 2);
+			else codegen_record_copy(codegen, value, address, type_object_size(local->type));
 		} else if (local->type->qualifiers & type_qualifier_volatile) {
 			size_t address = codegen->next_temporary++;
 			emit(codegen, "\t%%t%zu =l copy %%v%zu\n", address, local->slot);
@@ -2177,11 +2251,11 @@ static void codegen_vla(struct codegen *codegen, const struct ast_local_declarat
 		emit_label(codegen, loop);
 		emit(codegen, "\t%%t%zu =l phi @b%zu 0, @b%zu %%t%zu\n", index, predecessor, loop, next);
 		emit(codegen, "\t%%t%zu =l add %%v%zu, %%t%zu\n", address, local->slot, index);
-		if (local->type->qualifiers & type_qualifier_volatile) {
+		if (contains_volatile(local->type)) {
 			const struct type *element = array->element;
 			while (element->kind == type_kind_array)
 				element = ((const struct array_type *)element)->element;
-			unsigned width = (unsigned)type_object_size(element);
+			unsigned width = type_is_record(element) ? 1 : (unsigned)type_object_size(element);
 			emit(codegen, "\tcall $__kcc_volatile_store_%u(l %%t%zu, %c 0)\n",
 				width, address, width == 8 ? 'l' : 'w');
 			emit(codegen, "\t%%t%zu =l add %%t%zu, %u\n", next, index, width);
@@ -2494,7 +2568,9 @@ static bool codegen_function(FILE *stream, const struct ast_function *function, 
 			size_t source = codegen.next_temporary++, destination = codegen.next_temporary++;
 			emit(&codegen, "\t%%t%zu =l copy %%p%zu\n", source, parameter_index);
 			emit(&codegen, "\t%%t%zu =l copy %%v%zu\n", destination, parameter->local->slot);
-			codegen_record_copy(&codegen, source, destination, type_object_size(parameter->type));
+			if (contains_volatile(parameter->type))
+				codegen_volatile_copy(&codegen, source, destination, type_object_size(parameter->type), 2);
+			else codegen_record_copy(&codegen, source, destination, type_object_size(parameter->type));
 		} else if (parameter->local && (parameter->type->qualifiers & type_qualifier_volatile)) {
 			size_t address = codegen.next_temporary++, value = codegen.next_temporary++;
 			emit(&codegen, "\t%%t%zu =l copy %%v%zu\n", address, parameter->local->slot);
