@@ -67,13 +67,18 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 static struct constant_result evaluate_float_literal_cast(const struct ast_expression *expression,
 	const struct ast_expression *operand, bool evaluated)
 {
-	uint64_t raw = ((const struct ast_integer_expression *)operand)->value;
+	uint64_t raw;
 	double number, boundary;
 	unsigned width = type_integer_width(expression->type);
 
-	if (((const struct ast_integer_expression *)operand)->floating_special)
+	if (operand->kind == expression_floating) {
+		if (((const struct ast_integer_expression *)operand)->floating_special)
+			return constant_failure(expression, constant_not_constant,
+				"header IEEE constant is not a floating literal in an integer constant expression");
+		raw = ((const struct ast_integer_expression *)operand)->value;
+	} else if (!sema_constexpr_floating_bits(operand, &raw))
 		return constant_failure(expression, constant_not_constant,
-			"header IEEE constant is not a floating literal in an integer constant expression");
+			"integer constant expression requires integer operands");
 	if (!evaluated)
 		return constant_success(expression, 0);
 	if (operand->type->kind == type_kind_float) {
@@ -301,7 +306,8 @@ static struct constant_result evaluate(const struct ast_expression *expression, 
 			((const struct ast_conversion_expression *)expression)->operand;
 		struct constant_result value;
 
-		if (expression->kind == expression_cast && operand->kind == expression_floating)
+		if (expression->kind == expression_cast && type_is_floating(operand->type) &&
+			(operand->kind == expression_floating || operand->kind == expression_load))
 			return evaluate_float_literal_cast(expression, operand, evaluated);
 		value = evaluate(operand, evaluated, initializer_condition);
 

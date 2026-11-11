@@ -25,6 +25,9 @@ enum { sema_max_initializer_stores = 65536 };
 bool sema_static_arithmetic_value(const struct ast_expression *expression,
 	struct constant_result *result);
 
+/* Retrieve a floating named constant without evaluating arbitrary expressions. */
+bool sema_constexpr_floating_bits(const struct ast_expression *expression, uint64_t *bits);
+
 /* Pure validation of an already checked source and its assignment conversion.
  * Does not analyze either tree again. */
 bool sema_validate_static_initializer(const struct ast_expression *source,

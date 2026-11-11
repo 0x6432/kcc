@@ -4,6 +4,7 @@
 #include "type.h"
 
 #include <assert.h>
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -898,16 +899,16 @@ static bool enum_value_bits(struct constant_result value, const struct type *tar
 }
 
 /* Keep constexpr object identity and storage: only a value load is a named
- * constant. Integer values and null pointer values are supported. */
+ * constant. Integer, finite floating and null pointer values are supported. */
 static bool type_contains_vm(const struct type *type);
 static const struct type *constexpr_scalar_type(struct sema *sema, const struct type *type,
 	struct source_location location)
 {
-	if ((!type_is_integer(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) ||
+	if ((!type_is_integer(type) && !type_is_floating(type) && type->kind != type_kind_pointer && type->kind != type_kind_nullptr) ||
 		type_contains_vm(type) || (type->qualifiers & (type_qualifier_atomic |
 		type_qualifier_volatile | type_qualifier_restrict))) {
 		diagnostic_error(sema->diagnostics, location,
-			"constexpr currently requires a non-atomic, non-volatile integer or pointer object");
+			"constexpr currently requires a non-atomic, non-volatile scalar object");
 		return NULL;
 	}
 	if (!type_is_complete_object(type)) {
@@ -949,9 +950,86 @@ static bool constexpr_initializer_expression(struct sema *sema, struct ast_expre
 	return true;
 }
 
+static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits);
+static bool static_arithmetic_constant_form(const struct ast_expression *expression);
+static bool static_integer_arithmetic(const struct ast_expression *expression, struct constant_result *result);
+
+/* Exact integer-to-binary floating conversion is a bit property, not a host
+ * cast round trip (which would lose information for integers above 2^53). */
+static bool integer_exact_in_binary_float(struct constant_result value, unsigned precision)
+{
+	unsigned width = type_integer_width(value.type);
+	uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+	bool negative = !type_is_unsigned(value.type) && (value.bits & (UINT64_C(1) << (width - 1)));
+	uint64_t magnitude = negative ? (mask - value.bits) + 1 : value.bits;
+	unsigned significant = 0;
+	while (magnitude && !(magnitude & 1))
+		magnitude >>= 1;
+	while (magnitude) {
+		magnitude >>= 1;
+		significant++;
+	}
+	return significant <= precision;
+}
+
+static bool constexpr_floating_value(struct sema *sema, struct ast_expression *expression,
+	const struct type *target, uint64_t *bits)
+{
+	struct ast_conversion_expression converted = {
+		.expression = { .kind = expression_conversion, .type = target,
+			.location = expression->location, .depth = expression->depth + 1 },
+		.operand = expression,
+	};
+	if (!static_arithmetic_constant_form(expression))
+		goto not_constant;
+	if (type_is_integer(expression->type)) {
+		struct constant_result integer;
+		if (!static_integer_arithmetic(expression, &integer))
+			goto not_constant;
+		if (!integer_exact_in_binary_float(integer, target->kind == type_kind_float ? 24 : 53))
+			goto not_exact;
+	} else if (type_is_floating(expression->type)) {
+		uint64_t raw;
+		double source;
+		if (!static_floating_literal_bits(expression, &raw))
+			goto not_constant;
+		if (expression->type->kind == type_kind_float) {
+			uint32_t word = (uint32_t)raw;
+			float single;
+			memcpy(&single, &word, sizeof(single));
+			source = single;
+		} else
+			memcpy(&source, &raw, sizeof(source));
+		if (!isfinite(source))
+			goto not_constant;
+		if (target->kind == type_kind_float) {
+			if (source > FLT_MAX || source < -FLT_MAX)
+				goto not_exact;
+			float narrowed = (float)source;
+			if (!isfinite(narrowed) || (double)narrowed != source ||
+				(source == 0.0 && !!signbit(narrowed) != !!signbit(source)))
+				goto not_exact;
+		}
+	} else
+		goto not_constant;
+	if (!static_floating_literal_bits(&converted.expression, bits))
+		goto not_constant;
+	return true;
+not_exact:
+	diagnostic_error(sema->diagnostics, expression->location,
+		"constexpr initializer is not exactly representable in its object type");
+	return false;
+not_constant:
+	diagnostic_error(sema->diagnostics, expression->location,
+		"constexpr floating initializer requires a supported finite arithmetic constant expression");
+	return false;
+}
+
 static bool constexpr_scalar_value(struct sema *sema, struct ast_expression *expression,
 	const struct type *target, uint64_t *bits)
 {
+	if (type_is_floating(target))
+		return constexpr_floating_value(sema, expression, target, bits);
 	if (target->kind == type_kind_pointer || target->kind == type_kind_nullptr) {
 		struct null_initializer_result value = evaluate_null_initializer(expression);
 		if (value.status != constant_value) {
@@ -4024,6 +4102,28 @@ static bool static_boolean_initializer(const struct ast_expression *source,
 	return true;
 }
 
+bool sema_constexpr_floating_bits(const struct ast_expression *expression, uint64_t *bits)
+{
+	if (!type_is_floating(expression->type) || expression->kind != expression_load)
+		return false;
+	const struct ast_expression *object = ((const struct ast_load_expression *)expression)->operand;
+	if (object->kind == expression_name) {
+		const struct ast_local_declaration *local = ((const struct ast_name_expression *)object)->declaration;
+		if (local && local->is_constexpr && local->constexpr_complete) {
+			*bits = local->constexpr_bits;
+			return true;
+		}
+	} else if (object->kind == expression_external_object) {
+		const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)object;
+		if (reference->is_constexpr_name && reference->object->is_constexpr &&
+			!reference->object->constexpr_in_progress && reference->object->initializer_value.kind == static_data_floating) {
+			*bits = reference->object->initializer_value.integer_bits;
+			return true;
+		}
+	}
+	return false;
+}
+
 /* These initializer-only conditions are deliberately separate from integer
  * constant expressions, so floating comparisons never become array bounds. */
 static bool static_floating_literal_bits(const struct ast_expression *expression, uint64_t *bits);
@@ -4064,6 +4164,11 @@ static bool static_arithmetic_constant_form(const struct ast_expression *express
 		return true;
 	if (expression->kind == expression_floating)
 		return true;
+	if (type_is_floating(expression->type)) {
+		uint64_t bits;
+		if (sema_constexpr_floating_bits(expression, &bits))
+			return true;
+	}
 	if (expression->kind == expression_cast || expression->kind == expression_conversion) {
 		const struct ast_expression *operand = expression->kind == expression_cast ?
 			((const struct ast_cast_expression *)expression)->operand :
@@ -4346,6 +4451,8 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 {
 	if (!type_is_floating(expression->type))
 		return false;
+	if (sema_constexpr_floating_bits(expression, bits))
+		return true;
 	if (expression->kind == expression_floating) {
 		*bits = ((const struct ast_integer_expression *)expression)->value;
 		return true;
@@ -4440,6 +4547,8 @@ static bool static_floating_literal_bits(const struct ast_expression *expression
 				float converted;
 				uint32_t raw;
 				memcpy(&source, &source_bits, sizeof(source));
+				if (isfinite(source) && (source > FLT_MAX || source < -FLT_MAX))
+					return false;
 				converted = (float)source;
 				if (isfinite(source) && !isfinite(converted))
 					return false;
@@ -5571,7 +5680,7 @@ static bool sema_inferred_local(struct sema *sema, struct ast_local_declaration 
 		uint64_t bits;
 		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
 			diagnostic_error(sema->diagnostics, local->name.location,
-				"constexpr currently requires a non-atomic, non-volatile integer or pointer object");
+				"constexpr currently requires a non-atomic, non-volatile scalar object");
 			return false;
 		}
 		if (!(type = constexpr_scalar_type(sema, type, local->name.location)) ||
@@ -6786,6 +6895,10 @@ static struct external_object_symbol *sema_file_object(struct sema *sema,
 				&symbol->initializer_value, sema->diagnostics))
 			goto rollback;
 		symbol->definition = external;
+		if (is_constexpr) {
+			symbol->is_constexpr = true;
+			symbol->constexpr_in_progress = false;
+		}
 		return symbol;
 	}
 	/* Check the original expression before narrowing (notably to _Bool).
@@ -7181,7 +7294,7 @@ static bool sema_external_object_declaration(struct sema *sema,
 		bool checked;
 		if (syntax->qualifiers & (type_qualifier_atomic | type_qualifier_volatile | type_qualifier_restrict)) {
 			diagnostic_error(sema->diagnostics, declaration->name.location,
-				"constexpr currently requires a non-atomic, non-volatile integer or pointer object");
+				"constexpr currently requires a non-atomic, non-volatile scalar object");
 			return false;
 		}
 		if (!declaration->initializer || !declaration->initializer_syntax ||
