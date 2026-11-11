@@ -5142,7 +5142,8 @@ static enum initializer_ancestry_result initializer_contains_union(
 	}
 	if (selection->offset < offset || selection->offset - offset >= type_object_size(type))
 		return initializer_ancestry_absent;
-	if (type == selection->type && offset == selection->offset)
+	if (type->kind == type_kind_union && offset == selection->offset &&
+		type_record_definition(type) == type_record_definition(selection->type))
 		return initializer_ancestry_present;
 	if (type->kind != type_kind_array && !type_is_record(type))
 		return initializer_ancestry_absent;
@@ -5263,7 +5264,8 @@ static bool initializer_select_unions(struct initializer_builder *builder,
 		if (parent->type->kind != type_kind_union)
 			continue;
 		for (selection = builder->unions; selection; selection = selection->next)
-			if (selection->offset == parent->offset && selection->type == parent->type)
+			if (selection->offset == parent->offset &&
+				type_record_definition(selection->type) == type_record_definition(parent->type))
 				break;
 		if (selection && selection->member == member)
 			continue;
@@ -5479,22 +5481,6 @@ static void initializer_cache_constant(struct ast_initializer_constant *constant
 	}
 }
 
-/* Record-copy plans do not yet remap active union alternatives. */
-static bool constexpr_contains_union(const struct type *type, unsigned depth, size_t *work)
-{
-	if (++*work > 65536 || depth > 128)
-		return true;
-	if (type->kind == type_kind_union)
-		return true;
-	if (type->kind == type_kind_array)
-		return constexpr_contains_union(((const struct array_type *)type)->element, depth + 1, work);
-	if (type->kind == type_kind_struct)
-		for (const struct record_member *member = type_record_definition(type)->members; member; member = member->next)
-			if (constexpr_contains_union(member->type, depth + 1, work))
-				return true;
-	return false;
-}
-
 /* Resolve a direct constexpr record or record-member value to its immutable
  * initializer plan. Pointer indirection and runtime aggregate expressions do
  * not qualify. */
@@ -5540,9 +5526,6 @@ static bool initializer_constexpr_record_copy(struct initializer_builder *builde
 	uint64_t source_offset = 0;
 	const struct ast_initializer_plan *source = constexpr_record_source(expression, target, &source_offset);
 	uint64_t size = type_object_size(target);
-	size_t work = 0;
-	if (constexpr_contains_union(target, 0, &work))
-		return initializer_error(builder, syntax->location, "constexpr record copies containing unions are not supported yet");
 	if (!source || source_offset > source->size || size > source->size - source_offset)
 		return initializer_error(builder, syntax->location, "constexpr aggregate copy requires a direct constexpr record value of the same definition");
 	if (!initializer_clear(builder, target, offset, syntax))
@@ -5576,6 +5559,39 @@ static bool initializer_constexpr_record_copy(struct initializer_builder *builde
 		}
 		if (!initializer_store(builder, &store, syntax->location))
 			return false;
+	}
+	/* Preserve only selections physically contained in the copied subobject.
+	 * A same-offset ancestor union is not a member of that subobject. */
+	for (const struct ast_initializer_union_selection *entry = source->unions; entry; entry = entry->next) {
+		if (entry->offset < source_offset || entry->offset - source_offset >= size)
+			continue;
+		struct ast_initializer_union_selection candidate = *entry;
+		candidate.offset = offset + entry->offset - source_offset;
+		if (!builder->sema->initializer_ancestry) {
+			builder->sema->initializer_ancestry = initializer_alloc(builder,
+				sizeof(*builder->sema->initializer_ancestry), syntax->location);
+			if (!builder->sema->initializer_ancestry)
+				return false;
+		}
+		struct initializer_ancestry_memo *memo = builder->sema->initializer_ancestry;
+		if (++memo->generation == 0) {
+			memset(memo->entries, 0, sizeof(memo->entries));
+			memo->generation = 1;
+		}
+		struct initializer_ancestry_query query = {
+			.builder = builder, .selection = &candidate, .memo = memo, .location = syntax->location,
+		};
+		enum initializer_ancestry_result result = initializer_contains_union(&query, target, offset, 0);
+		if (result == initializer_ancestry_failed)
+			return false;
+		if (result == initializer_ancestry_absent)
+			continue;
+		struct ast_initializer_union_selection *copy = initializer_alloc(builder, sizeof(*copy), syntax->location);
+		if (!copy)
+			return false;
+		*copy = candidate;
+		copy->next = builder->unions;
+		builder->unions = copy;
 	}
 	return true;
 }
@@ -5815,6 +5831,7 @@ static struct ast_initializer_plan *sema_checked_constexpr_record_initializer(st
 	builder.plan->size = type_object_size(type);
 	builder.plan->zero_fill = true;
 	if (!initializer_constexpr_record_copy(&builder, type, 0, expression, syntax)) return NULL;
+	builder.plan->unions = builder.unions;
 	return builder.plan;
 }
 

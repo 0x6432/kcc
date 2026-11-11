@@ -36,9 +36,9 @@ are materialized from their translation-time value, independent of runtime round
 Bit-field initializers must be exactly representable in their declared field width.
 Direct union-member access can form a constant expression only for the initialized
 active member; empty-initialized unions select their first named member.
-Direct constexpr record values and direct record-member values of the same record
+Direct constexpr struct or union values and direct record-member values of the same record
 definition can initialize constexpr records, or records with static storage.
-Copies preserve nested arrays, bit-fields, string data and scalar constants without
+Copies preserve active union members, nested arrays, bit-fields, string data and scalar constants without
 re-evaluating the source initializer.
 
 The same bounded scalar, array, struct and union types are supported in C23 constexpr
@@ -47,8 +47,7 @@ Scalar compound literal constants and direct struct-member selections participat
 in supported constant expressions. They retain real const-qualified storage;
 initializer and representability rules are the same as constexpr objects.
 
-This is not complete C23 constexpr support. Anonymous union members, record copies
-containing unions, flexible arrays, general aggregate copy expressions, non-ASCII narrow strings targeting char or signed char, non-finite floating
+This is not complete C23 constexpr support. Anonymous union members, promoted anonymous-member constant accesses through unions, flexible arrays, general aggregate copy expressions, non-ASCII narrow strings targeting char or signed char, non-finite floating
 values and non-constexpr file-scope or static inferred auto remain unsupported.
 The compiler's existing type, initializer, ABI and resource limits also apply.
 `tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, `tests/test_constexpr_floating.py`, `tests/test_constexpr_aggregates.py`, and `tests/test_constexpr_literals.py` cover executable cross-feature examples,
