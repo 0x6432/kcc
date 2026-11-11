@@ -2420,10 +2420,8 @@ static struct ast_expression *parse_postfix_expression(struct parser *parser)
 	return parse_postfix_suffix(parser, parse_primary_expression(parser));
 }
 
-/* C23 storage-class prefix belongs only to compound literals, never casts.
- * Existing tokens cover static/register/thread_local; constexpr compound literals
- * remain unsupported even though integer constexpr objects are implemented. Nested type-names keep their normal context.
- */
+/* C23 storage-class prefixes belong to compound literals, never casts.
+ * Nested type-names retain their normal context. */
 static bool is_constexpr_keyword(struct token token)
 {
 	return token.kind == token_constexpr;
@@ -2441,9 +2439,12 @@ static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 		struct token *slot;
 
 		if (is_constexpr_keyword(token)) {
-			diagnostic_error(parser->diagnostics, token.location,
-				"constexpr compound literals require M23h constant-object support");
-			return NULL;
+			if (storage->constexpr_keyword.kind == token_constexpr) {
+				diagnostic_error(parser->diagnostics, token.location, "duplicate constexpr compound literal storage class");
+				return NULL;
+			}
+			storage->constexpr_keyword = preprocess_next(parser->preprocessor);
+			continue;
 		}
 		if (token.kind != token_static && token.kind != token_register && token.kind != token_thread_local)
 			break;
@@ -2453,6 +2454,10 @@ static struct ast_type_syntax *parse_cast_or_literal_type(struct parser *parser,
 			return NULL;
 		}
 		*slot = preprocess_next(parser->preprocessor);
+	}
+	if (storage->constexpr_keyword.kind == token_constexpr && storage->thread_keyword.kind == token_thread_local) {
+		diagnostic_error(parser->diagnostics, storage->thread_keyword.location, "constexpr cannot combine with thread_local");
+		return NULL;
 	}
 	if (storage->thread_keyword.kind == token_thread_local && storage->keyword.kind == token_register) {
 		diagnostic_error(parser->diagnostics, storage->keyword.location, "thread_local cannot combine with register");
@@ -2499,6 +2504,7 @@ static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
 	node->is_static = storage.keyword.kind == token_static;
 	node->is_register = storage.keyword.kind == token_register;
 	node->is_thread_local = storage.thread_keyword.kind == token_thread_local;
+	node->is_constexpr = storage.constexpr_keyword.kind == token_constexpr;
 	node->alignments = storage.alignments;
 	node->object_id = object_id;
 	return parse_postfix_suffix(parser, &node->expression);
@@ -2506,7 +2512,8 @@ static struct ast_expression *parse_compound_literal_tail(struct parser *parser,
 
 static bool literal_storage_present(struct declaration_head storage)
 {
-	return storage.keyword.kind != token_eof || storage.thread_keyword.kind != token_eof;
+	return storage.keyword.kind != token_eof || storage.thread_keyword.kind != token_eof ||
+		storage.constexpr_keyword.kind != token_eof;
 }
 
 /* parenthesized-or-cast ::= '(' expression ')' postfix-suffix

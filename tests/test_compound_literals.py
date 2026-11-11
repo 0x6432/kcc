@@ -509,7 +509,6 @@ STATIC_REFUSALS = [
     ('ordinary static record literal copy', 'struct S { int x; }; static struct S s=(struct S){42};'),
     ('ordinary object load literal content', 'int value=42; int *p=&(int){value};'),
     ('file unevaluated static literal content', 'int f(void); unsigned long n=sizeof((int){f()});'),
-    ('constexpr literal M23h dependency', 'int f(void) { return (constexpr int){42}; }'),
 ]
 # Exact KCC diagnostics are frozen only after production integration.
 KCC_REFUSALS = {'const literal assignment': (1, 23, 'assignment requires a modifiable lvalue'),
@@ -538,7 +537,6 @@ KCC_REFUSALS = {'const literal assignment': (1, 23, 'assignment requires a modif
                                          'non-integer file-scope object initializers are not supported yet'),
  'ordinary object load literal content': (1, 29, 'static initializer must be a constant expression'),
  'file unevaluated static literal content': (1, 43, 'static initializer must be a constant expression'),
- 'constexpr literal M23h dependency': (1, 23, 'constexpr compound literals require M23h constant-object support'),
  'M20 floating literal': (1, 1, 'expected integer type specifier'),
  'M22 bitfield literal': (1, 36, 'bit-fields are not supported yet (M22)')}
 

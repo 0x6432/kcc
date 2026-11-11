@@ -4157,14 +4157,16 @@ bool sema_constexpr_member_value(const struct ast_expression *expression, struct
 		member_seen = true;
 		operand = member->operand;
 	}
-	if (!member_seen)
-		return false;
 	const struct ast_initializer_plan *plan = NULL;
-	if (operand->kind == expression_name) {
+	if (operand->kind == expression_compound_literal) {
+		const struct ast_compound_literal_expression *literal = (const struct ast_compound_literal_expression *)operand;
+		if (literal->is_constexpr)
+			plan = literal->initializer_plan;
+	} else if (member_seen && operand->kind == expression_name) {
 		const struct ast_local_declaration *local = ((const struct ast_name_expression *)operand)->declaration;
 		if (local && local->is_constexpr && local->constexpr_complete)
 			plan = local->initializer_plan;
-	} else if (operand->kind == expression_external_object) {
+	} else if (member_seen && operand->kind == expression_external_object) {
 		const struct ast_external_object_expression *reference = (const struct ast_external_object_expression *)operand;
 		if (reference->is_constexpr_name && reference->object->is_constexpr && !reference->object->constexpr_in_progress)
 			plan = reference->object->initializer_plan;
@@ -7390,10 +7392,17 @@ static bool sema_compound_literal(struct sema *sema, struct ast_compound_literal
 	type = resolve_type_syntax(sema, node->type_syntax);
 	if (!type)
 		goto failure;
+	if (node->is_constexpr) {
+		type = (type->kind == type_kind_array || type_is_record(type)) ?
+			constexpr_aggregate_type(sema, type, node->expression.location) :
+			constexpr_scalar_type(sema, type, node->expression.location);
+		if (!type)
+			goto failure;
+	}
 	if (node->alignments && !check_object_alignment(sema, type,
 		node->alignments->alignment, node->expression.location))
 		goto failure;
-	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, false, &initializer_depth);
+	plan = sema_initializer(sema, type, node->initializer_syntax, static_duration, node->is_constexpr, &initializer_depth);
 	if (!plan)
 		goto failure;
 	node->expression.type = plan->type;

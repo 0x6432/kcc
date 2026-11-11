@@ -70,8 +70,7 @@ use bounded loops, not proportional machine-code expansion or hidden libc calls.
 
 ## Explicit boundaries
 
-This is not full C23 conformance. constexpr compound literals require M23h
-constant-object semantics and receive an explicit dependency diagnostic. C23
+This is not full C23 conformance. Bounded constexpr compound literals are supported; see `m23h-constexpr-integers.md` for scope. C23
 expanded record compatibility/redefinition rules remain M23h. Floating/complex,
 _BitInt, VLA, atomics, bit-fields/flexible arrays and by-value aggregate ABI
 belong to their listed milestones; bounded aggregate calls are described in

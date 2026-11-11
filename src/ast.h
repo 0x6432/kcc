@@ -226,6 +226,7 @@ struct ast_compound_literal_expression {
 	bool is_static;
 	bool is_register;
 	bool is_thread_local;
+	bool is_constexpr;
 	enum ast_compound_literal_storage storage;
 	size_t object_id;
 	struct ast_local_declaration *local;

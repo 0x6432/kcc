@@ -314,6 +314,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_constexpr_pointers.py
 	python3 tests/test_constexpr_floating.py
 	python3 tests/test_constexpr_aggregates.py
+	python3 tests/test_constexpr_literals.py
 	python3 tests/test_register_auto_inference.py
 	python3 tests/test_inferred_typedef_shadowing.py
 	python3 tests/test_static_assertions.py
@@ -555,6 +556,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_constexpr_pointers.py
 	python3 tests/test_constexpr_floating.py
 	python3 tests/test_constexpr_aggregates.py
+	python3 tests/test_constexpr_literals.py
 	python3 tests/test_register_auto_inference.py
 	python3 tests/test_inferred_typedef_shadowing.py
 	python3 tests/test_static_assertions.py

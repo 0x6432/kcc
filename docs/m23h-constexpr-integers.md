@@ -34,12 +34,17 @@ subscripts do not form named constants. Floating automatic constexpr initializer
 are materialized from their translation-time value, independent of runtime rounding.
 Bit-field initializers must be exactly representable in their declared field width.
 
+The same bounded scalar, array and struct types are supported in C23 constexpr
+compound literals, including automatic, static and register storage where valid.
+Scalar compound literal constants and direct struct-member selections participate
+in supported constant expressions. They retain real const-qualified storage;
+initializer and representability rules are the same as constexpr objects.
+
 This is not complete C23 constexpr support. Unions, structs containing unions,
 flexible arrays, aggregate copy initialization, aggregate inferred
 auto, non-ASCII narrow strings targeting char or signed char, non-finite floating
-values, constexpr compound literals and non-constexpr file-scope or static inferred
-auto remain unsupported.
+values and non-constexpr file-scope or static inferred auto remain unsupported.
 The compiler's existing type, initializer, ABI and resource limits also apply.
-`tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, and `tests/test_constexpr_floating.py`, and `tests/test_constexpr_aggregates.py` cover executable cross-feature examples,
+`tests/test_constexpr_integer.py`, `tests/test_constexpr_pointers.py`, `tests/test_constexpr_floating.py`, `tests/test_constexpr_aggregates.py`, and `tests/test_constexpr_literals.py` cover executable cross-feature examples,
 range and constraint refusals, and file-scope symbol linkage. Native C23
 constexpr agreement is not claimed unless a supporting host is separately used.
