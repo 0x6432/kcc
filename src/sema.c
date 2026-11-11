@@ -934,7 +934,7 @@ static bool constexpr_aggregate_members(const struct type *type, unsigned depth,
 		if (!definition->complete)
 			return false;
 		for (const struct record_member *member = definition->members; member; member = member->next)
-			if (member->is_bit_field || member->is_flexible ||
+			if (member->is_flexible ||
 				!constexpr_aggregate_members(member->type, depth + 1, work))
 				return false;
 		return true;
@@ -949,7 +949,7 @@ static const struct type *constexpr_aggregate_type(struct sema *sema, const stru
 	size_t work = 0;
 	if (!constexpr_aggregate_members(type, 0, &work)) {
 		diagnostic_error(sema->diagnostics, location,
-			"constexpr aggregate requires supported non-volatile members without unions or bit-fields");
+			"constexpr aggregate requires supported non-volatile members without unions");
 		return NULL;
 	}
 	type = type_qualified(sema->arena, type, type_qualifier_const);
@@ -4146,10 +4146,13 @@ bool sema_constexpr_member_value(const struct ast_expression *expression, struct
 	const struct ast_expression *operand = ((const struct ast_load_expression *)expression)->operand;
 	uint64_t offset = 0;
 	bool member_seen = false;
+	const struct record_member *field = NULL;
 	while (operand->kind == expression_member) {
 		const struct ast_member_expression *member = (const struct ast_member_expression *)operand;
-		if (member->indirect || member->member->is_bit_field || UINT64_MAX - offset < member->offset)
+		if (member->indirect || UINT64_MAX - offset < member->offset)
 			return false;
+		if (!member_seen && member->member->is_bit_field)
+			field = member->member;
 		offset += member->offset;
 		member_seen = true;
 		operand = member->operand;
@@ -4172,7 +4175,7 @@ bool sema_constexpr_member_value(const struct ast_expression *expression, struct
 		(type_is_integer(expression->type) ? static_data_integer : static_data_null_pointer) };
 	for (const struct ast_initializer_plan_entry *entry = plan->entries; entry; entry = entry->next) {
 		if (entry->kind == ast_initializer_write_expression && entry->offset == offset &&
-			entry->length == type_object_size(expression->type)) {
+			entry->bit_field == field && (field || entry->length == type_object_size(expression->type))) {
 			if (entry->constant.kind == ast_initializer_constant_integer)
 				value->integer_bits = entry->constant.bits;
 			else if (entry->constant.kind != ast_initializer_constant_null)
@@ -5576,6 +5579,18 @@ static bool initializer_value(struct initializer_builder *builder,
 			return initializer_error(builder, syntax->location, "constexpr aggregate copy initializers are not supported yet");
 		if (!constexpr_scalar_value(builder->sema, expression, object->type, &bits))
 			return false;
+		if (store.bit_field) {
+			unsigned width = store.bit_field->bit_width;
+			unsigned object_width = type_integer_width(object->type);
+			uint64_t mask = width == 64 ? UINT64_MAX : (UINT64_C(1) << width) - 1;
+			uint64_t object_mask = object_width == 64 ? UINT64_MAX : (UINT64_C(1) << object_width) - 1;
+			uint64_t narrowed = bits & mask;
+			if (!type_is_unsigned(object->type) && (narrowed & (UINT64_C(1) << (width - 1))))
+				narrowed |= object_mask & ~mask;
+			if (narrowed != bits)
+				return initializer_error(builder, syntax->location,
+					"constexpr initializer is not exactly representable in its bit-field");
+		}
 		struct static_data_value constant = {
 			.kind = type_is_integer(object->type) ? static_data_integer :
 				(type_is_floating(object->type) ? static_data_floating : static_data_null_pointer),

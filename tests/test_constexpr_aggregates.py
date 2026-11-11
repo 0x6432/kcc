@@ -23,9 +23,24 @@ programs=[
 '''struct A{int n; int b;}; struct S{struct A a;}; constexpr struct S s={.a={1,2},.a={42}}; static_assert(s.a.n==42 && s.a.b==0); int main(void){return s.a.n;}''',
 '''struct S{int n;}; constexpr struct S s={42}; constexpr int x=s.n; int main(void){constexpr int y=s.n; static_assert(y==42); return x;}''',
 '''constexpr unsigned char s[]="\\xff"; int main(void){return s[0]==255 && s[1]==0?42:1;}''',
+'''struct S{unsigned a:6; signed b:5; unsigned c:3;}; constexpr struct S s={42,-3,7}; static_assert(s.a==42 && s.b==-3 && s.c==7); int main(void){return s.a;}''',
+'''struct S{unsigned a:4; unsigned b:6; unsigned c:4;}; constexpr struct S s={.a=2,.b=42,.c=3,.a=1}; static_assert(s.a==1 && s.b==42 && s.c==3); int main(void){return s.b;}''',
+'''struct S{signed long a:40; unsigned long b:40;}; constexpr struct S s={-12345678901L,42}; static_assert(s.a==-12345678901L && s.b==42); int main(void){return s.b;}''',
+'''struct S{unsigned _BitInt(8) a:6; signed _BitInt(8) b:6;}; int main(void){constexpr struct S s={42,-3}; static_assert(s.a==42 && s.b==-3); return s.a;}''',
+'''struct S{unsigned a:3; unsigned :0; unsigned b:6;}; constexpr struct S s={.b=42}; static_assert(s.a==0 && s.b==42); int main(void){return s.b;}''',
+'''struct S{_Bool a:1; unsigned b:6;}; constexpr struct S s={1,42}; static_assert(s.a==1 && s.b==42); int main(void){return s.b;}''',
+'''enum E : unsigned int { A=1 }; struct S{enum E x:6;}; constexpr struct S s={42}; static_assert(s.x==42); int main(void){return s.x;}''',
+'''struct S{signed long x:64; unsigned long y:64;}; constexpr struct S s={-9223372036854775807L-1,18446744073709551615UL}; static_assert(s.x<0 && s.y==~0UL); int main(void){return s.x<0 && s.y==~0UL?42:1;}''',
+'''struct S{signed x:3; unsigned y:6;}; int main(void){static constexpr struct S s={-4,42}; static_assert(s.x==-4 && s.y==42); return s.y;}''',
 ]
 # Array indexing is not a C23 named constant: move the deliberately invalid case to refusals.
 negative=[programs.pop(8),
+'''struct S{unsigned x:3;}; constexpr struct S s={8};''',
+'''struct S{_Bool x:1;}; constexpr struct S s={2};''',
+'''struct S{signed x:3;}; constexpr struct S s={4};''',
+'''struct S{signed x:3;}; constexpr struct S s={-5};''',
+'''struct S{unsigned x:3;}; constexpr struct S s={-1};''',
+'''struct S{unsigned x:3;}; int f(void){constexpr struct S s={8}; return 0;}''',
 '''constexpr int a[2]={1,2}; static_assert(a[0]==1);''',
 '''constexpr int a[1]={1}; int main(void){a[0]=2; return 0;}''',
 '''struct S{int n;}; constexpr struct S s={42}; int main(void){s.n=1; return 0;}''',
@@ -35,7 +50,6 @@ negative=[programs.pop(8),
 '''int x; constexpr int *a[]={&x};''',
 '''int x; constexpr int a[]={x};''',
 '''struct S{volatile int n;}; constexpr struct S s={1};''',
-'''struct S{int n:3;}; constexpr struct S s={1};''',
 '''union U{int n; float f;}; constexpr union U u={1};''',
 '''struct S{int n; union U{int x;} u;}; constexpr struct S s={1,{2}};''',
 '''struct S{int n; int a[];}; constexpr struct S s={1};''',
@@ -72,4 +86,12 @@ with tempfile.TemporaryDirectory(prefix='kcc constexpr aggregate ') as tmp:
   native=d/'native.c'; native.write_text('''#include <fenv.h>\n#include <stdint.h>\n#include <string.h>\nstruct S{int n; double f; int *p;}; const struct S *get(void); double scalar(void), inferred(void), aggregate(void); int main(void){ const struct S *p=get(); if(p!=get() || p->n!=42 || p->f!=1.5 || p->p) return 1; fesetround(FE_UPWARD); double x[]={scalar(),inferred(),aggregate()}; for(int i=0;i<3;i++){uint64_t u; memcpy(&u,&x[i],8); if(u!=0x3fd5555555555555ULL)return 2;} return 42;}''')
   subprocess.run([host,str(asm),str(native),'-lm','-o',str(exe)],check=True,timeout=15)
   assert subprocess.run([str(exe)],timeout=5).returncode==42
+if qbe:
+ with tempfile.TemporaryDirectory(prefix='kcc constexpr bitfield abi ') as tmp:
+  d=Path(tmp); source=d/'p.c'; il=d/'p.ssa'; asm=d/'p.s'; exe=d/'p'; native=d/'native.c'
+  source.write_text('struct S{signed a:5; unsigned b:6;}; const struct S *get(void){static constexpr struct S s={-3,42}; return &s;}')
+  r=subprocess.run([str(kcc),str(source)],capture_output=True,text=True,timeout=15); assert r.returncode==0,r.stderr
+  il.write_text(r.stdout); subprocess.run([qbe,'-t','amd64_sysv','-o',str(asm),str(il)],check=True)
+  native.write_text('struct S{signed a:5; unsigned b:6;}; const struct S *get(void); int main(void){const struct S *s=get();return s->a==-3 && s->b==42?42:1;}')
+  subprocess.run([host,str(asm),str(native),'-o',str(exe)],check=True); assert subprocess.run([str(exe)]).returncode==42
 print(f'constexpr aggregates: {len(programs)} runtime cases, {len(negative)} refusals, native ABI and floating rounding')

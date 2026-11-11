@@ -27,14 +27,15 @@ qualifiers, missing initializers and multiple declarators.
 
 Explicit-type constexpr arrays and structs are supported at file and block scope,
 including static locals, unknown outer array bounds, nested aggregates, designated
-initializers, zero-filled members, and character strings. Integer and finite
+initializers, zero-filled members, and character strings. Integer (including bit-fields) and finite
 floating struct members accessed through direct member selection are named
 constants; null pointer members can initialize compatible pointers. Array
 subscripts do not form named constants. Floating automatic constexpr initializers
 are materialized from their translation-time value, independent of runtime rounding.
+Bit-field initializers must be exactly representable in their declared field width.
 
 This is not complete C23 constexpr support. Unions, structs containing unions,
-bit-fields or flexible arrays, aggregate copy initialization, aggregate inferred
+flexible arrays, aggregate copy initialization, aggregate inferred
 auto, non-ASCII narrow strings targeting char or signed char, non-finite floating
 values, constexpr compound literals and non-constexpr file-scope or static inferred
 auto remain unsupported.

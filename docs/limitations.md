@@ -1,6 +1,6 @@
 # Implementation limitations
 
-Current constexpr support includes integer, finite floating and null-pointer scalar objects; see `m23h-constexpr-integers.md` for scope and remaining gaps. Earlier references to constexpr being entirely unsupported are historical.
+Current constexpr support includes integer, finite floating and null-pointer scalar objects, and a bounded array and struct subset with bit-fields; see `m23h-constexpr-integers.md` for scope and remaining gaps. Earlier references to constexpr being entirely unsupported are historical.
 
 The development branch includes bounded initializers, enums, alignment,
 float/double, scalar variadics, flexible arrays, VLAs, atomics and partial
