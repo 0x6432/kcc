@@ -279,6 +279,7 @@ test-codegen: build/kcc build/libkccrt.a build/pp_oracle build/consteval_oracle 
 	python3 tests/test_boolean_enum.py
 	python3 tests/test_record_promotions.py
 	python3 tests/test_record_layout.py
+	python3 tests/test_record_compatibility.py
 	python3 tests/test_bit_fields.py
 	python3 tests/test_bool_bit_fields.py
 	python3 tests/test_char_bit_fields.py
@@ -521,6 +522,7 @@ test: build/test_bitint build/pp_oracle build/kcc build/libkccrt.a build/test_su
 	python3 tests/test_boolean_enum.py
 	python3 tests/test_record_promotions.py
 	python3 tests/test_record_layout.py
+	python3 tests/test_record_compatibility.py
 	python3 tests/test_bit_fields.py
 	python3 tests/test_bool_bit_fields.py
 	python3 tests/test_char_bit_fields.py

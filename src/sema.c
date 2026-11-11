@@ -608,6 +608,29 @@ static bool following_record_member(const struct ast_record_member_declaration *
 	return false;
 }
 
+/* Repeated definitions in one scope require identical member types, not
+ * merely compatible ones. Keep the original definition as the canonical
+ * identity; the candidate is checked transactionally after layout. */
+static bool record_redefinition_matches(const struct record_definition *a,
+	const struct record_definition *b)
+{
+	const struct record_member *x = a->members, *y = b->members;
+	if (a->member_count != b->member_count)
+		return false;
+	while (x && y) {
+		if (x->name.length != y->name.length ||
+			(x->name.length && !same_name(x->name, y->name)) ||
+			x->alignment != y->alignment || x->anonymous != y->anonymous ||
+			x->is_bit_field != y->is_bit_field ||
+			(x->is_bit_field && x->bit_width != y->bit_width) ||
+			!type_same(x->type, y->type))
+			return false;
+		x = x->next;
+		y = y->next;
+	}
+	return !x && !y;
+}
+
 static const struct type *resolve_record_syntax(struct sema *sema,
 	struct ast_record_type_syntax *syntax, bool standalone)
 {
@@ -617,6 +640,10 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	struct record_definition saved_definition;
 	struct record_state *state;
 	struct record_state saved_state;
+	struct record_state candidate_state = {0};
+	struct record_state *canonical_state = NULL;
+	struct record_definition candidate_definition = {0};
+	struct record_definition *canonical_definition = NULL;
 	size_t saved_member_count;
 	struct record_member **tail;
 	struct promoted_member_name *names = NULL;
@@ -645,6 +672,8 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 			return NULL;
 		}
 		record = type_new_record(sema->arena, syntax->is_union);
+		if (record)
+			record->definition->tag = syntax->tag;
 		if (!record)
 			goto allocation_failure;
 		state = arena_alloc(sema->arena, sizeof(*state));
@@ -673,13 +702,22 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 				"use of deprecated record type");
 		return &record->type;
 	}
-	if (definition->complete || state->defining) {
+	if (state->defining) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of record tag");
 		return NULL;
 	}
 	if (sema->record_nesting == sema_max_record_nesting) {
 		diagnostic_error(sema->diagnostics, syntax->syntax.location, "record definition nesting exceeds limit (64)");
 		return NULL;
+	}
+	if (definition->complete) {
+		canonical_definition = definition;
+		canonical_state = state;
+		canonical_state->defining = true;
+		candidate_definition.is_union = definition->is_union;
+		candidate_definition.tag = definition->tag;
+		definition = &candidate_definition;
+		state = &candidate_state;
 	}
 	/* Completion is a transaction on the existing nominal identity. In
 	 * particular a failed definition must not publish members through a
@@ -856,8 +894,18 @@ static const struct type *resolve_record_syntax(struct sema *sema,
 	}
 	definition->is_nodiscard = syntax->is_nodiscard;
 	definition->is_deprecated = syntax->is_deprecated;
+	if (canonical_definition && !record_redefinition_matches(canonical_definition, definition)) {
+		diagnostic_error(sema->diagnostics, syntax->syntax.location, "redefinition of record tag");
+		goto done;
+	}
+	if (canonical_definition) {
+		canonical_definition->is_nodiscard |= syntax->is_nodiscard;
+		canonical_definition->is_deprecated |= syntax->is_deprecated;
+	}
 	success = true;
 done:
+	if (canonical_state)
+		canonical_state->defining = false;
 	if (!success) {
 		*definition = saved_definition;
 		*state = saved_state;

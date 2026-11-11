@@ -535,9 +535,59 @@ static bool enum_definitions_compatible(const struct enum_definition *a,
 	return true;
 }
 
+enum { type_compatibility_max_record_pairs = 512 };
+struct compatibility_pair { const struct record_definition *left, *right; };
+struct compatibility_context {
+	struct compatibility_pair records[type_compatibility_max_record_pairs];
+	size_t count;
+};
+
+static bool compatible_types(const struct type *left, const struct type *right,
+	bool ignore_root_qualifiers, bool require_same_type, struct compatibility_context *context);
+
+/* C23 permits distinct complete tagged records with the same tag and
+ * corresponding compatible members. A visited-pair set makes recursive
+ * pointer graphs coinductive and keeps the analysis bounded. */
+static bool record_definitions_compatible(const struct record_definition *a,
+	const struct record_definition *b, bool anonymous, struct compatibility_context *context)
+{
+	if (a == b)
+		return true;
+	if (a->is_union != b->is_union || !a->complete || !b->complete ||
+		(!anonymous && !enum_name_equal(&a->tag, &b->tag)) ||
+		a->member_count != b->member_count)
+		return false;
+	for (size_t i = 0; i < context->count; i++)
+		if ((context->records[i].left == a && context->records[i].right == b) ||
+			(context->records[i].left == b && context->records[i].right == a))
+			return true;
+	if (context->count == type_compatibility_max_record_pairs)
+		return false;
+	context->records[context->count++] = (struct compatibility_pair) { a, b };
+	const struct record_member *x = a->members, *y = b->members;
+	while (x && y) {
+		if (x->name.length != y->name.length ||
+			(x->name.length && !enum_name_equal(&x->name, &y->name)) ||
+			x->alignment != y->alignment || x->anonymous != y->anonymous ||
+			x->is_bit_field != y->is_bit_field ||
+			(x->is_bit_field && x->bit_width != y->bit_width))
+			return false;
+		if (x->anonymous && type_is_record(x->type) && type_is_record(y->type)) {
+			if (x->type->qualifiers != y->type->qualifiers ||
+				!record_definitions_compatible(type_record_definition(x->type),
+					type_record_definition(y->type), true, context))
+				return false;
+		} else if (!compatible_types(x->type, y->type, false, false, context))
+			return false;
+		x = x->next;
+		y = y->next;
+	}
+	return !x && !y;
+}
+
 /* Array elements repeat their array's qualifier, not a new pointer level. */
 static bool compatible_types(const struct type *left, const struct type *right,
-	bool ignore_root_qualifiers, bool require_same_type)
+	bool ignore_root_qualifiers, bool require_same_type, struct compatibility_context *context)
 {
 	const struct function_type *left_function;
 	const struct function_type *right_function;
@@ -569,14 +619,16 @@ static bool compatible_types(const struct type *left, const struct type *right,
 	if (type_is_other_bitint(left) || type_is_field_integer(left))
 		return type_integer_width(left) == type_integer_width(right);
 	if (type_is_record(left))
-		return type_record_definition(left) == type_record_definition(right);
+		return type_record_definition(left) == type_record_definition(right) ||
+			(!require_same_type && record_definitions_compatible(
+				type_record_definition(left), type_record_definition(right), false, context));
 	if (type_is_integer(left) || type_is_floating(left) || left->kind == type_kind_void || left->kind == type_kind_nullptr)
 		return true;
 	if (left->kind == type_kind_pointer) {
 		const struct pointer_type *a = (const struct pointer_type *)left;
 		const struct pointer_type *b = (const struct pointer_type *)right;
 
-		return compatible_types(a->referent, b->referent, false, require_same_type);
+		return compatible_types(a->referent, b->referent, false, require_same_type, context);
 	}
 	if (left->kind == type_kind_array) {
 		const struct array_type *a = (const struct array_type *)left;
@@ -584,18 +636,18 @@ static bool compatible_types(const struct type *left, const struct type *right,
 
 		return (require_same_type ? a->count == b->count :
 			(!a->count || !b->count || a->count == b->count)) &&
-			compatible_types(a->element, b->element, ignore_root_qualifiers, require_same_type);
+			compatible_types(a->element, b->element, ignore_root_qualifiers, require_same_type, context);
 	}
 	left_function = (const struct function_type *)left;
 	right_function = (const struct function_type *)right;
-	if (!compatible_types(left_function->return_type, right_function->return_type, false, require_same_type) ||
+	if (!compatible_types(left_function->return_type, right_function->return_type, false, require_same_type, context) ||
 		left_function->parameter_count != right_function->parameter_count ||
 		left_function->variadic != right_function->variadic)
 		return false;
 	left_parameter = left_function->parameters;
 	right_parameter = right_function->parameters;
 	while (left_parameter && right_parameter) {
-		if (!compatible_types(left_parameter->type, right_parameter->type, false, require_same_type))
+		if (!compatible_types(left_parameter->type, right_parameter->type, false, require_same_type, context))
 			return false;
 		left_parameter = left_parameter->next;
 		right_parameter = right_parameter->next;
@@ -605,18 +657,24 @@ static bool compatible_types(const struct type *left, const struct type *right,
 
 bool type_compatible(const struct type *left, const struct type *right)
 {
-	return compatible_types(left, right, false, false);
+	struct compatibility_context context;
+	context.count = 0;
+	return compatible_types(left, right, false, false, &context);
 }
 
 bool type_unqualified_compatible(const struct type *left, const struct type *right)
 {
-	return compatible_types(left, right, true, false);
+	struct compatibility_context context;
+	context.count = 0;
+	return compatible_types(left, right, true, false, &context);
 }
 
 /* Unlike compatibility, unknown array bounds are not wildcard typedef identities. */
 bool type_same(const struct type *left, const struct type *right)
 {
-	return compatible_types(left, right, false, true);
+	struct compatibility_context context;
+	context.count = 0;
+	return compatible_types(left, right, false, true, &context);
 }
 
 const struct type *type_composite(struct arena *arena, const struct type *left,

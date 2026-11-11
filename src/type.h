@@ -99,6 +99,7 @@ struct record_member {
 };
 
 struct record_definition {
+	struct token tag; /* Empty for untagged, nominal-only types. */
 	bool is_union;
 	bool complete;
 	bool is_nodiscard;
